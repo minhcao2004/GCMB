@@ -1,6 +1,6 @@
-# GCMS — GenZ Cinema & Music Box Management System
+# GCMB — GenZ Cinema & Music Box Management System
 
-GCMS is a centralized web application for managing the GenZ Cinema & Music Box chain. It connects room bookings, F&B orders, inventory, equipment, staff, payroll, and financial operations across branches.
+ is a centralized web application for managing the GenZ Cinema & Music Box chain. It connects room bookings, F&B orders, inventory, equipment, staff, payroll, and financial operations across branches.
 
 The project aims to reduce duplicate data entry and manual reconciliation caused by operational data being spread across KiotViet, spreadsheets, and manual records.
 
@@ -28,7 +28,7 @@ The project aims to reduce duplicate data entry and manual reconciliation caused
 
 ## About the Project
 
-GCMS brings branch operations and financial records into one system. Its goals are to prevent conflicting room assignments, standardize operational workflows, maintain transaction history, and provide consistent branch and chain-level reporting.
+GCMB brings branch operations and financial records into one system. Its goals are to prevent conflicting room assignments, standardize operational workflows, maintain transaction history, and provide consistent branch and chain-level reporting.
 
 Access is controlled by both business role and branch scope.
 
