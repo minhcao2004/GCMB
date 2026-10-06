@@ -1,70 +1,47 @@
-# Getting Started with Create React App
+# GCMB Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React frontend cho hệ thống GenZ Cinema & Music Box. Landing page được chuyển từ website tĩnh sang React component, giữ nguyên thiết kế, dữ liệu phòng, bảng giá, chi nhánh và các tương tác chính.
 
-## Available Scripts
+## Chạy dự án
 
-In the project directory, you can run:
+```powershell
+npm.cmd ci
+npm.cmd start
+```
 
-### `npm start`
+Ứng dụng chạy tại `http://localhost:3000`.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Tạo `.env.local` nếu cần đổi backend:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```dotenv
+REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
+```
 
-### `npm test`
+## Kiểm tra
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```powershell
+npm.cmd test -- --watchAll=false
+npm.cmd run build
+```
 
-### `npm run build`
+## Cấu trúc
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```text
+src/
+├── api/                  # Axios client và API services
+├── assets/
+│   ├── images/           # Ảnh giao diện
+│   └── styles/           # CSS dùng chung
+├── features/landing/
+│   ├── components/       # Các section và dialog
+│   ├── data/             # Phòng, chi nhánh, bảng giá
+│   ├── hooks/            # Hiệu ứng trang
+│   └── pages/            # Trang chủ
+├── layouts/              # Bố cục public
+├── routes/               # React Router
+├── shared/               # Component và tiện ích dùng lại
+├── App.js
+└── index.js
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Không đặt secret trong biến `REACT_APP_*` vì các biến này được đưa vào bundle trình duyệt.
