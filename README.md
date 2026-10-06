@@ -71,7 +71,7 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 ## Architecture
 
-GCMS uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
+GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
 The backend is deployed as one application. Business code is grouped into five modules, each owning its controllers, services, repositories, entities, and DTOs. Frontend features follow the same business boundaries.
 
@@ -85,9 +85,9 @@ The backend is deployed as one application. Business code is grouped into five m
 The agreed structure is shown below. Maven Wrapper support files, frontend manifests, and the Spring Boot entry point must also be present in the working repository.
 
 ```text
-GCMS/
+GCMB/
 ├── backend/
-│   ├── src/main/java/com/gcms/
+│   ├── src/main/java/com/GCMB/
 │   │   ├── administration/
 │   │   ├── booking/
 │   │   ├── inventory/
@@ -162,8 +162,8 @@ Maven Wrapper is used, so a separate Maven installation is optional. Docker is o
 Replace `YOUR_REPOSITORY_URL` with the team's Git repository URL. The final argument sets the local folder name.
 
 ```bash
-git clone YOUR_REPOSITORY_URL GCMS
-cd GCMS
+git clone YOUR_REPOSITORY_URL GCMB
+cd GCMB
 ```
 
 ### 2. Create a development database
@@ -171,11 +171,11 @@ cd GCMS
 Run the following in pgAdmin Query Tool or `psql` using a PostgreSQL administrator account. Replace the example password before executing.
 
 ```sql
-CREATE USER gcms_dev WITH PASSWORD 'REPLACE_WITH_LOCAL_PASSWORD';
-CREATE DATABASE gcms OWNER gcms_dev;
+CREATE USER GCMB_dev WITH PASSWORD 'REPLACE_WITH_LOCAL_PASSWORD';
+CREATE DATABASE GCMB OWNER GCMB_dev;
 ```
 
-PostgreSQL is separate from SQL Server. GCMS uses the PostgreSQL database and connection settings below.
+PostgreSQL is separate from SQL Server. GCMB uses the PostgreSQL database and connection settings below.
 
 ### 3. Configure and run the backend
 
@@ -186,8 +186,8 @@ Ensure `application-dev.yml` uses the [configuration example](#configuration) be
 ```powershell
 cd backend
 $env:SPRING_PROFILES_ACTIVE = "dev"
-$env:DB_URL = "jdbc:postgresql://localhost:5432/gcms"
-$env:DB_USERNAME = "gcms_dev"
+$env:DB_URL = "jdbc:postgresql://localhost:5432/GCMB"
+$env:DB_USERNAME = "GCMB_dev"
 $env:DB_PASSWORD = "REPLACE_WITH_LOCAL_PASSWORD"
 .\mvnw.cmd spring-boot:run
 ```
@@ -197,8 +197,8 @@ $env:DB_PASSWORD = "REPLACE_WITH_LOCAL_PASSWORD"
 ```bash
 cd backend
 export SPRING_PROFILES_ACTIVE=dev
-export DB_URL='jdbc:postgresql://localhost:5432/gcms'
-export DB_USERNAME='gcms_dev'
+export DB_URL='jdbc:postgresql://localhost:5432/GCMB'
+export DB_USERNAME='GCMB_dev'
 export DB_PASSWORD='REPLACE_WITH_LOCAL_PASSWORD'
 ./mvnw spring-boot:run
 ```
@@ -264,8 +264,8 @@ server:
 
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/gcms}
-    username: ${DB_USERNAME:gcms_dev}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/GCMB}
+    username: ${DB_USERNAME:GCMB_dev}
     password: ${DB_PASSWORD}
 ```
 
@@ -356,4 +356,4 @@ Technical setup references: [Create React App environment variables](https://cre
 
 ## License
 
-GCMS is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
+GCMB is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
