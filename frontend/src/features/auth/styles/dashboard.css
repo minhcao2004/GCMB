@@ -1,0 +1,43 @@
+.dashboard-page { min-height: 100vh; min-height: 100svh; box-sizing: border-box; padding: 32px; background: #fff; color: #222; }
+.dashboard-header { position: static; padding: 0; color: inherit; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.dashboard-header h1 { margin: 0; font-size: 24px; letter-spacing: normal; line-height: 1.4; }
+.dashboard-page p { line-height: 1.6; overflow-wrap: anywhere; }
+.dashboard-page button { padding: 10px 16px; border: 1px solid #ccc; border-radius: 6px; background: #fff; color: #222; font: inherit; cursor: pointer; }
+.dashboard-page button:disabled { opacity: .6; cursor: not-allowed; }
+.dashboard-page :focus-visible { outline: 3px solid #9341a0; outline-offset: 3px; }
+.dashboard-error { color: #b12642; }
+@media (max-width: 600px) { .dashboard-page { padding: 20px; } }
+.dashboard-page.dashboard-page-manager { padding: 4px; background: #e4e9f1; font-family: 'Be Vietnam Pro', Arial, sans-serif; color: #202338; }
+.head-office-dashboard { display: flex; min-height: calc(100svh - 8px); border-left: 3px solid #ed188d; }
+.manager-sidebar { width: 220px; flex-shrink: 0; display: flex; flex-direction: column; background: #fff; border-radius: 0 6px 6px 0; padding: 12px 8px; }
+.manager-brand { padding: 8px 0; background: #fff; }
+.manager-sidebar .manager-role { margin: 10px 4px 12px; padding: 7px 10px; border-radius: 6px; background: #e7f8fb; color: #08758a; font-size: 10px; font-weight: 700; letter-spacing: .4px; }
+.manager-sidebar .manager-navigation { position: static; display: flex; flex-direction: column; gap: 6px; padding: 0; background: transparent; font-size: 12px; }
+.manager-navigation button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; border: 0; padding: 12px; border-radius: 8px; color: #637089; background: transparent; text-align: left; font-size: 12px; }
+.manager-navigation button:hover { background: #f5f7fa; }
+.manager-navigation button[aria-current='page'] { background: #fdecf5; color: #ce0876; font-weight: 600; }
+.manager-navigation svg { width: 18px; height: 18px; flex-shrink: 0; }
+.manager-sidebar-footer { margin: auto 6px 0; padding-top: 24px; font-size: 10px; }
+.manager-sidebar-footer strong { display: block; border-top: 1px solid #edf0f5; padding-top: 18px; }
+.manager-sidebar-footer p { margin-top: 6px; color: #788397; font-size: 10px; }
+.manager-workspace { min-width: 0; flex: 1; display: flex; flex-direction: column; padding-left: 6px; }
+.manager-topbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 20px; background: #fff; border-radius: 6px; color: #637089; font-size: 11px; }
+.manager-topbar p { margin: 0; }
+.manager-topbar p span { color: #8b93a4; }
+.manager-account { display: flex; align-items: center; gap: 16px; }
+.manager-account > span { overflow-wrap: anywhere; }
+.manager-account button { border-color: #e4e9f1; font-size: 11px; white-space: nowrap; }
+.manager-content { flex: 1; background: #fff; margin-top: 6px; border-radius: 6px; padding: 24px; }
+.manager-content h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: normal; line-height: 1.5; }
+.dashboard-page-manager > .dashboard-error { background: #fff; padding: 16px; margin-top: 12px; }
+@media (max-width: 720px) {
+  .head-office-dashboard { flex-direction: column; }
+  .manager-sidebar { width: 100%; border-radius: 0 10px 10px 0; }
+  .manager-brand { padding: 8px; }
+  .manager-sidebar .manager-navigation { flex-direction: row; overflow-x: auto; }
+  .manager-navigation button { width: auto; flex-shrink: 0; }
+  .manager-sidebar-footer { display: none; }
+  .manager-workspace { padding-left: 0; margin-top: 6px; }
+  .manager-topbar { padding: 16px; flex-wrap: wrap; }
+  .manager-content { min-height: 50svh; padding: 24px; }
+}

@@ -1,0 +1,19 @@
+# Isolated database: never point AUTH_TEST_DB_URL at the user's database.
+spring:
+  datasource:
+    url: ${AUTH_TEST_DB_URL}
+    username: ${AUTH_TEST_DB_USERNAME:gcmb_auth_test}
+    password: ${AUTH_TEST_DB_PASSWORD:}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  mail:
+    host: localhost
+gcmb:
+  auth:
+    secure-cookie: false
+    frontend-origin: http://localhost:3000
+    mail-from: test@example.invalid
