@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import Brand from '../shared/components/Brand';
 
 function Header({ onBook }) {
@@ -11,6 +12,7 @@ function Header({ onBook }) {
         <a href="#about" onClick={closeMenu}>Chất GenZ</a><a href="#spaces" onClick={closeMenu}>Không gian</a><a href="#pricing" onClick={closeMenu}>Bảng giá</a><a href="#locations" onClick={closeMenu}>Chi nhánh</a>
       </nav>
       <div className="header-actions">
+        <Link className="button small outline" to="/dang-nhap">Đăng nhập</Link>
         <button className="button small pink" onClick={onBook}>Đặt phòng <span>↗</span></button>
         <button id="menu-toggle" className="menu-toggle" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} aria-controls="navigation" onClick={() => setMenuOpen((value) => !value)}><span></span><span></span></button>
       </div>

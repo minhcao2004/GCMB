@@ -9,9 +9,13 @@ npm.cmd ci
 npm.cmd start
 ```
 
-Ứng dụng chạy tại `http://localhost:3000`.
+`npm start` tự chạy cả backend Spring Boot và frontend React. PostgreSQL cần đang chạy; cấu hình riêng trong `backend/.env`, xem mẫu `backend/.env.example`. Không cần bấm thêm BackendApplication trong IntelliJ. Nhấn Ctrl+C để dừng cả hai.
 
-Tạo `.env.local` nếu cần đổi backend:
+Mở `http://localhost:3000/dang-nhap`. Frontend gọi `/api/v1` qua proxy tới backend cổng 8080. Lệnh báo lỗi nếu cổng 3000/8080 đang bị dùng, không tự chuyển sang 3001.
+
+Nếu muốn chạy backend riêng trong IntelliJ, dùng `npm.cmd run start:frontend` cho phần React.
+
+Khi chạy riêng bằng `start:frontend`, tạo `.env.local` nếu cần đổi backend. Lệnh chạy chung `npm start` luôn dùng proxy `/api/v1`:
 
 ```dotenv
 REACT_APP_API_BASE_URL=http://localhost:8080/api/v1

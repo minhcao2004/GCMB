@@ -148,6 +148,10 @@ Within a backend feature, create `controller/`, `service/`, `repository/`, `enti
 
 ## Getting Started
 
+**Current local quick start:** copy `backend/.env.example` to `backend/.env`, fill the database credentials, keep PostgreSQL running, then run `npm.cmd start` from `frontend/`. This command starts both servers and waits for the backend before starting React. Open `http://localhost:3000/dang-nhap`. No separate IntelliJ BackendApplication run is needed. See [authentication and local setup](docs/AUTHENTICATION.md).
+
+The separate-server instructions below remain available for debugging; use `npm run start:frontend` when the backend is already running in IntelliJ.
+
 ### Prerequisites
 
 - JDK 17; `JAVA_HOME` must point to the JDK.
@@ -222,7 +226,7 @@ Open a second terminal at the repository root.
 ```powershell
 cd frontend
 npm.cmd ci
-npm.cmd start
+npm.cmd run start:frontend
 ```
 
 **macOS/Linux:**
@@ -230,7 +234,7 @@ npm.cmd start
 ```bash
 cd frontend
 npm ci
-npm start
+npm run start:frontend
 ```
 
 `npm ci` requires a committed `package-lock.json` matching `package.json`. If the project has no lockfile yet, run `npm install` once and commit the generated lockfile.
@@ -248,6 +252,8 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
 
 ## Configuration
+
+Authentication implementation, one-command startup, SMTP setup and tests: [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 | File | Purpose |
 | --- | --- |
