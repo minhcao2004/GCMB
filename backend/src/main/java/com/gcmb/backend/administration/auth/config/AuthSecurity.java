@@ -24,7 +24,7 @@ public class AuthSecurity {
             .cors(cors -> cors.configurationSource(request -> {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(List.of(policy.frontendOrigin()));
-                config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+                config.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
                 config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN"));
                 config.setAllowCredentials(true); return config;
             }))
