@@ -1,0 +1,5 @@
+.brand-wordmark { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.brand-wordmark img { width: 100px; height: 100px; object-fit: cover; flex-shrink: 0; }
+.brand-wordmark .brand-gradient, .brand > .brand-gradient { background: linear-gradient(90deg, #70cddd 0%, #ed188d 100%); background-clip: text; -webkit-background-clip: text; color: transparent; }
+.brand-wordmark .brand-gradient { font-size: 27px; font-weight: 800; letter-spacing: -1px; }
+.brand .brand-small { color: #70cddd; }
