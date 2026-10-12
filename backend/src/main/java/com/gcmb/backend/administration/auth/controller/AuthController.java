@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Cung cấp API xác thực, khôi phục mật khẩu và quản lý cookie phiên đăng nhập.
+ */
+
 package com.gcmb.backend.administration.auth.controller;
 
 import com.gcmb.backend.administration.auth.dto.request.LoginRequest;

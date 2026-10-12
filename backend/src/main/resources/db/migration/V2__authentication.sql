@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Bổ sung cột và chỉ mục cho token xác thực, đồng thời tạo bảng lưu dữ liệu giới hạn tần suất yêu cầu.
+ */
+
 -- Extend the existing identity schema; preserve all existing accounts and tokens.
 ALTER TABLE gcmb.auth_token ADD COLUMN code_hash text;
 ALTER TABLE gcmb.auth_token ADD COLUMN failed_attempts integer NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0);

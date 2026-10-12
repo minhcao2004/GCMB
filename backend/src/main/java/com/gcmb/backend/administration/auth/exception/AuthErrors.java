@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Chuyển các ngoại lệ xác thực, gửi email và xử lý yêu cầu thành phản hồi lỗi API.
+ */
+
 package com.gcmb.backend.administration.auth.exception;
 
 import com.gcmb.backend.administration.auth.service.RecoveryMailer;

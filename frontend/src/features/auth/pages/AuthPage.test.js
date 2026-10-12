@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm thử form xác thực, hiện hoặc ẩn mật khẩu, xử lý lỗi, chống gửi trùng và chuyển trang.
+ */
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AuthPage from './AuthPage';

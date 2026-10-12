@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Xử lý đăng nhập, gửi mã khôi phục, đặt lại mật khẩu, xác thực phiên và đăng xuất.
+ */
+
 package com.gcmb.backend.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.entity.Account;

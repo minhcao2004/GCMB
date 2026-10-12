@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Ánh xạ kết quả truy vấn thành dữ liệu xác thực và xác định đường dẫn theo vai trò.
+ */
+
 package com.gcmb.backend.administration.auth.mapper;
 
 import java.sql.ResultSet;

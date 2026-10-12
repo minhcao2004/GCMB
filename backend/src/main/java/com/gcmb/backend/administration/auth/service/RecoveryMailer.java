@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Gửi email chứa mã xác nhận đặt lại mật khẩu và xử lý trường hợp gửi thư thất bại.
+ */
+
 package com.gcmb.backend.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.config.AuthSettings;
