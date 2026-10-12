@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
+const dashboardPath = '/quan-ly-he-thong';
 const icons = [
   'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   'M4 21V5l8-3 8 3v16 M9 21v-5h6v5 M8 7h1 M15 7h1 M8 11h1 M15 11h1',
@@ -15,12 +19,25 @@ const icons = [
 
 export default function HeadOfficeDashboard({ user, busy, onLogout }) {
   const [activeTab, setActiveTab] = useState('Tổng quan');
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    setActiveTab(location.pathname === catalogPath ? 'Phòng & bảng giá' : 'Tổng quan');
+  }, [location.pathname]);
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'Phòng & bảng giá') navigate(catalogPath);
+    else if (location.pathname !== dashboardPath) navigate(dashboardPath);
+  };
   return <div className="head-office-dashboard">
     <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
       <div className="manager-brand"><BrandWordmark /></div>
       <p className="manager-role">QUẢN LÝ CẤP CAO</p>
       <nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => setActiveTab(tab)}>
+        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-current={activeTab === tab ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
+          {tab}
+        </NavLink> : <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
           {tab}
         </button>)}
@@ -29,7 +46,9 @@ export default function HeadOfficeDashboard({ user, busy, onLogout }) {
     </aside>
     <div className="manager-workspace">
       <div className="manager-topbar"><p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p><div className="manager-account"><span>{user.username}</span><button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></div></div>
-      <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>
+      <section className={`manager-content${activeTab === 'Phòng & bảng giá' ? ' manager-content-catalog' : ''}`} aria-labelledby={activeTab === 'Phòng & bảng giá' ? undefined : 'manager-greeting'}>
+        {activeTab === 'Phòng & bảng giá' ? <RoomCatalogPage /> : <><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1><p>Chọn một chức năng trên thanh điều hướng để tiếp tục.</p></>}
+      </section>
     </div>
   </div>;
 }
