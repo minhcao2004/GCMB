@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
+ */
+
 import { useState } from 'react';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 

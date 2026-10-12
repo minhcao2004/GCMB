@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Chứa tên đăng nhập, mật khẩu và lựa chọn duy trì đăng nhập.
+ */
+
 package com.gcmb.backend.administration.auth.dto.request;
 
 // Avoid generated toString() methods containing credentials.

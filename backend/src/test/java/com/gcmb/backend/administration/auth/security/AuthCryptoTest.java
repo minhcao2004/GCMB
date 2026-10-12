@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm thử băm mật khẩu, sinh mã xác nhận và các quy tắc kiểm tra dữ liệu xác thực.
+ */
+
 package com.gcmb.backend.administration.auth.security;
 
 import com.gcmb.backend.administration.auth.security.AuthCrypto;

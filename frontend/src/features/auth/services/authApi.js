@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Gọi API xác thực với mã CSRF và chuyển lỗi API thành thông báo cho form.
+ */
+
 import api from '../../../api/client';
 
 // Keep secrets out of URLs, browser storage and logs. Cookies are HttpOnly.

@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Hiển thị ô nhập dùng chung cho form xác thực, hỗ trợ hiện hoặc ẩn mật khẩu, gợi ý và thông báo lỗi.
+ */
+
 import { useState } from 'react';
 
 export default function AuthField({ name, label, type = 'text', error, hint, ...props }) {

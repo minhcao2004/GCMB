@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm thử tích hợp xác thực, khôi phục mật khẩu, giao dịch dữ liệu và bảo mật API với cơ sở dữ liệu thử nghiệm.
+ */
+
 package com.gcmb.backend.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.service.AuthService;

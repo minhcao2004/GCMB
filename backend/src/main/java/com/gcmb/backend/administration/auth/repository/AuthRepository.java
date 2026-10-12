@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Truy vấn và cập nhật tài khoản, phiên đăng nhập và yêu cầu đặt lại mật khẩu bằng JDBC.
+ */
+
 package com.gcmb.backend.administration.auth.repository;
 
 import java.sql.Timestamp;

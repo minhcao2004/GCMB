@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Đọc cookie phiên đăng nhập và thiết lập thông tin xác thực trong Spring Security.
+ */
+
 package com.gcmb.backend.administration.auth.security;
 
 import com.gcmb.backend.administration.auth.dto.response.Identity;

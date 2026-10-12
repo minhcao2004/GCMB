@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Cấu hình bảo mật API, CORS, CSRF và phân quyền truy cập theo vai trò.
+ */
+
 package com.gcmb.backend.administration.auth.config;
 
 import com.gcmb.backend.administration.auth.service.AuthService;

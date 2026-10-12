@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Định dạng giao diện trang xác thực, ô nhập, nút thao tác, thông báo và bố cục trên màn hình nhỏ.
+ */
+
 .auth-page { min-height: 100vh; min-height: 100svh; box-sizing: border-box; position: relative; isolation: isolate; display: flex; align-items: center; justify-content: center; padding: 48px 20px 76px; color: #39333f; font-family: Arial, sans-serif; background: #340c36 url('../../../assets/images/login.png') center center / cover no-repeat; }
 .auth-page::before { content: ''; position: absolute; inset: 0; background: rgba(12, 2, 20, .57); z-index: -1; }
 .auth-page *, .auth-page *::before, .auth-page *::after { box-sizing: border-box; }

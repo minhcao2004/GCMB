@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm thử quy tắc kiểm tra email, tên đăng nhập, mật khẩu xác nhận và mã xác nhận.
+ */
+
 import { emailError, validate } from './validation';
 
 const valid = { username: 'nhanvien', password: '  mat khau moi  ', confirmation: '  mat khau moi  ', code: '038291', email: 'nhanvien@example.com' };

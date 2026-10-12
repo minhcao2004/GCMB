@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm tra dữ liệu bắt buộc, định dạng email, xác nhận mật khẩu và mã xác nhận sáu chữ số.
+ */
+
 package com.gcmb.backend.administration.auth.validator;
 
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
