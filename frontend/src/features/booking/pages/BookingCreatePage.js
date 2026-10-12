@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { formatDate, formatVnd } from '../data/bookingData';
@@ -9,6 +9,11 @@ function localDate(value = new Date()) {
 
 function dateTimeIso(date, time) {
   return new Date(`${date}T${time}:00`).toISOString();
+}
+
+function formatMoneyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 function Field({ label, children, className = '' }) {
@@ -23,7 +28,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
   const [form, setForm] = useState({
     contactName: '', contactPhone: '', channel: 'PHONE', date: initialDate, time: initialTime,
     guestCount: '2', roomTypeId: '', roomId: '', pricingMode: 'COMBO', comboId: '',
-    durationHours: '2', note: '', depositEnabled: true, depositAmount: '200000',
+    durationHours: '2', note: '', depositEnabled: false, depositAmount: '',
     paymentMethod: 'BANK_TRANSFER', transaction: '',
   });
   const [availability, setAvailability] = useState(null);
@@ -31,8 +36,9 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const depositAmountEdited = useRef(false);
 
-  const roomTypes = options?.roomTypes || [];
+  const roomTypes = useMemo(() => options?.roomTypes || [], [options?.roomTypes]);
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
   const combos = selectedType?.combos || [];
   const selectedCombo = combos.find((item) => item.id === form.comboId) || combos[0] || null;
@@ -46,7 +52,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
     if (!plannedStart || !durationMinutes) return null;
     return new Date(plannedStart.getTime() + durationMinutes * 60000);
   }, [plannedStart, durationMinutes]);
-  const availableRooms = availability?.rooms || [];
+  const availableRooms = useMemo(() => availability?.rooms || [], [availability?.rooms]);
   const chosenRoom = availableRooms.find((room) => room.id === form.roomId) || null;
   const quote = availability?.quote;
   const estimatedAmount = Number(quote?.expectedAmount || selectedCombo?.price || 0);
@@ -99,14 +105,16 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
   }, [availableRooms, form.roomId]);
 
   useEffect(() => {
-    if (quote?.depositRequired && Number(quote.depositRequired) > 0) {
-      setForm((current) => ({ ...current, depositEnabled: true, depositAmount: String(quote.depositRequired) }));
-    }
+    if (depositAmountEdited.current || quote?.depositRequired == null) return;
+    const suggestedAmount = Number(quote.depositRequired) > 0 ? String(Math.trunc(Number(quote.depositRequired))) : '';
+    setForm((current) => current.depositAmount === suggestedAmount ? current : { ...current, depositAmount: suggestedAmount });
   }, [quote?.depositRequired]);
 
   const change = (event) => {
     const { name, value, checked, type } = event.target;
-    setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
+    if (name === 'depositAmount') depositAmountEdited.current = true;
+    const nextValue = name === 'depositAmount' ? value.replace(/\D/g, '') : value;
+    setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : nextValue }));
     setFormError('');
   };
 
@@ -118,7 +126,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
     if (!plannedStart || !plannedEnd) return setFormError('Vui lòng chọn thời gian nhận phòng hợp lệ.');
     if (!chosenRoom) return setFormError('Chọn một phòng đang trống trong khung giờ này.');
     if (Number(form.guestCount) < 1 || Number(form.guestCount) > chosenRoom.capacity) return setFormError(`Phòng này nhận tối đa ${chosenRoom.capacity} khách.`);
-    if (form.depositEnabled && (!Number.isFinite(depositAmount) || depositAmount < 0)) return setFormError('Kiểm tra lại số tiền cọc.');
+    if (form.depositEnabled && (!Number.isFinite(depositAmount) || depositAmount <= 0)) return setFormError('Nhập số tiền cọc đã nhận hoặc tắt mục “Có thu cọc”.');
 
     setSubmitting(true);
     const result = await onCreate({
@@ -131,7 +139,11 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
       contactPhone: form.contactPhone.trim(),
       channel: form.channel,
       note: form.note.trim() || null,
-    }, { depositAmount, depositEnabled: form.depositEnabled, guestCount: Number(form.guestCount) });
+      guestCount: Number(form.guestCount),
+      depositAmount,
+      paymentMethod: form.depositEnabled && depositAmount > 0 ? form.paymentMethod : null,
+      paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
+    });
     setSubmitting(false);
     if (result?.error) setFormError(result.error);
   };
@@ -186,11 +198,11 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
         <div className="booking-form-divider" />
         <div className="booking-section-title-row booking-deposit-heading"><h3>Tiền cọc</h3><label className="booking-toggle"><span>Có thu cọc</span><input type="checkbox" name="depositEnabled" checked={form.depositEnabled} onChange={change} /><i /></label></div>
         <div className="booking-form-grid booking-deposit-grid">
-          <Field label="Số tiền cọc"><input name="depositAmount" inputMode="numeric" value={form.depositAmount} onChange={change} disabled={!form.depositEnabled} placeholder="0đ" /></Field>
+          <Field label="Số tiền cọc"><div className="booking-money-input"><input name="depositAmount" inputMode="numeric" value={formatMoneyInput(form.depositAmount)} onChange={change} disabled={!form.depositEnabled} placeholder="0" aria-label="Số tiền cọc" /><span>đ</span></div></Field>
           <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="CARD">Thẻ</option><option value="QR">QR</option></select></Field>
           <Field label="Mã giao dịch / ghi chú"><input name="transaction" value={form.transaction} onChange={change} disabled={!form.depositEnabled} placeholder="Ví dụ: CK-245781" /></Field>
         </div>
-        <p className="booking-feature-note">API booking hiện tại chưa lưu số khách hoặc ghi sổ khoản cọc; các trường này chỉ dùng để đối chiếu tại quầy.</p>
+        <p className="booking-feature-note">Chỉ bật “Có thu cọc” khi đã thực sự nhận tiền. Khoản thu được ghi nhận ngay khi tạo booking; có thể nhập mã giao dịch để đối chiếu.</p>
         <Field label="Ghi chú booking" className="booking-note-field"><textarea name="note" rows="2" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></Field>
       </section>
 
@@ -207,7 +219,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
         </dl>
         <div className="booking-summary-separator" />
         <div className="booking-summary-money"><span>Giá dự kiến</span><strong>{formatVnd(estimatedAmount)}</strong></div>
-        <div className="booking-summary-money booking-deposit-money"><span>Tiền cọc dự kiến</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
+        <div className="booking-summary-money booking-deposit-money"><span>Tiền cọc đã nhận</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
         <div className="booking-summary-total"><strong>Còn lại dự kiến</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
         <div className="booking-summary-hint">Booking giữ phòng theo ngày/giờ đã chọn.<br />Giá cuối có thể thay đổi khi checkout.</div>
         <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || loadingAvailability || !chosenRoom}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>

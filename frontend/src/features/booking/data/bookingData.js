@@ -31,7 +31,7 @@ export function fromDateAndTime(date, time) {
 }
 
 export function formatVnd(value) {
-  return `${new Intl.NumberFormat('vi-VN').format(Number(value) || 0)} đ`;
+  return `${new Intl.NumberFormat('vi-VN').format(Number(value) || 0)}đ`;
 }
 
 export function formatDate(value) {

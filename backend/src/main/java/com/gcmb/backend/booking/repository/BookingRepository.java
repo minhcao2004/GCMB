@@ -38,12 +38,12 @@ public class BookingRepository {
                               String dayKind, LocalDate specificDate, int minuteFrom, int minuteTo,
                               BigDecimal hourlyPrice, BigDecimal overtimeHourlyPrice,
                               int billingStepMinutes, int priority) {}
-    public record BookingRow(UUID id, UUID branchId, String code, String contactName, String contactPhone,
+    public record BookingRow(UUID id, UUID branchId, String code, String contactName, String contactPhone, int guestCount,
                              String channel, Instant plannedStart, Instant plannedEnd, Instant actualCheckin,
                              Instant actualCheckout, String status, Instant cancelledAt, String cancellationReason,
                              int refundCutoffMinutes, UUID createdBy, String note, Instant createdAt) {}
-    public record AllocationRow(UUID id, UUID bookingId, UUID roomId, String roomCode, String roomName,
-                                Instant startsAt, Instant endsAt, String state, String changeReason,
+    public record AllocationRow(UUID id, UUID bookingId, UUID roomId, String roomCode, String roomName, String roomTypeName,
+                                String operatingStatus, Instant startsAt, Instant endsAt, String state, String changeReason,
                                 Instant createdAt) {}
     public record ChargeRow(UUID id, String kind, String description, BigDecimal quantity,
                             BigDecimal unitPrice, BigDecimal amount, String status,
@@ -139,6 +139,23 @@ public class BookingRepository {
                 rs.getString("room_type_name")), branchId, roomTypeId, ts(end), ts(start));
     }
 
+    public List<RoomRow> availableRoomsForEdit(UUID branchId, Instant start, Instant end, UUID excludeBookingId) {
+        return db.query("""
+            SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
+            FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
+            WHERE r.branch_id=? AND rt.active=true AND r.operating_status='AVAILABLE'
+              AND NOT EXISTS (
+                SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
+                WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
+                  AND b.status IN ('CONFIRMED','IN_HOUSE') AND b.id<>?
+                  AND a.starts_at < ? AND a.ends_at > ?
+              )
+            ORDER BY rt.name,r.code
+            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
+                rs.getString("room_type_name")), branchId, excludeBookingId, ts(end), ts(start));
+    }
+
     public RoomRow lockAvailableRoom(UUID roomId, UUID branchId) {
         List<RoomRow> rows = db.query("""
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
@@ -164,13 +181,13 @@ public class BookingRepository {
         return Boolean.TRUE.equals(db.queryForObject(sql, Boolean.class, params.toArray()));
     }
 
-    public UUID insertBooking(UUID branchId, String code, String contactName, String contactPhone, String channel,
+    public UUID insertBooking(UUID branchId, String code, String contactName, String contactPhone, int guestCount, String channel,
                               Instant start, Instant end, int refundCutoffMinutes, UUID createdBy, String note) {
         return db.queryForObject("""
-            INSERT INTO gcmb.booking(branch_id,code,contact_name,contact_phone,channel,planned_start,planned_end,
+            INSERT INTO gcmb.booking(branch_id,code,contact_name,contact_phone,guest_count,channel,planned_start,planned_end,
                                      status,refund_cutoff_minutes,created_by,note)
-            VALUES (?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
-            """, UUID.class, branchId, code, contactName, contactPhone, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
+            VALUES (?,?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
+            """, UUID.class, branchId, code, contactName, contactPhone, guestCount, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
     }
 
     public void updateBooking(UUID id, String contactName, String contactPhone, Instant start, Instant end, String note) {
@@ -187,13 +204,24 @@ public class BookingRepository {
 
     public AllocationRow currentAllocationForUpdate(UUID bookingId) {
         List<AllocationRow> rows = db.query("""
-            SELECT a.id,a.booking_id,a.room_id,r.code AS room_code,r.name AS room_name,a.starts_at,a.ends_at,
+            SELECT a.id,a.booking_id,a.room_id,r.code AS room_code,r.name AS room_name,rt.name AS room_type_name,
+                   r.operating_status,a.starts_at,a.ends_at,
                    a.state,a.change_reason,a.created_at
-            FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
+            FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE a.booking_id=? AND a.state IN ('RESERVED','OCCUPIED')
-            ORDER BY a.created_at DESC LIMIT 1 FOR UPDATE OF a
+            ORDER BY a.created_at DESC LIMIT 1 FOR UPDATE OF a,r
             """, BookingRepository::allocationRow, bookingId);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public int checkInBooking(UUID bookingId, Instant now) {
+        return db.update("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=? WHERE id=? AND status='CONFIRMED'",
+            ts(now), bookingId);
+    }
+
+    public int occupyAllocation(UUID allocationId, Instant now) {
+        return db.update("UPDATE gcmb.room_allocation SET state='OCCUPIED',actual_start=? WHERE id=? AND state='RESERVED'",
+            ts(now), allocationId);
     }
 
     public void releaseAllocation(UUID allocationId, String reason) {
@@ -204,6 +232,22 @@ public class BookingRepository {
         db.update("UPDATE gcmb.booking SET status='CANCELLED',cancelled_at=?,cancellation_reason=? WHERE id=?", ts(now), reason, id);
     }
 
+    public UUID lockDeposit(UUID bookingId) {
+        List<UUID> rows = db.query("SELECT id FROM gcmb.deposit WHERE booking_id=? FOR UPDATE",
+            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public UUID createDepositRefundRequest(UUID branchId, UUID bookingId, UUID depositId, BigDecimal amount,
+            String reason, String beneficiaryName, String bankName, String bankAccount, UUID actorId) {
+        return db.queryForObject("""
+            INSERT INTO gcmb.refund_request(branch_id,booking_id,deposit_id,kind,amount,reason,
+                                            beneficiary_name,bank_name,bank_account,requested_by,status)
+            VALUES (?,?,?,'DEPOSIT',?,?,?,?,?,?,'REQUESTED')
+            RETURNING id
+            """, UUID.class, branchId, bookingId, depositId, amount, reason, beneficiaryName, bankName, bankAccount, actorId);
+    }
+
     public UUID lockBookingId(UUID bookingId, UUID branchId) {
         List<UUID> rows = db.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
             (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
@@ -212,7 +256,7 @@ public class BookingRepository {
 
     public BookingRow booking(UUID bookingId, UUID branchId) {
         List<BookingRow> rows = db.query("""
-            SELECT id,branch_id,code,contact_name,contact_phone,channel,planned_start,planned_end,actual_checkin,
+            SELECT id,branch_id,code,contact_name,contact_phone,guest_count,channel,planned_start,planned_end,actual_checkin,
                    actual_checkout,status,cancelled_at,cancellation_reason,refund_cutoff_minutes,created_by,note,created_at
             FROM gcmb.booking WHERE id=? AND branch_id=?
             """, BookingRepository::bookingRow, bookingId, branchId);
@@ -221,7 +265,7 @@ public class BookingRepository {
 
     private static BookingRow bookingRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         return new BookingRow(rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class), rs.getString("code"),
-            rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),
+            rs.getString("contact_name"), rs.getString("contact_phone"), rs.getInt("guest_count"), rs.getString("channel"), instant(rs, "planned_start"),
             instant(rs, "planned_end"), instant(rs, "actual_checkin"), instant(rs, "actual_checkout"), rs.getString("status"),
             instant(rs, "cancelled_at"), rs.getString("cancellation_reason"), rs.getInt("refund_cutoff_minutes"),
             rs.getObject("created_by", UUID.class), rs.getString("note"), instant(rs, "created_at"));
@@ -229,9 +273,10 @@ public class BookingRepository {
 
     public List<AllocationRow> allocations(UUID bookingId) {
         return db.query("""
-            SELECT a.id,a.booking_id,a.room_id,r.code AS room_code,r.name AS room_name,a.starts_at,a.ends_at,
+            SELECT a.id,a.booking_id,a.room_id,r.code AS room_code,r.name AS room_name,rt.name AS room_type_name,
+                   r.operating_status,a.starts_at,a.ends_at,
                    a.state,a.change_reason,a.created_at
-            FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
+            FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE a.booking_id=? ORDER BY a.created_at,a.id
             """, BookingRepository::allocationRow, bookingId);
     }
@@ -239,6 +284,7 @@ public class BookingRepository {
     private static AllocationRow allocationRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         return new AllocationRow(rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
             rs.getObject("room_id", UUID.class), rs.getString("room_code"), rs.getString("room_name"),
+            rs.getString("room_type_name"), rs.getString("operating_status"),
             instant(rs, "starts_at"), instant(rs, "ends_at"), rs.getString("state"), rs.getString("change_reason"), instant(rs, "created_at"));
     }
 
@@ -265,6 +311,28 @@ public class BookingRepository {
         db.update("INSERT INTO gcmb.deposit(booking_id) VALUES (?) ON CONFLICT (booking_id) DO NOTHING", bookingId);
     }
 
+    public void receiveDeposit(UUID branchId, UUID bookingId, UUID actorId, BigDecimal amount,
+            String method, String reference) {
+        BigDecimal cashTendered = "CASH".equals(method) ? amount : null;
+        BigDecimal cashChange = "CASH".equals(method) ? BigDecimal.ZERO : null;
+        String paymentKey = "BOOKING-DEPOSIT-" + UUID.randomUUID();
+        String entryKey = "BOOKING-DEPOSIT-" + UUID.randomUUID();
+        UUID paymentId = db.queryForObject("""
+            INSERT INTO gcmb.payment(branch_id,booking_id,purpose,method,amount,cash_tendered,cash_change,
+                                     receipt_reference,received_at,received_by,idempotency_key)
+            VALUES (?,?,'DEPOSIT',?,?,?,?,?,CURRENT_TIMESTAMP,?,?)
+            RETURNING id
+            """, UUID.class, branchId, bookingId, method, amount, cashTendered, cashChange, reference,
+            actorId, paymentKey);
+        int inserted = db.update("""
+            INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,payment_id,actor_id,reason,idempotency_key)
+            SELECT d.id,'RECEIVE',?,?,?,'Cọc đã thu khi tạo booking',?
+            FROM gcmb.deposit d
+            WHERE d.booking_id=?
+            """, amount, paymentId, actorId, entryKey, bookingId);
+        if (inserted != 1) throw new IllegalStateException("Booking deposit account was not created");
+    }
+
     public BigDecimal depositBalance(UUID bookingId) {
         List<BigDecimal> rows = db.query("""
             SELECT COALESCE(v.balance,0) AS balance
@@ -272,6 +340,19 @@ public class BookingRepository {
             WHERE d.booking_id=?
             """, (rs, rowNum) -> rs.getBigDecimal("balance"), bookingId);
         return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
+    }
+
+    public String depositPaymentMethod(UUID bookingId) {
+        List<String> methods = db.query("""
+            SELECT DISTINCT p.method
+            FROM gcmb.deposit d
+            JOIN gcmb.deposit_entry e ON e.deposit_id=d.id AND e.kind='RECEIVE'
+            JOIN gcmb.payment p ON p.id=e.payment_id
+            WHERE d.booking_id=?
+            ORDER BY p.method
+            """, (rs, rowNum) -> rs.getString("method"), bookingId);
+        if (methods.isEmpty()) return null;
+        return methods.size() == 1 ? methods.get(0) : "MULTIPLE";
     }
 
     public void forfeitDeposit(UUID bookingId, UUID actorId, BigDecimal amount, String reason, String idempotencyKey) {
@@ -303,17 +384,19 @@ public class BookingRepository {
         String from = """
             FROM gcmb.booking b
             LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
-            LEFT JOIN gcmb.room r ON r.id=latest.room_id
+             LEFT JOIN gcmb.room r ON r.id=latest.room_id
+             LEFT JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             LEFT JOIN (SELECT booking_id,SUM(amount) AS amount FROM gcmb.booking_charge WHERE status='ACTIVE' GROUP BY booking_id) ch ON ch.booking_id=b.id
             LEFT JOIN gcmb.deposit d ON d.booking_id=b.id
             LEFT JOIN gcmb.v_deposit_balance dep ON dep.id=d.id
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.channel,b.planned_start,b.planned_end,b.status,latest.room_id,r.code room_code,r.name room_name,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance " + from + where + " ORDER BY b.planned_start DESC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel,b.planned_start,b.planned_end,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance " + from + where + " ORDER BY b.planned_start DESC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return db.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),
             instant(rs, "planned_end"), rs.getString("status"), rs.getObject("room_id", UUID.class), rs.getString("room_code"),
-            rs.getString("room_name"), rs.getBigDecimal("expected_amount"), rs.getBigDecimal("deposit_balance")), params.toArray());
+            rs.getString("room_name"), rs.getString("room_type_name"), rs.getBigDecimal("expected_amount"), rs.getBigDecimal("deposit_balance"),
+            rs.getInt("guest_count"), rs.getString("room_operating_status")), params.toArray());
     }
 
     public long countBookings(UUID branchId, String status, LocalDate dateFrom, LocalDate dateTo, ZoneId timezone,

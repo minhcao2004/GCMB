@@ -341,7 +341,6 @@ The detailed project references are:
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.
 - GenZ Cinema AS-IS / TO-BE workflows.
-- Reception room and check-in frontend scope: [docs/RECEPTION_SCREENS.md](docs/RECEPTION_SCREENS.md).
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.
 

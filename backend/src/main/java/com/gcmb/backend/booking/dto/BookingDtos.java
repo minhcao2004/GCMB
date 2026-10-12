@@ -20,18 +20,21 @@ public final class BookingDtos {
                              List<ChargeLine> charges) {}
     public record Availability(UUID branchId, UUID roomTypeId, Instant plannedStart, Instant plannedEnd,
                                List<AvailableRoom> rooms, PriceQuote quote) {}
+    public record BookingEditOptions(List<AvailableRoom> rooms) {}
 
     public record CreateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd,
                                        String pricingMode, UUID comboId, String contactName,
-                                       String contactPhone, String channel, String note) {}
+                                       String contactPhone, String channel, String note, Integer guestCount,
+                                       BigDecimal depositAmount, String paymentMethod, String paymentReference) {}
     public record UpdateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd,
                                        String contactName, String contactPhone, String note) {}
-    public record CancelBookingRequest(String reason) {}
+    public record CancelBookingRequest(String reason, String beneficiaryName, String bankAccount, String bankName) {}
 
     public record BookingSummary(UUID id, String code, String contactName, String contactPhone,
                                  String channel, Instant plannedStart, Instant plannedEnd, String status,
-                                 UUID roomId, String roomCode, String roomName,
-                                 BigDecimal expectedAmount, BigDecimal depositBalance) {}
+                                 UUID roomId, String roomCode, String roomName, String roomTypeName,
+                                 BigDecimal expectedAmount, BigDecimal depositBalance, int guestCount,
+                                 String roomOperatingStatus) {}
     public record BookingPage(List<BookingSummary> items, int page, int size, long totalElements, int totalPages) {}
     public record AllocationView(UUID id, UUID roomId, String roomCode, String roomName,
                                  Instant startsAt, Instant endsAt, String state,
@@ -40,10 +43,11 @@ public final class BookingDtos {
                              BigDecimal unitPrice, BigDecimal amount, String status,
                              UUID priceRuleId, UUID comboId, Map<String, Object> pricingSnapshot,
                              Instant createdAt) {}
-    public record DepositView(BigDecimal balance, String cancellationOutcome, int refundCutoffMinutes) {}
+    public record DepositView(BigDecimal balance, String cancellationOutcome, int refundCutoffMinutes,
+                              String paymentMethod) {}
     public record BookingDetail(BookingSummary booking, UUID branchId, String note,
                                 Instant createdAt, List<AllocationView> allocations,
                                 List<ChargeView> charges, DepositView deposit) {}
     public record CancellationResult(BookingDetail booking, String depositOutcome,
-                                     BigDecimal depositAmount, Instant cancelledAt) {}
+                                     BigDecimal depositAmount, Instant cancelledAt, UUID refundRequestId) {}
 }

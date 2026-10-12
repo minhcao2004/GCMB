@@ -57,6 +57,19 @@ public class BookingController {
         return bookings.detail(identity, bookingId);
     }
 
+    @GetMapping("/bookings/{bookingId}/edit-options")
+    public BookingDtos.BookingEditOptions editOptions(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedStart,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedEnd) {
+        return bookings.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant());
+    }
+
+    @PostMapping("/bookings/{bookingId}/check-in")
+    public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return bookings.checkIn(identity, bookingId);
+    }
+
     @PostMapping("/bookings")
     public BookingDtos.BookingDetail create(@AuthenticationPrincipal Identity identity,
             @RequestBody BookingDtos.CreateBookingRequest request) {
