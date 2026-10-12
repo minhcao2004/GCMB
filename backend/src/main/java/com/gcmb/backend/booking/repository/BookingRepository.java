@@ -214,14 +214,23 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public int checkInBooking(UUID bookingId, Instant now) {
-        return db.update("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=? WHERE id=? AND status='CONFIRMED'",
-            ts(now), bookingId);
+    public int checkInBooking(UUID bookingId, Instant now, Instant plannedStart, Instant plannedEnd) {
+        return db.update("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=?,planned_start=?,planned_end=? WHERE id=? AND status='CONFIRMED'",
+            ts(now), ts(plannedStart), ts(plannedEnd), bookingId);
     }
 
     public int occupyAllocation(UUID allocationId, Instant now) {
         return db.update("UPDATE gcmb.room_allocation SET state='OCCUPIED',actual_start=? WHERE id=? AND state='RESERVED'",
             ts(now), allocationId);
+    }
+
+    public int shiftAndOccupyAllocation(UUID allocationId, Instant now, Instant startsAt, Instant endsAt) {
+        return db.update("""
+            UPDATE gcmb.room_allocation
+            SET starts_at=?,ends_at=?,state='OCCUPIED',actual_start=?,
+                change_reason='Khách nhận phòng sớm; khung giờ được dời để giữ nguyên thời lượng'
+            WHERE id=? AND state='RESERVED'
+            """, ts(startsAt), ts(endsAt), ts(now), allocationId);
     }
 
     public void releaseAllocation(UUID allocationId, String reason) {
@@ -342,6 +351,78 @@ public class BookingRepository {
         return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
     }
 
+    public BigDecimal depositReceivedAmount(UUID bookingId) {
+        return db.queryForObject("""
+            SELECT GREATEST(
+                COALESCE((
+                    SELECT SUM(e.amount)
+                    FROM gcmb.deposit d
+                    JOIN gcmb.deposit_entry e ON e.deposit_id=d.id AND e.kind='RECEIVE'
+                    WHERE d.booking_id=?
+                ),0),
+                COALESCE((
+                    SELECT NULLIF(be.details ->> 'depositAmount','')::numeric
+                    FROM gcmb.booking_event be
+                    WHERE be.booking_id=? AND be.event_type='BOOKING_CANCELLED'
+                    ORDER BY be.created_at DESC,be.id DESC
+                    LIMIT 1
+                ),0)
+            )
+            """, BigDecimal.class, bookingId, bookingId);
+    }
+
+    public BigDecimal depositForfeitedAmount(UUID bookingId) {
+        return db.queryForObject("""
+            SELECT GREATEST(
+                COALESCE((
+                    SELECT SUM(e.amount)
+                    FROM gcmb.deposit d
+                    JOIN gcmb.deposit_entry e ON e.deposit_id=d.id AND e.kind='FORFEIT'
+                    WHERE d.booking_id=?
+                ),0),
+                COALESCE((
+                    SELECT NULLIF(be.details ->> 'depositAmount','')::numeric
+                    FROM gcmb.booking_event be
+                    WHERE be.booking_id=? AND be.event_type='BOOKING_CANCELLED'
+                      AND be.details ->> 'depositOutcome'='NON_REFUNDABLE'
+                    ORDER BY be.created_at DESC,be.id DESC
+                    LIMIT 1
+                ),0)
+            )
+            """, BigDecimal.class, bookingId, bookingId);
+    }
+
+    public String depositCancellationOutcome(UUID bookingId) {
+        List<String> outcomes = db.query("""
+            SELECT details ->> 'depositOutcome'
+            FROM gcmb.booking_event
+            WHERE booking_id=? AND event_type='BOOKING_CANCELLED'
+            ORDER BY created_at DESC,id DESC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getString(1), bookingId);
+        String outcome = outcomes.isEmpty() ? null : outcomes.get(0);
+        if (outcome != null) return outcome;
+        return db.queryForObject("""
+            SELECT CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM gcmb.deposit d
+                    JOIN gcmb.deposit_entry e ON e.deposit_id=d.id
+                    WHERE d.booking_id=? AND e.kind='FORFEIT'
+                ) THEN 'NON_REFUNDABLE'
+                WHEN EXISTS (
+                    SELECT 1 FROM gcmb.refund_request r
+                    WHERE r.booking_id=? AND r.kind='DEPOSIT'
+                ) THEN 'REFUND_ELIGIBLE'
+                WHEN NOT EXISTS (
+                    SELECT 1 FROM gcmb.deposit d
+                    JOIN gcmb.deposit_entry e ON e.deposit_id=d.id
+                    WHERE d.booking_id=? AND e.kind='RECEIVE'
+                ) THEN 'NO_DEPOSIT'
+                ELSE NULL
+            END
+            """, String.class, bookingId, bookingId, bookingId);
+    }
+
     public String depositPaymentMethod(UUID bookingId) {
         List<String> methods = db.query("""
             SELECT DISTINCT p.method
@@ -379,8 +460,8 @@ public class BookingRepository {
             String pattern = "%" + search.trim() + "%";
             params.add(pattern); params.add(pattern); params.add(pattern); params.add(pattern);
         }
-        if (Boolean.TRUE.equals(hasDeposit)) where.append(" AND COALESCE(dep.balance,0)>0");
-        if (Boolean.FALSE.equals(hasDeposit)) where.append(" AND COALESCE(dep.balance,0)=0");
+        if (Boolean.TRUE.equals(hasDeposit)) where.append(" AND COALESCE(received.amount,0)>0");
+        if (Boolean.FALSE.equals(hasDeposit)) where.append(" AND COALESCE(received.amount,0)=0");
         String from = """
             FROM gcmb.booking b
             LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
@@ -389,13 +470,31 @@ public class BookingRepository {
             LEFT JOIN (SELECT booking_id,SUM(amount) AS amount FROM gcmb.booking_charge WHERE status='ACTIVE' GROUP BY booking_id) ch ON ch.booking_id=b.id
             LEFT JOIN gcmb.deposit d ON d.booking_id=b.id
             LEFT JOIN gcmb.v_deposit_balance dep ON dep.id=d.id
+            LEFT JOIN LATERAL (
+                SELECT GREATEST(
+                    COALESCE((
+                        SELECT SUM(e.amount)
+                        FROM gcmb.deposit d1
+                        JOIN gcmb.deposit_entry e ON e.deposit_id=d1.id AND e.kind='RECEIVE'
+                        WHERE d1.booking_id=b.id
+                    ),0),
+                    COALESCE((
+                        SELECT NULLIF(be.details ->> 'depositAmount','')::numeric
+                        FROM gcmb.booking_event be
+                        WHERE be.booking_id=b.id AND be.event_type='BOOKING_CANCELLED'
+                        ORDER BY be.created_at DESC,be.id DESC
+                        LIMIT 1
+                    ),0)
+                ) AS amount
+            ) received ON true
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel,b.planned_start,b.planned_end,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance " + from + where + " ORDER BY b.planned_start DESC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel,b.planned_start,b.planned_end,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY b.planned_start DESC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return db.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),
             instant(rs, "planned_end"), rs.getString("status"), rs.getObject("room_id", UUID.class), rs.getString("room_code"),
             rs.getString("room_name"), rs.getString("room_type_name"), rs.getBigDecimal("expected_amount"), rs.getBigDecimal("deposit_balance"),
+            rs.getBigDecimal("deposit_received_amount"),
             rs.getInt("guest_count"), rs.getString("room_operating_status")), params.toArray());
     }
 
@@ -411,7 +510,9 @@ public class BookingRepository {
             String pattern = "%" + search.trim() + "%"; params.add(pattern); params.add(pattern); params.add(pattern); params.add(pattern);
         }
         if (hasDeposit != null) {
-            where.append(hasDeposit ? " AND EXISTS (SELECT 1 FROM gcmb.deposit d JOIN gcmb.v_deposit_balance v ON v.id=d.id WHERE d.booking_id=b.id AND v.balance>0)" : " AND NOT EXISTS (SELECT 1 FROM gcmb.deposit d JOIN gcmb.v_deposit_balance v ON v.id=d.id WHERE d.booking_id=b.id AND v.balance>0)");
+            where.append(hasDeposit
+                ? " AND (EXISTS (SELECT 1 FROM gcmb.deposit d JOIN gcmb.deposit_entry e ON e.deposit_id=d.id AND e.kind='RECEIVE' WHERE d.booking_id=b.id) OR EXISTS (SELECT 1 FROM gcmb.booking_event be WHERE be.booking_id=b.id AND be.event_type='BOOKING_CANCELLED' AND COALESCE(NULLIF(be.details ->> 'depositAmount','')::numeric,0)>0))"
+                : " AND NOT (EXISTS (SELECT 1 FROM gcmb.deposit d JOIN gcmb.deposit_entry e ON e.deposit_id=d.id AND e.kind='RECEIVE' WHERE d.booking_id=b.id) OR EXISTS (SELECT 1 FROM gcmb.booking_event be WHERE be.booking_id=b.id AND be.event_type='BOOKING_CANCELLED' AND COALESCE(NULLIF(be.details ->> 'depositAmount','')::numeric,0)>0))");
         }
         return db.queryForObject("SELECT count(*) FROM gcmb.booking b" + where, Long.class, params.toArray());
     }

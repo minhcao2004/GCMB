@@ -179,8 +179,6 @@ public class BookingService {
             throw new BookingFailure(409, "form", "Chỉ có thể check-in booking đang chờ nhận phòng");
 
         Instant now = Instant.now();
-        if (now.isBefore(booking.plannedStart()))
-            throw new BookingFailure(409, "form", "Chưa đến giờ nhận phòng theo booking");
         if (!booking.plannedEnd().isAfter(now))
             throw new BookingFailure(409, "form", "Đã quá khung giờ booking; không thể check-in");
         AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
@@ -189,11 +187,26 @@ public class BookingService {
         if (!"AVAILABLE".equals(allocation.operatingStatus()))
             throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng nhận khách; hãy đổi phòng trước khi check-in");
 
-        if (repository.checkInBooking(bookingId, now) != 1 || repository.occupyAllocation(allocation.id(), now) != 1)
+        boolean earlyCheckIn = now.isBefore(booking.plannedStart());
+        Instant effectiveStart = earlyCheckIn ? now : booking.plannedStart();
+        Instant effectiveEnd = earlyCheckIn
+            ? now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd()))
+            : booking.plannedEnd();
+        if (earlyCheckIn && repository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
+            throw new BookingFailure(409, "roomId", "Không thể nhận phòng sớm vì khung giờ mới bị trùng với booking khác của phòng");
+
+        int bookingUpdated = repository.checkInBooking(bookingId, now, effectiveStart, effectiveEnd);
+        int allocationUpdated = earlyCheckIn
+            ? shiftAndOccupyAllocation(allocation.id(), now, effectiveStart, effectiveEnd)
+            : repository.occupyAllocation(allocation.id(), now);
+        if (bookingUpdated != 1 || allocationUpdated != 1)
             throw new BookingFailure(409, "form", "Booking vừa được xử lý ở một phiên khác. Vui lòng tải lại dữ liệu.");
         BigDecimal deposit = repository.depositBalance(bookingId);
         repository.event(bookingId, actorId, "BOOKING_CHECKED_IN", null, detailsMap(
-            "actualCheckin", now, "roomId", allocation.roomId(), "depositBalance", deposit));
+            "actualCheckin", now, "roomId", allocation.roomId(), "depositBalance", deposit,
+            "earlyCheckIn", earlyCheckIn, "plannedStartBeforeCheckIn", booking.plannedStart(),
+            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", effectiveStart,
+            "plannedEndAfterCheckIn", effectiveEnd));
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 
@@ -279,10 +292,6 @@ public class BookingService {
             "refundCutoffMinutes", booking.refundCutoffMinutes(), "releasedRoomId", allocation.roomId(),
             "refundRequestId", refundRequestId));
         BookingDtos.BookingDetail detail = detail(branch.id(), repository.booking(bookingId, branch.id()));
-        BookingDtos.DepositView depositView = new BookingDtos.DepositView(repository.depositBalance(bookingId), outcome,
-            booking.refundCutoffMinutes(), repository.depositPaymentMethod(bookingId));
-        detail = new BookingDtos.BookingDetail(detail.booking(), detail.branchId(), detail.note(), detail.createdAt(),
-            detail.allocations(), detail.charges(), depositView);
         return new BookingDtos.CancellationResult(detail, outcome, deposit, now, refundRequestId);
     }
 
@@ -291,17 +300,19 @@ public class BookingService {
         List<AllocationRow> allocations = repository.allocations(booking.id());
         AllocationRow latest = allocations.isEmpty() ? null : allocations.get(allocations.size() - 1);
         BigDecimal depositBalance = repository.depositBalance(booking.id());
+        BigDecimal depositReceivedAmount = repository.depositReceivedAmount(booking.id());
         BookingDtos.BookingSummary summary = new BookingDtos.BookingSummary(booking.id(), booking.code(), booking.contactName(),
             booking.contactPhone(), booking.channel(), booking.plannedStart(), booking.plannedEnd(), booking.status(),
             latest == null ? null : latest.roomId(), latest == null ? null : latest.roomCode(), latest == null ? null : latest.roomName(),
             latest == null ? null : latest.roomTypeName(),
-            repository.activeChargeTotal(booking.id()), depositBalance, booking.guestCount(),
+            repository.activeChargeTotal(booking.id()), depositBalance, depositReceivedAmount, booking.guestCount(),
             latest == null ? null : latest.operatingStatus());
         List<BookingDtos.AllocationView> allocationViews = allocations.stream().map(a -> new BookingDtos.AllocationView(
             a.id(), a.roomId(), a.roomCode(), a.roomName(), a.startsAt(), a.endsAt(), a.state(), a.changeReason(), a.createdAt())).toList();
         List<BookingDtos.ChargeView> chargeViews = repository.charges(booking.id()).stream().map(this::chargeView).toList();
         return new BookingDtos.BookingDetail(summary, branchId, booking.note(), booking.createdAt(), allocationViews,
-            chargeViews, new BookingDtos.DepositView(depositBalance, null, booking.refundCutoffMinutes(),
+            chargeViews, new BookingDtos.DepositView(depositBalance, depositReceivedAmount,
+                repository.depositForfeitedAmount(booking.id()), repository.depositCancellationOutcome(booking.id()), booking.refundCutoffMinutes(),
                 repository.depositPaymentMethod(booking.id())));
     }
 
@@ -331,6 +342,16 @@ public class BookingService {
         catch (DataIntegrityViolationException e) {
             String detail = e.getMostSpecificCause() == null ? "" : e.getMostSpecificCause().getMessage();
             if (detail != null && (detail.contains("no_room_overlap") || detail.contains("no_booking_parallel_rooms"))) throw roomConflict();
+            throw e;
+        }
+    }
+
+    private int shiftAndOccupyAllocation(UUID allocationId, Instant now, Instant startsAt, Instant endsAt) {
+        try { return repository.shiftAndOccupyAllocation(allocationId, now, startsAt, endsAt); }
+        catch (DataIntegrityViolationException e) {
+            String detail = e.getMostSpecificCause() == null ? "" : e.getMostSpecificCause().getMessage();
+            if (detail != null && (detail.contains("no_room_overlap") || detail.contains("no_booking_parallel_rooms")))
+                throw roomConflict();
             throw e;
         }
     }

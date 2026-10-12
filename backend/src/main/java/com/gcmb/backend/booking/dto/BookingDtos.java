@@ -33,7 +33,7 @@ public final class BookingDtos {
     public record BookingSummary(UUID id, String code, String contactName, String contactPhone,
                                  String channel, Instant plannedStart, Instant plannedEnd, String status,
                                  UUID roomId, String roomCode, String roomName, String roomTypeName,
-                                 BigDecimal expectedAmount, BigDecimal depositBalance, int guestCount,
+                                 BigDecimal expectedAmount, BigDecimal depositBalance, BigDecimal depositReceivedAmount, int guestCount,
                                  String roomOperatingStatus) {}
     public record BookingPage(List<BookingSummary> items, int page, int size, long totalElements, int totalPages) {}
     public record AllocationView(UUID id, UUID roomId, String roomCode, String roomName,
@@ -43,8 +43,9 @@ public final class BookingDtos {
                              BigDecimal unitPrice, BigDecimal amount, String status,
                              UUID priceRuleId, UUID comboId, Map<String, Object> pricingSnapshot,
                              Instant createdAt) {}
-    public record DepositView(BigDecimal balance, String cancellationOutcome, int refundCutoffMinutes,
-                              String paymentMethod) {}
+    public record DepositView(BigDecimal balance, BigDecimal receivedAmount, BigDecimal forfeitedAmount,
+                              String cancellationOutcome,
+                              int refundCutoffMinutes, String paymentMethod) {}
     public record BookingDetail(BookingSummary booking, UUID branchId, String note,
                                 Instant createdAt, List<AllocationView> allocations,
                                 List<ChargeView> charges, DepositView deposit) {}

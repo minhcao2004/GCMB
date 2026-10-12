@@ -140,7 +140,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
       channel: form.channel,
       note: form.note.trim() || null,
       guestCount: Number(form.guestCount),
-      depositAmount,
+      depositAmount: form.depositEnabled ? depositAmount : 0,
       paymentMethod: form.depositEnabled && depositAmount > 0 ? form.paymentMethod : null,
       paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
     });
