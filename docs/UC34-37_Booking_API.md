@@ -47,3 +47,7 @@ Cancellation is allowed before the planned start. At least 40 minutes before sta
 The current schema has `HOLIDAY` price-rule rows but no holiday calendar. Hourly quotes therefore use matching `SPECIFIC`, `WEEKDAY`, `WEEKEND`, and `ALL` rules; a holiday-only window has no resolvable hourly price until a holiday calendar is added.
 
 Errors use the existing auth API envelope: `{ "message": "...", "errors": { "field": "..." } }`.
+
+## Frontend screen boundary
+
+The current frontend also includes a preview for active room details and an in-session room-change dialog, documented in [Reception room and check-in screens](RECEPTION_SCREENS.md). The API contract above does not include active room sessions, in-session room changes, check-in confirmation, checkout, or payment. The preview does not persist room/order/deposit data. The booking check-in panel can read a booking and its saved charges, but its confirmation action only explains that a backend endpoint is not available; it does not change booking status.

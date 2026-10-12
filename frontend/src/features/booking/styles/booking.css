@@ -28,6 +28,8 @@
   line-height: 1.5;
 }
 
+.booking-app h2 { letter-spacing: normal; }
+
 .booking-app header { position: static; inset: auto; z-index: auto; padding: 0; }
 .booking-app { display: flex; border-left: 5px solid var(--booking-pink); }
 .booking-sidebar { width: 218px; flex: 0 0 218px; min-height: 100vh; display: flex; flex-direction: column; padding: 14px 12px 16px; background: #fff; }

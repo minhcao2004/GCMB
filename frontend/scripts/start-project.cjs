@@ -27,16 +27,20 @@ function readConfig() {
 }
 
 async function assertFree(port) {
-  for (const host of ['127.0.0.1', '::1']) {
-    await new Promise((resolve, reject) => {
-      const server = net.createServer();
-      server.once('error', (error) => {
-        if (error.code === 'EAFNOSUPPORT' || error.code === 'EADDRNOTAVAIL') resolve();
-        else reject(new Error(`Cổng ${port} đang được dùng hoặc không được phép mở. Dừng phiên npm/BackendApplication cũ rồi chạy lại. Không tự động chuyển sang cổng khác.`));
-      });
-      server.listen({ port, host, exclusive: true }, () => server.close(resolve));
+  // Both servers below bind only to 127.0.0.1; an unrelated IPv6-only
+  // listener on ::1 must not prevent this session from starting.
+  const host = '127.0.0.1';
+  await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (error) => {
+      const detail = `${error.code || 'lỗi socket'}: ${error.message}`;
+      const nextStep = error.code === 'EADDRINUSE'
+        ? `Kiểm tra tiến trình đang nghe cổng ${port} rồi dừng đúng phiên cũ.`
+        : 'Kiểm tra quyền mở socket hoặc cấu hình cổng loại trừ của Windows.';
+      reject(new Error(`Không mở được ${host}:${port} (${detail}). ${nextStep} Không tự động chuyển sang cổng khác.`));
     });
-  }
+    server.listen({ port, host, exclusive: true }, () => server.close(resolve));
+  });
 }
 
 function launch(command, args, options, label) {
@@ -59,8 +63,9 @@ function launch(command, args, options, label) {
 async function stop(code = 0) {
   if (stopping) return;
   stopping = true;
-  console.log('\n[GenZ] Đang dừng backend và frontend của phiên này…');
-  await Promise.all([...children].map((child) => new Promise((resolve) => {
+  const ownedChildren = [...children];
+  if (ownedChildren.length) console.log('\n[GenZ] Đang dừng backend và frontend của phiên này…');
+  await Promise.all(ownedChildren.map((child) => new Promise((resolve) => {
     if (!child.pid) return resolve();
     if (process.platform === 'win32') {
       // Only terminate descendants of processes this runner created, never by port/name.
@@ -119,7 +124,16 @@ async function main() {
       // Do not copy the backend .env (database / SMTP credentials) to the frontend process.
       launch(process.execPath, [require.resolve('react-scripts/scripts/start.js')], {
         cwd: frontend,
-        env: { ...process.env, PORT: '3000', HOST: '0.0.0.0', REACT_APP_API_BASE_URL: '/api/v1' },
+        // CRA can derive an empty allowedHosts entry when Windows has no
+        // discoverable private LAN IP. Host checking is unnecessary because
+        // this development server only listens on the loopback interface.
+        env: {
+          ...process.env,
+          PORT: '3000',
+          HOST: '127.0.0.1',
+          DANGEROUSLY_DISABLE_HOST_CHECK: 'true',
+          REACT_APP_API_BASE_URL: '/api/v1',
+        },
       }, 'Frontend');
       return;
     }

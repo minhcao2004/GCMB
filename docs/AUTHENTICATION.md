@@ -13,6 +13,15 @@ Lệnh này tự chạy backend Java bằng Maven Wrapper, đợi `/api/v1/auth/
 
 Nhấn Ctrl+C ở terminal này để dừng cả hai tiến trình. Nếu cổng 3000 hoặc 8080 đang được dùng, lệnh báo lỗi thay vì tự chuyển cổng hoặc tự kết nối vào một backend khác. Dừng phiên cũ rồi chạy lại.
 
+Thông báo lỗi bind hiện ghi rõ địa chỉ, mã lỗi và bước kiểm tra. Với `EADDRINUSE`, xem tiến trình đang nghe cổng trong PowerShell rồi dừng phiên đúng ứng dụng:
+
+```powershell
+$portOwnerId = (Get-NetTCPConnection -State Listen -LocalPort 8080 | Select-Object -First 1 -ExpandProperty OwningProcess)
+Get-CimInstance Win32_Process -Filter "ProcessId = $portOwnerId" | Select-Object ProcessId,ParentProcessId,Name,CommandLine
+```
+
+Thay `8080` bằng `3000` nếu thông báo chỉ cổng frontend. Nếu không có kết quả nhưng vẫn gặp lỗi bind, kiểm tra cổng bị Windows loại trừ (`netsh interface ipv4 show excludedportrange protocol=tcp`) hoặc quyền mở socket trên máy.
+
 Cần Node.js 20.12+, JDK 17+ và các dependency frontend (`npm.cmd ci` nếu chưa cài). Lần chạy đầu Maven có thể tải dependency. Lệnh `npm.cmd run start:frontend` chỉ chạy React khi chủ động chạy backend riêng trong IntelliJ.
 
 ## Cấu hình riêng trên từng máy
@@ -23,7 +32,7 @@ Các biến database: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`. Máy hiện tại 
 
 Nếu chạy trực tiếp BackendApplication từ IntelliJ, cấu hình môi trường vẫn phải có `SPRING_PROFILES_ACTIVE=dev`, `DB_PASSWORD` và `AUTH_SECURE_COOKIE=false` cho HTTP localhost; Java không tự đọc `.env`. Cách đơn giản được hỗ trợ là `npm start`.
 
-Frontend dùng URL tương đối `/api/v1`, dev server proxy tới backend `127.0.0.1:8080`. Tránh mở nhầm cổng 3001. Bản production cần reverse proxy `/api` tới backend và HTTPS; cookie Secure mặc định được giữ cho production.
+Frontend chỉ lắng nghe local tại `127.0.0.1:3000`, dùng URL tương đối `/api/v1` và dev server proxy tới backend `127.0.0.1:8080`. Runner tắt host check của CRA vì giao diện chỉ mở trên loopback; việc này cũng tránh lỗi `allowedHosts` khi Windows không phát hiện được địa chỉ LAN riêng. Tránh mở nhầm cổng 3001. Bản production cần reverse proxy `/api` tới backend và HTTPS; cookie Secure mặc định được giữ cho production.
 
 ## Luồng xác thực theo yêu cầu đã điều chỉnh
 

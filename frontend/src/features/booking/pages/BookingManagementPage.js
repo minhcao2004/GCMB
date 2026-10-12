@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import Brand from '../../../shared/components/Brand';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import ReceptionLayout from '../components/ReceptionLayout';
 import BookingCreatePage from './BookingCreatePage';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
-
-const navigation = [
-  ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
-  ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Kho hàng', 'inventory'], ['Báo sự cố', 'issues'],
-];
 
 const iconPaths = {
   overview: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -46,44 +41,6 @@ function statusLabel(value) {
 }
 function timeText(value, timezone) { return displayPart(value, { hour: '2-digit', minute: '2-digit', hour12: false }, timezone); }
 function dateText(value, timezone) { return displayPart(value, { day: '2-digit', month: '2-digit', year: 'numeric' }, timezone); }
-function initials(user) {
-  const value = user?.fullName || user?.username || 'MC';
-  return value.split(/[\s._-]+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join('') || 'MC';
-}
-
-function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange }) {
-  const now = new Date();
-  const currentDate = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
-  const currentTime = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
-  return <div className="booking-app">
-    <aside className="booking-sidebar">
-      <div className="booking-brand"><Brand /></div>
-      <span className="booking-role-chip">LỄ TÂN</span>
-      <nav className="booking-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === 'booking' ? ' is-active' : ''}`} aria-current={icon === 'booking' ? 'page' : undefined} aria-disabled={icon !== 'booking'}>
-          <Icon name={icon} /><span>{label}</span>
-        </button>)}
-      </nav>
-      <div className="booking-sidebar-footer">
-        <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
-        <small>Đang làm việc · Lễ tân</small>
-        <button type="button" className="booking-logout-link" disabled={busy} onClick={onLogout}>Đăng xuất</button>
-      </div>
-    </aside>
-    <div className="booking-workspace">
-      <header className="booking-topbar">
-        <p><span>Lễ tân</span><b>/</b><strong>{breadcrumb}</strong></p>
-        <div className="booking-topbar-tools">
-          <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label="Tìm kiếm booking" /></label>
-          <span className="booking-topbar-datetime">{currentDate} {currentTime}</span>
-          <span className="booking-user-avatar" aria-label={user?.username}>{initials(user)}</span>
-        </div>
-      </header>
-      <main className="booking-main" id="main">{children}</main>
-    </div>
-  </div>;
-}
-
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel }) {
@@ -346,9 +303,9 @@ export default function BookingManagementPage() {
     </div>
   </>;
 
-  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={createMode ? 'Booking / Tạo booking' : 'Booking'} search={search} onSearchChange={setSearch}>
+  return <ReceptionLayout user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={createMode ? 'Booking / Tạo booking' : 'Booking'} search={search} onSearchChange={setSearch} activeSection="booking">
     {mainContent}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} />}
     <CancelDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={cancelBooking} busy={busy} error={cancelError} />
-  </AppShell>;
+  </ReceptionLayout>;
 }
