@@ -8,15 +8,15 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
-import { useState } from 'react';
-
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchAssignmentPanel from '../../branch/components/BranchAssignmentPanel';
+import AccountsPage from '../../administration/accounts/AccountsPage';
+import AuditLogPage from '../../administration/accounts/AuditLogPage';
 
-const tabs = ['Tổng quan', 'Cơ sở', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
