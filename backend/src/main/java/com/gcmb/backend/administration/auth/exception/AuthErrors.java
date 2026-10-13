@@ -28,12 +28,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class AuthErrors {
-    private static final Logger log=LoggerFactory.getLogger(AuthErrors.class);
+    private static final Logger log = LoggerFactory.getLogger(AuthErrors.class);
+
     @ExceptionHandler(AuthFailure.class)
+    // Chuyển lỗi nghiệp vụ thành mã HTTP và lỗi theo trường.
     ResponseEntity<?> failure(AuthFailure e) { return ResponseEntity.status(e.status).body(Map.of("message", e.getMessage(), "errors", e.errors)); }
     @ExceptionHandler(RecoveryMailer.MailUnavailable.class)
+    // Trả lỗi dịch vụ khi không gửi được email khôi phục.
     ResponseEntity<?> mail() { return error(503, "Gửi email thất bại. Vui lòng thử lại sau"); }
     @ExceptionHandler(HttpMessageNotReadableException.class)
+    // Trả lỗi dữ liệu JSON không đọc được.
     ResponseEntity<?> badRequest() { return error(400, "Dữ liệu gửi lên không hợp lệ"); }
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<?> responseStatus(ResponseStatusException e) {
@@ -42,9 +46,11 @@ public class AuthErrors {
         return ResponseEntity.status(status).body(Map.of("message",message,"errors",Map.of("form",message)));
     }
     @ExceptionHandler(Exception.class)
+    // Ghi stack trace phía server nhưng che chi tiết nội bộ khỏi client.
     ResponseEntity<?> unexpected(Exception e) {
-        log.error("Unhandled API error",e);
+        log.error("Unhandled API exception", e);
         return error(503, "Không thể hoàn tất thao tác do lỗi máy chủ. Vui lòng thử lại");
     }
+    // Trả lỗi chung theo cùng cấu trúc message và errors.form.
     private ResponseEntity<?> error(int status, String message) { return ResponseEntity.status(status).body(Map.of("message", message, "errors", Map.of("form", message))); }
 }

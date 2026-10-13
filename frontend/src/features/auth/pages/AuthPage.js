@@ -14,6 +14,7 @@ import { authApi, apiErrors } from '../services/authApi';
 import { validate } from '../services/validation';
 
 const empty = { username: '', password: '', email: '', confirmation: '', code: '', remember: false };
+// Dùng chung biểu mẫu đăng nhập, quên mật khẩu và đặt lại mật khẩu.
 export default function AuthPage({ mode, recovery, onRecovery }) {
   const [values, setValues] = useState(empty);
   const [errors, setErrors] = useState({});
@@ -27,19 +28,23 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
   useEffect(() => {
     document.title = `${mode === 'login' ? 'Đăng nhập' : mode === 'forgot' ? 'Quên mật khẩu' : 'Đặt lại mật khẩu'} | GenZ Cinema & Music Box`;
   }, [mode]);
+  // Cập nhật trường nhập và xóa lỗi cũ của trường đó.
   const change = (event) => {
     const { name, value, checked, type } = event.target;
     setValues((old) => ({ ...old, [name]: type === 'checkbox' ? checked : value }));
     setErrors((old) => ({ ...old, [name]: '', form: '' }));
     setNotice('');
   };
+  // Chỉ hiện lỗi khi người dùng đã nhập hoặc trường đang có lỗi.
   const blur = (name) => {
-    // Do not move navigation links when an untouched, empty field loses focus.
+    // Không làm xê dịch liên kết điều hướng khi trường trống chưa sửa mất focus.
     if (!values[name] && !errors[name]) return;
     const next = validate(mode, values);
     setErrors((old) => ({ ...old, [name]: next[name] || '' }));
   };
+  // Ghép thuộc tính chung và trạng thái lỗi cho một trường xác thực.
   const field = (name) => ({ name, value: values[name], onChange: change, onBlur: () => blur(name), error: errors[name], disabled: Boolean(busy), required: true });
+  // Kiểm tra dữ liệu rồi gọi API tương ứng với chế độ của trang.
   const submit = async (event) => {
     event.preventDefault();
     if (submitting.current) return;
@@ -63,6 +68,7 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
     } catch (error) { setErrors(apiErrors(error)); }
     finally { submitting.current = false; setBusy(''); }
   };
+  // Gửi mã mới và xóa mã cũ trên biểu mẫu sau khi API thành công.
   const resend = async () => {
     if (submitting.current) return;
     submitting.current = true; setBusy('resend'); setErrors({}); setNotice('');
