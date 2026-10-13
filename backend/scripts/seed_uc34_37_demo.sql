@@ -1,5 +1,5 @@
 -- UC34-UC37 manual demo fixture. Run only against a local development database
--- after Flyway has applied V1 through V4. All names and customer data are fictional.
+-- after Flyway has applied V1, V2, V7 and V8. All names and customer data are fictional.
 -- The fixed IDs make the fixture safe to run more than once; existing fixture
 -- bookings and append-only payment/deposit history are left as-is.
 

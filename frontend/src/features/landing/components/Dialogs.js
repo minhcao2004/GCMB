@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { branches } from '../data/siteData';
 import { branchTypeName, formatPhone } from '../../../shared/utils/formatters';
 
+// Quản lý focus và phím Escape khi hộp thoại đang mở.
 function useDialog(isOpen, onClose) {
   const ref = useRef(null);
   useEffect(() => {
@@ -14,6 +15,7 @@ function useDialog(isOpen, onClose) {
   }, [isOpen]);
   useEffect(() => {
     const dialog = ref.current;
+    // Đồng bộ sự kiện đóng dialog gốc (kể cả phím Escape) với trạng thái React.
     const handleClose = () => onClose();
     dialog?.addEventListener('close', handleClose);
     return () => dialog?.removeEventListener('close', handleClose);
@@ -21,11 +23,13 @@ function useDialog(isOpen, onClose) {
   return ref;
 }
 
+// Chỉ đóng khi nhấp vào lớp nền ngoài nội dung hộp thoại.
 const closeFromBackdrop = (event) => {
   const rect = event.currentTarget.getBoundingClientRect();
   if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.currentTarget.close();
 };
 
+// Hiển thị chi tiết phòng từ dữ liệu trang giới thiệu.
 export function RoomDialog({ room, onClose, onBook }) {
   const ref = useDialog(Boolean(room), onClose);
   return (
@@ -36,6 +40,7 @@ export function RoomDialog({ room, onClose, onBook }) {
   );
 }
 
+// Hiển thị thông tin liên hệ/chi nhánh cho khách trên trang giới thiệu.
 export function BookingDialog({ isOpen, branchIndex, onBranchChange, onClose }) {
   const ref = useDialog(isOpen, onClose);
   const branch = branches[branchIndex] || branches[0];

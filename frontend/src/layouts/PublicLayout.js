@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Brand from '../shared/components/Brand';
 
+// Thanh điều hướng công khai và nút mở luồng đặt phòng.
 function Header({ onBook }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // Đóng menu trên màn hình nhỏ sau khi chọn mục.
   const closeMenu = () => setMenuOpen(false);
   return (
     <header id="header">
@@ -20,6 +22,7 @@ function Header({ onBook }) {
   );
 }
 
+// Thông tin chân trang của website công khai.
 function Footer() {
   return (
     <footer>
@@ -29,6 +32,7 @@ function Footer() {
   );
 }
 
+// Các lối tắt mạng xã hội trên website công khai.
 function SocialDock() {
   return (
     <aside className="social-dock" aria-label="Liên hệ GenZ Cinema">
@@ -38,6 +42,7 @@ function SocialDock() {
   );
 }
 
+// Ghép đầu trang, nội dung và chân trang công khai.
 export default function PublicLayout({ children, onBook }) {
   return <><a className="skip-link" href="#main">Đến nội dung chính</a><Header onBook={onBook} />{children}<Footer /><SocialDock /></>;
 }

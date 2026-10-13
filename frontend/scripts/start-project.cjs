@@ -1,4 +1,4 @@
-// One terminal owns both servers. No database/SMTP secrets are passed as arguments.
+// Một terminal quản lý cả hai server; không truyền mật khẩu database/SMTP qua đối số tiến trình.
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
@@ -12,6 +12,7 @@ const localConfig = path.join(backend, '.env');
 const children = new Set();
 let stopping = false;
 
+// Đọc cấu hình riêng của backend và ưu tiên biến môi trường hệ thống.
 function readConfig() {
   if (!parseEnv) throw new Error('Cần Node.js 20.12 trở lên. Hãy cập nhật Node.js rồi chạy lại.');
   let local = {};
@@ -26,9 +27,9 @@ function readConfig() {
   return env;
 }
 
+// Báo lỗi rõ ràng nếu cổng loopback cần dùng đã bị chiếm.
 async function assertFree(port) {
-  // Both servers below bind only to 127.0.0.1; an unrelated IPv6-only
-  // listener on ::1 must not prevent this session from starting.
+  // Hai server chỉ nghe trên 127.0.0.1; tiến trình IPv6 chỉ nghe ở ::1 không cản phiên này.
   const host = '127.0.0.1';
   await new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -43,6 +44,7 @@ async function assertFree(port) {
   });
 }
 
+// Khởi chạy một server và theo dõi để dừng cả phiên khi server thoát.
 function launch(command, args, options, label) {
   const child = spawn(command, args, { ...options, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32' });
   children.add(child);
@@ -60,6 +62,7 @@ function launch(command, args, options, label) {
   return child;
 }
 
+// Chỉ dừng các tiến trình con do lệnh này tạo ra.
 async function stop(code = 0) {
   if (stopping) return;
   stopping = true;
@@ -68,7 +71,7 @@ async function stop(code = 0) {
   await Promise.all(ownedChildren.map((child) => new Promise((resolve) => {
     if (!child.pid) return resolve();
     if (process.platform === 'win32') {
-      // Only terminate descendants of processes this runner created, never by port/name.
+      // Chỉ dừng cây tiến trình do lệnh này tạo, không dừng theo tên hay cổng.
       const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
       killer.once('exit', resolve); killer.once('error', resolve);
     } else {
@@ -79,6 +82,7 @@ async function stop(code = 0) {
   process.exit(code);
 }
 
+// Chỉ coi backend sẵn sàng khi health API trả đúng trạng thái UP.
 function backendReady() {
   return new Promise((resolve) => {
     const request = http.get('http://127.0.0.1:8080/api/v1/auth/health', { timeout: 1500 }, (response) => {
@@ -95,6 +99,7 @@ function backendReady() {
   });
 }
 
+// Khởi động backend trước, đợi sẵn sàng rồi mới mở frontend.
 async function main() {
   const config = readConfig();
   await assertFree(8080);
@@ -108,7 +113,7 @@ async function main() {
     FRONTEND_ORIGIN: 'http://localhost:3000',
     SERVER_PORT: '8080', SERVER_ADDRESS: '127.0.0.1',
     TEMP: temporary, TMP: temporary,
-    // A short temporary path also avoids the Java 17 Windows socket path limit.
+    // Đường dẫn tạm ngắn cũng tránh giới hạn độ dài socket của Java 17 trên Windows.
     JAVA_TOOL_OPTIONS: `${config.JAVA_TOOL_OPTIONS || ''} -Djava.io.tmpdir="${temporary}" -Dspring.devtools.restart.enabled=false`.trim(),
   };
   console.log('[GenZ] Đang khởi động backend và kết nối PostgreSQL…');
@@ -121,12 +126,11 @@ async function main() {
   while (!stopping && Date.now() < deadline) {
     if (await backendReady()) {
       console.log('[GenZ] Backend sẵn sàng. Đang mở http://localhost:3000/dang-nhap');
-      // Do not copy the backend .env (database / SMTP credentials) to the frontend process.
+      // Không chuyển .env của backend (database/SMTP) sang tiến trình frontend.
       launch(process.execPath, [require.resolve('react-scripts/scripts/start.js')], {
         cwd: frontend,
-        // CRA can derive an empty allowedHosts entry when Windows has no
-        // discoverable private LAN IP. Host checking is unnecessary because
-        // this development server only listens on the loopback interface.
+        // CRA có thể tạo allowedHosts rỗng khi Windows không tìm được IP LAN riêng.
+        // Server phát triển chỉ nghe loopback nên không cần kiểm tra host tại đây.
         env: {
           ...process.env,
           PORT: '3000',

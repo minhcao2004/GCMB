@@ -17,11 +17,14 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 public class SessionFilter extends OncePerRequestFilter {
     private final AuthService auth;
+    // Dùng service để xác thực token trên từng request được bảo vệ.
     public SessionFilter(AuthService auth) { this.auth = auth; }
+    // Lấy token phiên từ cookie mà không đưa token vào URL hoặc log.
     public static String token(HttpServletRequest request) {
         if (request.getCookies() != null) for (var cookie : request.getCookies()) if ("GCMB_SESSION".equals(cookie.getName())) return cookie.getValue();
         return null;
     }
+    // Nạp danh tính và quyền vào SecurityContext trước khi request tới controller.
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         try {
             Identity identity = auth.authenticate(token(request));

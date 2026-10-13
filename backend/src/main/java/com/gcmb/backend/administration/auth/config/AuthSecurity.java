@@ -17,6 +17,7 @@ import org.springframework.web.cors.CorsConfiguration;
 @Configuration
 @EnableConfigurationProperties(AuthSettings.class)
 public class AuthSecurity {
+    // Cấu hình CORS, CSRF, quyền theo vai trò và bộ lọc phiên cho toàn bộ API.
     @Bean SecurityFilterChain security(HttpSecurity http, AuthService auth, AuthSettings policy) throws Exception {
         CookieCsrfTokenRepository csrf = new CookieCsrfTokenRepository();
         csrf.setCookieCustomizer(cookie -> cookie.path("/api").sameSite("Lax").httpOnly(true).secure(policy.secureCookie()));

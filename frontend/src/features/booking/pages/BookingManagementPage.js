@@ -37,28 +37,38 @@ const iconPaths = {
   logout: <><path d="M10 17l5-5-5-5m5 5H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
 };
 
+// Vẽ biểu tượng dùng chung theo tên trong giao diện lễ tân.
 function Icon({ name, size = 18 }) {
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{iconPaths[name]}</svg>;
 }
 
+// Lấy ngày hôm nay theo giờ địa phương cho bộ lọc lịch.
 function localToday() { return toLocalDateInput(new Date()); }
+// Lấy ngày kế tiếp theo giờ địa phương cho bộ lọc lịch.
 function localTomorrow() { const date = new Date(); date.setDate(date.getDate() + 1); return toLocalDateInput(date); }
+// Định dạng một phần thời gian theo múi giờ chi nhánh.
 function displayPart(instant, options, timezone = 'Asia/Ho_Chi_Minh') {
   if (!instant) return '—';
   try { return new Intl.DateTimeFormat('vi-VN', { ...options, timeZone: timezone }).format(new Date(instant)); }
   catch { return new Intl.DateTimeFormat('vi-VN', options).format(new Date(instant)); }
 }
+// Đổi trạng thái API thành mã dùng cho CSS.
 function statusId(value) {
   return ({ CONFIRMED: 'pending', IN_HOUSE: 'checkedIn', CANCELLED: 'cancelled', NO_SHOW: 'noShow', COMPLETED: 'completed', DRAFT: 'draft' })[value] || String(value || '').toLowerCase();
 }
+// Đổi trạng thái booking thành nhãn tiếng Việt.
 function statusLabel(value) {
   return ({ CONFIRMED: 'Chờ check-in', IN_HOUSE: 'Đã check-in', CANCELLED: 'Đã hủy', NO_SHOW: 'No-show', COMPLETED: 'Hoàn tất', DRAFT: 'Nháp' })[value] || 'Chờ check-in';
 }
+// Định dạng giờ hẹn theo múi giờ chi nhánh.
 function timeText(value, timezone) { return displayPart(value, { hour: '2-digit', minute: '2-digit', hour12: false }, timezone); }
+// Định dạng ngày hẹn theo múi giờ chi nhánh.
 function dateText(value, timezone) { return displayPart(value, { day: '2-digit', month: '2-digit', year: 'numeric' }, timezone); }
+// Hiển thị phương thức đã thu cọc cho lễ tân.
 function paymentMethodLabel(value) {
   return ({ BANK_TRANSFER: 'Chuyển khoản', MANUAL_TRANSFER: 'Chuyển khoản', CASH: 'Tiền mặt', CARD: 'Thẻ', QR: 'QR', MULTIPLE: 'Nhiều phương thức' })[value] || 'Chưa rõ phương thức';
 }
+// Mô tả kết quả cọc sau hủy và trường hợp chưa thu cọc.
 function depositOutcomeLabel(outcome, receivedAmount, bookingStatus) {
   if (outcome === 'REFUND_ELIGIBLE') return 'Có cọc · Đủ điều kiện hoàn';
   if (outcome === 'NON_REFUNDABLE') return 'Có cọc · Không đủ điều kiện hoàn';
@@ -66,26 +76,31 @@ function depositOutcomeLabel(outcome, receivedAmount, bookingStatus) {
   if (bookingStatus === 'CANCELLED' && receivedAmount > 0) return 'Chưa xác định kết quả hoàn cọc';
   return receivedAmount > 0 ? 'Đang giữ cọc' : 'Chưa thu cọc';
 }
+// Hiển thị số cọc còn giữ, chờ hoàn hoặc đã bị giữ lại.
 function depositDispositionLabel(outcome, receivedAmount, balance, forfeitedAmount, bookingStatus) {
   if (outcome === 'NON_REFUNDABLE') return forfeitedAmount > 0 ? `Đã tịch thu ${formatVnd(forfeitedAmount)}` : 'Cọc đã bị tịch thu';
   if (outcome === 'REFUND_ELIGIBLE') return balance > 0 ? `Đang chờ hoàn ${formatVnd(balance)}` : `Số dư cọc hiện tại ${formatVnd(balance)}`;
   if (bookingStatus === 'CANCELLED' && receivedAmount > 0) return 'Chưa xác định cách xử lý cọc';
   return receivedAmount > 0 ? `Còn giữ ${formatVnd(balance)}` : null;
 }
+// Tạo tiêu đề tình trạng phòng trên bảng xác nhận check-in.
 function checkInRoomTitle(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return `${booking.roomCode || 'Phòng'} đang được sử dụng cho booking này`;
   if (!booking.roomCode) return 'Booking chưa được gán phòng';
   return roomReady ? `${booking.roomCode} trống · sẵn sàng nhận khách` : `${booking.roomCode} chưa sẵn sàng nhận khách`;
 }
+// Giải thích vì sao phòng có hoặc chưa có thể check-in.
 function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
+// Lấy chữ cái đại diện cho tài khoản đang đăng nhập.
 function initials(user) {
   const value = user?.fullName || user?.username || 'MC';
   return value.split(/[\s._-]+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join('') || 'MC';
 }
 
+// Dựng khung điều hướng, thanh đầu và nút đăng xuất của lễ tân.
 function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange }) {
   const now = new Date();
   const currentDate = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
@@ -120,8 +135,10 @@ function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, sear
     </div>
   </div>;
 }
+// Chọn lớp CSS theo trạng thái booking.
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
+// Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
 function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow, onStay }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -171,6 +188,7 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
   </aside>;
 }
 
+// Xác nhận phòng và thời lượng trước khi gửi thao tác check-in.
 function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, error }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -227,6 +245,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   </div>;
 }
 
+// Nạp số dư cọc mới nhất rồi xác định nhánh hoàn hoặc giữ cọc khi hủy.
 function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const [reasonOption, setReasonOption] = useState(cancellationReasons[0]);
   const [otherReason, setOtherReason] = useState('');
@@ -339,6 +358,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   </div>;
 }
 
+// Nạp booking mới nhất để xác nhận no-show và số cọc sẽ bị giữ.
 function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const [bookingDetail, setBookingDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
@@ -400,6 +420,7 @@ function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   </div>;
 }
 
+// Điều phối danh sách, chi tiết và các thao tác booking trong phạm vi lễ tân.
 export default function BookingManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -505,6 +526,7 @@ export default function BookingManagementPage() {
     return true;
   }), [rows, activeFilter, roomTier]);
 
+  // Đăng xuất rồi chuyển về trang đăng nhập.
   const logout = async () => {
     setBusy(true);
     try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }
@@ -512,6 +534,7 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  // Gửi booking mới và cập nhật danh sách sau khi lưu.
   const createBooking = async (payload) => {
     setBusy(true);
     try {
@@ -541,6 +564,7 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  // Gửi yêu cầu hủy và đồng bộ lại chi tiết cùng bộ lọc.
   const cancelBooking = async (booking, cancellation) => {
     setBusy(true);
     setCancelError('');
@@ -560,6 +584,7 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  // Ghi no-show và làm mới số dư cọc, trạng thái phòng.
   const markNoShow = async (booking, payload) => {
     setBusy(true);
     setNoShowError('');
@@ -575,6 +600,7 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  // Ghi check-in rồi tải lại booking để hiển thị giờ thực tế.
   const confirmCheckIn = async (booking) => {
     setBusy(true);
     setCheckInError('');
@@ -593,6 +619,7 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  // Lưu thay đổi booking và đóng hộp thoại sửa khi thành công.
   const updateBooking = async (id, payload) => {
     setBusy(true);
     try {
@@ -611,6 +638,7 @@ export default function BookingManagementPage() {
     } finally { setBusy(false); }
   };
 
+  // Điều phối đổi phòng, mua combo hoặc bật/dừng đồng hồ giờ lẻ.
   const saveStayChange = async (action, payload) => {
     if (!stayTarget) return { error: 'Không tìm thấy booking cần cập nhật.' };
     setBusy(true);
@@ -645,13 +673,17 @@ export default function BookingManagementPage() {
     ['cancelled', 'Đã hủy', counts.cancelled], ['noShow', 'No-show', counts.noShow], ['paid', 'Có cọc', counts.paid], ['unpaid', 'Không cọc', counts.unpaid],
   ];
 
+  // Chuyển đến đường dẫn xác nhận check-in của booking được chọn.
   const openCheckIn = (booking) => {
     setCheckInError('');
     setSelectedId(booking.id);
     navigate(`/le-tan/bookings/${booking.id}/check-in`);
   };
+  // Mở đường dẫn sửa booking tương ứng.
   const openEdit = (booking) => navigate(`/le-tan/bookings/${booking.id}/edit`);
+  // Mở hộp thoại lưu trú ở chế độ đổi phòng hoặc gia hạn.
   const openStay = (booking, mode) => { setStayMode(mode); setStayTarget(booking); };
+  // Quay về danh sách khi đóng bảng check-in.
   const closeCheckIn = () => navigate('/le-tan/bookings');
   const mainContent = createMode ? <BookingCreatePage options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">

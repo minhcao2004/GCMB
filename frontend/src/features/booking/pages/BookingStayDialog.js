@@ -3,11 +3,13 @@ import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { formatVnd } from '../data/bookingData';
 
+// Lấy thông báo lỗi API phù hợp để hiển thị trong hộp thoại.
 function requestError(error) {
   const errors = apiErrors(error);
   return errors.form || Object.values(errors)[0] || 'Không thể tải báo giá.';
 }
 
+// Hiển thị ngày giờ theo múi giờ của chi nhánh.
 function dateTimeText(value, timezone) {
   if (!value) return '—';
   try {
@@ -23,6 +25,7 @@ function dateTimeText(value, timezone) {
   }
 }
 
+// Đổi tổng số phút thành thời lượng dễ đọc.
 function durationText(minutes) {
   if (minutes == null || !Number.isFinite(Number(minutes)) || Number(minutes) < 0) return '—';
   const hours = Math.floor(Number(minutes) / 60);
@@ -30,6 +33,7 @@ function durationText(minutes) {
   return [hours ? `${hours} giờ` : '', remainder ? `${remainder} phút` : ''].filter(Boolean).join(' ') || 'Dưới 1 phút';
 }
 
+// Chỉ hiện combo ngày/đêm khi giờ bắt đầu đáp ứng quy tắc backend.
 function comboCanStartAt(combo, value, timezone) {
   const name = String(combo?.name || '').toLocaleLowerCase('vi-VN');
   if (!name.includes('ngày') && !name.includes('ngay') && !name.includes('day')
@@ -43,6 +47,7 @@ function comboCanStartAt(combo, value, timezone) {
     : localTime === '23:00';
 }
 
+// Báo giá và thực hiện đổi phòng hoặc gia hạn khi khách đang sử dụng.
 export default function BookingStayDialog({ booking, detail, bookingOptions, initialMode = 'change', onClose, onSave, busy = false, timezone = 'Asia/Ho_Chi_Minh' }) {
   const [mode, setMode] = useState(initialMode);
   const [options, setOptions] = useState(null);
@@ -118,6 +123,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
     return () => { active = false; };
   }, [booking.id, extensionRequest, mode, pricingMode, comboId, meter]);
 
+  // Gửi thao tác được chọn; tiền đồng hồ hiển thị chỉ là tạm tính.
   const submit = async (event) => {
     event.preventDefault();
     setError('');

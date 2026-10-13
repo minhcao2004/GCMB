@@ -4,7 +4,7 @@ Fixture SQL: [`backend/scripts/seed_uc34_37_demo.sql`](../backend/scripts/seed_u
 
 ## Nạp dữ liệu
 
-1. Chạy ứng dụng backend ít nhất một lần để Flyway áp dụng migration V1 đến V4.
+1. Chạy ứng dụng backend ít nhất một lần để Flyway áp dụng migration V1, V2, V7 và V8.
 2. Mở database development `gcmb` trong pgAdmin, mở Query Tool, rồi chạy toàn bộ file fixture SQL. Có thể dùng PowerShell nếu đã cài `psql`:
 
    ```powershell

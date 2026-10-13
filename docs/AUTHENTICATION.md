@@ -50,9 +50,9 @@ CSRF, CORS theo origin cấu hình, cookie HttpOnly, chống gửi lặp khi đa
 
 ## Database, tài khoản và SMTP
 
-Dùng các bảng hiện có `gcmb.user_account`, `gcmb.role`, `gcmb.auth_token`. Flyway áp dụng migration mới nhất tự động khi chạy backend. V2 vẫn giữ các cột/bảng giới hạn của phiên bản trước để bảo toàn checksum migration đã chạy trong database kiểm thử; bản hiện tại không sử dụng các giới hạn đó. V3 bổ sung số khách vào booking để kiểm tra sức chứa và hiển thị ở màn check-in. V4 bổ sung mã tham chiếu cho khoản thu lễ tân xác nhận và cho phép ghi sổ cọc tại lúc tạo booking.
+Dùng các bảng hiện có `gcmb.user_account`, `gcmb.role`, `gcmb.auth_token`. Flyway áp dụng migration mới nhất tự động khi chạy backend. V2 vẫn giữ các cột/bảng giới hạn của phiên bản trước để bảo toàn checksum migration đã chạy trong database kiểm thử; bản hiện tại không sử dụng các giới hạn đó. V7 bổ sung số khách vào booking để kiểm tra sức chứa và hiển thị ở màn check-in. V8 bổ sung mã tham chiếu cho khoản thu lễ tân xác nhận và cho phép ghi sổ cọc tại lúc tạo booking.
 
-Đã chạy lệnh npm start mới và xác nhận migration V1/V2 thành công trên database `gcmb`; migration V3/V4 sẽ được Flyway áp dụng khi backend khởi động lại. Fixture UC34–37 có thể tạo tài khoản lễ tân demo `uc3437.demo` trong database local/dev khi được chạy chủ động; không chạy fixture hoặc tạo mật khẩu mặc định trên production. Đăng nhập thật cần tài khoản ACTIVE có username, email và password_hash hợp lệ. Trường đăng nhập là username, không tự tìm theo email.
+Đã chạy lệnh npm start mới và xác nhận migration V1/V2 thành công trên database `gcmb`; migration V7/V8 sẽ được Flyway áp dụng khi backend khởi động lại trên database chưa chạy các migration này dưới số cũ. Fixture UC34–37 có thể tạo tài khoản lễ tân demo `uc3437.demo` trong database local/dev khi được chạy chủ động; không chạy fixture hoặc tạo mật khẩu mặc định trên production. Đăng nhập thật cần tài khoản ACTIVE có username, email và password_hash hợp lệ. Trường đăng nhập là username, không tự tìm theo email.
 
 Các điểm vào theo vai trò: `/quan-ly-he-thong`, `/quan-ly-chi-nhanh`, `/le-tan`, `/ke-toan`. Các module nghiệp vụ chưa có trong repository nên trang hiện chỉ xác nhận người dùng, vai trò và cho đăng xuất. Ở màn lễ tân, nút Đăng xuất nằm trên thanh đầu trang để luôn hiển thị cả khi thanh bên thu gọn trên màn hình nhỏ.
 

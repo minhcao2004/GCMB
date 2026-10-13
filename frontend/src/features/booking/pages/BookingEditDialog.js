@@ -3,6 +3,7 @@ import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { formatVnd } from '../data/bookingData';
 
+// Tách thời điểm ISO thành ngày/giờ nhập theo múi giờ chi nhánh.
 function partsInZone(value, timezone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -12,6 +13,7 @@ function partsInZone(value, timezone) {
   return { date: `${fields.year}-${fields.month}-${fields.day}`, time: `${fields.hour}:${fields.minute}` };
 }
 
+// Đổi ngày/giờ tại chi nhánh về ISO, kể cả sai lệch múi giờ.
 function instantInZone(date, time, timezone) {
   if (!date || !time) return null;
   const [year, month, day] = date.split('-').map(Number);
@@ -26,6 +28,7 @@ function instantInZone(date, time, timezone) {
   return new Date(target - (represented - target)).toISOString();
 }
 
+// Nạp booking và phòng trống để sửa thông tin trước giờ bắt đầu.
 export default function BookingEditDialog({ bookingId, timezone, onClose, onUpdate }) {
   const [detail, setDetail] = useState(null);
   const [form, setForm] = useState(null);
@@ -98,12 +101,14 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     return () => { active = false; window.clearTimeout(timer); };
   }, [bookingId, formReady, form?.startDate, form?.startTime, form?.endDate, form?.endTime, plannedStart, plannedEnd, periodValid]);
 
+  // Cập nhật trường vừa sửa và xóa lỗi biểu mẫu cũ.
   const change = (event) => {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
     setFormError('');
   };
 
+  // Xác thực thời gian/phòng rồi gửi phần thay đổi tới backend.
   const save = async (event) => {
     event.preventDefault();
     setFormError('');

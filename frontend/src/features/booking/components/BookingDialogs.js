@@ -9,6 +9,7 @@ import {
   hasRoomConflict,
 } from '../data/bookingData';
 
+// Định dạng ngày địa phương cho biểu mẫu booking minh họa.
 const localDate = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -16,8 +17,10 @@ const localDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+// Định dạng giờ cho input thời gian.
 const timeInput = (date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
+// Tạo dữ liệu ban đầu cho biểu mẫu đặt phòng minh họa.
 function freshForm(selectedDate) {
   const today = localDate(new Date());
   const start = selectedDate === today ? new Date(Date.now() + 30 * 60 * 1000) : new Date(`${selectedDate}T15:00:00`);
@@ -32,6 +35,7 @@ function freshForm(selectedDate) {
   };
 }
 
+// Điền biểu mẫu minh họa từ booking đang sửa.
 function formFromBooking(booking) {
   return {
     source: booking.source === 'Khách đến trực tiếp' ? 'walkin' : 'advance',
@@ -50,6 +54,7 @@ function formFromBooking(booking) {
   };
 }
 
+// Hiển thị trường nhập và lỗi xác thực cùng một kiểu.
 function TextField({ label, name, value, onChange, error, ...inputProps }) {
   return <label className="booking-field">
     <span>{label}</span>
@@ -58,6 +63,7 @@ function TextField({ label, name, value, onChange, error, ...inputProps }) {
   </label>;
 }
 
+// Xử lý tạo/sửa booking trong luồng dữ liệu minh họa phía client.
 export function BookingFormDialog({ open, mode, booking, bookings, selectedDate, onClose, onSubmit }) {
   const [form, setForm] = useState(() => freshForm(selectedDate));
   const [errors, setErrors] = useState({});
@@ -82,6 +88,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
 
   if (!open) return null;
 
+  // Cập nhật trường nhập và xóa lỗi tương ứng.
   const updateField = (event) => {
     const { name, value, checked, type } = event.target;
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
@@ -92,6 +99,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
   const tier = room?.tier || bookingRooms.find((item) => item.id === booking?.roomId)?.tier || 'queen';
   const estimatedPrice = editing ? booking?.priceAmount || 0 : calculateBookingPrice({ ...form, tier });
 
+  // Kiểm tra biểu mẫu minh họa trước khi gọi callback lưu.
   const save = (event) => {
     event.preventDefault();
     const nextErrors = {};
@@ -248,6 +256,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
   </div>;
 }
 
+// Xác nhận hủy hoặc no-show trong luồng dữ liệu minh họa.
 export function BookingCancelDialog({ booking, onClose, onConfirm }) {
   const [cancelType, setCancelType] = useState('customer');
   const [reason, setReason] = useState('');

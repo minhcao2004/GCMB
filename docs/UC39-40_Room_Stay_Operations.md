@@ -68,7 +68,7 @@ Giá trong menu là giá tham khảo cấu hình ở mỗi chi nhánh; frontend 
 
 Fixture local để nạp các hạng Queen/King và giá trên vào chi nhánh demo UC34–UC37: chạy `backend/scripts/seed_uc34_37_demo.sql` trước, rồi chạy `backend/scripts/seed_uc39_40_menu.sql`. Script thứ hai chỉ thêm dữ liệu demo mới, không thay giá trong chi nhánh thật.
 
-Schema V1 có `room_allocation`, `booking_charge` và `booking_event`; migration V6 thêm `booking_hourly_meter` để lưu phiên đồng hồ bền vững cùng giá snapshot, thời điểm bắt đầu/dừng và số phút chốt.
+Schema V1 có `room_allocation`, `booking_charge` và `booking_event`; migration V10 thêm `booking_hourly_meter` để lưu phiên đồng hồ bền vững cùng giá snapshot, thời điểm bắt đầu/dừng và số phút chốt.
 
 ## Phạm vi liên quan: UC37 no-show
 

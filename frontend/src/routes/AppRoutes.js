@@ -5,6 +5,7 @@ import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 
+// Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
   const [recovery, setRecovery] = useState(null);
   return <BrowserRouter><Routes>

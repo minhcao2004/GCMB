@@ -26,8 +26,10 @@ import org.springframework.stereotype.Service;
 public class BookingPricingService {
     private final BookingRepository repository;
 
+    // Rule giá và combo luôn đọc từ cấu hình database thay vì giá do client gửi.
     public BookingPricingService(BookingRepository repository) { this.repository = repository; }
 
+    // Chọn cách tính giá theo combo hoặc theo giờ và kiểm tra tham số tương ứng.
     public BookingDtos.PriceQuote quote(UUID roomTypeId, UUID branchId, ZoneId timezone,
                                         Instant start, Instant end, String mode, UUID comboId) {
         if (start == null || end == null || !end.isAfter(start))
@@ -39,6 +41,7 @@ public class BookingPricingService {
         return hourlyQuote(roomTypeId, branchId, timezone, start, end);
     }
 
+    // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.
     public PricingRule meteredRate(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant at) {
         ZonedDateTime local = at.atZone(timezone);
         LocalDate date = local.toLocalDate();
@@ -51,6 +54,7 @@ public class BookingPricingService {
             .orElseThrow(() -> new BookingFailure(409, "pricingMode", "Chưa cấu hình giá giờ lẻ cho phòng và thời điểm bắt đầu"));
     }
 
+    // Xác thực combo, thời hạn áp dụng và thời lượng trước khi dùng giá niêm yết.
     private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
         ComboRow combo = repository.combo(comboId);
@@ -73,6 +77,7 @@ public class BookingPricingService {
         return new BookingDtos.PriceQuote("COMBO", combo.price(), combo.depositRequired(), List.of(line));
     }
 
+    // Chia khoảng sử dụng theo ranh giới price rule và cộng giá của từng đoạn.
     private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
         LocalDate firstDate = start.atZone(timezone).toLocalDate();
         LocalDate lastDate = end.minusNanos(1).atZone(timezone).toLocalDate();
@@ -102,6 +107,7 @@ public class BookingPricingService {
 
         List<BookingDtos.ChargeLine> charges = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
+        // Mỗi đoạn áp dụng bước làm tròn của chính rule đó; đồng hồ giờ lẻ dùng cách tính khác.
         for (Segment segment : segments) {
             long seconds = Duration.between(segment.start(), segment.end()).getSeconds();
             long actualMinutes = Math.max(1, (seconds + 59) / 60);
@@ -123,6 +129,7 @@ public class BookingPricingService {
         return new BookingDtos.PriceQuote("HOURLY", total, BigDecimal.ZERO, List.copyOf(charges));
     }
 
+    // Kiểm tra price rule có áp dụng cho ngày và phút địa phương hiện tại không.
     private static boolean applies(PricingRule rule, LocalDate date, int minute) {
         if (date.isBefore(rule.validFrom()) || (rule.validTo() != null && !date.isBefore(rule.validTo()))) return false;
         if (minute < rule.minuteFrom() || minute >= rule.minuteTo()) return false;
@@ -131,12 +138,13 @@ public class BookingPricingService {
             case "WEEKEND" -> date.getDayOfWeek().getValue() >= 6;
             case "WEEKDAY" -> date.getDayOfWeek().getValue() < 6;
             case "ALL" -> true;
-            // The current schema has no holiday calendar with which to classify a date.
+            // Schema hiện chưa có lịch ngày lễ để xác định một ngày thuộc loại HOLIDAY.
             case "HOLIDAY" -> false;
             default -> false;
         };
     }
 
+    // Phân xử độ cụ thể khi các rule có cùng phạm vi chi nhánh và mức ưu tiên.
     private static int specificity(String dayKind) {
         return switch (dayKind) {
             case "SPECIFIC" -> 4;
@@ -146,6 +154,7 @@ public class BookingPricingService {
         };
     }
 
+    // Tìm ranh giới kế tiếp để một đoạn chỉ dùng một price rule.
     private static Instant nextBoundary(Instant cursor, Instant end, LocalDate date, int currentMinute,
                                         List<PricingRule> rules, ZoneId timezone) {
         Instant next = date.plusDays(1).atStartOfDay(timezone).toInstant();

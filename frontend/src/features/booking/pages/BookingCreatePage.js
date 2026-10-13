@@ -3,23 +3,28 @@ import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { formatDate, formatVnd } from '../data/bookingData';
 
+// Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
 function localDate(value = new Date()) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 }
 
+// Chuyển ngày và giờ nhập trên máy thành mốc ISO gửi backend.
 function dateTimeIso(date, time) {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
+// Chỉ giữ chữ số và thêm dấu phân nhóm cho tiền cọc.
 function formatMoneyInput(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+// Bọc nhãn và trường nhập thống nhất trong biểu mẫu.
 function Field({ label, children, className = '' }) {
   return <label className={`booking-form-field ${className}`}><span>{label}</span>{children}</label>;
 }
 
+// Thu thông tin khách, phòng, giá và xác nhận thu cọc trước khi tạo booking.
 export default function BookingCreatePage({ options, optionsLoading, optionsError, onBack, onCreate }) {
   const now = new Date();
   now.setMinutes(Math.ceil((now.getMinutes() + 30) / 15) * 15, 0, 0);
@@ -110,6 +115,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
     setForm((current) => current.depositAmount === suggestedAmount ? current : { ...current, depositAmount: suggestedAmount });
   }, [quote?.depositRequired]);
 
+  // Cập nhật biểu mẫu; đánh dấu khi lễ tân tự sửa tiền cọc gợi ý.
   const change = (event) => {
     const { name, value, checked, type } = event.target;
     if (name === 'depositAmount') depositAmountEdited.current = true;
@@ -118,6 +124,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
     setFormError('');
   };
 
+  // Kiểm tra lựa chọn và gửi dữ liệu chuẩn hóa cho callback tạo booking.
   const submit = async (event) => {
     event.preventDefault();
     setFormError('');

@@ -5,6 +5,7 @@ import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân', ACCOUNTANT: 'Kế toán' };
+// Kiểm tra phiên/đúng vai trò trước khi hiển thị trang sau đăng nhập.
 export default function RoleHomePage({ role }) {
   const [user, setUser] = useState(null);
   const [error, setError] = useState('');
@@ -15,6 +16,7 @@ export default function RoleHomePage({ role }) {
     let active = true;
     setUser(null);
     setError('');
+    // Kiểm tra lại phiên khi trang mở hoặc cửa sổ được chú ý trở lại.
     const check = () => authApi.me().then((data) => {
       if (!active) return;
       if (data.role !== role) navigate(data.destination, { replace: true });
@@ -29,6 +31,7 @@ export default function RoleHomePage({ role }) {
     window.addEventListener('focus', check);
     return () => { active = false; window.removeEventListener('focus', check); };
   }, [role, navigate, retry]);
+  // Thu hồi phiên trên server rồi trở về màn đăng nhập.
   const logout = async () => {
     setBusy(true);
     try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }

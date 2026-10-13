@@ -17,6 +17,7 @@ export const bookingStatuses = {
 
 export const tierLabels = { queen: 'Queen', king: 'King' };
 
+// Định dạng ngày cho input và bộ lọc trên giao diện.
 export function toLocalDateInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -24,26 +25,31 @@ export function toLocalDateInput(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Ghép ngày và giờ nhập thành Date theo múi giờ máy.
 export function fromDateAndTime(date, time) {
   if (!date || !time) return null;
   const value = new Date(`${date}T${time}:00`);
   return Number.isNaN(value.getTime()) ? null : value;
 }
 
+// Định dạng số tiền theo đồng Việt Nam.
 export function formatVnd(value) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value) || 0)}đ`;
 }
 
+// Định dạng ngày cho giao diện.
 export function formatDate(value) {
   if (!value) return '—';
   const [year, month, day] = value.split('-');
   return `${day}/${month}/${year}`;
 }
 
+// Tìm phòng tương ứng trong dữ liệu minh họa.
 export function roomForBooking(booking) {
   return bookingRooms.find((room) => room.id === booking?.roomId) || null;
 }
 
+// Ước tính giá trên dữ liệu minh họa; giá chốt của API do backend tính.
 export function calculateBookingPrice({ tier, pricingMode, comboIndex, startDate, startTime, endDate, endTime }) {
   const tierPrices = prices[tier];
   if (!tierPrices) return 0;
@@ -56,6 +62,7 @@ export function calculateBookingPrice({ tier, pricingMode, comboIndex, startDate
   return hours * Number(tierPrices.hour) * 1000;
 }
 
+// Kiểm tra giao nhau giữa các lượt đặt trong dữ liệu minh họa.
 export function hasRoomConflict(bookings, candidate, excludeId) {
   const candidateStart = fromDateAndTime(candidate.startDate, candidate.startTime);
   const candidateEnd = fromDateAndTime(candidate.endDate, candidate.endTime);
@@ -71,6 +78,7 @@ export function hasRoomConflict(bookings, candidate, excludeId) {
   });
 }
 
+// Tạo một booking mẫu quanh ngày hiện tại cho giao diện minh họa.
 function bookingAt({ id, offsetMinutes, durationMinutes, roomId, customerName, phone, guestCount, status, depositAmount, source, pricingMode = 'hourly', comboIndex = 0, priceAmount, depositOutcome = '' }) {
   const start = new Date(Date.now() + offsetMinutes * 60 * 1000);
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
@@ -110,6 +118,7 @@ function bookingAt({ id, offsetMinutes, durationMinutes, roomId, customerName, p
   };
 }
 
+// Sinh danh sách booking mẫu; không ghi vào database thật.
 export function createDemoBookings() {
   return [
     bookingAt({ id: 'BK-26001', offsetMinutes: 75, durationMinutes: 120, roomId: 'P.501', customerName: 'Nguyễn Minh Anh', phone: '0912 345 678', guestCount: 4, status: 'pending', depositAmount: 150000, source: 'Đặt trước', pricingMode: 'combo', comboIndex: 0 }),
