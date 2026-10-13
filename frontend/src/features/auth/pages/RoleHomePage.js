@@ -1,9 +1,11 @@
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
+
  * Author: HuyDV
  * Created: 10/10/2026
  * Description: Kiểm tra phiên đăng nhập và vai trò, hiển thị trang phù hợp và xử lý đăng xuất.
+
  */
 
 import { useEffect, useState } from 'react';
@@ -11,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
+import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân', ACCOUNTANT: 'Kế toán' };
 export default function RoleHomePage({ role }) {
@@ -43,13 +46,15 @@ export default function RoleHomePage({ role }) {
     catch (e) { setError(apiErrors(e).form); }
     finally { setBusy(false); }
   };
-  return <main className={`dashboard-page${user && role === 'HEAD_OFFICE_MANAGER' ? ' dashboard-page-manager' : ''}`}>
+  return <main className={`dashboard-page${user && ['HEAD_OFFICE_MANAGER','BRANCH_MANAGER'].includes(role) ? ' dashboard-page-manager' : ''}`}>
     {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} /> : user ? <>
+      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} busy={busy} onLogout={logout} /> : <>
       <header className="dashboard-header">
         <h1>Dashboard — {names[role]}</h1>
         <button disabled={busy} onClick={logout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
       </header>
       <p>Xin chào, <strong>{user.username}</strong> — {names[role]}.</p>
+      </>}
     </> : !error && <p role="status">Đang kiểm tra phiên đăng nhập…</p>}
     {error && <p className="dashboard-error" role="alert">{error} <button onClick={() => setRetry((value) => value + 1)}>Thử lại</button></p>}
   </main>;

@@ -1,9 +1,11 @@
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
+
  * Author: HuyDV
  * Created: 10/10/2026
  * Description: Xử lý đăng nhập, gửi mã khôi phục, đặt lại mật khẩu, xác thực phiên và đăng xuất.
+
  */
 
 package com.gcmb.backend.administration.auth.service;
@@ -44,6 +46,9 @@ public class AuthService {
         Account account = repository.findByUsername(username);
         if (account == null) { crypto.matches(password, dummyHash); throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng"); }
         active(account);
+        if ("BRANCH_MANAGER".equals(account.role()) && account.branchId() == null) {
+            throw new AuthFailure(403, "form", "Tài khoản quản lý cơ sở chưa được gán cơ sở. Vui lòng liên hệ quản lý cấp cao");
+        }
         Instant now = Instant.now();
         if (!crypto.matches(password, account.hash())) {
             throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng");
@@ -56,7 +61,7 @@ public class AuthService {
         long seconds = remember ? Integer.MAX_VALUE : -1;
         String token = crypto.token();
         repository.createSession(account.id(), AuthCrypto.hash(token));
-        return new LoginResult(new Identity(account.id(), account.username(), account.role(), target), token, seconds);
+        return new LoginResult(new Identity(account.id(), account.username(), account.role(), target, account.branchId(), account.branchName()), token, seconds);
     }
     @Transactional(noRollbackFor = AuthFailure.class)
     public Recovery sendCode(String email) {

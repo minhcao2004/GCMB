@@ -1,5 +1,12 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Khai báo điều hướng màn hình trong ứng dụng.
+ */
+
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import HomePage from '../features/landing/pages/HomePage';
 import { useState } from 'react';
 import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
@@ -13,6 +20,7 @@ export default function AppRoutes() {
     <Route path="/quen-mat-khau" element={<AuthPage key="forgot" mode="forgot" recovery={recovery} onRecovery={setRecovery} />} />
     <Route path="/dat-lai-mat-khau" element={<AuthPage key="reset" mode="reset" recovery={recovery} onRecovery={setRecovery} />} />
     <Route path="/quan-ly-he-thong" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
+    <Route path="/quan-ly-he-thong/phong-bang-gia" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-chi-nhanh" element={<RoleHomePage role="BRANCH_MANAGER" />} />
     <Route path="/le-tan" element={<RoleHomePage role="RECEPTIONIST" />} />
     <Route path="/ke-toan" element={<RoleHomePage role="ACCOUNTANT" />} />

@@ -1,9 +1,15 @@
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
+
  * Author: HuyDV
  * Created: 10/10/2026
  * Description: Cấu hình bảo mật API, CORS, CSRF và phân quyền truy cập theo vai trò.
+
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Cấu hình bảo mật và quyền truy cập API.
+
  */
 
 package com.gcmb.backend.administration.auth.config;
@@ -32,7 +38,7 @@ public class AuthSecurity {
             .cors(cors -> cors.configurationSource(request -> {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(List.of(policy.frontendOrigin()));
-                config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN"));
                 config.setAllowCredentials(true); return config;
             }))
