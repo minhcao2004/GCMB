@@ -1,0 +1,65 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 12/10/2026
+ * Description: Định dạng danh sách tài khoản, bộ lọc, form tạo tài khoản và màn hình thành công trên các kích thước màn hình.
+ */
+
+.accounts-page { flex: 1; padding: 24px 28px; background: #f5f7fa; font-size: 12px; }
+.accounts-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; }
+.accounts-heading h1 { margin: 0; font-size: 26px; letter-spacing: normal; }
+.accounts-heading p, .account-drawer-heading p { color: #788397; font-size: 12px; margin: 8px 0 0; }
+.dashboard-page .account-primary { background: #ed188d; border-color: #ed188d; color: #fff; font-weight: 600; min-width: 160px; min-height: 44px; border-radius: 10px; }
+.accounts-filters { display: grid; grid-template-columns: 1.8fr 1fr 1.1fr 1fr; gap: 12px; padding: 18px; background: white; border-radius: 12px; margin-bottom: 20px; }
+.accounts-page input, .accounts-page select, .account-drawer input, .account-drawer select { width: 100%; min-width: 0; height: 44px; border: 1px solid #dce2ec; border-radius: 8px; padding: 0 14px; color: #202338; background: #fff; font: inherit; box-sizing: border-box; }
+.accounts-filters input, .accounts-filters select { color: #637089; background: #fafbfc; }
+.account-search { position: relative; }
+.account-search input { padding-left: 36px; }
+.account-search > span { position: absolute; left: 13px; top: 8px; font-size: 24px; color: #8894a7; }
+.accounts-card { background: #fff; border-radius: 12px; overflow: hidden; padding: 0 8px; }
+.accounts-table-scroll { overflow-x: auto; }
+.accounts-page table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; }
+.accounts-page th { padding: 18px 14px; color: #778195; background: #f9fafb; font-weight: 600; white-space: nowrap; }
+.accounts-page td { padding: 21px 14px; border-bottom: 1px solid #edf0f5; }
+.accounts-page tr:nth-child(even) { background: #fafbfc; }
+.accounts-page tr.account-highlight { background: #fff2fa; }
+.accounts-page td strong { display: block; font-weight: 600; }
+.accounts-page td small { display: block; margin-top: 6px; color: #788397; }
+.accounts-page abbr { text-decoration: none; }
+.account-status { display: inline-block; min-width: 106px; padding: 7px 10px; border-radius: 6px; background: #edf0f5; color: #637089; font-size: 10px; font-weight: 600; }
+.account-status.active { color: #06a367; background: #e6f8ee; }
+.account-status.locked { color: #9b6610; background: #fff4d8; }
+.accounts-pagination { display: flex; align-items: center; gap: 22px; padding: 14px 10px; color: #788397; font-size: 10px; }
+.accounts-pagination > span:first-child { margin-right: auto; }
+.accounts-pagination nav { display: flex; align-items: center; gap: 8px; position: static; background: transparent; padding: 0; }
+.accounts-pagination nav > span { padding: 8px 12px; background: #fdecf5; color: #ed188d; border-radius: 7px; }
+.accounts-pagination button { border: 0; padding: 6px 12px; }
+.accounts-empty { text-align: center; padding: 50px 20px; color: #637089; }
+.accounts-empty button { margin: 12px; }
+.account-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: 620px; max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; background: white; color: #202338; font: inherit; font-size: 12px; }
+.account-drawer[open] { display: flex; flex-direction: column; }
+.account-drawer::backdrop { background: rgba(28,30,48,.28); }
+.account-drawer-heading { display: flex; justify-content: space-between; padding: 24px 28px; border-bottom: 1px solid #e7eaf0; }
+.account-drawer h2 { font-size: 22px; margin: 0; letter-spacing: normal; line-height: 1.5; }
+.account-drawer-heading button { border: 0; padding: 0 6px; align-self: flex-start; color: #788397; font-size: 22px; }
+.account-create-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.account-form-body { flex: 1; overflow-y: auto; border: 0; margin: 0; padding: 24px 28px; min-width: 0; }
+.account-field { margin-bottom: 18px; }
+.account-field label { display: block; color: #637089; font-size: 11px; font-weight: 600; margin-bottom: 10px; }
+.account-password { position: relative; }
+.account-password input { padding-right: 65px; }
+.account-password button { position: absolute; right: 4px; top: 4px; border: 0; padding: 9px; font-size: 11px; }
+.account-error { color: #b12642; display: block; margin-top: 7px; }
+.account-access-note { background: #e7f8fb; border-radius: 12px; padding: 18px 16px; color: #00839c; }
+.account-access-note p { margin: 6px 0 0; font-size: 11px; }
+.account-drawer-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 18px 28px; border-top: 1px solid #e7eaf0; }
+.account-drawer-footer > button { min-width: 120px; border-color: #dce2ec; border-radius: 10px; }
+.account-success { flex: 1; overflow-y: auto; padding: 70px 28px 28px; }
+.account-check { display: grid; place-items: center; margin: 0 auto 24px; width: 108px; height: 108px; border-radius: 50%; background: #e6f8ee; color: #06a367; font-size: 56px; }
+.account-success h2 { text-align: center; }
+.account-success dl { margin-top: 40px; }
+.account-success dt { color: #788397; font-size: 11px; margin-bottom: 8px; }
+.account-success dd { margin: 0 0 28px; font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 1050px) { .accounts-filters { grid-template-columns: 1fr 1fr; } .accounts-page { padding: 22px 18px; } }
+@media (max-width: 600px) { .accounts-heading { align-items: flex-start; flex-direction: column; } .accounts-filters { grid-template-columns: 1fr; } .accounts-pagination { gap: 8px; flex-wrap: wrap; } .accounts-page td { padding: 16px 10px; } .account-form-body, .account-drawer-heading, .account-drawer-footer { padding: 20px; } }
