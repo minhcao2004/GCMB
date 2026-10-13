@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Dashboard quản lý cấp cao và điều hướng chức năng bảng giá.
+ */
+
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';

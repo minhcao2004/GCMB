@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Chuẩn hóa phản hồi lỗi xác thực và phân quyền.
+ */
+
 package com.gcmb.backend.administration.auth.exception;
 
 import com.gcmb.backend.administration.auth.service.RecoveryMailer;

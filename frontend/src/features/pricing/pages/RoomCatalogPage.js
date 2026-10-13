@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Màn hình quản lý hạng phòng, quy tắc giá và combo.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { catalogError, roomCatalogApi } from '../services/roomCatalogApi';
 import '../styles/room-catalog.css';

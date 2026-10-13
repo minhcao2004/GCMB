@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: DTO trả thông tin quy tắc giá.
+ */
+
 package com.gcmb.backend.administration.pricing.dto;
 
 import java.math.BigDecimal;

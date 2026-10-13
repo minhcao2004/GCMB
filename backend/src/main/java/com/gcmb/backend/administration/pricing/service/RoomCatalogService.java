@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Nghiệp vụ quản lý hạng phòng, giá theo thời gian và combo.
+ */
+
 package com.gcmb.backend.administration.pricing.service;
 
 import com.gcmb.backend.administration.pricing.dto.PriceCatalogItem;

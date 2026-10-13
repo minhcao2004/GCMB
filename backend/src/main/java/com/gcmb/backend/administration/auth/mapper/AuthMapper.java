@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Ánh xạ dữ liệu tài khoản và nhận diện người dùng.
+ */
+
 package com.gcmb.backend.administration.auth.mapper;
 
 import java.sql.ResultSet;

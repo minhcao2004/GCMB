@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Nghiệp vụ xác thực và cung cấp danh tính người dùng.
+ */
+
 package com.gcmb.backend.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.entity.Account;

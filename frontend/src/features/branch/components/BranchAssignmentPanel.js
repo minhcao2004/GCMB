@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Màn hình gán quản lý cho từng cơ sở.
+ */
+
 import { useEffect, useState } from 'react';
 import api from '../../../api/client';
 

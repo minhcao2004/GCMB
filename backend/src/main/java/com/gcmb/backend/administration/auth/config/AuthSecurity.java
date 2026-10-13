@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Cấu hình bảo mật và quyền truy cập API.
+ */
+
 package com.gcmb.backend.administration.auth.config;
 
 import com.gcmb.backend.administration.auth.service.AuthService;

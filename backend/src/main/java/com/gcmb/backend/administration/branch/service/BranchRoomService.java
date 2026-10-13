@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Nghiệp vụ quản lý phòng và lịch sử trạng thái tại cơ sở.
+ */
+
 package com.gcmb.backend.administration.branch.service;
 
 import com.gcmb.backend.administration.auth.dto.response.Identity;

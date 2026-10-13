@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Truy vấn tài khoản và thông tin cơ sở được gán.
+ */
+
 package com.gcmb.backend.administration.auth.repository;
 
 import java.sql.Timestamp;

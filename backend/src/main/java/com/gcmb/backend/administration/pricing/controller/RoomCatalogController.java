@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: REST API quản lý hạng phòng, quy tắc giá và combo.
+ */
+
 package com.gcmb.backend.administration.pricing.controller;
 
 import com.gcmb.backend.administration.pricing.dto.PriceCatalogItem;

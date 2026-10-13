@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Kiểu giao diện dùng chung cho dashboard quản lý.
+ */
+
 .dashboard-page { min-height: 100vh; min-height: 100svh; box-sizing: border-box; padding: 32px; background: #fff; color: #222; }
 .dashboard-header { position: static; padding: 0; color: inherit; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
 .dashboard-header h1 { margin: 0; font-size: 24px; letter-spacing: normal; line-height: 1.4; }

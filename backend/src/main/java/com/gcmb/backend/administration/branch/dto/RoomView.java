@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: DTO thông tin phòng trả về cho màn hình quản lý.
+ */
+
 package com.gcmb.backend.administration.branch.dto;
 
 import java.util.UUID;

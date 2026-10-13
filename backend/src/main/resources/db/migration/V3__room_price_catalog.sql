@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Tạo cấu trúc dữ liệu danh mục hạng phòng và bảng giá.
+ */
+
 -- Chain-wide Cinema room types and price catalogue.
 ALTER TABLE gcmb.combo ADD COLUMN mode varchar(20);
 UPDATE gcmb.combo c SET mode = rt.mode FROM gcmb.room_type rt WHERE rt.id = c.room_type_id;

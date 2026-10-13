@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Tích hợp API quản lý phòng theo cơ sở.
+ */
+
 import api from '../../../api/client';
 
 const base='/branch-management/rooms';

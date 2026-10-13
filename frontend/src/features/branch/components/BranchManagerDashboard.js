@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Dashboard, điều hướng, đồng hồ và hồ sơ quản lý cơ sở.
+ */
+
 import { useEffect, useState } from 'react';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BranchRoomsPage from '../pages/BranchRoomsPage';

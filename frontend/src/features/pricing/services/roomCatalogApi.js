@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Tích hợp API danh mục hạng phòng và bảng giá.
+ */
+
 import api from '../../../api/client';
 
 async function mutate(method,url,data) {

@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Màn hình xem, thêm, sửa, xóa phòng và cập nhật trạng thái.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { branchRoomApi } from '../services/branchRoomApi';
 import './branch-rooms.css';

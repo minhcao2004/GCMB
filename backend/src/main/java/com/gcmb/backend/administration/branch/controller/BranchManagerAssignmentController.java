@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: API gán tài khoản quản lý cho cơ sở.
+ */
+
 package com.gcmb.backend.administration.branch.controller;
 
 import com.gcmb.backend.administration.auth.dto.response.Identity;

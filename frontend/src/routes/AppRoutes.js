@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Khai báo điều hướng màn hình trong ứng dụng.
+ */
+
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useState } from 'react';
 import AuthPage from '../features/auth/pages/AuthPage';

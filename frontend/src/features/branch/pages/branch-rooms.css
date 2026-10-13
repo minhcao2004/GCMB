@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Giao diện CSS cho màn hình quản lý phòng theo cơ sở.
+ */
+
 .branch-manager-dashboard,
 .branch-manager-dashboard * { box-sizing: border-box; }
 .branch-manager-dashboard { min-height: 100svh; border-left: 3px solid #ed168d; background: #f4f7fb; color: #202338; font-family: 'Be Vietnam Pro', Arial, sans-serif; }

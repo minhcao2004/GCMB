@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Truy vấn dữ liệu phòng trong phạm vi cơ sở được phân quyền.
+ */
+
 package com.gcmb.backend.administration.branch.repository;
 
 import com.gcmb.backend.administration.branch.dto.RoomCommand;
