@@ -5,6 +5,7 @@ import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
+import BookingStayDialog from './BookingStayDialog';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 
@@ -121,7 +122,12 @@ function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, sear
 }
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
-function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel }) {
+function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow, onStay }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, [booking?.id]);
   if (!booking) return <aside className="booking-details booking-details-empty"><h2>Chi tiết</h2><p>Chọn một booking để xem thông tin khách, phòng và tiền cọc.</p></aside>;
   const depositDetail = detail?.booking?.id === booking.id ? detail.deposit : null;
   const depositReceived = Number(depositDetail?.receivedAmount ?? booking.depositReceivedAmount ?? booking.depositBalance ?? 0);
@@ -132,6 +138,8 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, depositForfeited, booking.status);
   const canCheckIn = booking.status === 'CONFIRMED';
   const canEdit = canCheckIn && new Date(booking.plannedStart) > new Date();
+  const hasReservedRoom = detail?.booking?.id === booking.id && detail.allocations?.some((allocation) => allocation.state === 'RESERVED');
+  const canMarkNoShow = canCheckIn && hasReservedRoom && new Date(booking.plannedStart).getTime() <= now.getTime();
   const room = [booking.roomCode, booking.roomName].filter(Boolean).join(' · ') || 'Chưa gán phòng';
   return <aside className="booking-details">
     <h2>Chi tiết</h2>
@@ -155,6 +163,10 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
     {detail?.note && <p className="booking-detail-note">{detail.note}</p>}
     <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
     <button type="button" className="booking-button booking-button-primary booking-detail-checkin" onClick={onCheckIn} disabled={!canCheckIn}>Check-in</button>
+    {canMarkNoShow && <button type="button" className="booking-button booking-button-danger booking-detail-no-show" onClick={() => onNoShow(booking)}>Đánh dấu no-show</button>}
+    {booking.status === 'IN_HOUSE' && <div className="booking-detail-stay-actions"><button type="button" disabled={Boolean(detail?.meter)} onClick={() => onStay(booking, 'change')}>Đổi phòng</button><button type="button" onClick={() => onStay(booking, 'extend')}>Gia hạn</button></div>}
+    {detail?.booking?.id === booking.id && detail.meter?.status === 'RUNNING' && <div className="booking-detail-meter"><span>Giờ lẻ đang chạy</span><strong>{Math.max(0, Math.floor((now.getTime() - new Date(detail.meter.billedFrom).getTime()) / 60000))} phút</strong><button type="button" onClick={() => onStay(booking, 'extend')}>Mở đồng hồ để dừng</button></div>}
+    {detail?.booking?.id === booking.id && detail.meter?.status === 'STOPPED' && booking.status === 'IN_HOUSE' && <div className="booking-detail-meter"><span>Giờ lẻ đã chốt</span><strong>{detail.meter.billedMinutes} phút · {formatVnd(detail.meter.amount)}</strong><button type="button" onClick={() => onStay(booking, 'extend')}>Xem phụ thu</button></div>}
     <div className="booking-detail-actions"><button type="button" className="booking-detail-action-edit" disabled={!canEdit} onClick={() => onEdit(booking)}>Sửa booking</button><button type="button" className="booking-detail-action-cancel is-danger" disabled={!canCheckIn} onClick={() => onCancel(booking)}>Hủy booking</button></div>
   </aside>;
 }
@@ -166,6 +178,12 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     return () => window.clearInterval(timer);
   }, []);
   const actualTime = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
+  const recordedCheckIn = detail?.booking?.id === booking?.id
+    ? detail.booking.actualCheckin || booking?.actualCheckin
+    : booking?.actualCheckin;
+  const savedCheckInTime = recordedCheckIn
+    ? displayPart(recordedCheckIn, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone)
+    : 'Chưa có dữ liệu';
   const charge = Number(booking?.expectedAmount || 0);
   const depositReceived = Number(detail?.booking?.id === booking?.id
     ? detail.deposit?.receivedAmount ?? booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0
@@ -198,8 +216,8 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         <p>{checkInRoomHint(booking, roomReady)}</p>
       </div></div>
       <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
-      <label className="booking-checkin-time"><span>Giờ check-in thực tế</span><div><input value={actualTime} readOnly /><small>Theo giờ hệ thống</small></div></label>
-      {booking.status === 'CONFIRMED' && earlyCheckIn && roomReady && checkInTimeValid && <p className="booking-checkin-time-note is-info">Nhận phòng sớm sẽ dời giờ trả dự kiến đến {timeText(shiftedCheckout, timezone)} · {dateText(shiftedCheckout, timezone)}, giữ nguyên thời lượng đã đặt. Hệ thống sẽ kiểm tra khung giờ mới có trùng booking khác không.</p>}
+      <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
+      {booking.status === 'CONFIRMED' && earlyCheckIn && roomReady && checkInTimeValid && <p className="booking-checkin-time-note is-info">Nhận phòng sớm sẽ giữ giờ hẹn {timeText(booking.plannedStart, timezone)} và dời giờ trả dự kiến đến {timeText(shiftedCheckout, timezone)} · {dateText(shiftedCheckout, timezone)}, để khách vẫn dùng đủ thời lượng đã đặt. Hệ thống sẽ kiểm tra khung giờ mới có trùng booking khác không.</p>}
       <section className="booking-checkin-receipt"><strong>Tóm tắt</strong><div><span>{detail?.charges?.[0]?.description || 'Dịch vụ phòng'}</span><b>{formatVnd(charge)}</b></div><p>Tiền cọc đang giữ {formatVnd(depositBalance)} sẽ được đối chiếu khi checkout.</p></section>
       {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
       {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note">Đã quá giờ kết thúc booking, không thể check-in.</p>}
@@ -321,6 +339,67 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   </div>;
 }
 
+function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
+  const [bookingDetail, setBookingDetail] = useState(null);
+  const [detailError, setDetailError] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [reason, setReason] = useState('Khách không đến nhận phòng');
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    setBookingDetail(null);
+    setDetailError('');
+    setReason('Khách không đến nhận phòng');
+    if (!booking?.id) return undefined;
+    let active = true;
+    setDetailLoading(true);
+    bookingApi.detail(booking.id).then((value) => { if (active) setBookingDetail(value); })
+      .catch((requestError) => { if (active) { const errors = apiErrors(requestError); setDetailError(errors.form || Object.values(errors)[0]); } })
+      .finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [booking?.id]);
+  useEffect(() => {
+    setNow(new Date());
+    if (!booking?.id) return undefined;
+    const timer = window.setInterval(() => setNow(new Date()), 15000);
+    return () => window.clearInterval(timer);
+  }, [booking?.id]);
+  if (!booking) return null;
+  const currentDetail = bookingDetail?.booking?.id === booking.id ? bookingDetail : null;
+  const currentBooking = currentDetail?.booking || booking;
+  const depositBalance = currentDetail ? Number(currentDetail.deposit?.balance ?? 0) : null;
+  const hasReservedRoom = currentDetail?.allocations?.some((allocation) => allocation.state === 'RESERVED');
+  const hasStarted = new Date(currentBooking.plannedStart).getTime() <= now.getTime();
+  const canMarkNoShow = currentBooking.status === 'CONFIRMED' && hasStarted && hasReservedRoom;
+  const detailMessage = detailError || (!currentDetail && !detailLoading ? 'Không tải được thông tin booking. Hãy đóng và mở lại hộp thoại.' : '');
+  const markedAt = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
+  let outcomeTitle = 'Đang tải thông tin tiền cọc';
+  let outcomeDescription = 'Đang đối chiếu số dư tiền cọc còn lại.';
+  let outcomeClass = 'is-empty';
+  if (currentDetail && depositBalance > 0) {
+    outcomeTitle = `Cọc ${formatVnd(depositBalance)} sẽ bị tịch thu`;
+    outcomeDescription = 'Số dư cọc hiện tại được ghi thành khoản FORFEIT theo chính sách no-show.';
+    outcomeClass = 'is-forfeited';
+  } else if (currentDetail) {
+    outcomeTitle = 'Không có cọc cần xử lý';
+    outcomeDescription = 'Booking sẽ chuyển sang NO_SHOW và phòng được giải phóng.';
+  }
+  const buttonLabel = busy ? 'Đang ghi nhận…' : !hasStarted ? 'Chưa tới giờ bắt đầu' : !hasReservedRoom && currentDetail ? 'Không còn phòng đang giữ' : !canMarkNoShow ? 'Chưa thể đánh dấu no-show' : 'Xác nhận no-show';
+  return <div className="booking-cancel-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <section className="booking-cancel-dialog booking-no-show-dialog" role="dialog" aria-modal="true" aria-labelledby="no-show-title">
+      <div className="booking-cancel-title"><div><h2 id="no-show-title">Đánh dấu khách no-show</h2><p>{currentBooking.code} · {currentBooking.contactName}</p></div><button type="button" className="booking-panel-close" onClick={onClose} aria-label="Đóng" disabled={busy}>×</button></div>
+      <h3 className="booking-cancel-section-title">Thông tin booking</h3>
+      <div className="booking-cancel-booking-info"><div><span>Khách hàng</span><strong>{currentBooking.contactName}</strong></div><div><span>Số điện thoại</span><strong>{currentBooking.contactPhone || '—'}</strong></div><div><span>Giờ bắt đầu</span><strong>{timeText(currentBooking.plannedStart, timezone)} · {dateText(currentBooking.plannedStart, timezone)}</strong></div><div><span>Phòng</span><strong>{currentBooking.roomCode ? `${currentBooking.roomCode} · ${currentBooking.roomName || ''}` : 'Chưa gán'}</strong></div></div>
+      <div className={`booking-cancel-outcome ${outcomeClass}`} role="status"><strong>{outcomeTitle}</strong><p>{outcomeDescription}</p><small>Thời điểm ghi nhận dự kiến: {markedAt}</small></div>
+      <label className="booking-form-field booking-cancel-reason"><span>Ghi chú</span><textarea rows="2" maxLength="1000" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Khách không đến nhận phòng" /></label>
+      <p className="booking-no-show-warning">Xác nhận sẽ đổi trạng thái booking thành NO_SHOW, giải phóng phòng đang giữ và tịch thu số dư cọc (nếu có). Không thể check-in booking sau thao tác này.</p>
+      {detailLoading && <p role="status">Đang tải số dư cọc…</p>}
+      {detailMessage && <p className="booking-inline-error" role="alert">{detailMessage}</p>}
+      {error && <p className="booking-inline-error" role="alert">{error}</p>}
+      <div className="booking-cancel-buttons"><button className="booking-button booking-button-danger" type="button" disabled={!currentDetail || !canMarkNoShow || detailLoading || Boolean(detailError) || busy} onClick={() => onConfirm(booking, { reason: reason.trim() || undefined })}>{buttonLabel}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={busy}>Quay lại</button></div>
+    </section>
+  </div>;
+}
+
 export default function BookingManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -349,6 +428,10 @@ export default function BookingManagementPage() {
   const [reload, setReload] = useState(0);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelError, setCancelError] = useState('');
+  const [noShowTarget, setNoShowTarget] = useState(null);
+  const [noShowError, setNoShowError] = useState('');
+  const [stayTarget, setStayTarget] = useState(null);
+  const [stayMode, setStayMode] = useState('change');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { document.title = `${createMode ? 'Tạo booking' : editMode ? 'Sửa booking' : 'Booking'} | GenZ Cinema & Music Box`; }, [createMode, editMode]);
@@ -477,6 +560,21 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
+  const markNoShow = async (booking, payload) => {
+    setBusy(true);
+    setNoShowError('');
+    try {
+      const result = await bookingApi.markNoShow(booking.id, payload);
+      setNoShowTarget(null);
+      setNoticeKind('success');
+      setNotice(result.depositOutcome === 'NON_REFUNDABLE'
+        ? `Đã ghi nhận no-show cho ${booking.code}; ${formatVnd(result.depositAmount)} cọc đã bị tịch thu và phòng được giải phóng.`
+        : `Đã ghi nhận no-show cho ${booking.code}; phòng được giải phóng.`);
+      setReload((value) => value + 1);
+    } catch (requestError) { const errors = apiErrors(requestError); setNoShowError(errors.form || Object.values(errors)[0]); }
+    finally { setBusy(false); }
+  };
+
   const confirmCheckIn = async (booking) => {
     setBusy(true);
     setCheckInError('');
@@ -485,9 +583,9 @@ export default function BookingManagementPage() {
       setSelectedId(booking.id);
       setSelectedDate(toLocalDateInput(new Date(result.booking.plannedStart)));
       setNoticeKind('success');
-      const wasMovedEarlier = new Date(result.booking.plannedStart).getTime() < new Date(booking.plannedStart).getTime();
-      setNotice(wasMovedEarlier
-        ? `Đã check-in booking ${booking.code}; khung giờ mới ${timeText(result.booking.plannedStart, timezone)}–${timeText(result.booking.plannedEnd, timezone)} để giữ nguyên thời lượng.`
+      const checkoutWasExtended = new Date(result.booking.plannedEnd).getTime() > new Date(booking.plannedEnd).getTime();
+      setNotice(checkoutWasExtended
+        ? `Đã check-in booking ${booking.code}; giờ hẹn ${timeText(result.booking.plannedStart, timezone)} được giữ nguyên, giờ trả dự kiến dời đến ${timeText(result.booking.plannedEnd, timezone)} để bảo đảm đủ thời lượng.`
         : `Đã check-in booking ${booking.code}.`);
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
@@ -513,6 +611,33 @@ export default function BookingManagementPage() {
     } finally { setBusy(false); }
   };
 
+  const saveStayChange = async (action, payload) => {
+    if (!stayTarget) return { error: 'Không tìm thấy booking cần cập nhật.' };
+    setBusy(true);
+    try {
+      const result = action === 'change' ? await bookingApi.changeRoom(stayTarget.id, payload)
+        : action === 'extend' ? await bookingApi.extendStay(stayTarget.id, payload)
+        : action === 'meterStart' ? await bookingApi.startHourlyMeter(stayTarget.id)
+        : await bookingApi.stopHourlyMeter(stayTarget.id);
+      if (!['meterStart', 'meterStop'].includes(action)) setStayTarget(null);
+      setNoticeKind('success');
+      if (action === 'change') {
+        setNotice(`Đã đổi ${result.booking.booking.roomCode ? `sang phòng ${result.booking.booking.roomCode}` : 'phòng'} cho booking ${stayTarget.code}. Điều chỉnh ${formatVnd(result.adjustmentAmount)}.`);
+      } else if (action === 'extend') {
+        setNotice(`Đã gia hạn booking ${stayTarget.code} đến ${timeText(result.endsAt, timezone)}. Phụ thu ${formatVnd(result.quote.expectedAmount)}.`);
+      } else if (action === 'meterStart') {
+        setNotice(`Đã bật đồng hồ giờ lẻ cho booking ${stayTarget.code}.`);
+      } else if (action === 'meterStop') {
+        setNotice(`Đã dừng đồng hồ booking ${stayTarget.code}; chốt ${result.meter.billedMinutes} phút và phụ thu ${formatVnd(result.meter.amount)}.`);
+      }
+      setReload((value) => value + 1);
+      return { ok: true, detail: ['meterStart', 'meterStop'].includes(action) ? result : undefined };
+    } catch (requestError) {
+      const errors = apiErrors(requestError);
+      return { error: errors.form || Object.values(errors)[0] };
+    } finally { setBusy(false); }
+  };
+
   if (!user) return <main className="booking-auth-state">{error ? <div className="booking-auth-message" role="alert"><p>{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div> : <p role="status">Đang kiểm tra phiên đăng nhập…</p>}</main>;
 
   const tabs = [
@@ -526,6 +651,7 @@ export default function BookingManagementPage() {
     navigate(`/le-tan/bookings/${booking.id}/check-in`);
   };
   const openEdit = (booking) => navigate(`/le-tan/bookings/${booking.id}/edit`);
+  const openStay = (booking, mode) => { setStayMode(mode); setStayTarget(booking); };
   const closeCheckIn = () => navigate('/le-tan/bookings');
   const mainContent = createMode ? <BookingCreatePage options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
@@ -568,7 +694,7 @@ export default function BookingManagementPage() {
         {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
         </div>
       </section>
-      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} />
+      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onStay={openStay} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
     </div>
   </>;
 
@@ -576,6 +702,8 @@ export default function BookingManagementPage() {
     {mainContent}
     {editMode && <BookingEditDialog bookingId={bookingId} timezone={timezone} onClose={() => navigate('/le-tan/bookings')} onUpdate={updateBooking} />}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} busy={busy} error={checkInError} />}
+    {stayTarget && <BookingStayDialog booking={stayTarget} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayTarget(null)} onSave={saveStayChange} busy={busy} timezone={timezone} />}
     <CancelDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={cancelBooking} busy={busy} error={cancelError} timezone={timezone} />
+    <NoShowDialog booking={noShowTarget} onClose={() => setNoShowTarget(null)} onConfirm={markNoShow} busy={busy} error={noShowError} timezone={timezone} />
   </AppShell>;
 }

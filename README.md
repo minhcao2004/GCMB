@@ -335,8 +335,11 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
+Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38–UC40 (check-in, room change, stay extension), and UC43 (create a deposit refund request). Checkout, bill settlement, and payment are separate use cases.
+
 The detailed project references are:
 
+- [UC39–UC40 Room and Stay Operations](docs/UC39-40_Room_Stay_Operations.md).
 - Report 1 — Project Introduction.
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.

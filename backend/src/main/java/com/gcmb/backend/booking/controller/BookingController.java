@@ -65,6 +65,45 @@ public class BookingController {
         return bookings.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant());
     }
 
+    @GetMapping("/bookings/{bookingId}/stay-options")
+    public BookingDtos.StayOptions stayOptions(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return bookings.stayOptions(identity, bookingId);
+    }
+
+    @GetMapping("/bookings/{bookingId}/room-change-quote")
+    public BookingDtos.RoomChangeQuote roomChangeQuote(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId, @RequestParam UUID targetRoomId, @RequestParam String cause) {
+        return bookings.roomChangeQuote(identity, bookingId, targetRoomId, cause);
+    }
+
+    @PostMapping("/bookings/{bookingId}/change-room")
+    public BookingDtos.RoomChangeResult changeRoom(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId, @RequestBody BookingDtos.RoomChangeRequest request) {
+        return bookings.changeRoom(identity, bookingId, request);
+    }
+
+    @PostMapping("/bookings/{bookingId}/extension-quote")
+    public BookingDtos.ExtensionQuote extensionQuote(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId, @RequestBody BookingDtos.ExtendStayRequest request) {
+        return bookings.extensionQuote(identity, bookingId, request);
+    }
+
+    @PostMapping("/bookings/{bookingId}/extend")
+    public BookingDtos.ExtensionResult extendStay(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId, @RequestBody BookingDtos.ExtendStayRequest request) {
+        return bookings.extendStay(identity, bookingId, request);
+    }
+
+    @PostMapping("/bookings/{bookingId}/hourly-meter/start")
+    public BookingDtos.BookingDetail startHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return bookings.startHourlyMeter(identity, bookingId);
+    }
+
+    @PostMapping("/bookings/{bookingId}/hourly-meter/stop")
+    public BookingDtos.BookingDetail stopHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return bookings.stopHourlyMeter(identity, bookingId);
+    }
+
     @PostMapping("/bookings/{bookingId}/check-in")
     public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
         return bookings.checkIn(identity, bookingId);
@@ -86,5 +125,11 @@ public class BookingController {
     public BookingDtos.CancellationResult cancel(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody(required = false) BookingDtos.CancelBookingRequest request) {
         return bookings.cancel(identity, bookingId, request);
+    }
+
+    @PostMapping("/bookings/{bookingId}/no-show")
+    public BookingDtos.NoShowResult markNoShow(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
+            @RequestBody(required = false) BookingDtos.NoShowRequest request) {
+        return bookings.markNoShow(identity, bookingId, request);
     }
 }

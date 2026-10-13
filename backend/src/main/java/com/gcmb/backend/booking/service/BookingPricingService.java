@@ -39,6 +39,18 @@ public class BookingPricingService {
         return hourlyQuote(roomTypeId, branchId, timezone, start, end);
     }
 
+    public PricingRule meteredRate(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant at) {
+        ZonedDateTime local = at.atZone(timezone);
+        LocalDate date = local.toLocalDate();
+        int minute = local.getHour() * 60 + local.getMinute();
+        return repository.pricingRules(roomTypeId, branchId, date, date).stream()
+            .filter(rule -> applies(rule, date, minute))
+            .max(Comparator.comparing((PricingRule rule) -> rule.branchId() != null)
+                .thenComparingInt(PricingRule::priority)
+                .thenComparingInt(rule -> specificity(rule.dayKind())))
+            .orElseThrow(() -> new BookingFailure(409, "pricingMode", "Chưa cấu hình giá giờ lẻ cho phòng và thời điểm bắt đầu"));
+    }
+
     private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
         ComboRow combo = repository.combo(comboId);
@@ -53,6 +65,7 @@ public class BookingPricingService {
         snapshot.put("pricingMode", "COMBO"); snapshot.put("code", combo.code());
         snapshot.put("version", combo.version()); snapshot.put("name", combo.name());
         snapshot.put("durationMinutes", combo.durationMinutes());
+        snapshot.put("from", start.toString()); snapshot.put("to", end.toString());
         snapshot.put("depositRequired", combo.depositRequired());
         snapshot.put("overtimeHourlyPrice", combo.overtimeHourlyPrice());
         BookingDtos.ChargeLine line = new BookingDtos.ChargeLine("COMBO", combo.name(), BigDecimal.ONE,

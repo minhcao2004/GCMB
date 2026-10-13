@@ -13,10 +13,14 @@ import com.gcmb.backend.booking.repository.BookingRepository.ChargeRow;
 import com.gcmb.backend.booking.repository.BookingRepository.ComboRow;
 import com.gcmb.backend.booking.repository.BookingRepository.RoomRow;
 import com.gcmb.backend.booking.repository.BookingRepository.RoomTypeRow;
+import com.gcmb.backend.booking.repository.BookingRepository.MeterRow;
+import com.gcmb.backend.booking.repository.BookingRepository.PricingRule;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,6 +112,209 @@ public class BookingService {
         return detail(branch.id(), booking);
     }
 
+    @Transactional(readOnly = true)
+    public BookingDtos.StayOptions stayOptions(Identity identity, UUID bookingId) {
+        BranchScope branch = branch(identity);
+        BookingRow booking = repository.booking(bookingId, branch.id());
+        if (booking == null) throw notFound();
+        if (!"IN_HOUSE".equals(booking.status()))
+            throw new BookingFailure(409, "form", "Chỉ booking đang sử dụng phòng mới có thể đổi phòng hoặc gia hạn");
+        AllocationRow allocation = repository.currentAllocation(bookingId);
+        if (allocation == null || !"OCCUPIED".equals(allocation.state()))
+            throw new BookingFailure(409, "roomId", "Không tìm thấy chặng phòng đang được sử dụng");
+        Instant now = Instant.now();
+        List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId)
+            .stream().filter(room -> !room.id().equals(allocation.roomId()) && room.capacity() >= booking.guestCount())
+            .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
+        List<BookingDtos.ComboOption> combos = repository.combos(allocation.roomTypeId()).stream()
+            .filter(combo -> extensionComboAvailableAt(combo, booking.plannedEnd(), branch.timezone()))
+            .map(BookingService::comboOption).toList();
+        String currentComboName = repository.activeChargesForAllocation(allocation.id()).stream()
+            .filter(charge -> charge.comboId() != null || "COMBO".equals(charge.kind())
+                || "COMBO".equals(readSnapshot(charge.snapshot()).get("pricingMode")))
+            .map(charge -> charge.description())
+            .distinct()
+            .collect(java.util.stream.Collectors.joining(" · "));
+        long currentDurationMinutes = Math.max(0, Duration.between(allocation.startsAt(), allocation.endsAt()).toMinutes());
+        return new BookingDtos.StayOptions(allocation.roomId(), allocation.roomCode(), allocation.roomTypeId(), allocation.roomTypeName(),
+            booking.plannedEnd(), booking.plannedEnd(), currentComboName.isBlank() ? null : currentComboName,
+            currentDurationMinutes, available, combos);
+    }
+
+    @Transactional(readOnly = true)
+    public BookingDtos.RoomChangeQuote roomChangeQuote(Identity identity, UUID bookingId, UUID targetRoomId, String cause) {
+        BranchScope branch = branch(identity);
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        rejectRunningMeter(bookingId);
+        AllocationRow current = repository.currentAllocation(bookingId);
+        validateActiveAllocation(current);
+        Instant now = Instant.now();
+        String normalizedCause = normalizeChangeCause(cause);
+        RoomRow target = repository.availableRoom(targetRoomId, branch.id());
+        validateTargetRoom(target, booking);
+        if (target.id().equals(current.roomId())) throw new BookingFailure(400, "targetRoomId", "Vui lòng chọn phòng khác phòng hiện tại");
+        if (!now.isBefore(booking.plannedEnd()) || !now.isAfter(current.startsAt()))
+            throw new BookingFailure(409, "form", "Chỉ đổi phòng trong thời gian booking đang được sử dụng");
+        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict();
+        RoomChangePlan plan = roomChangePlan(branch, booking, current, target, now, normalizedCause);
+        BigDecimal previous = repository.activeChargeTotal(bookingId);
+        BigDecimal updated = previous.subtract(plan.originalAmount()).add(plan.usedAmount()).add(plan.nextAmount());
+        return new BookingDtos.RoomChangeQuote(previous, updated, updated.subtract(previous), plan.usedAmount(), plan.nextAmount());
+    }
+
+    @Transactional
+    public BookingDtos.RoomChangeResult changeRoom(Identity identity, UUID bookingId, BookingDtos.RoomChangeRequest request) {
+        if (request == null) throw new BookingFailure(400, "form", "Dữ liệu đổi phòng không hợp lệ");
+        BranchScope branch = branch(identity);
+        UUID actorId = identity.id();
+        lockBooking(bookingId, branch.id());
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        rejectRunningMeter(bookingId);
+        AllocationRow current = repository.currentAllocationForUpdate(bookingId);
+        validateActiveAllocation(current);
+        Instant now = Instant.now();
+        String cause = normalizeChangeCause(request.cause());
+        String reason = nullable(request.reason(), "reason", 1000);
+        RoomRow target = repository.lockAvailableRoom(request.targetRoomId(), branch.id());
+        validateTargetRoom(target, booking);
+        if (target.id().equals(current.roomId())) throw new BookingFailure(400, "targetRoomId", "Vui lòng chọn phòng khác phòng hiện tại");
+        if (!now.isBefore(booking.plannedEnd()) || !now.isAfter(current.startsAt()))
+            throw new BookingFailure(409, "form", "Chỉ đổi phòng trong thời gian booking đang được sử dụng");
+        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict();
+
+        RoomChangePlan plan = roomChangePlan(branch, booking, current, target, now, cause);
+        BigDecimal previous = repository.activeChargeTotal(bookingId);
+        if (repository.finishOccupiedAllocation(current.id(), now, cause, reason) != 1)
+            throw new BookingFailure(409, "form", "Chặng phòng vừa được cập nhật ở một phiên khác; vui lòng tải lại booking");
+        UUID nextAllocation = repository.insertChangedAllocation(branch.id(), bookingId, target.id(), now,
+            booking.plannedEnd(), actorId, cause, reason);
+        if (repository.occupyAllocation(nextAllocation, now) != 1)
+            throw new BookingFailure(409, "form", "Không thể kích hoạt chặng phòng mới");
+        for (UUID chargeId : plan.chargeIds()) {
+            if (repository.supersedeCharge(chargeId) != 1)
+                throw new BookingFailure(409, "form", "Các khoản phí vừa được cập nhật ở một phiên khác; vui lòng tải lại booking");
+        }
+        plan.usedCharges().forEach(line -> repository.insertCharge(bookingId, current.id(), line));
+        plan.nextCharges().forEach(line -> repository.insertCharge(bookingId, nextAllocation, line));
+        BigDecimal updated = previous.subtract(plan.originalAmount()).add(plan.usedAmount()).add(plan.nextAmount());
+        repository.event(bookingId, actorId, "BOOKING_ROOM_CHANGED", reason, detailsMap(
+            "previousRoomId", current.roomId(), "previousRoomCode", current.roomCode(),
+            "roomId", target.id(), "roomCode", target.code(), "changeCause", cause,
+            "changedAt", now, "plannedEnd", booking.plannedEnd(), "previousAmount", previous,
+            "updatedAmount", updated, "adjustmentAmount", updated.subtract(previous),
+            "usedSegmentAmount", plan.usedAmount(), "nextSegmentAmount", plan.nextAmount()));
+        BookingDtos.BookingDetail updatedBooking = detail(branch.id(), repository.booking(bookingId, branch.id()));
+        return new BookingDtos.RoomChangeResult(updatedBooking, previous, updated, updated.subtract(previous));
+    }
+
+    @Transactional(readOnly = true)
+    public BookingDtos.ExtensionQuote extensionQuote(Identity identity, UUID bookingId, BookingDtos.ExtendStayRequest request) {
+        if (request == null) throw new BookingFailure(400, "form", "Chọn combo hoặc số giờ gia hạn");
+        BranchScope branch = branch(identity);
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        rejectRunningMeter(bookingId);
+        AllocationRow current = repository.currentAllocation(bookingId);
+        validateActiveAllocation(current);
+        return extensionQuote(branch, booking, current, request);
+    }
+
+    @Transactional
+    public BookingDtos.ExtensionResult extendStay(Identity identity, UUID bookingId, BookingDtos.ExtendStayRequest request) {
+        if (request == null) throw new BookingFailure(400, "form", "Chọn combo hoặc số giờ gia hạn");
+        BranchScope branch = branch(identity);
+        UUID actorId = identity.id();
+        lockBooking(bookingId, branch.id());
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        rejectRunningMeter(bookingId);
+        AllocationRow current = repository.currentAllocationForUpdate(bookingId);
+        validateActiveAllocation(current);
+        BookingDtos.ExtensionQuote extension = extensionQuote(branch, booking, current, request);
+        if (repository.hasRoomOverlap(current.roomId(), extension.startsAt(), extension.endsAt(), bookingId))
+            throw new BookingFailure(409, "hours", "Phòng đã có booking khác trong khoảng thời gian gia hạn");
+        if (repository.updateInHouseBookingEnd(bookingId, booking.plannedEnd(), extension.endsAt()) != 1
+            || repository.updateOccupiedAllocationEnd(current.id(), current.endsAt(), extension.endsAt()) != 1)
+            throw new BookingFailure(409, "form", "Booking vừa được gia hạn ở một phiên khác; vui lòng tải lại");
+
+        for (BookingDtos.ChargeLine charge : extension.quote().charges()) {
+            Map<String, Object> snapshot = new LinkedHashMap<>(charge.pricingSnapshot());
+            snapshot.put("useCase", "UC40");
+            snapshot.put("extensionStartsAt", extension.startsAt().toString());
+            snapshot.put("extensionEndsAt", extension.endsAt().toString());
+            String kind = "COMBO".equals(extension.quote().pricingMode()) ? "COMBO" : "OVERTIME";
+            repository.insertCharge(bookingId, current.id(), new BookingDtos.ChargeLine(kind, charge.description(),
+                charge.quantity(), charge.unitPrice(), charge.amount(), charge.priceRuleId(), charge.comboId(), snapshot));
+        }
+        repository.event(bookingId, actorId, "BOOKING_EXTENDED", null, detailsMap(
+            "roomId", current.roomId(), "pricingMode", extension.quote().pricingMode(),
+            "comboId", request.comboId(), "hours", request.hours(), "startsAt", extension.startsAt(),
+            "endsAt", extension.endsAt(), "addedAmount", extension.quote().expectedAmount()));
+        return new BookingDtos.ExtensionResult(detail(branch.id(), repository.booking(bookingId, branch.id())),
+            extension.startsAt(), extension.endsAt(), extension.quote());
+    }
+
+    @Transactional
+    public BookingDtos.BookingDetail startHourlyMeter(Identity identity, UUID bookingId) {
+        BranchScope branch = branch(identity);
+        lockBooking(bookingId, branch.id());
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        if (repository.meter(bookingId) != null)
+            throw new BookingFailure(409, "form", "Booking đã có phiên tính giờ lẻ; vui lòng tải lại");
+        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
+        validateActiveAllocation(allocation);
+        Instant now = Instant.now();
+        Instant billedFrom = later(now, booking.plannedEnd());
+        Instant reservedUntil = billedFrom.plus(Duration.ofHours(24));
+        Instant nextBooking = repository.nextRoomBookingStart(allocation.roomId(), allocation.endsAt(), bookingId);
+        if (nextBooking != null && nextBooking.isBefore(reservedUntil)) reservedUntil = nextBooking;
+        if (!reservedUntil.isAfter(billedFrom))
+            throw new BookingFailure(409, "form", "Phòng đã có booking kế tiếp; không còn thời gian trống để bật đồng hồ giờ lẻ");
+        if (repository.hasRoomOverlap(allocation.roomId(), allocation.endsAt(), reservedUntil, bookingId))
+            throw new BookingFailure(409, "form", "Phòng đã có booking khác trong khoảng tính giờ lẻ");
+        PricingRule rule = pricing.meteredRate(allocation.roomTypeId(), branch.id(), branch.timezone(), billedFrom);
+        if (repository.updateOccupiedAllocationEnd(allocation.id(), allocation.endsAt(), reservedUntil) != 1)
+            throw new BookingFailure(409, "form", "Lịch phòng vừa thay đổi; vui lòng tải lại");
+        repository.startMeter(bookingId, allocation.id(), rule.id(), now, billedFrom, allocation.endsAt(),
+            reservedUntil, rule.hourlyPrice(), identity.id());
+        repository.event(bookingId, identity.id(), "HOURLY_METER_STARTED", null, detailsMap(
+            "startedAt", now, "billedFrom", billedFrom, "reservedUntil", reservedUntil,
+            "hourlyPrice", rule.hourlyPrice(), "roomId", allocation.roomId()));
+        return detail(branch.id(), repository.booking(bookingId, branch.id()));
+    }
+
+    @Transactional
+    public BookingDtos.BookingDetail stopHourlyMeter(Identity identity, UUID bookingId) {
+        BranchScope branch = branch(identity);
+        lockBooking(bookingId, branch.id());
+        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
+        MeterRow meter = repository.meter(bookingId);
+        if (meter == null || !Set.of("RUNNING", "STOPPED").contains(meter.status()))
+            throw new BookingFailure(409, "form", "Booking không có phiên tính giờ lẻ để dừng");
+        if ("STOPPED".equals(meter.status())) return detail(branch.id(), booking);
+        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
+        validateActiveAllocation(allocation);
+        if (!allocation.id().equals(meter.allocationId()))
+            throw new BookingFailure(409, "form", "Phòng hiện tại không khớp phiên tính giờ; vui lòng tải lại");
+        Instant stoppedAt = Instant.now();
+        long elapsedMillis = Math.max(0, Duration.between(meter.billedFrom(), stoppedAt).toMillis());
+        int minutes = Math.toIntExact((elapsedMillis + 59_999) / 60_000);
+        BigDecimal amount = meter.hourlyPrice().multiply(BigDecimal.valueOf(minutes))
+            .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
+        if (minutes > 0) {
+            Map<String, Object> snapshot = detailsMap("useCase", "UC40_METER", "from", meter.billedFrom(),
+                "to", stoppedAt, "billedMinutes", minutes, "hourlyPrice", meter.hourlyPrice(),
+                "billing", "ACTUAL_MINUTES", "meterId", meter.id());
+            repository.insertCharge(bookingId, allocation.id(), new BookingDtos.ChargeLine("OVERTIME",
+                "Gia hạn giờ lẻ · " + minutes + " phút", BigDecimal.valueOf(minutes)
+                    .divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP),
+                meter.hourlyPrice(), amount, meter.priceRuleId(), null, snapshot));
+        }
+        repository.stopMeter(meter.id(), stoppedAt, minutes, amount, identity.id());
+        repository.event(bookingId, identity.id(), "HOURLY_METER_STOPPED", null, detailsMap(
+            "stoppedAt", stoppedAt, "billedMinutes", minutes, "amount", amount,
+            "pastReservationLimit", stoppedAt.isAfter(meter.reservedUntil())));
+        return detail(branch.id(), repository.booking(bookingId, branch.id()));
+    }
+
     @Transactional
     public BookingDtos.BookingDetail create(Identity identity, BookingDtos.CreateBookingRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Dữ liệu booking không hợp lệ");
@@ -195,7 +402,7 @@ public class BookingService {
         if (earlyCheckIn && repository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
             throw new BookingFailure(409, "roomId", "Không thể nhận phòng sớm vì khung giờ mới bị trùng với booking khác của phòng");
 
-        int bookingUpdated = repository.checkInBooking(bookingId, now, effectiveStart, effectiveEnd);
+        int bookingUpdated = repository.checkInBooking(bookingId, now, effectiveEnd);
         int allocationUpdated = earlyCheckIn
             ? shiftAndOccupyAllocation(allocation.id(), now, effectiveStart, effectiveEnd)
             : repository.occupyAllocation(allocation.id(), now);
@@ -205,7 +412,7 @@ public class BookingService {
         repository.event(bookingId, actorId, "BOOKING_CHECKED_IN", null, detailsMap(
             "actualCheckin", now, "roomId", allocation.roomId(), "depositBalance", deposit,
             "earlyCheckIn", earlyCheckIn, "plannedStartBeforeCheckIn", booking.plannedStart(),
-            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", effectiveStart,
+            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", booking.plannedStart(),
             "plannedEndAfterCheckIn", effectiveEnd));
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
@@ -295,6 +502,293 @@ public class BookingService {
         return new BookingDtos.CancellationResult(detail, outcome, deposit, now, refundRequestId);
     }
 
+    @Transactional
+    public BookingDtos.NoShowResult markNoShow(Identity identity, UUID bookingId, BookingDtos.NoShowRequest request) {
+        BranchScope branch = branch(identity);
+        UUID actorId = identity.id();
+        lockBooking(bookingId, branch.id());
+        BookingRow booking = repository.booking(bookingId, branch.id());
+        if (booking == null) throw notFound();
+        if (!"CONFIRMED".equals(booking.status()))
+            throw new BookingFailure(409, "form", "Chỉ booking đã xác nhận và chưa check-in mới có thể đánh dấu no-show");
+        Instant now = Instant.now();
+        if (booking.plannedStart().isAfter(now))
+            throw new BookingFailure(409, "form", "Chỉ có thể đánh dấu no-show khi đã đến giờ bắt đầu booking");
+        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
+        if (allocation == null || !"RESERVED".equals(allocation.state()))
+            throw new BookingFailure(409, "form", "Booking không còn phòng đang được giữ để giải phóng");
+
+        String reason = request == null || request.reason() == null || request.reason().isBlank()
+            ? "Khách không đến nhận phòng"
+            : required(request.reason(), "reason", "Lý do no-show", 1000);
+        UUID depositId = repository.lockDeposit(bookingId);
+        BigDecimal deposit = repository.depositBalance(bookingId);
+        if (deposit.signum() > 0 && depositId == null)
+            throw new BookingFailure(409, "form", "Không tìm thấy tài khoản tiền cọc để ghi nhận no-show");
+        if (deposit.signum() > 0)
+            repository.forfeitDeposit(bookingId, actorId, deposit, "Tịch thu cọc do khách không đến (no-show)", UUID.randomUUID().toString());
+
+        repository.releaseAllocation(allocation.id(), "Booking no-show");
+        if (repository.markNoShow(bookingId) != 1)
+            throw new BookingFailure(409, "form", "Booking đã được cập nhật bởi thao tác khác");
+        String depositOutcome = deposit.signum() > 0 ? "NON_REFUNDABLE" : "NO_DEPOSIT";
+        repository.event(bookingId, actorId, "BOOKING_NO_SHOW", reason, detailsMap(
+            "noShowAt", now, "depositOutcome", depositOutcome, "depositAmount", deposit,
+            "releasedRoomId", allocation.roomId()));
+        BookingDtos.BookingDetail detail = detail(branch.id(), repository.booking(bookingId, branch.id()));
+        return new BookingDtos.NoShowResult(detail, depositOutcome, deposit, now, allocation.roomId());
+    }
+
+    private BookingRow requireInHouseBooking(UUID bookingId, UUID branchId) {
+        BookingRow booking = repository.booking(bookingId, branchId);
+        if (booking == null) throw notFound();
+        if (!"IN_HOUSE".equals(booking.status()))
+            throw new BookingFailure(409, "form", "Chỉ booking đang sử dụng phòng mới có thể đổi phòng hoặc gia hạn");
+        return booking;
+    }
+
+    private void rejectRunningMeter(UUID bookingId) {
+        MeterRow meter = repository.meter(bookingId);
+        if (meter != null)
+            throw new BookingFailure(409, "form", "Đã có phiên tính giờ lẻ; không thể đổi phòng hoặc mua combo sau khi bắt đầu tính giờ");
+    }
+
+    private static void validateActiveAllocation(AllocationRow allocation) {
+        if (allocation == null || !"OCCUPIED".equals(allocation.state()))
+            throw new BookingFailure(409, "roomId", "Không tìm thấy chặng phòng đang được sử dụng");
+    }
+
+    private static void validateTargetRoom(RoomRow room, BookingRow booking) {
+        if (room == null) throw new BookingFailure(409, "targetRoomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
+        if (booking.guestCount() > room.capacity())
+            throw new BookingFailure(400, "targetRoomId", "Phòng mới không đủ sức chứa số khách của booking");
+    }
+
+    private static String normalizeChangeCause(String cause) {
+        if (cause == null || cause.isBlank()) throw new BookingFailure(400, "cause", "Vui lòng chọn lý do đổi phòng");
+        String value = cause.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("CUSTOMER", "BRANCH_FAULT").contains(value))
+            throw new BookingFailure(400, "cause", "Lý do đổi phòng không hợp lệ");
+        return value;
+    }
+
+    private BookingDtos.ExtensionQuote extensionQuote(BranchScope branch, BookingRow booking, AllocationRow current,
+                                                       BookingDtos.ExtendStayRequest request) {
+        validateActiveAllocation(current);
+        Instant startsAt = booking.plannedEnd();
+        String mode = request.pricingMode() == null ? "" : request.pricingMode().trim().toUpperCase(Locale.ROOT);
+        Instant endsAt;
+        if ("COMBO".equals(mode)) {
+            if (request.comboId() == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo gia hạn");
+            ComboRow combo = repository.combo(request.comboId());
+            if (combo == null || !current.roomTypeId().equals(combo.roomTypeId()))
+                throw new BookingFailure(400, "comboId", "Combo không áp dụng cho loại phòng hiện tại");
+            if (!extensionComboAvailableAt(combo, startsAt, branch.timezone()))
+                throw new BookingFailure(400, "comboId", "Combo ngày chỉ bắt đầu lúc 07:00 và combo đêm chỉ bắt đầu lúc 23:00");
+            endsAt = startsAt.plusSeconds(combo.durationMinutes() * 60L);
+        } else if ("HOURLY".equals(mode)) {
+            if (request.comboId() != null) throw new BookingFailure(400, "comboId", "Không chọn combo khi gia hạn theo giờ");
+            Integer hours = request.hours();
+            if (hours == null || hours < 1 || hours > 12)
+                throw new BookingFailure(400, "hours", "Số giờ gia hạn phải từ 1 đến 12 giờ");
+            endsAt = startsAt.plus(Duration.ofHours(hours));
+        } else {
+            throw new BookingFailure(400, "pricingMode", "Chọn gia hạn theo combo hoặc theo giờ");
+        }
+        if (!endsAt.isAfter(Instant.now()))
+            throw new BookingFailure(400, "hours", "Thời lượng gia hạn phải đủ để bao phủ đến thời điểm hiện tại");
+        BookingDtos.PriceQuote quote = pricing.quote(current.roomTypeId(), branch.id(), branch.timezone(), startsAt, endsAt,
+            mode, request.comboId());
+        return new BookingDtos.ExtensionQuote(startsAt, endsAt, quote);
+    }
+
+    private static boolean extensionComboAvailableAt(ComboRow combo, Instant start, java.time.ZoneId timezone) {
+        String name = combo.name() == null ? "" : combo.name().toLowerCase(Locale.ROOT);
+        LocalTime localStart = start.atZone(timezone).toLocalTime();
+        if (name.contains("ngày") || name.contains("ngay") || name.contains("day"))
+            return localStart.equals(LocalTime.of(7, 0));
+        if (name.contains("đêm") || name.contains("dem") || name.contains("night"))
+            return localStart.equals(LocalTime.of(23, 0));
+        return true;
+    }
+
+    private RoomChangePlan roomChangePlan(BranchScope branch, BookingRow booking, AllocationRow current,
+                                           RoomRow target, Instant changedAt, String cause) {
+        List<ChargeRow> charges = repository.activeChargesForAllocation(current.id());
+        if (charges.isEmpty()) throw new BookingFailure(409, "form", "Không tìm thấy khoản phí đang gắn với chặng phòng hiện tại");
+        List<BookingDtos.ChargeLine> usedLines = new ArrayList<>();
+        List<BookingDtos.ChargeLine> nextLines = new ArrayList<>();
+        BigDecimal originalAmount = BigDecimal.ZERO;
+        BigDecimal usedAmount = BigDecimal.ZERO;
+        BigDecimal nextAmount = BigDecimal.ZERO;
+        List<UUID> chargeIds = new ArrayList<>();
+        Instant savedBaseStart = charges.stream()
+            .filter(charge -> !readSnapshot(charge.snapshot()).containsKey("extensionStartsAt"))
+            .map(charge -> readSnapshot(charge.snapshot()))
+            .map(snapshot -> snapshotInstant(snapshot, null, "from", "startsAt"))
+            .filter(value -> value != null).min(Instant::compareTo).orElse(null);
+        Duration timelineShift = savedBaseStart == null ? Duration.ZERO : Duration.between(savedBaseStart, current.startsAt());
+
+        for (ChargeRow charge : charges) {
+            originalAmount = originalAmount.add(charge.amount());
+            chargeIds.add(charge.id());
+            Map<String, Object> sourceSnapshot = readSnapshot(charge.snapshot());
+            Instant lineStart = snapshotInstant(sourceSnapshot, current.startsAt(), "extensionStartsAt", "from", "startsAt");
+            Instant lineEnd = snapshotInstant(sourceSnapshot, current.endsAt(), "extensionEndsAt", "to", "endsAt");
+            boolean hasSavedWindow = sourceSnapshot.containsKey("extensionStartsAt") || sourceSnapshot.containsKey("from")
+                || sourceSnapshot.containsKey("startsAt") || sourceSnapshot.containsKey("extensionEndsAt")
+                || sourceSnapshot.containsKey("to") || sourceSnapshot.containsKey("endsAt");
+            if (hasSavedWindow && !sourceSnapshot.containsKey("extensionStartsAt")) {
+                lineStart = lineStart.plus(timelineShift);
+                lineEnd = lineEnd.plus(timelineShift);
+            }
+            boolean packageCharge = charge.comboId() != null || "COMBO".equals(sourceSnapshot.get("pricingMode"));
+            if (packageCharge && !hasSavedWindow) {
+                int savedDuration = snapshotInteger(sourceSnapshot, "durationMinutes", 0);
+                if (savedDuration > 0) lineEnd = lineStart.plusSeconds(savedDuration * 60L);
+            }
+            Instant usedEnd = earlier(lineEnd, changedAt);
+            if (usedEnd.isAfter(lineStart)) {
+                long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
+                long usedSeconds = Duration.between(lineStart, usedEnd).getSeconds();
+                BigDecimal amount = proportional(charge.amount(), usedSeconds, fullSeconds);
+                Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, lineStart, usedEnd, cause, "USED", charge.id());
+                usedLines.add(new BookingDtos.ChargeLine(charge.kind(), charge.description(),
+                    splitQuantity(charge.quantity(), usedSeconds, fullSeconds), charge.unitPrice(), amount,
+                    charge.priceRuleId(), charge.comboId(), snapshot));
+                usedAmount = usedAmount.add(amount);
+            }
+
+            Instant nextStart = later(lineStart, changedAt);
+            if (!lineEnd.isAfter(nextStart)) continue;
+            long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
+            long nextSeconds = Duration.between(nextStart, lineEnd).getSeconds();
+            BigDecimal sourceRemaining = charge.amount().subtract(proportional(charge.amount(), fullSeconds - nextSeconds, fullSeconds));
+            if ("BRANCH_FAULT".equals(cause)) {
+                Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, nextStart, lineEnd, cause, "NEXT", charge.id());
+                nextLines.add(new BookingDtos.ChargeLine(charge.kind(), charge.description(),
+                    splitQuantity(charge.quantity(), nextSeconds, fullSeconds), charge.unitPrice(), sourceRemaining,
+                    charge.priceRuleId(), charge.comboId(), snapshot));
+                nextAmount = nextAmount.add(sourceRemaining);
+                continue;
+            }
+
+            ComboRow sourceCombo = charge.comboId() == null ? null : repository.combo(charge.comboId());
+            String sourceComboName = sourceCombo == null ? snapshotString(sourceSnapshot, "name") : sourceCombo.name();
+            int sourceDuration = sourceCombo == null
+                ? snapshotInteger(sourceSnapshot, "durationMinutes", 0) : sourceCombo.durationMinutes();
+            ComboRow equivalent = packageCharge
+                ? equivalentCombo(sourceComboName, sourceDuration, target.roomTypeId()) : null;
+            if (equivalent != null) {
+                int packageMinutes = snapshotInteger(sourceSnapshot, "packageDurationMinutes",
+                    sourceDuration);
+                BigDecimal amount = proportional(equivalent.price(), nextSeconds, Math.max(1, packageMinutes * 60L));
+                Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, nextStart, lineEnd, cause, "NEXT", charge.id());
+                snapshot.put("pricingMode", "COMBO");
+                snapshot.put("name", equivalent.name());
+                snapshot.put("code", equivalent.code());
+                snapshot.put("version", equivalent.version());
+                snapshot.put("durationMinutes", equivalent.durationMinutes());
+                snapshot.put("packageDurationMinutes", packageMinutes);
+                if (charge.comboId() != null) snapshot.put("sourceComboId", charge.comboId().toString());
+                nextLines.add(new BookingDtos.ChargeLine("COMBO", equivalent.name(),
+                    BigDecimal.valueOf(nextSeconds).divide(BigDecimal.valueOf(3600), 3, RoundingMode.HALF_UP),
+                    equivalent.price(), amount, null, equivalent.id(), snapshot));
+                nextAmount = nextAmount.add(amount);
+            } else {
+                BookingDtos.PriceQuote hourly = pricing.quote(target.roomTypeId(), branch.id(), branch.timezone(),
+                    nextStart, lineEnd, "HOURLY", null);
+                for (BookingDtos.ChargeLine line : hourly.charges()) {
+                    Map<String, Object> snapshot = new LinkedHashMap<>(line.pricingSnapshot());
+                    snapshot.put("changeCause", cause);
+                    snapshot.put("sourceChargeId", charge.id().toString());
+                    snapshot.put("chargeSegment", "NEXT");
+                    nextLines.add(new BookingDtos.ChargeLine(line.kind(), line.description(), line.quantity(),
+                        line.unitPrice(), line.amount(), line.priceRuleId(), line.comboId(), snapshot));
+                    nextAmount = nextAmount.add(line.amount());
+                }
+            }
+        }
+        return new RoomChangePlan(List.copyOf(chargeIds), List.copyOf(usedLines), List.copyOf(nextLines),
+            originalAmount, usedAmount, nextAmount);
+    }
+
+    private ComboRow equivalentCombo(String sourceComboName, int sourceDurationMinutes, UUID targetRoomTypeId) {
+        if (sourceComboName == null || sourceComboName.isBlank() || sourceDurationMinutes <= 0) return null;
+        String sourceName = normalizeComboName(sourceComboName);
+        return repository.combos(targetRoomTypeId).stream()
+            .filter(combo -> combo.durationMinutes() == sourceDurationMinutes)
+            .filter(combo -> normalizeComboName(combo.name()).equals(sourceName))
+            .findFirst().orElse(null);
+    }
+
+    private static String normalizeComboName(String name) {
+        return name == null ? "" : name.toLowerCase(Locale.ROOT).replaceAll("queen|king|room|phòng", "")
+            .replaceAll("[^a-z0-9]", "");
+    }
+
+    private Map<String, Object> readSnapshot(String source) {
+        try { return source == null ? new LinkedHashMap<>() : json.readValue(source, new TypeReference<>() {}); }
+        catch (Exception ignored) { return new LinkedHashMap<>(); }
+    }
+
+    private static Instant snapshotInstant(Map<String, Object> snapshot, Instant fallback, String... keys) {
+        for (String key : keys) {
+            Object value = snapshot.get(key);
+            if (value instanceof String text) {
+                try { return Instant.parse(text); } catch (Exception ignored) { /* try the next supported key */ }
+            }
+        }
+        return fallback;
+    }
+
+    private static int snapshotInteger(Map<String, Object> snapshot, String key, int fallback) {
+        Object value = snapshot.get(key);
+        if (value instanceof Number number) return number.intValue();
+        if (value instanceof String text) {
+            try { return Integer.parseInt(text); } catch (NumberFormatException ignored) { /* keep the fallback */ }
+        }
+        return fallback;
+    }
+
+    private static String snapshotString(Map<String, Object> snapshot, String key) {
+        Object value = snapshot.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static BigDecimal proportional(BigDecimal amount, long partSeconds, long fullSeconds) {
+        if (partSeconds <= 0) return BigDecimal.ZERO;
+        return amount.multiply(BigDecimal.valueOf(partSeconds))
+            .divide(BigDecimal.valueOf(Math.max(1, fullSeconds)), 0, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal splitQuantity(BigDecimal quantity, long partSeconds, long fullSeconds) {
+        BigDecimal result = quantity.multiply(BigDecimal.valueOf(partSeconds))
+            .divide(BigDecimal.valueOf(Math.max(1, fullSeconds)), 3, RoundingMode.HALF_UP);
+        return result.signum() > 0 ? result : new BigDecimal("0.001");
+    }
+
+    private static Map<String, Object> splitSnapshot(Map<String, Object> original, Instant start, Instant end,
+                                                       String cause, String segment, UUID sourceChargeId) {
+        Map<String, Object> snapshot = new LinkedHashMap<>(original);
+        snapshot.put("from", start.toString());
+        snapshot.put("to", end.toString());
+        snapshot.put("changeCause", cause);
+        snapshot.put("chargeSegment", segment);
+        snapshot.put("sourceChargeId", sourceChargeId.toString());
+        if ("COMBO".equals(snapshot.get("pricingMode"))) {
+            snapshot.putIfAbsent("packageDurationMinutes", snapshotInteger(snapshot, "durationMinutes", 0));
+        }
+        return snapshot;
+    }
+
+    private static Instant earlier(Instant left, Instant right) { return left.isBefore(right) ? left : right; }
+    private static Instant later(Instant left, Instant right) { return left.isAfter(right) ? left : right; }
+
+    private record RoomChangePlan(List<UUID> chargeIds, List<BookingDtos.ChargeLine> usedCharges,
+                                  List<BookingDtos.ChargeLine> nextCharges, BigDecimal originalAmount,
+                                  BigDecimal usedAmount, BigDecimal nextAmount) {}
+
     private BookingDtos.BookingDetail detail(UUID branchId, BookingRow booking) {
         if (booking == null) throw notFound();
         List<AllocationRow> allocations = repository.allocations(booking.id());
@@ -302,7 +796,7 @@ public class BookingService {
         BigDecimal depositBalance = repository.depositBalance(booking.id());
         BigDecimal depositReceivedAmount = repository.depositReceivedAmount(booking.id());
         BookingDtos.BookingSummary summary = new BookingDtos.BookingSummary(booking.id(), booking.code(), booking.contactName(),
-            booking.contactPhone(), booking.channel(), booking.plannedStart(), booking.plannedEnd(), booking.status(),
+            booking.contactPhone(), booking.channel(), booking.plannedStart(), booking.plannedEnd(), booking.actualCheckin(), booking.status(),
             latest == null ? null : latest.roomId(), latest == null ? null : latest.roomCode(), latest == null ? null : latest.roomName(),
             latest == null ? null : latest.roomTypeName(),
             repository.activeChargeTotal(booking.id()), depositBalance, depositReceivedAmount, booking.guestCount(),
@@ -310,10 +804,13 @@ public class BookingService {
         List<BookingDtos.AllocationView> allocationViews = allocations.stream().map(a -> new BookingDtos.AllocationView(
             a.id(), a.roomId(), a.roomCode(), a.roomName(), a.startsAt(), a.endsAt(), a.state(), a.changeReason(), a.createdAt())).toList();
         List<BookingDtos.ChargeView> chargeViews = repository.charges(booking.id()).stream().map(this::chargeView).toList();
+        MeterRow meter = repository.meter(booking.id());
         return new BookingDtos.BookingDetail(summary, branchId, booking.note(), booking.createdAt(), allocationViews,
             chargeViews, new BookingDtos.DepositView(depositBalance, depositReceivedAmount,
                 repository.depositForfeitedAmount(booking.id()), repository.depositCancellationOutcome(booking.id()), booking.refundCutoffMinutes(),
-                repository.depositPaymentMethod(booking.id())));
+                repository.depositPaymentMethod(booking.id())),
+            meter == null ? null : new BookingDtos.MeterView(meter.status(), meter.startedAt(), meter.billedFrom(),
+                meter.reservedUntil(), meter.stoppedAt(), meter.billedMinutes(), meter.hourlyPrice(), meter.amount()));
     }
 
     private BookingDtos.ChargeView chargeView(ChargeRow charge) {
