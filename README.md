@@ -287,6 +287,8 @@ The directory alone does not run migrations. If the team selects Flyway, configu
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
 
+The booking migrations in this branch are `V7__booking_guest_count.sql`, `V8__reception_deposit_receipts.sql`, `V9__schema_qualified_booking_deposit_triggers.sql`, and `V10__booking_hourly_meter.sql`. These were renamed from V3–V6 to reserve distinct versions when combining team branches. Before running this checkout against a database that already applied the old filenames, inspect `flyway_schema_history` and plan the database transition: renaming an applied migration makes Flyway validation fail, and rerunning its SQL can fail because the schema changes already exist.
+
 ## Usage
 
 Once the relevant features and development accounts are available:
@@ -335,8 +337,11 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
+Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38–UC40 (check-in, room change, stay extension), and UC43 (create a deposit refund request). Checkout, bill settlement, and payment are separate use cases.
+
 The detailed project references are:
 
+- [UC39–UC40 Room and Stay Operations](docs/UC39-40_Room_Stay_Operations.md).
 - Report 1 — Project Introduction.
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.

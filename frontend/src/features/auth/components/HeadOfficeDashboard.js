@@ -31,6 +31,7 @@ const icons = [
   'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5',
 ];
 
+// Trang tổng quan cho vai trò quản lý cấp cao.
 export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile }) {
   const [activeTab, setActiveTab] = useState('Tổng quan');
   const location = useLocation();

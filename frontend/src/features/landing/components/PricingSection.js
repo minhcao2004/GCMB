@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { comboDetails, longComboDetails, prices } from '../data/siteData';
 
+// Hiển thị bảng giá tham khảo theo hạng phòng trên trang giới thiệu.
 export default function PricingSection({ onBook }) {
   const [tier, setTier] = useState('queen');
   const price = prices[tier];

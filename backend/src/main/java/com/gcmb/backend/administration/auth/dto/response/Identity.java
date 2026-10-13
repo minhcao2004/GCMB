@@ -15,4 +15,6 @@ package com.gcmb.backend.administration.auth.dto.response;
 
 import java.util.UUID;
 
-public record Identity(UUID id, String username, String role, String destination, UUID branchId, String branchName) {}
+// Danh tính công khai của phiên, cơ sở được gán và trang đích theo vai trò.
+public record Identity(UUID id, String username, String role, String destination,
+                       UUID branchId, String branchName) {}

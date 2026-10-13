@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 
+// Hiển thị trường nhập xác thực cùng nhãn, gợi ý và lỗi dưới trường.
 export default function AuthField({ name, label, type = 'text', error, hint, ...props }) {
   const [visible, setVisible] = useState(false);
   const password = type === 'password';
