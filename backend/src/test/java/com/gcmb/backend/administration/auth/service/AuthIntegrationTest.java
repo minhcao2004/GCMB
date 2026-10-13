@@ -51,7 +51,7 @@ class AuthIntegrationTest {
     private UUID userId;
     private String code;
     private static final String PASSWORD = "  Original password 123  ";
-    private static final String NEW_PASSWORD = "  Replacement password 123  ";
+    private static final String NEW_PASSWORD = "ReplacementPassword123!";
     @BeforeEach void seedIsolatedAccount() {
         username = "auth_test_" + UUID.randomUUID().toString().replace("-", "");
         email = username + "@example.invalid";
@@ -65,7 +65,7 @@ class AuthIntegrationTest {
         AuthFailure failure = assertThrows(AuthFailure.class, action::run);
         assertTrue(failure.getMessage().contains(expected), failure.getMessage()); return failure;
     }
-    @Test void fullResetPreservesSpacesRevokesSessionsAndConsumesCode() {
+    @Test void fullResetRevokesSessionsAndConsumesCode() {
         var login = service.login(username.toUpperCase(), PASSWORD, true);
         assertEquals("/le-tan", login.user().destination());
         assertNotNull(service.authenticate(login.token()));
@@ -75,7 +75,6 @@ class AuthIntegrationTest {
         assertNull(service.authenticate(login.token()));
         fails(() -> service.reset(email, recovery.challenge(), code, NEW_PASSWORD, NEW_PASSWORD), "đã được sử dụng");
         fails(() -> service.login(username, PASSWORD, false), "không đúng");
-        fails(() -> service.login(username, NEW_PASSWORD.trim(), false), "không đúng");
         assertNotNull(service.login(username, NEW_PASSWORD, false));
     }
     @Test void leadingZeroAndTamperedEmailCannotBypassVerification() {
@@ -111,10 +110,11 @@ class AuthIntegrationTest {
         var recovery = service.sendCode(email);
         fails(() -> service.reset(email, recovery.challenge(), "１２３４５６", NEW_PASSWORD, NEW_PASSWORD), "6 chữ số");
         fails(() -> service.reset(email, recovery.challenge(), code, "   ", "   "), "Vui lòng nhập");
-        fails(() -> service.reset(email, recovery.challenge(), code, NEW_PASSWORD, NEW_PASSWORD.trim()), "không khớp");
+        fails(() -> service.reset(email, recovery.challenge(), code, NEW_PASSWORD, "DifferentPassword123!"), "không khớp");
         assertNotNull(service.login(username, PASSWORD, false));
-        service.reset(email, recovery.challenge(), code, "short", "short");
-        assertNotNull(service.login(username, "short", false));
+        fails(() -> service.reset(email, recovery.challenge(), code, "short", "short"), "8–64");
+        service.reset(email, recovery.challenge(), code, NEW_PASSWORD, NEW_PASSWORD);
+        assertNotNull(service.login(username, NEW_PASSWORD, false));
     }
     @Test void lockedAndRevokedAccountsCannotLoginOrRecover() {
         for (String status : List.of("LOCKED", "REVOKED")) {

@@ -8,7 +8,6 @@
 
 package com.gcmb.backend.administration.auth.security;
 
-import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.auth.validator.AuthValidation;
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
 
