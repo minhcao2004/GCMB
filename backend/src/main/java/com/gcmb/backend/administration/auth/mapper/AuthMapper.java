@@ -13,13 +13,14 @@ import com.gcmb.backend.administration.auth.exception.AuthFailure;
 public final class AuthMapper {
     private AuthMapper() {}
     public static Account account(ResultSet rs, int row) throws SQLException {
-        return new Account(rs.getObject("id", UUID.class), rs.getString("username"), rs.getString("email"), rs.getString("password_hash"), rs.getString("status"), rs.getString("role"));
+        return new Account(rs.getObject("id", UUID.class), rs.getString("username"), rs.getString("email"), rs.getString("password_hash"), rs.getString("status"), rs.getString("role"), rs.getObject("branch_id",UUID.class), rs.getString("branch_name"));
     }
     public static Reset reset(ResultSet rs, int row) throws SQLException {
         return new Reset(rs.getObject("id", UUID.class), rs.getString("code_hash"), instant(rs, "used_at"), instant(rs, "revoked_at"));
     }
     public static Identity identity(ResultSet rs, int row) throws SQLException {
-        return new Identity(rs.getObject("id", UUID.class), rs.getString("username"), rs.getString("code"), destination(rs.getString("code")));
+        String role=rs.getString("code");
+        return new Identity(rs.getObject("id", UUID.class), rs.getString("username"), role, destination(role), rs.getObject("branch_id",UUID.class), rs.getString("branch_name"));
     }
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         Timestamp value = rs.getTimestamp(column);

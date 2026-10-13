@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
+import BranchAssignmentPanel from '../../branch/components/BranchAssignmentPanel';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
@@ -46,8 +47,8 @@ export default function HeadOfficeDashboard({ user, busy, onLogout }) {
     </aside>
     <div className="manager-workspace">
       <div className="manager-topbar"><p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p><div className="manager-account"><span>{user.username}</span><button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></div></div>
-      <section className={`manager-content${activeTab === 'Phòng & bảng giá' ? ' manager-content-catalog' : ''}`} aria-labelledby={activeTab === 'Phòng & bảng giá' ? undefined : 'manager-greeting'}>
-        {activeTab === 'Phòng & bảng giá' ? <RoomCatalogPage /> : <><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1><p>Chọn một chức năng trên thanh điều hướng để tiếp tục.</p></>}
+      <section className={`manager-content${activeTab === 'Phòng & bảng giá' ? ' manager-content-catalog' : ''}`} aria-labelledby={activeTab === 'Phòng & bảng giá' || activeTab === 'Cơ sở' ? undefined : 'manager-greeting'}>
+        {activeTab === 'Phòng & bảng giá' ? <RoomCatalogPage /> : activeTab === 'Cơ sở' ? <BranchAssignmentPanel /> : <><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1><p>Chọn một chức năng trên thanh điều hướng để tiếp tục.</p></>}
       </section>
     </div>
   </div>;

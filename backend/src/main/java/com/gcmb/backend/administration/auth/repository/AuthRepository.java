@@ -20,7 +20,7 @@ public class AuthRepository {
     public Account findByEmail(String email) { return account("email", email); }
     private Account account(String column, String value) {
         // column is only supplied by internal constants, never request data.
-        List<Account> result = db.query("SELECT u.*, r.code AS role FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE lower(u." + column + ")=lower(?) FOR UPDATE OF u", AuthMapper::account, value);
+        List<Account> result = db.query("SELECT u.*, r.code AS role, bma.branch_id, b.name AS branch_name FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id LEFT JOIN gcmb.branch_manager_assignment bma ON bma.user_id=u.id LEFT JOIN gcmb.branch b ON b.id=bma.branch_id WHERE lower(u." + column + ")=lower(?) FOR UPDATE OF u", AuthMapper::account, value);
         return result.isEmpty() ? null : result.get(0);
     }
     public void recordLogin(UUID userId, Instant now) {
@@ -50,9 +50,11 @@ public class AuthRepository {
     }
     public Identity findSession(String tokenHash) {
         List<Identity> users = db.query("""
-            SELECT u.id, u.username, r.code FROM gcmb.auth_token t
+            SELECT u.id, u.username, r.code, bma.branch_id, b.name AS branch_name FROM gcmb.auth_token t
             JOIN gcmb.user_account u ON u.id=t.user_id JOIN gcmb.role r ON r.id=u.role_id
+            LEFT JOIN gcmb.branch_manager_assignment bma ON bma.user_id=u.id LEFT JOIN gcmb.branch b ON b.id=bma.branch_id
             WHERE t.token_hash=? AND t.kind='SESSION' AND t.revoked_at IS NULL AND t.expires_at>CURRENT_TIMESTAMP AND u.status='ACTIVE'
+              AND (r.code <> 'BRANCH_MANAGER' OR bma.branch_id IS NOT NULL)
             """, AuthMapper::identity, tokenHash);
         return users.isEmpty() ? null : users.get(0);
     }
