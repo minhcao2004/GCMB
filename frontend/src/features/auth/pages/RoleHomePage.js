@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
+import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân', ACCOUNTANT: 'Kế toán' };
 export default function RoleHomePage({ role }) {
@@ -18,6 +19,7 @@ export default function RoleHomePage({ role }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
   useEffect(() => {
     let active = true;
@@ -44,13 +46,15 @@ export default function RoleHomePage({ role }) {
     finally { setBusy(false); }
   };
   return <main className={`dashboard-page${user && role === 'HEAD_OFFICE_MANAGER' ? ' dashboard-page-manager' : ''}`}>
-    {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} /> : user ? <>
+    {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : user ? <>
       <header className="dashboard-header">
         <h1>Dashboard — {names[role]}</h1>
+        <button onClick={() => setProfileOpen(true)}>Thông tin tài khoản</button>
         <button disabled={busy} onClick={logout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
       </header>
       <p>Xin chào, <strong>{user.username}</strong> — {names[role]}.</p>
     </> : !error && <p role="status">Đang kiểm tra phiên đăng nhập…</p>}
+    {user && profileOpen && <AccountProfileDialog onClose={() => setProfileOpen(false)} />}
     {error && <p className="dashboard-error" role="alert">{error} <button onClick={() => setRetry((value) => value + 1)}>Thử lại</button></p>}
   </main>;
 }
