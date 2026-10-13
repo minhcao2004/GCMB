@@ -67,7 +67,7 @@ class AuthServiceTest {
     }
 
     private static Account account(String status, String role) {
-        return new Account(USER_ID, USERNAME, EMAIL, PASSWORD_HASH, status, role);
+        return new Account(USER_ID, USERNAME, EMAIL, PASSWORD_HASH, status, role, null, null);
     }
 
     private static Reset reset(Instant usedAt, Instant revokedAt) {
@@ -410,7 +410,7 @@ class AuthServiceTest {
 
     @Test
     void authenticateReturnsIdentityFromHashedToken() {
-        Identity identity = new Identity(USER_ID, USERNAME, "RECEPTIONIST", "/le-tan");
+        Identity identity = new Identity(USER_ID, USERNAME, "RECEPTIONIST", "/le-tan", null, null);
         when(repository.findSession(AuthCrypto.hash(SESSION_TOKEN))).thenReturn(identity);
 
         assertSame(identity, service.authenticate(SESSION_TOKEN));
