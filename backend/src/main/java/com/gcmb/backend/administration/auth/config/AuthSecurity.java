@@ -48,7 +48,7 @@ public class AuthSecurity {
             .formLogin(config -> config.disable()).httpBasic(config -> config.disable()).logout(config -> config.disable())
             .authorizeHttpRequests(config -> config
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/health", "/api/v1/auth/login", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
-                .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout").authenticated()
+                .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/account/profile").authenticated()
                 .requestMatchers("/api/v1/head-office/**").hasRole("HEAD_OFFICE_MANAGER")
                 .requestMatchers("/api/v1/branch-management/**").hasRole("BRANCH_MANAGER")
                 .requestMatchers("/api/v1/reception/**").hasRole("RECEPTIONIST")

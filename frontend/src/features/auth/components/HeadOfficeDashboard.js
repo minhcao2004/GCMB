@@ -4,6 +4,7 @@
 
  * Author: HuyDV
  * Created: 10/10/2026
+ * Updated: 12/10/2026
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
@@ -21,6 +22,7 @@ const dashboardPath = '/quan-ly-he-thong';
 const icons = [
   'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   'M4 21V5l8-3 8 3v16 M9 21v-5h6v5 M8 7h1 M15 7h1 M8 11h1 M15 11h1',
+  'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M18 8v6 M15 11h6',
   'M4 3v18h17 M8 16v-4 M13 16V8 M18 16V5',
   'M8 3H5v18h14V3h-3 M8 2h8v4H8z M8 13l3 3 5-6',
   'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M17 4a4 4 0 0 1 0 7 M22 21v-2a4 4 0 0 0-3-4',
@@ -29,7 +31,7 @@ const icons = [
   'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5',
 ];
 
-export default function HeadOfficeDashboard({ user, busy, onLogout }) {
+export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile }) {
   const [activeTab, setActiveTab] = useState('Tổng quan');
   const location = useLocation();
   const navigate = useNavigate();
@@ -57,10 +59,21 @@ export default function HeadOfficeDashboard({ user, busy, onLogout }) {
       <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
     </aside>
     <div className="manager-workspace">
-      <div className="manager-topbar"><p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p><div className="manager-account"><span>{user.username}</span><button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></div></div>
-      <section className={`manager-content${activeTab === 'Phòng & bảng giá' ? ' manager-content-catalog' : ''}`} aria-labelledby={activeTab === 'Phòng & bảng giá' || activeTab === 'Cơ sở' ? undefined : 'manager-greeting'}>
-        {activeTab === 'Phòng & bảng giá' ? <RoomCatalogPage /> : activeTab === 'Cơ sở' ? <BranchAssignmentPanel /> : <><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1><p>Chọn một chức năng trên thanh điều hướng để tiếp tục.</p></>}
-      </section>
+      <div className="manager-topbar">
+        <p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p>
+        <div className="manager-account">
+          <span>{user.username}</span>
+          <button onClick={onProfile}>Thông tin tài khoản</button>
+          <button disabled={busy} onClick={onLogout}>
+            {busy ? 'Đang đăng xuất…' : 'Đăng xuất'}
+          </button>
+        </div>
+      </div>
+      {activeTab === 'Tài khoản & phân quyền' ? (
+        <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
+      ) : activeTab === 'Nhật ký hệ thống' ? (
+        <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+      ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
     </div>
   </div>;
 }

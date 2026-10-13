@@ -1,0 +1,155 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 12/10/2026
+ * Description: Bố cục phân quyền, xác nhận thu hồi và nhật ký hệ thống.
+ */
+.dashboard-page .account-link {
+  border: 0;
+  background: transparent;
+  color: #ed188d;
+  padding: 6px 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.accounts-bottom-actions {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 18px;
+}
+
+.access-permission-title {
+  font-size: 13px;
+  margin: 30px 0 16px;
+}
+
+.access-permission-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
+}
+
+.access-permission-table th,
+.access-permission-table td {
+  padding: 16px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.access-permission-table th {
+  color: #788397;
+  background: #f8fafc;
+}
+
+.access-preview {
+  margin-top: 30px;
+}
+
+.dashboard-page .access-revoke-link {
+  margin-top: 24px;
+}
+
+.account-revoke-dialog {
+  inset: 0;
+  margin: auto;
+  width: 620px;
+  height: auto;
+  max-height: calc(100dvh - 40px);
+  border-radius: 16px;
+}
+
+.account-revoke-dialog .account-form-body {
+  min-height: 270px;
+}
+
+.access-warning {
+  padding: 18px;
+  margin-bottom: 22px;
+  background: #fff0f3;
+  color: #d83b50;
+  border-radius: 8px;
+}
+
+.access-warning p {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+
+.account-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  resize: vertical;
+  font: inherit;
+}
+
+.dashboard-page .account-danger {
+  background: #e14b58;
+  border-color: #e14b58;
+  color: white;
+  min-width: 190px;
+}
+
+.account-success-message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #087b50;
+  background: #e6f8ee;
+}
+
+.audit-filters {
+  grid-template-columns: repeat(2, minmax(130px, 1fr)) 1.6fr 1fr 1fr;
+}
+
+.audit-date label {
+  display: block;
+  color: #788397;
+  margin-bottom: 6px;
+  font-size: 10px;
+}
+
+.audit-filters > input,
+.audit-filters > select {
+  align-self: end;
+}
+
+.audit-readonly {
+  margin-top: 20px;
+}
+
+.audit-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.audit-detail-body dt {
+  color: #788397;
+  margin-top: 14px;
+}
+
+.audit-detail-body dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .audit-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .account-revoke-dialog {
+    width: calc(100vw - 24px);
+  }
+  .audit-filters {
+    grid-template-columns: 1fr;
+  }
+}
