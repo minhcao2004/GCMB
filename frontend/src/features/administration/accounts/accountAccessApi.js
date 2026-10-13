@@ -50,6 +50,7 @@ export const roleNames = {
 };
 
 export const actionNames = {
+  UPDATE_ACCOUNT_INFORMATION: 'Cập nhật thông tin tài khoản',
   CREATE_USER_ACCOUNT: 'Tạo tài khoản',
   SET_ACCOUNT_ROLE: 'Thay đổi vai trò / phạm vi',
   DEACTIVATE_USER_ACCOUNT: 'Thu hồi truy cập',

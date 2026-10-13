@@ -9,6 +9,9 @@ package com.gcmb.backend.administration.accounts;
 
 import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.*;
 import com.gcmb.backend.administration.accounts.service.AccountAccessService;
+import com.gcmb.backend.administration.accounts.service.AccountProfileService;
+import com.gcmb.backend.administration.accounts.dto.AccountProfileDtos.UpdateProfile;
+import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.audit.service.AuditService;
 import com.gcmb.backend.administration.auth.dto.response.Identity;
 import java.time.LocalDate;
@@ -42,6 +45,8 @@ class AccountAccessIntegrationTest {
     @Autowired JdbcTemplate db;
     @Autowired AccountAccessService access;
     @Autowired AuditService audit;
+    @Autowired AccountProfileService profiles;
+    @Autowired AuthCrypto crypto;
     @Autowired WebApplicationContext context;
     private UUID actor;
     private UUID target;
@@ -144,5 +149,85 @@ class AccountAccessIntegrationTest {
                 .with(authentication(manager())).contentType("application/json")
                 .content("{\"reason\":\"test\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    private UsernamePasswordAuthenticationToken staff() {
+        return new UsernamePasswordAuthenticationToken(
+                new Identity(target, username, "RECEPTIONIST", "/le-tan"),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_RECEPTIONIST"))
+        );
+    }
+
+    @Test
+    void profileApiOnlyUpdatesSessionOwnerAndRecordsSafeSnapshot() throws Exception {
+        mvc.perform(get("/api/v1/account/profile").with(authentication(staff())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account.id").value(target.toString()))
+                .andExpect(jsonPath("$.linkedEmployee").value(true))
+                .andExpect(jsonPath("$.password_hash").doesNotExist());
+        String email = db.queryForObject("SELECT email FROM gcmb.user_account WHERE id=?", String.class, target);
+        // Dữ liệu thừa không được phép đổi đối tượng, quyền hoặc trạng thái tài khoản.
+        mvc.perform(post("/api/v1/account/profile").with(authentication(staff())).with(csrf())
+                .contentType("application/json").content("""
+                        {"fullName":"Updated Employee","phone":"0901234567","email":"%s",
+                         "id":"%s","role":"HEAD_OFFICE_MANAGER","status":"REVOKED"}
+                        """.formatted(email, actor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Updated Employee"))
+                .andExpect(jsonPath("$.account.role").value("RECEPTIONIST"))
+                .andExpect(jsonPath("$.account.status").value("ACTIVE"));
+        assertEquals("Updated Employee", db.queryForObject(
+                "SELECT full_name FROM gcmb.employee WHERE id=?", String.class, employee));
+        var page = audit.list(username, "UPDATE_ACCOUNT_INFORMATION", branch, null, null, 0, 10);
+        assertEquals(1, page.total());
+        var detail = audit.detail(page.items().get(0).id());
+        assertEquals("Test Employee", detail.before().fullName());
+        assertEquals("0901234567", detail.after().phone());
+        assertEquals(email, detail.after().email());
+    }
+
+    @Test
+    void profileEmailChangeRevokesRecoveryCodesButKeepsSession() {
+        db.update("UPDATE gcmb.user_account SET password_hash=? WHERE id=?", crypto.encode("123"), target);
+        db.update("""
+                INSERT INTO gcmb.auth_token(user_id,token_hash,kind,expires_at)
+                VALUES (?,?,'PASSWORD_RESET',CURRENT_TIMESTAMP + interval '1 day')
+                """, target, UUID.randomUUID().toString());
+        String email = "updated_" + target + "@example.com";
+        var result = profiles.update(target, new UpdateProfile("Test Employee", null, email, "123"));
+        assertEquals(email, result.account().email());
+        assertEquals(0, db.queryForObject("""
+                SELECT count(*) FROM gcmb.auth_token
+                WHERE user_id=? AND kind='PASSWORD_RESET' AND revoked_at IS NULL
+                """, Integer.class, target));
+        assertEquals(1, db.queryForObject("""
+                SELECT count(*) FROM gcmb.auth_token
+                WHERE user_id=? AND kind='SESSION' AND revoked_at IS NULL
+                """, Integer.class, target));
+        assertFalse(db.queryForObject("""
+                SELECT before_data::text || after_data::text FROM gcmb.audit_event
+                WHERE entity_id=? AND action='UPDATE_ACCOUNT_INFORMATION'
+                """, String.class, target).contains("currentPassword"));
+    }
+
+    @Test
+    void profileRequiresLoginCsrfAndSupportsAccountWithoutEmployee() throws Exception {
+        mvc.perform(get("/api/v1/account/profile")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/account/profile").with(authentication(staff()))
+                .contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/account/profile").with(authentication(manager())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linkedEmployee").value(false));
+        for (String role : List.of("BRANCH_MANAGER", "ACCOUNTANT")) {
+            var principal = new UsernamePasswordAuthenticationToken(
+                    new Identity(target, username, role, "/"),
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+            );
+            mvc.perform(get("/api/v1/account/profile").with(authentication(principal)))
+                    .andExpect(status().isOk());
+        }
     }
 }

@@ -31,7 +31,14 @@ public final class AuditDtos {
     public record AuditPage(List<AuditEntry> items, long total, int page, int size) {
     }
 
-    public record Snapshot(String username, String role, String branchName, String status) {
+    public record Snapshot(
+            String username,
+            String role,
+            String branchName,
+            String status,
+            String fullName,
+            String email,
+            String phone) {
     }
 
     public record AuditDetail(AuditEntry event, Snapshot before, Snapshot after) {

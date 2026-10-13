@@ -117,16 +117,24 @@ public class AuditRepository {
                 a.after_data->>'username' AS after_username,
                 a.after_data->>'role' AS after_role,
                 a.after_data->>'branchName' AS after_branch,
-                a.after_data->>'status' AS after_status
+                a.after_data->>'status' AS after_status,
+                a.before_data->>'fullName' AS before_name,
+                a.before_data->>'email' AS before_email,
+                a.before_data->>'phone' AS before_phone,
+                a.after_data->>'fullName' AS after_name,
+                a.after_data->>'email' AS after_email,
+                a.after_data->>'phone' AS after_phone
                 """;
         List<AuditDetail> result = db.query(
                 SELECT + snapshots + FROM + " WHERE a.id=?",
                 (rs, row) -> new AuditDetail(
                         entry(rs, row),
                         new Snapshot(rs.getString("before_username"), rs.getString("before_role"),
-                                rs.getString("before_branch"), rs.getString("before_status")),
+                                rs.getString("before_branch"), rs.getString("before_status"),
+                                rs.getString("before_name"), rs.getString("before_email"), rs.getString("before_phone")),
                         new Snapshot(rs.getString("after_username"), rs.getString("after_role"),
-                                rs.getString("after_branch"), rs.getString("after_status"))
+                                rs.getString("after_branch"), rs.getString("after_status"),
+                                rs.getString("after_name"), rs.getString("after_email"), rs.getString("after_phone"))
                 ),
                 id
         );

@@ -179,9 +179,15 @@ function AuditDetail({ id, onClose }) {
 
   const fields = [
     ['username', 'Tên đăng nhập'],
+    ...(detail?.event.action === 'UPDATE_ACCOUNT_INFORMATION' ? [
+      ['fullName', 'Họ và tên'],
+      ['email', 'Email'],
+      ['phone', 'Số điện thoại'],
+    ] : [
     ['role', 'Vai trò'],
     ['branchName', 'Phạm vi'],
     ['status', 'Truy cập'],
+    ]),
   ];
   function value(snapshot, field) {
     const text = snapshot?.[field];

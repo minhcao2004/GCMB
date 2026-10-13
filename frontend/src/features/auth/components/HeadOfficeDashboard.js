@@ -25,7 +25,7 @@ const icons = [
   'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5',
 ];
 
-export default function HeadOfficeDashboard({ user, busy, onLogout }) {
+export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile }) {
   const [activeTab, setActiveTab] = useState('Tổng quan');
   return <div className="head-office-dashboard">
     <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
@@ -40,7 +40,16 @@ export default function HeadOfficeDashboard({ user, busy, onLogout }) {
       <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
     </aside>
     <div className="manager-workspace">
-      <div className="manager-topbar"><p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p><div className="manager-account"><span>{user.username}</span><button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></div></div>
+      <div className="manager-topbar">
+        <p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p>
+        <div className="manager-account">
+          <span>{user.username}</span>
+          <button onClick={onProfile}>Thông tin tài khoản</button>
+          <button disabled={busy} onClick={onLogout}>
+            {busy ? 'Đang đăng xuất…' : 'Đăng xuất'}
+          </button>
+        </div>
+      </div>
       {activeTab === 'Tài khoản & phân quyền' ? (
         <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
       ) : activeTab === 'Nhật ký hệ thống' ? (
