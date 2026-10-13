@@ -8,7 +8,7 @@
 
 package com.gcmb.backend.administration.auth.dto.request;
 
-// Avoid generated toString() methods containing credentials.
+// Dữ liệu đăng nhập; không tạo toString để tránh lộ mật khẩu vào log.
 public class LoginRequest {
     public String username; public String password; public boolean remember;
 }

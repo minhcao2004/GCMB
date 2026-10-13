@@ -7,6 +7,7 @@ const heroSlides = [
   { name: 'Music Box', image: images.musicBanner, position: 'center 57%' },
 ];
 
+// Hiển thị slide nổi bật của trang giới thiệu.
 export default function Hero() {
   const [activeSlide, setActiveSlide] = useState(0);
   const slide = heroSlides[activeSlide];

@@ -3,11 +3,14 @@ import { rooms } from '../data/siteData';
 
 const filters = [['all', 'Tất cả'], ['cinema', 'Cinema'], ['gaming', 'Gaming'], ['music', 'Music']];
 
+// Lọc và cuộn các thẻ không gian/phòng trên trang giới thiệu.
 export default function SpacesSection({ onSelectRoom }) {
   const [filter, setFilter] = useState('all');
   const trackRef = useRef(null);
   const filteredRooms = useMemo(() => rooms.filter((room) => filter === 'all' || room.category === filter), [filter]);
+  // Đổi nhóm phòng và đưa thanh cuộn về đầu.
   const changeFilter = (value) => { setFilter(value); trackRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); };
+  // Cuộn đúng bề rộng một thẻ phòng theo hướng được chọn.
   const moveRooms = (direction) => { const card = trackRef.current?.querySelector('.room-card'); if (card) trackRef.current.scrollBy({ left: direction * (card.getBoundingClientRect().width + 26), behavior: 'smooth' }); };
   return (
     <section id="spaces" className="section spaces">
