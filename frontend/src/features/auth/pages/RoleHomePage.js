@@ -52,10 +52,8 @@ export default function RoleHomePage({ role }) {
     finally { setBusy(false); }
   };
   return <main className={`dashboard-page${user && ['HEAD_OFFICE_MANAGER','BRANCH_MANAGER'].includes(role) ? ' dashboard-page-manager' : ''}`}>
-    {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} /> : user ? <>
-      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} busy={busy} onLogout={logout} /> : <>
-  return <main className={`dashboard-page${user && role === 'HEAD_OFFICE_MANAGER' ? ' dashboard-page-manager' : ''}`}>
     {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : user ? <>
+      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} busy={busy} onLogout={logout} /> : <>
       <header className="dashboard-header">
         <h1>Dashboard — {names[role]}</h1>
         <button onClick={() => setProfileOpen(true)}>Thông tin tài khoản</button>

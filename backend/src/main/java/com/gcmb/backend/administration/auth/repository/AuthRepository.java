@@ -87,11 +87,12 @@ List<Account> result = db.query(sql, AuthMapper::account, value);
     // Đọc danh tính qua hash token nếu tài khoản và phiên còn hiệu lực.
     public Identity findSession(String tokenHash) {
         List<Identity> users = db.query("""
-            SELECT u.id, u.username, r.code, bma.branch_id, b.name AS branch_name FROM gcmb.auth_token t
+            SELECT u.id, u.username, r.code, COALESCE(bma.branch_id, u.branch_id) AS branch_id, b.name AS branch_name FROM gcmb.auth_token t
             JOIN gcmb.user_account u ON u.id=t.user_id JOIN gcmb.role r ON r.id=u.role_id
-            LEFT JOIN gcmb.branch_manager_assignment bma ON bma.user_id=u.id LEFT JOIN gcmb.branch b ON b.id=bma.branch_id
+            LEFT JOIN gcmb.branch_manager_assignment bma ON bma.user_id=u.id AND r.code='BRANCH_MANAGER'
+            LEFT JOIN gcmb.branch b ON b.id=COALESCE(bma.branch_id, u.branch_id)
             WHERE t.token_hash=? AND t.kind='SESSION' AND t.revoked_at IS NULL AND t.expires_at>CURRENT_TIMESTAMP AND u.status='ACTIVE'
-              AND (r.code <> 'BRANCH_MANAGER' OR bma.branch_id IS NOT NULL)
+              AND (r.code <> 'BRANCH_MANAGER' OR COALESCE(bma.branch_id, u.branch_id) IS NOT NULL)
             """, AuthMapper::identity, tokenHash);
         return users.isEmpty() ? null : users.get(0);
     }
