@@ -52,7 +52,9 @@ export default function AccountProfileDialog({ onClose }) {
     return () => { active = false; };
   }, [retry]);
 
-  function beginEdit() {
+  function beginEdit(event) {
+    // Chặn hành vi mặc định của lần bấm mở form khi nút Lưu được hiển thị.
+    event.preventDefault();
     setForm({
       fullName: profile.fullName || '',
       phone: profile.phone || '',
@@ -72,7 +74,7 @@ export default function AccountProfileDialog({ onClose }) {
 
   async function save(event) {
     event.preventDefault();
-    if (busy) return;
+    if (!editing || busy) return;
     setBusy(true);
     setErrors({});
     try {
@@ -180,11 +182,13 @@ export default function AccountProfileDialog({ onClose }) {
             {editing ? 'Hủy chỉnh sửa' : 'Đóng'}
           </button>
           {profile && (editing ? (
-            <button type="submit" className="account-primary" disabled={busy}>
+            <button key="save-profile" type="submit" className="account-primary" disabled={busy}>
               {busy ? 'Đang lưu…' : 'Lưu thay đổi'}
             </button>
           ) : (
-            <button type="button" className="account-primary" onClick={beginEdit}>Chỉnh sửa thông tin</button>
+            <button key="edit-profile" type="button" className="account-primary" onClick={beginEdit}>
+              Chỉnh sửa thông tin
+            </button>
           ))}
         </div>
       </form>
