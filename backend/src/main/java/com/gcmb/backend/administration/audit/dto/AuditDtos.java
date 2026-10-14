@@ -9,6 +9,7 @@ package com.gcmb.backend.administration.audit.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class AuditDtos {
@@ -41,6 +42,10 @@ public final class AuditDtos {
             String phone) {
     }
 
-    public record AuditDetail(AuditEntry event, Snapshot before, Snapshot after) {
+    public record AuditDetail(AuditEntry event, Snapshot before, Snapshot after,
+            Map<String,Object> beforeValues, Map<String,Object> afterValues, String actorRole) {
+        public AuditDetail(AuditEntry event, Snapshot before, Snapshot after) {
+            this(event, before, after, Map.of(), Map.of(), null);
+        }
     }
 }

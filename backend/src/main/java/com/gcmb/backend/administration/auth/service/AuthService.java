@@ -105,6 +105,20 @@ public class AuthService {
         repository.consumeReset(reset.id(), now);
         repository.revokeTokens(account.id(), now);
     }
+    @Transactional
+    public void changePassword(Identity identity, String currentPassword, String password, String confirmation) {
+        String current = AuthValidation.required(currentPassword, "currentPassword", "mật khẩu hiện tại", Integer.MAX_VALUE, false);
+        AuthValidation.password(password, confirmation);
+        Account account = repository.findByUsername(identity.username());
+        if (account == null || !account.id().equals(identity.id())) throw new AuthFailure(401, "form", "Vui lòng đăng nhập lại");
+        active(account);
+        if (!crypto.matches(current, account.hash())) throw new AuthFailure(400, "currentPassword", "Mật khẩu hiện tại không đúng");
+        if (crypto.matches(password, account.hash())) throw new AuthFailure(400, "password", "Mật khẩu mới phải khác mật khẩu hiện tại");
+        Instant now = Instant.now();
+        repository.changePassword(account.id(), crypto.encode(password), now);
+        repository.revokePendingResets(account.id(), now);
+    }
+
     @Transactional(readOnly = true)
     // Kiểm tra token cookie qua hash đã lưu và trả danh tính còn hiệu lực.
     public Identity authenticate(String token) {

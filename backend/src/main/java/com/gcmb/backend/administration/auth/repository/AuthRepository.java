@@ -75,6 +75,12 @@ List<Account> result = db.query(sql, AuthMapper::account, value);
     // Lưu hash mật khẩu mới và thời điểm đổi.
     public void changePassword(UUID userId, String passwordHash, Instant now) {
         db.update("UPDATE gcmb.user_account SET password_hash=?, password_changed_at=?, failed_login_count=0, locked_until=NULL WHERE id=?", passwordHash, ts(now), userId);
+        db.update("""
+            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
+            SELECT u.id,u.branch_id,'CHANGE_PASSWORD','USER_ACCOUNT',u.id,
+                jsonb_build_object('username',u.username,'actorRole',r.code)
+            FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
+            """,userId);
     }
     // Đánh dấu mã khôi phục đã sử dụng.
     public void consumeReset(UUID resetId, Instant now) {

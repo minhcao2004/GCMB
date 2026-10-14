@@ -1,0 +1,82 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ * Author: HuyDV
+ * Created: 14/10/2026
+ * Description: Giao diện quản lý cơ sở theo mẫu GenZ.
+ */
+.branch-admin { padding: 24px 30px; color: #202238; background: #f5f7fa; min-height: calc(100vh - 90px); font-size: 13px; line-height: 1.5; }
+.branch-admin * { box-sizing: border-box; }
+.branch-admin button, .branch-admin input, .branch-admin select, .branch-admin textarea { font: inherit; }
+.branch-admin button { cursor: pointer; border: 1px solid #dfe5ef; border-radius: 9px; padding: 11px 16px; background: white; color: #526078; font-size: 13px; }
+.branch-admin button:disabled { opacity: .45; cursor: not-allowed; }
+.branch-admin button:focus-visible, .branch-admin input:focus-visible, .branch-admin select:focus-visible, .branch-admin textarea:focus-visible { outline: 2px solid #ed148d; outline-offset: 2px; }
+.branch-admin .ba-primary { background: #ed148d; border-color: #ed148d; color: white; font-weight: 650; }
+.branch-admin .ba-danger { background: #e34855; border-color: #e34855; color: white; font-weight: 650; }
+.ba-heading { position: static; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; padding: 0; }
+.ba-heading h1 { font-size: 26px; margin: 0 0 7px; }
+.ba-heading p, .ba-subtitle { margin: 0; font-size: 12px; color: #7b8496; }
+.ba-card { padding: 24px; background: white; border-radius: 13px; margin-bottom: 18px; }
+.ba-card h2 { font-size: 16px; margin: 0 0 22px; }
+.ba-filters { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; background: white; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+.branch-admin input:not([type=radio]), .branch-admin select, .branch-admin textarea { width: 100%; border: 1px solid #dce3ef; border-radius: 9px; padding: 12px 14px; background: white; color: #30364b; min-height: 43px; }
+.branch-admin textarea { resize: vertical; }
+.branch-admin input[readonly] { background: #f8f9fc; }
+.ba-table-scroll { overflow-x: auto; }
+.branch-admin table { border-collapse: collapse; width: 100%; text-align: left; font-size: 13px; }
+.branch-admin th { color: #7b8496; background: #f8f9fb; font-size: 11px; padding: 14px; }
+.branch-admin td { padding: 20px 14px; border-bottom: 1px solid #f0f2f6; }
+.branch-admin tbody tr:nth-child(even) { background: #fbfcfe; }
+.branch-admin small { display: block; margin-top: 7px; font-size: 11px; color: #7b8496; }
+.branch-admin .ba-link, .branch-admin .ba-back { border: 0; background: none; color: #ed148d; padding-left: 0; }
+.ba-back { margin-bottom: 15px; }
+.ba-badge { display: inline-block; border-radius: 5px; padding: 6px 10px; background: #edf0f4; color: #647085; font-size: 11px; white-space: nowrap; }
+.ba-badge.ACTIVE { background: #e6f8ef; color: #00a66a; }
+.ba-badge.SUSPENDED { background: #fff4e2; color: #aa7019; }
+.ba-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 0 0; background: white; color: #7b8496; font-size: 12px; }
+.ba-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+.ba-tabs button { border: 0; background: none; }
+.ba-tabs button[aria-current=page] { background: #fce9f4; color: #d00978; }
+.ba-detail-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 18px; }
+.ba-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin: 0; }
+.ba-info-grid dt { color: #7b8496; font-size: 11px; margin-bottom: 8px; }
+.ba-info-grid dd { font-size: 13px; font-weight: 600; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ba-manager-card > button { width: 100%; }
+.ba-manager-card > p { color: #7b8496; font-size: 12px; }
+.ba-manager-identity { display: flex; gap: 13px; align-items: center; margin: 30px 0; font-size: 14px; }
+.ba-avatar { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #e5f8fc; color: #048398; }
+.ba-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.ba-info, .ba-warning, .ba-success, .ba-error { padding: 16px; border-radius: 9px; font-size: 12px; line-height: 1.7; margin: 20px 0; }
+.ba-info { background: #e6f8fc; color: #00849c; }
+.ba-warning { background: #fff5e4; color: #b57718; }
+.ba-success { background: #e6f8ef; color: #098c59; }
+.ba-error { background: #ffedf0; color: #c52e4a; }
+.ba-info strong, .ba-warning strong, .ba-info span, .ba-warning span { display: block; }
+.ba-overlay { position: fixed; inset: 0; background: #22243755; z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 18px; }
+.ba-overlay.drawer { justify-content: flex-end; padding: 0; }
+.ba-modal { background: white; border-radius: 15px; width: 560px; max-width: 100%; max-height: 94vh; display: flex; flex-direction: column; overflow: hidden; outline: 0; }
+.drawer .ba-modal { width: 540px; border-radius: 0; height: 100dvh; max-height: 100dvh; }
+.ba-modal > header { display: flex; align-items: center; justify-content: space-between; padding: 24px; border-bottom: 1px solid #e6eaf1; flex-shrink: 0; }
+.ba-modal h2 { margin: 0; font-size: 21px; line-height: 1.4; letter-spacing: normal; }
+.ba-modal header button { border: 0; padding: 0 7px; font-size: 23px; color: #7b8496; }
+.ba-modal form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.ba-modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+.ba-subtitle { margin-bottom: 24px; }
+.ba-fields { display: grid; gap: 24px; }
+.ba-fields label, .ba-search-label { display: grid; gap: 10px; font-size: 12px; color: #6c768b; }
+.ba-modal-footer { border-top: 1px solid #e6eaf1; padding: 20px 24px; display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+.ba-modal-footer button { min-width: 100px; }
+.ba-manager-option { display: flex; align-items: center; gap: 13px; padding: 16px; border: 1px solid #e2e7ef; border-radius: 10px; margin-top: 12px; cursor: pointer; }
+.ba-manager-option.selected { border-color: #ed148d; background: #fff7fb; }
+.ba-manager-option strong { display: block; margin-top: 10px; font-size: 13px; }
+.ba-manager-option input { accent-color: #ed148d; }
+.ba-status-transition { display: flex; justify-content: space-between; align-items: center; color: #b57718; font-size: 13px; margin-bottom: 22px; }
+.ba-checks { font-size: 12px; line-height: 1.8; }
+@media (max-width: 760px) {
+  .branch-admin { padding: 18px 14px; }
+  .ba-detail-grid, .ba-filters { grid-template-columns: 1fr; }
+  .ba-heading { align-items: flex-start; }
+  .ba-heading h1 { font-size: 22px; }
+  .ba-info-grid { grid-template-columns: 1fr; }
+  .ba-tabs { flex-wrap: wrap; }
+  .ba-card { padding: 18px; }
+}

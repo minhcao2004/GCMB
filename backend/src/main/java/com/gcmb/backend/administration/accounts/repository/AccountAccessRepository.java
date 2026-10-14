@@ -87,11 +87,12 @@ public class AccountAccessRepository {
                     jsonb_build_object('username',CAST(? AS text),'role',CAST(? AS text),
                         'branchName',CAST(? AS text),'status',CAST(? AS text)),
                     jsonb_build_object('username',CAST(? AS text),'role',CAST(? AS text),
-                        'branchName',CAST(? AS text),'status',CAST(? AS text)),?)
+                        'branchName',CAST(? AS text),'status',CAST(? AS text),
+                        'actorRole',(SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?)),?)
                 """,
                 actor, after.branchId(), action, after.id(),
                 before.username(), before.role(), before.branchName(), before.status(),
-                after.username(), after.role(), after.branchName(), after.status(), reason
+                after.username(), after.role(), after.branchName(), after.status(), actor, reason
         );
     }
 }

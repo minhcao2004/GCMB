@@ -44,6 +44,6 @@ function SocialDock() {
 
 // Ghép đầu trang, nội dung và chân trang công khai.
 export default function PublicLayout({ children, onBook }) {
-  return <><a className="skip-link" href="#main">Đến nội dung chính</a><Header onBook={onBook} />{children}<Footer /><SocialDock /></>;
+  return <div className="public-site"><a className="skip-link" href="#main">Đến nội dung chính</a><Header onBook={onBook} />{children}<Footer /><SocialDock /></div>;
 }
 

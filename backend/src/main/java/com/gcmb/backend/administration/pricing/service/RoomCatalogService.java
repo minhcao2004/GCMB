@@ -3,6 +3,7 @@
  *
  * Author: TrongNV
  * Created: 12/10/2026
+ * Updated: HuyDV - 14/10/2026 (UC-14 đến UC-18).
  * Description: Nghiệp vụ quản lý hạng phòng, giá theo thời gian và combo.
  */
 
@@ -35,51 +36,94 @@ public class RoomCatalogService {
     private static final Pattern PRICE_RULE_CODE = Pattern.compile("[A-Z0-9_-]{2,60}");
     private final JdbcTemplate db;
 
-    public RoomCatalogService(JdbcTemplate db) { this.db = db; }
+    public RoomCatalogService(JdbcTemplate db) {
+        this.db = db;
+    }
 
     public List<RoomTypeView> roomTypes() {
-        return db.query("SELECT id,code,name,mode,capacity,description,active FROM gcmb.room_type ORDER BY code",
-            (rs,n) -> new RoomTypeView(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),
-                rs.getString("mode"),rs.getInt("capacity"),rs.getString("description"),rs.getBoolean("active")));
+        return db.query("""
+            SELECT id, code, name, mode, capacity, description, active
+            FROM gcmb.room_type ORDER BY code
+            """, (rs, n) -> new RoomTypeView(
+                rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getString("mode"), rs.getInt("capacity"), rs.getString("description"),
+                rs.getBoolean("active")));
     }
 
     @Transactional
-    public RoomTypeView createRoomType(RoomTypeCommand c) {
-        validateRoomType(c);
-        String code=c.code().trim().toUpperCase();
-        Long duplicate=db.queryForObject("SELECT COUNT(*) FROM gcmb.room_type WHERE upper(code)=?",Long.class,code);
-        if(duplicate!=null&&duplicate>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã hạng phòng đã tồn tại. Vui lòng nhập mã khác.");
-        UUID id=UUID.randomUUID();
+    public RoomTypeView createRoomType(RoomTypeCommand command) {
+        validateRoomType(command);
+        String code = command.code().trim().toUpperCase(java.util.Locale.ROOT);
+        Long duplicate = db.queryForObject(
+            "SELECT COUNT(*) FROM gcmb.room_type WHERE upper(code)=?", Long.class, code);
+        if (duplicate != null && duplicate > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Mã hạng phòng đã tồn tại. Vui lòng nhập mã khác.");
+        }
+        UUID id = UUID.randomUUID();
         try {
-            db.update("INSERT INTO gcmb.room_type(id,code,name,mode,capacity,description,active) VALUES (?,?,?,?,?,?,true)",
-                id,code,c.name().trim(),c.serviceType(),c.capacity(),c.description()==null?"":c.description().trim());
-        } catch(DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã hạng phòng đã tồn tại hoặc dữ liệu không hợp lệ.");
+            db.update("""
+                INSERT INTO gcmb.room_type(id, code, name, mode, capacity, description, active)
+                VALUES (?, ?, ?, ?, ?, ?, true)
+                """, id, code, command.name().trim(), command.serviceType(), command.capacity(),
+                command.description() == null ? "" : command.description().trim());
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Mã hạng phòng đã tồn tại hoặc dữ liệu không hợp lệ.");
         }
         return roomType(id);
     }
 
     @Transactional
-    public RoomTypeView updateRoomType(UUID id, RoomTypeCommand c) {
-        validateRoomType(c);
-        int updated=db.update("UPDATE gcmb.room_type SET name=?,mode=?,capacity=?,description=? WHERE id=?",
-            c.name().trim(),c.serviceType(),c.capacity(),c.description()==null?"":c.description().trim(),id);
-        if(updated==0) throw missing("Không tìm thấy hạng phòng.");
+    public RoomTypeView updateRoomType(UUID id, RoomTypeCommand command) {
+        validateRoomType(command);
+        // Mã định danh giữ nguyên khi sửa; không thay đổi giá đã xác nhận của booking.
+        RoomTypeView current = roomType(id);
+        if (!current.code().equals(command.code().trim().toUpperCase(java.util.Locale.ROOT))) {
+            throw bad("Không được thay đổi mã hạng phòng khi chỉnh sửa.");
+        }
+        int updated = db.update("""
+            UPDATE gcmb.room_type SET name=?, mode=?, capacity=?, description=? WHERE id=?
+            """, command.name().trim(), command.serviceType(), command.capacity(),
+            command.description() == null ? "" : command.description().trim(), id);
+        if (updated == 0) {
+            throw missing("Không tìm thấy hạng phòng.");
+        }
+        return roomType(id);
+    }
+
+    // HuyDV - 14/10/2026: Chỉ ngừng chọn cho phòng mới, giữ nguyên các tham chiếu lịch sử.
+    @Transactional
+    public RoomTypeView deactivateRoomType(UUID id) {
+        int updated = db.update("UPDATE gcmb.room_type SET active=false WHERE id=?", id);
+        if (updated == 0) {
+            throw missing("Không tìm thấy hạng phòng.");
+        }
         return roomType(id);
     }
 
     @Transactional
     public void deleteRoomType(UUID id) {
+        // Khóa bản ghi trước khi kiểm tra; FK RESTRICT bảo vệ cả trường hợp ghi đồng thời.
+        List<UUID> found = db.queryForList(
+            "SELECT id FROM gcmb.room_type WHERE id=? FOR UPDATE", UUID.class, id);
+        if (found.isEmpty()) {
+            throw missing("Không tìm thấy hạng phòng.");
+        }
+        Boolean used = db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.room WHERE room_type_id=?)
+                OR EXISTS(SELECT 1 FROM gcmb.price_rule WHERE room_type_id=?)
+                OR EXISTS(SELECT 1 FROM gcmb.combo WHERE room_type_id=?)
+            """, Boolean.class, id, id, id);
+        if (Boolean.TRUE.equals(used)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể xóa hạng phòng đã có phòng, giá hoặc combo liên quan (kể cả đã ngừng). Hãy chọn Ngừng sử dụng để giữ lịch sử.");
+        }
         try {
-            Long exists=db.queryForObject("SELECT COUNT(*) FROM gcmb.room_type WHERE id=?",Long.class,id);
-            if(exists==null||exists==0) throw missing("Không tìm thấy hạng phòng.");
-            db.update("DELETE FROM gcmb.combo_item WHERE combo_id IN (SELECT id FROM gcmb.combo WHERE room_type_id=? AND branch_id IS NULL)",id);
-            db.update("DELETE FROM gcmb.combo WHERE room_type_id=? AND branch_id IS NULL",id);
-            db.update("DELETE FROM gcmb.price_rule WHERE room_type_id=? AND branch_id IS NULL",id);
-            int deleted=db.update("DELETE FROM gcmb.room_type WHERE id=?",id);
-            if(deleted==0) throw missing("Không tìm thấy hạng phòng.");
-        } catch(DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể xóa hạng phòng vì phòng thực tế hoặc hóa đơn lịch sử đang sử dụng dữ liệu này. Các dữ liệu liên quan vẫn được giữ nguyên.");
+            db.update("DELETE FROM gcmb.room_type WHERE id=?", id);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể xóa hạng phòng đang được dữ liệu khác sử dụng. Các dữ liệu liên quan vẫn được giữ nguyên.");
         }
     }
 
@@ -166,7 +210,7 @@ public class RoomCatalogService {
     }
 
     private static void validatePriceRule(PriceRuleCommand c) {
-        if(c==null||c.code()==null||!PRICE_RULE_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.roomTypeId()==null||c.weekdays()==null||c.weekdays().isEmpty()||c.weekdays().stream().anyMatch(day->day==null||day<1||day>7)||c.validFrom()==null||(c.validTo()!=null&&!c.validTo().isAfter(c.validFrom()))||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo())||c.hourlyPrice()==null||c.hourlyPrice().signum()<0) throw bad("Thông tin quy tắc giá chưa hợp lệ.");
+        if(c==null||c.code()==null||!PRICE_RULE_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.name().trim().length()>200||c.roomTypeId()==null||c.weekdays()==null||c.weekdays().isEmpty()||c.weekdays().stream().anyMatch(day->day==null||day<1||day>7)||c.validFrom()==null||(c.validTo()!=null&&!c.validTo().isAfter(c.validFrom()))||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo())||c.hourlyPrice()==null||c.hourlyPrice().signum()<0) throw bad("Thông tin quy tắc giá chưa hợp lệ.");
     }
 
     public List<PriceCatalogItem> prices(String kind, UUID roomTypeId, boolean activeOnly) {
@@ -270,11 +314,18 @@ public class RoomCatalogService {
     private static PriceCatalogItem priceItem(UUID id,String kind,String code,UUID roomId,String roomName,String name,String description,Integer duration,Integer from,Integer to,BigDecimal price,boolean active) {
         return new PriceCatalogItem(id,kind,code,roomId,roomName,name,description,duration,from,to,price,active);
     }
-    private static void validateRoomType(RoomTypeCommand c) {
-        if(c==null||c.code()==null||!ROOM_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()
-            ||c.capacity()==null||c.capacity()<1||c.serviceType()==null||!List.of("CINEMA","MUSIC_BOX").contains(c.serviceType()))
-            throw bad("Vui lòng nhập mã, tên, loại dịch vụ và sức chứa hợp lệ.");
+    private static void validateRoomType(RoomTypeCommand command) {
+        if (command == null || command.code() == null
+                || !ROOM_CODE.matcher(command.code().trim().toUpperCase(java.util.Locale.ROOT)).matches()
+                || command.name() == null || command.name().isBlank()
+                || command.name().trim().length() > 200
+                || command.capacity() == null || command.capacity() < 1
+                || command.serviceType() == null
+                || !List.of("CINEMA", "MUSIC_BOX").contains(command.serviceType())) {
+            throw bad("Vui lòng nhập mã, tên (tối đa 200 ký tự), loại dịch vụ và sức chứa hợp lệ.");
+        }
     }
+
     private static void validatePrice(String kind,PriceCommand c) {
         if(!List.of("HOURLY","COMBO").contains(kind)||c==null||c.price()==null||c.price().signum()<0) throw bad("Mức giá không hợp lệ.");
         if("COMBO".equals(kind)&&(c.code()==null||!COMBO_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.durationMinutes()==null||c.durationMinutes()<1||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo()))) throw bad("Mã combo chỉ gồm chữ in hoa, số, dấu gạch ngang hoặc gạch dưới (2–60 ký tự); tên, thời lượng và khung giờ phải hợp lệ.");

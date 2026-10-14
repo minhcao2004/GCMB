@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import com.gcmb.backend.administration.audit.service.AuditSnapshots;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -34,7 +35,8 @@ public class AuditRepository {
             SELECT a.id,a.created_at,a.action,a.entity_type,a.entity_id,a.reason,
                 COALESCE(employee.full_name,actor.username,'Hệ thống') AS actor_name,
                 actor.username AS actor_username,
-                COALESCE(a.after_data->>'username',target.username,CAST(a.entity_id AS text),'—') AS entity_name,
+                COALESCE(a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',
+                    a.before_data->>'code',a.before_data->>'name',target.username,CAST(a.entity_id AS text),'—') AS entity_name,
                 COALESCE(b.name,'Toàn chuỗi') AS branch_name
             """;
 
@@ -67,7 +69,7 @@ public class AuditRepository {
             int size) {
         StringBuilder where = new StringBuilder("""
                 WHERE strpos(lower(concat_ws(' ',employee.full_name,actor.username,
-                    target.username,CAST(a.entity_id AS text),a.after_data->>'username')),lower(?))>0
+                    target.username,CAST(a.entity_id AS text),a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',a.before_data->>'code',a.before_data->>'name')),lower(?))>0
                 """);
         List<Object> args = new ArrayList<>();
         args.add(q);
@@ -108,9 +110,11 @@ public class AuditRepository {
     }
 
     public AuditDetail detail(UUID id) {
-        // Không trả nguyên JSON lịch sử: chỉ chiếu các trường tài khoản được phép hiển thị.
+        // The additional snapshots pass through an allowlist before being returned.
         String snapshots = """
-                ,a.before_data->>'username' AS before_username,
+                ,a.before_data::text AS before_values,a.after_data::text AS after_values,
+                COALESCE(a.after_data->>'actorRole',(SELECT r.code FROM gcmb.role r WHERE r.id=actor.role_id)) AS actor_role,
+                a.before_data->>'username' AS before_username,
                 a.before_data->>'role' AS before_role,
                 a.before_data->>'branchName' AS before_branch,
                 a.before_data->>'status' AS before_status,
@@ -134,7 +138,9 @@ public class AuditRepository {
                                 rs.getString("before_name"), rs.getString("before_email"), rs.getString("before_phone")),
                         new Snapshot(rs.getString("after_username"), rs.getString("after_role"),
                                 rs.getString("after_branch"), rs.getString("after_status"),
-                                rs.getString("after_name"), rs.getString("after_email"), rs.getString("after_phone"))
+                                rs.getString("after_name"), rs.getString("after_email"), rs.getString("after_phone")),
+                        AuditSnapshots.read(rs.getString("before_values")), AuditSnapshots.read(rs.getString("after_values")),
+                        rs.getString("actor_role")
                 ),
                 id
         );

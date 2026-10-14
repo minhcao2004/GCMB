@@ -23,6 +23,7 @@ export const authApi = {
   login: (body) => post('login', body),
   sendCode: (email) => post('forgot-password', { email }),
   reset: (body) => post('reset-password', body),
+  changePassword: (body) => post('change-password', body),
   logout: () => post('logout', {}),
 };
 // Đổi lỗi HTTP hoặc lỗi mạng thành thông báo trường biểu mẫu.

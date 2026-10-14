@@ -243,6 +243,8 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 
 ### Troubleshooting
 
+Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/main/java/com/gcmb/backend/BackendApplication.java`. Maven chỉ định lớp này trong `pom.xml`; cấu hình Run của IDE cũng cần dùng đúng tên package. Nếu IDE còn chọn `com.gcmb.BackendApplication`, xóa cấu hình Run cũ và chọn lại lớp hiện tại.
+
 | Problem | Check or action |
 | --- | --- |
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
@@ -250,6 +252,7 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
+| `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
 
 ## Configuration
 
@@ -290,6 +293,10 @@ Add a new migration for changes to an already-shared schema. Preserve applied mi
 The booking migrations in this branch are `V7__booking_guest_count.sql`, `V8__reception_deposit_receipts.sql`, `V9__schema_qualified_booking_deposit_triggers.sql`, and `V10__booking_hourly_meter.sql`. These were renamed from V3–V6 to reserve distinct versions when combining team branches. Before running this checkout against a database that already applied the old filenames, inspect `flyway_schema_history` and plan the database transition: renaming an applied migration makes Flyway validation fail, and rerunning its SQL can fail because the schema changes already exist.
 
 ## Usage
+
+Quản lý cơ sở UC-09–13: xem [nghiệp vụ, API và migration V11](docs/UC09-13_Branch_Administration.md).
+
+Quản lý hạng phòng UC-14–18: xem [luồng thao tác, API và bàn giao](docs/UC14-18_Room_Types.md).
 
 Once the relevant features and development accounts are available:
 
@@ -336,6 +343,9 @@ Before opening a pull request:
 Review and test changes before merging. Keep `node_modules/`, `build/`, `target/`, and local environment files out of Git; preserve examples such as `.env.example` and Maven Wrapper files.
 
 ## Documentation
+
+Audit logs record successful data changes by all roles: accounts, passwords, rooms, room types, prices, combos, branch-manager assignments, and booking operations. Views, searches, filters, pagination, availability checks, and quote calculations are excluded. Audit details show approved before/after fields and actor roles, with no passwords, hashes, or tokens. New business-write APIs must integrate audit in the same transaction. Accountant-specific business APIs are not yet implemented in this checkout.
+
 
 Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38–UC40 (check-in, room change, stay extension), and UC43 (create a deposit refund request). Checkout, bill settlement, and payment are separate use cases.
 

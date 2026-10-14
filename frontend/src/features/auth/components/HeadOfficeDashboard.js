@@ -8,11 +8,12 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
+import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
-import BranchAssignmentPanel from '../../branch/components/BranchAssignmentPanel';
+import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../administration/accounts/AccountsPage';
 import AuditLogPage from '../../administration/accounts/AuditLogPage';
 
@@ -37,7 +38,10 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
-    setActiveTab(location.pathname === catalogPath ? 'Phòng & bảng giá' : 'Tổng quan');
+    // Giữ mục vừa chọn khi rời trang bảng giá về đường dẫn dashboard chung.
+    setActiveTab((current) => location.pathname === catalogPath
+      ? 'Phòng & bảng giá'
+      : current === 'Phòng & bảng giá' ? 'Tổng quan' : current);
   }, [location.pathname]);
   const selectTab = (tab) => {
     setActiveTab(tab);
@@ -60,17 +64,14 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
     </aside>
     <div className="manager-workspace">
-      <div className="manager-topbar">
-        <p>QUẢN LÝ CẤP CAO <span>/ {activeTab}</span></p>
-        <div className="manager-account">
-          <span>{user.username}</span>
-          <button onClick={onProfile}>Thông tin tài khoản</button>
-          <button disabled={busy} onClick={onLogout}>
-            {busy ? 'Đang đăng xuất…' : 'Đăng xuất'}
-          </button>
-        </div>
-      </div>
-      {activeTab === 'Tài khoản & phân quyền' ? (
+      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
+      {activeTab === 'Cơ sở' ? (
+        <BranchManagementPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+      ) : activeTab === 'Phòng & bảng giá' ? (
+        <section className="manager-content manager-content-catalog">
+          <RoomCatalogPage />
+        </section>
+      ) : activeTab === 'Tài khoản & phân quyền' ? (
         <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
