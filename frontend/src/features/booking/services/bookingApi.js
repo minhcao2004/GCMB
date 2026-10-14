@@ -12,11 +12,22 @@ async function mutate(method, path, body) {
   return response.data;
 }
 
+// Lấy đủ các trang khi cần đối chiếu mọi phòng đang được sử dụng.
+async function listAll(params = {}) {
+  const pageSize = 100;
+  const first = (await api.get('/reception/bookings', { params: { ...params, page: 0, size: pageSize } })).data;
+  if (first.totalPages <= 1) return first.items || [];
+  const pages = await Promise.all(Array.from({ length: first.totalPages - 1 }, (_, index) =>
+    api.get('/reception/bookings', { params: { ...params, page: index + 1, size: pageSize } })));
+  return [...(first.items || []), ...pages.flatMap((response) => response.data.items || [])];
+}
+
 // Tập hợp lời gọi API booking; quyết định nghiệp vụ và giá vẫn nằm ở backend.
 export const bookingApi = {
   // Dữ liệu đầu vào và danh sách booking của chi nhánh hiện tại.
   options: async () => (await api.get('/reception/booking-options')).data,
   list: async (params) => (await api.get('/reception/bookings', { params })).data,
+  listAll,
   detail: async (id) => (await api.get(`/reception/bookings/${id}`)).data,
   // Thao tác trong thời gian khách đang ở phòng.
   stayOptions: async (id) => (await api.get(`/reception/bookings/${id}/stay-options`)).data,

@@ -6,9 +6,9 @@ import AccountProfileDialog from '../../administration/accounts/AccountProfileDi
 import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
-import BookingStayDialog from './BookingStayDialog';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 
@@ -97,41 +97,94 @@ function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
-// Dựng khung điều hướng, thanh đầu và nút đăng xuất của lễ tân.
-function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange }) {
+// HuyDV - 14/10/2026: Giữ khung đồng bộ, ghép điều hướng Booking/Phòng của Thanh.
+export function AppShell({
+  user,
+  branchName,
+  busy,
+  onLogout,
+  children,
+  breadcrumb,
+  search = '',
+  onSearchChange,
+  activeTab = 'booking',
+  hideSearch = false,
+}) {
+  const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
-  return <><div className="booking-app reception-dashboard"><div className="head-office-dashboard">
-    <aside className="manager-sidebar">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">LỄ TÂN</p>
-      <nav className="manager-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label}  aria-current={icon === 'booking' ? 'page' : undefined} aria-disabled={icon !== 'booking'}>
-          <Icon name={icon} /><span>{label}</span>
-        </button>)}
-      </nav>
-      <div className="manager-sidebar-footer">
-        <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
-        <p>Đang làm việc · Lễ tân</p>
+
+  function selectTab(icon) {
+    if (icon === 'booking') {
+      navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
+    } else if (icon === 'rooms') {
+      navigate('/le-tan/phong');
+    }
+  }
+
+  return (
+    <>
+      <div className="booking-app reception-dashboard">
+        <div className="head-office-dashboard">
+          <aside className="manager-sidebar">
+            <div className="manager-brand"><BrandWordmark /></div>
+            <p className="manager-role">LỄ TÂN</p>
+            <nav className="manager-navigation" aria-label="Điều hướng lễ tân">
+              {navigation.map(([label, icon]) => (
+                <button
+                  type="button"
+                  key={label}
+                  aria-current={icon === activeTab ? 'page' : undefined}
+                  aria-disabled={!['booking', 'rooms'].includes(icon)}
+                  onClick={() => selectTab(icon)}
+                >
+                  <Icon name={icon} /><span>{label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="manager-sidebar-footer">
+              <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
+              <p>Đang làm việc · Lễ tân</p>
+            </div>
+          </aside>
+          <div className="manager-workspace">
+            <DashboardTopbar
+              role="LỄ TÂN"
+              page={breadcrumb}
+              user={user}
+              busy={busy}
+              onLogout={onLogout}
+              onProfile={() => setProfileOpen(true)}
+            >
+              {!hideSearch && (
+                <label className="booking-global-search">
+                  <Icon name="search" />
+                  <input
+                    value={search}
+                    onChange={(event) => onSearchChange?.(event.target.value)}
+                    placeholder="Tìm phòng, booking, khách hàng..."
+                    aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'}
+                  />
+                </label>
+              )}
+            </DashboardTopbar>
+            <main className="booking-main" id="main">{children}</main>
+          </div>
+        </div>
       </div>
-    </aside>
-    <div className="manager-workspace">
-      <DashboardTopbar role="LỄ TÂN" page={breadcrumb} user={user} busy={busy} onLogout={onLogout} onProfile={() => setProfileOpen(true)}>
-        <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label="Tìm kiếm booking" /></label>
-      </DashboardTopbar>
-      <main className="booking-main" id="main">{children}</main>
-    </div>
-    </div>
-  </div>
-    {profileOpen && <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
-      <AccountProfileDialog onClose={() => setProfileOpen(false)} />
-    </div>}
-  </>;
+      {profileOpen && (
+        <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
+          <AccountProfileDialog onClose={() => setProfileOpen(false)} />
+        </div>
+      )}
+    </>
+  );
 }
 // Chọn lớp CSS theo trạng thái booking.
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 // Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
-function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow, onStay }) {
+function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow }) {
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -173,9 +226,7 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
     <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
     <button type="button" className="booking-button booking-button-primary booking-detail-checkin" onClick={onCheckIn} disabled={!canCheckIn}>Check-in</button>
     {canMarkNoShow && <button type="button" className="booking-button booking-button-danger booking-detail-no-show" onClick={() => onNoShow(booking)}>Đánh dấu no-show</button>}
-    {booking.status === 'IN_HOUSE' && <div className="booking-detail-stay-actions"><button type="button" disabled={Boolean(detail?.meter)} onClick={() => onStay(booking, 'change')}>Đổi phòng</button><button type="button" onClick={() => onStay(booking, 'extend')}>Gia hạn</button></div>}
-    {detail?.booking?.id === booking.id && detail.meter?.status === 'RUNNING' && <div className="booking-detail-meter"><span>Giờ lẻ đang chạy</span><strong>{Math.max(0, Math.floor((now.getTime() - new Date(detail.meter.billedFrom).getTime()) / 60000))} phút</strong><button type="button" onClick={() => onStay(booking, 'extend')}>Mở đồng hồ để dừng</button></div>}
-    {detail?.booking?.id === booking.id && detail.meter?.status === 'STOPPED' && booking.status === 'IN_HOUSE' && <div className="booking-detail-meter"><span>Giờ lẻ đã chốt</span><strong>{detail.meter.billedMinutes} phút · {formatVnd(detail.meter.amount)}</strong><button type="button" onClick={() => onStay(booking, 'extend')}>Xem phụ thu</button></div>}
+    {booking.status === 'IN_HOUSE' && <button type="button" className="booking-detail-room-link" onClick={() => navigate('/le-tan/phong', { state: { roomId: booking.roomId } })}>Xem phòng và thao tác lưu trú</button>}
     <div className="booking-detail-actions"><button type="button" className="booking-detail-action-edit" disabled={!canEdit} onClick={() => onEdit(booking)}>Sửa booking</button><button type="button" className="booking-detail-action-cancel is-danger" disabled={!canCheckIn} onClick={() => onCancel(booking)}>Hủy booking</button></div>
   </aside>;
 }
@@ -443,8 +494,6 @@ export default function BookingManagementPage() {
   const [cancelError, setCancelError] = useState('');
   const [noShowTarget, setNoShowTarget] = useState(null);
   const [noShowError, setNoShowError] = useState('');
-  const [stayTarget, setStayTarget] = useState(null);
-  const [stayMode, setStayMode] = useState('change');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { document.title = `${createMode ? 'Tạo booking' : editMode ? 'Sửa booking' : 'Booking'} | GenZ Cinema & Music Box`; }, [createMode, editMode]);
@@ -521,7 +570,7 @@ export default function BookingManagementPage() {
   // Đăng xuất rồi chuyển về trang đăng nhập.
   const logout = async () => {
     setBusy(true);
-    try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }
+    try { await authApi.logout(); clearBookingDraft(user); navigate('/dang-nhap', { replace: true }); }
     catch (requestError) { const errors = apiErrors(requestError); setError(errors.form || Object.values(errors)[0]); }
     finally { setBusy(false); }
   };
@@ -531,6 +580,7 @@ export default function BookingManagementPage() {
     setBusy(true);
     try {
       const result = await bookingApi.create(payload);
+      clearBookingDraft(user);
       const booking = result.booking;
       setSelectedDate(toLocalDateInput(new Date(booking.plannedStart)));
       setSelectedId(booking.id);
@@ -620,38 +670,10 @@ export default function BookingManagementPage() {
       setSelectedDate(toLocalDateInput(new Date(updated.plannedStart)));
       setSelectedId(updated.id);
       setNoticeKind('success');
-      setNotice(`Đã cập nhật booking ${updated.code}. Tiền cọc và giá đã chốt được giữ nguyên.`);
+      setNotice(`Đã cập nhật booking ${updated.code}. Giá mới: ${formatVnd(updated.expectedAmount)}; tiền cọc đã ghi được giữ nguyên.`);
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
       return { ok: true };
-    } catch (requestError) {
-      const errors = apiErrors(requestError);
-      return { error: errors.form || Object.values(errors)[0] };
-    } finally { setBusy(false); }
-  };
-
-  // Điều phối đổi phòng, mua combo hoặc bật/dừng đồng hồ giờ lẻ.
-  const saveStayChange = async (action, payload) => {
-    if (!stayTarget) return { error: 'Không tìm thấy booking cần cập nhật.' };
-    setBusy(true);
-    try {
-      const result = action === 'change' ? await bookingApi.changeRoom(stayTarget.id, payload)
-        : action === 'extend' ? await bookingApi.extendStay(stayTarget.id, payload)
-        : action === 'meterStart' ? await bookingApi.startHourlyMeter(stayTarget.id)
-        : await bookingApi.stopHourlyMeter(stayTarget.id);
-      if (!['meterStart', 'meterStop'].includes(action)) setStayTarget(null);
-      setNoticeKind('success');
-      if (action === 'change') {
-        setNotice(`Đã đổi ${result.booking.booking.roomCode ? `sang phòng ${result.booking.booking.roomCode}` : 'phòng'} cho booking ${stayTarget.code}. Điều chỉnh ${formatVnd(result.adjustmentAmount)}.`);
-      } else if (action === 'extend') {
-        setNotice(`Đã gia hạn booking ${stayTarget.code} đến ${timeText(result.endsAt, timezone)}. Phụ thu ${formatVnd(result.quote.expectedAmount)}.`);
-      } else if (action === 'meterStart') {
-        setNotice(`Đã bật đồng hồ giờ lẻ cho booking ${stayTarget.code}.`);
-      } else if (action === 'meterStop') {
-        setNotice(`Đã dừng đồng hồ booking ${stayTarget.code}; chốt ${result.meter.billedMinutes} phút và phụ thu ${formatVnd(result.meter.amount)}.`);
-      }
-      setReload((value) => value + 1);
-      return { ok: true, detail: ['meterStart', 'meterStop'].includes(action) ? result : undefined };
     } catch (requestError) {
       const errors = apiErrors(requestError);
       return { error: errors.form || Object.values(errors)[0] };
@@ -673,11 +695,9 @@ export default function BookingManagementPage() {
   };
   // Mở đường dẫn sửa booking tương ứng.
   const openEdit = (booking) => navigate(`/le-tan/bookings/${booking.id}/edit`);
-  // Mở hộp thoại lưu trú ở chế độ đổi phòng hoặc gia hạn.
-  const openStay = (booking, mode) => { setStayMode(mode); setStayTarget(booking); };
   // Quay về danh sách khi đóng bảng check-in.
   const closeCheckIn = () => navigate('/le-tan/bookings');
-  const mainContent = createMode ? <BookingCreatePage options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
+  const mainContent = createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
       <div><h1>Booking</h1><p>Theo dõi lịch đặt và check-in khách trong ca</p></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
@@ -718,7 +738,7 @@ export default function BookingManagementPage() {
         {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
         </div>
       </section>
-      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onStay={openStay} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
+      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
     </div>
   </>;
 
@@ -726,7 +746,6 @@ export default function BookingManagementPage() {
     {mainContent}
     {editMode && <BookingEditDialog bookingId={bookingId} timezone={timezone} onClose={() => navigate('/le-tan/bookings')} onUpdate={updateBooking} />}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} busy={busy} error={checkInError} />}
-    {stayTarget && <BookingStayDialog booking={stayTarget} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayTarget(null)} onSave={saveStayChange} busy={busy} timezone={timezone} />}
     <CancelDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={cancelBooking} busy={busy} error={cancelError} timezone={timezone} />
     <NoShowDialog booking={noShowTarget} onClose={() => setNoShowTarget(null)} onConfirm={markNoShow} busy={busy} error={noShowError} timezone={timezone} />
   </AppShell>;

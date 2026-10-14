@@ -326,10 +326,16 @@
 .booking-edit-dialog .booking-edit-section-title { margin-top: 18px; }
 .booking-edit-dialog .booking-schedule-grid { margin-bottom: 0; }
 .booking-edit-dialog .booking-edit-summary { margin-top: 18px; margin-bottom: 0; }
+.booking-edit-dialog .booking-edit-combo { margin-top: 16px; }
+.booking-edit-dialog .booking-edit-combo small { color: #66758a; font-size: 11px; line-height: 1.5; }
+.booking-edit-dialog .booking-edit-summary { flex-wrap: wrap; }
 .booking-edit-dialog .booking-note-field textarea { min-height: 70px; }
 .booking-detail-stay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
 .booking-detail-stay-actions button { min-height: 42px; border: 1px solid #f1c8df; border-radius: 9px; color: #b72e7d; background: #fff7fb; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .booking-detail-stay-actions button:hover { border-color: #d8529d; background: #fff0f8; }
+.booking-detail-room-link { width: 100%; min-height: 39px; margin-top: 13px; border: 1px solid #bde4ed; border-radius: 8px; color: #087f93; background: #e8f8fb; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.booking-detail-room-link:hover { background: #d5f0f5; }
+.booking-detail-room-link:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 .booking-stay-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(30, 39, 52, .48); }
 .booking-stay-dialog { width: min(640px, 100%); max-height: calc(100svh - 40px); overflow-y: auto; padding: 24px 27px; border-radius: 15px; background: #fff; box-shadow: 0 24px 70px rgba(20, 28, 44, .22); }
 .booking-stay-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }

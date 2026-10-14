@@ -148,10 +148,6 @@ Within a backend feature, create `controller/`, `service/`, `repository/`, `enti
 
 ## Getting Started
 
-**Current local quick start:** copy `backend/.env.example` to `backend/.env`, fill the database credentials, keep PostgreSQL running, then run `npm.cmd start` from `frontend/`. This command starts both servers and waits for the backend before starting React. Open `http://localhost:3000/dang-nhap`. No separate IntelliJ BackendApplication run is needed. See [authentication and local setup](docs/AUTHENTICATION.md).
-
-The separate-server instructions below remain available for debugging; use `npm run start:frontend` when the backend is already running in IntelliJ.
-
 ### Prerequisites
 
 - JDK 17; `JAVA_HOME` must point to the JDK.
@@ -226,7 +222,7 @@ Open a second terminal at the repository root.
 ```powershell
 cd frontend
 npm.cmd ci
-npm.cmd run start:frontend
+npm.cmd start
 ```
 
 **macOS/Linux:**
@@ -234,7 +230,7 @@ npm.cmd run start:frontend
 ```bash
 cd frontend
 npm ci
-npm run start:frontend
+npm start
 ```
 
 `npm ci` requires a committed `package-lock.json` matching `package.json`. If the project has no lockfile yet, run `npm install` once and commit the generated lockfile.
@@ -255,8 +251,6 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 | `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
 
 ## Configuration
-
-Authentication implementation, one-command startup, SMTP setup and tests: [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 | File | Purpose |
 | --- | --- |
@@ -289,8 +283,6 @@ Store schema changes under `backend/src/main/resources/db/migration/`. For Flywa
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
-
-The booking migrations in this branch are `V7__booking_guest_count.sql`, `V8__reception_deposit_receipts.sql`, `V9__schema_qualified_booking_deposit_triggers.sql`, and `V10__booking_hourly_meter.sql`. These were renamed from V3–V6 to reserve distinct versions when combining team branches. Before running this checkout against a database that already applied the old filenames, inspect `flyway_schema_history` and plan the database transition: renaming an applied migration makes Flyway validation fail, and rerunning its SQL can fail because the schema changes already exist.
 
 ## Usage
 
@@ -351,7 +343,6 @@ Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38�
 
 The detailed project references are:
 
-- [UC39–UC40 Room and Stay Operations](docs/UC39-40_Room_Stay_Operations.md).
 - Report 1 — Project Introduction.
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.
@@ -378,3 +369,5 @@ Technical setup references: [Create React App environment variables](https://cre
 ## License
 
 GCMB is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
+
+Reception merge integration: `AppShell` keeps the shared manager sidebar and DashboardTopbar (including profile access), and supports Thanh’s Booking/Rooms navigation, booking drafts, activeTab and hideSearch.

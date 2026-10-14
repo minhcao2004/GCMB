@@ -171,7 +171,8 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE')
-                  AND a.starts_at < ? AND a.ends_at > ?
+                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                       OR (a.starts_at < ? AND a.ends_at > ?))
               )
             ORDER BY r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
@@ -189,7 +190,8 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE') AND b.id<>?
-                  AND a.starts_at < ? AND a.ends_at > ?
+                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                       OR (a.starts_at < ? AND a.ends_at > ?))
               )
             ORDER BY rt.name,r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
@@ -222,13 +224,14 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    // Kiểm tra có allocation khác chồng lên khoảng sử dụng hay không.
+    // Phòng đang OCCUPIED vẫn bị giữ sau ends_at dự kiến cho tới khi kết thúc lượt sử dụng.
     public boolean hasRoomOverlap(UUID roomId, Instant start, Instant end, UUID excludeBookingId) {
         String sql = """
             SELECT EXISTS (
               SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
               WHERE a.room_id=? AND a.state IN ('RESERVED','OCCUPIED') AND b.status IN ('CONFIRMED','IN_HOUSE')
-                AND a.starts_at < ? AND a.ends_at > ?
+                AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                     OR (a.starts_at < ? AND a.ends_at > ?))
             """;
         List<Object> params = new ArrayList<>(List.of(roomId, ts(end), ts(start)));
         if (excludeBookingId != null) { sql += " AND a.booking_id<>?"; params.add(excludeBookingId); }
