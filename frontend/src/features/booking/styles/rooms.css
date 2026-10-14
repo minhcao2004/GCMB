@@ -49,6 +49,7 @@
 .room-usage span { color: #697687; font-size: 11px; }
 .room-usage strong { color: #168eb8; font-size: 25px; font-variant-numeric: tabular-nums; }
 .room-usage small { color: #58667a; font-size: 11px; }
+.room-usage small.is-ended { color: #bd2966; font-weight: 600; }
 .room-detail-total { display: flex; flex-direction: column; gap: 3px; margin: 17px 0 22px; border-radius: 10px; padding: 15px; background: #f4f6f9; }
 .room-detail-total span { color: #697687; font-size: 11px; }
 .room-detail-total strong { color: #1a1a2e; font-size: 20px; }

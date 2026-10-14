@@ -420,8 +420,8 @@ public class BookingService {
         Instant effectiveEnd = earlyCheckIn
             ? now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd()))
             : booking.plannedEnd();
-        if (earlyCheckIn && repository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
-            throw new BookingFailure(409, "roomId", "Không thể nhận phòng sớm vì khung giờ mới bị trùng với booking khác của phòng");
+        if (repository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
+            throw new BookingFailure(409, "roomId", "Phòng vẫn đang được sử dụng hoặc lịch giữ phòng đã thay đổi; vui lòng chọn phòng khác");
 
         int bookingUpdated = repository.checkInBooking(bookingId, now, effectiveEnd);
         int allocationUpdated = earlyCheckIn

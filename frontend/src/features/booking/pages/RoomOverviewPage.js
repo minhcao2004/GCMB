@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
 import BookingStayDialog from './BookingStayDialog';
@@ -32,11 +33,11 @@ function statusText(status) {
 }
 
 async function bookingsForDate(date) {
-  const params = { dateFrom: date, dateTo: date, size: 100 };
-  const first = await bookingApi.list({ ...params, page: 0 });
-  if (first.totalPages <= 1) return first.items || [];
-  const rest = await Promise.all(Array.from({ length: first.totalPages - 1 }, (_, index) => bookingApi.list({ ...params, page: index + 1 })));
-  return [...(first.items || []), ...rest.flatMap((page) => page.items || [])];
+  const [daily, inHouse] = await Promise.all([
+    bookingApi.listAll({ dateFrom: date, dateTo: date }),
+    bookingApi.listAll({ status: 'IN_HOUSE' }),
+  ]);
+  return [...new Map([...daily, ...inHouse].map((booking) => [booking.id, booking])).values()];
 }
 
 export default function RoomOverviewPage() {
@@ -111,7 +112,7 @@ export default function RoomOverviewPage() {
     Promise.allSettled([list, vacancies]).then(([listResult, vacancyResult]) => {
       if (!active) return;
       if (listResult.status === 'fulfilled') setBookings(listResult.value);
-      else { setBookings([]); setLoadError(errorText(listResult.reason)); }
+      else { setBookings([]); setAvailable([]); setVacancyLoaded(false); setLoadError(errorText(listResult.reason)); return; }
       const fulfilled = vacancyResult.status === 'fulfilled' ? vacancyResult.value.filter((item) => item.status === 'fulfilled') : [];
       setAvailable(fulfilled.flatMap((item) => item.value.rooms.map((room) => ({ ...room, roomTypeName: item.value.type.name }))));
       setVacancyLoaded(fulfilled.length > 0);
@@ -126,7 +127,7 @@ export default function RoomOverviewPage() {
       if (!booking.roomId || !['IN_HOUSE', 'CONFIRMED'].includes(booking.status)) return;
       const overlaps = new Date(booking.plannedStart) <= slot && new Date(booking.plannedEnd) > slot;
       const upcoming = booking.status === 'CONFIRMED' && new Date(booking.plannedStart) > slot;
-      if (!overlaps && !upcoming && !(booking.status === 'IN_HOUSE' && Math.abs(slot.getTime() - Date.now()) < 10 * 60000)) return;
+      if (!overlaps && !upcoming && booking.status !== 'IN_HOUSE') return;
       const existing = byRoom.get(booking.roomId);
       if (existing?.status === 'occupied' && booking.status !== 'IN_HOUSE') return;
       if (existing?.status === 'reserved' && booking.status === 'CONFIRMED'
@@ -170,17 +171,21 @@ export default function RoomOverviewPage() {
   });
   const counts = Object.fromEntries(['vacant', 'reserved', 'occupied'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
-  const currentBooking = detail?.booking?.id === selected?.booking?.id ? detail.booking : selected?.booking;
-  const detailReady = !selected?.booking || detail?.booking?.id === selected.booking.id;
-  const meter = detail?.booking?.id === selected?.booking?.id ? detail.meter : null;
-  const activeCombo = detailReady ? detail?.charges?.find((charge) => charge.status === 'ACTIVE' && (charge.comboId || charge.kind === 'COMBO'))?.description : null;
+  const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
+  const currentBooking = selectedDetail?.booking || selectedBooking || null;
+  const detailReady = !selectedBooking || Boolean(selectedDetail);
+  const meter = selectedDetail?.meter || null;
+  const activeCombo = selectedDetail?.charges?.find((charge) => charge.status === 'ACTIVE' && (charge.comboId || charge.kind === 'COMBO'))?.description;
   const checkinMs = currentBooking?.actualCheckin ? new Date(currentBooking.actualCheckin).getTime() : NaN;
-  const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((now - checkinMs) / 1000)) : null;
+  const plannedEndMs = currentBooking?.plannedEnd ? new Date(currentBooking.plannedEnd).getTime() : NaN;
+  const usageStopped = Number.isFinite(plannedEndMs) && now >= plannedEndMs;
+  const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
+  const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
 
   const logout = async () => {
     setBusy(true);
-    try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }
+    try { await authApi.logout(); clearBookingDraft(user); navigate('/dang-nhap', { replace: true }); }
     catch (error) { setLoadError(errorText(error)); }
     finally { setBusy(false); }
   };
@@ -227,7 +232,7 @@ export default function RoomOverviewPage() {
       <aside className="room-detail" aria-label="Phòng đang chọn">
         <span className="room-detail-label">Phòng đang chọn</span>
         {selected ? <><h2>{selected.code} · {selected.name}</h2><span className={`room-detail-status ${selected.status}`}>{statusText(selected.status)}</span><p>{selected.roomTypeName || 'Phòng'}{selected.capacity ? ` · tối đa ${selected.capacity} người` : ''}</p>
-          {currentBooking && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong><small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
+          {currentBooking && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className="is-ended">Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
           <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled>Checkout &amp; lập bill</button><small className="room-checkout-note">Checkout và các thao tác khác sẽ được kết nối khi có luồng tương ứng.</small>
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}

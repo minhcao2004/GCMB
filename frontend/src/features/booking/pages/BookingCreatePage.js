@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
 import { formatDate, formatVnd } from '../data/bookingData';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
@@ -25,23 +26,33 @@ function Field({ label, children, className = '' }) {
 }
 
 // Thu thông tin khách, phòng, giá và xác nhận thu cọc trước khi tạo booking.
-export default function BookingCreatePage({ options, optionsLoading, optionsError, onBack, onCreate }) {
+export default function BookingCreatePage({ user, options, optionsLoading, optionsError, onBack, onCreate }) {
   const now = new Date();
   now.setMinutes(Math.ceil((now.getMinutes() + 30) / 15) * 15, 0, 0);
   const initialDate = localDate(now);
   const initialTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const [form, setForm] = useState({
+  const savedDraft = useRef(readBookingDraft(user));
+  const [form, setForm] = useState(() => ({
     contactName: '', contactPhone: '', channel: 'PHONE', date: initialDate, time: initialTime,
     guestCount: '2', roomTypeId: '', roomId: '', pricingMode: 'COMBO', comboId: '',
     durationHours: '2', note: '', depositEnabled: false, depositAmount: '',
     paymentMethod: 'BANK_TRANSFER', transaction: '',
-  });
+    ...savedDraft.current?.form,
+  }));
   const [availability, setAvailability] = useState(null);
   const [availabilityError, setAvailabilityError] = useState('');
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
-  const depositAmountEdited = useRef(false);
+  const depositAmountEdited = useRef(Boolean(savedDraft.current?.depositAmountEdited));
+  const autoSelectRoom = useRef(!savedDraft.current?.form?.roomId);
+
+  useEffect(() => { saveBookingDraft(user, form, depositAmountEdited.current); }, [user, form]);
+
+  const cancelDraft = () => {
+    clearBookingDraft(user);
+    onBack();
+  };
 
   const roomTypes = useMemo(() => options?.roomTypes || [], [options?.roomTypes]);
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
@@ -89,9 +100,12 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
       ...(form.pricingMode === 'COMBO' && selectedCombo ? { comboId: selectedCombo.id } : {}),
     };
     setLoadingAvailability(true);
+    setAvailability(null);
     setAvailabilityError('');
-    bookingApi.availability(params).then((result) => {
-      if (active) setAvailability(result);
+    Promise.all([bookingApi.availability(params), bookingApi.listAll({ status: 'IN_HOUSE' })]).then(([result, inHouse]) => {
+      if (!active) return;
+      const occupiedRoomIds = new Set(inHouse.map((booking) => booking.roomId));
+      setAvailability({ ...result, rooms: (result.rooms || []).filter((room) => !occupiedRoomIds.has(room.id)) });
     }).catch((error) => {
       if (active) {
         setAvailability(null);
@@ -103,11 +117,17 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
   }, [selectedType, selectedCombo, plannedStart, plannedEnd, form.pricingMode]);
 
   useEffect(() => {
-    if (availableRooms.length && !availableRooms.some((room) => room.id === form.roomId)) {
+    if (!availability) return;
+    if (form.roomId && !availableRooms.some((room) => room.id === form.roomId)) {
+      autoSelectRoom.current = false;
+      setForm((current) => ({ ...current, roomId: '' }));
+      setFormError('Phòng đã chọn không còn trống trong khung giờ này. Vui lòng chọn lại phòng.');
+      return;
+    }
+    if (!form.roomId && availableRooms.length && autoSelectRoom.current) {
       setForm((current) => ({ ...current, roomId: availableRooms[0].id }));
     }
-    if (!availableRooms.length && form.roomId) setForm((current) => ({ ...current, roomId: '' }));
-  }, [availableRooms, form.roomId]);
+  }, [availability, availableRooms, form.roomId]);
 
   useEffect(() => {
     if (depositAmountEdited.current || quote?.depositRequired == null) return;
@@ -136,23 +156,34 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
     if (form.depositEnabled && (!Number.isFinite(depositAmount) || depositAmount <= 0)) return setFormError('Nhập số tiền cọc đã nhận hoặc tắt mục “Có thu cọc”.');
 
     setSubmitting(true);
-    const result = await onCreate({
-      roomId: chosenRoom.id,
-      plannedStart: dateTimeIso(form.date, form.time),
-      plannedEnd: plannedEnd.toISOString(),
-      pricingMode: form.pricingMode,
-      comboId: form.pricingMode === 'COMBO' ? selectedCombo?.id : null,
-      contactName: form.contactName.trim(),
-      contactPhone: form.contactPhone.trim(),
-      channel: form.channel,
-      note: form.note.trim() || null,
-      guestCount: Number(form.guestCount),
-      depositAmount: form.depositEnabled ? depositAmount : 0,
-      paymentMethod: form.depositEnabled && depositAmount > 0 ? form.paymentMethod : null,
-      paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
-    });
-    setSubmitting(false);
-    if (result?.error) setFormError(result.error);
+    try {
+      const inHouse = await bookingApi.listAll({ status: 'IN_HOUSE' });
+      if (inHouse.some((booking) => booking.roomId === chosenRoom.id)) {
+        setFormError('Phòng vẫn đang được sử dụng. Vui lòng chọn phòng khác hoặc chờ checkout.');
+        setAvailability((current) => current ? { ...current, rooms: current.rooms.filter((room) => room.id !== chosenRoom.id) } : null);
+        return;
+      }
+      const result = await onCreate({
+        roomId: chosenRoom.id,
+        plannedStart: dateTimeIso(form.date, form.time),
+        plannedEnd: plannedEnd.toISOString(),
+        pricingMode: form.pricingMode,
+        comboId: form.pricingMode === 'COMBO' ? selectedCombo?.id : null,
+        contactName: form.contactName.trim(),
+        contactPhone: form.contactPhone.trim(),
+        channel: form.channel,
+        note: form.note.trim() || null,
+        guestCount: Number(form.guestCount),
+        depositAmount: form.depositEnabled ? depositAmount : 0,
+        paymentMethod: form.depositEnabled && depositAmount > 0 ? form.paymentMethod : null,
+        paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
+      });
+      if (result?.ok) clearBookingDraft(user);
+      if (result?.error) setFormError(result.error);
+    } catch (error) {
+      const errors = apiErrors(error);
+      setFormError(errors.form || Object.values(errors)[0] || 'Không kiểm tra được trạng thái phòng. Vui lòng thử lại.');
+    } finally { setSubmitting(false); }
   };
 
   return <div className="booking-create-page">
@@ -173,7 +204,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
           <Field label="Ngày nhận phòng *"><input type="date" name="date" value={form.date} onChange={change} required /></Field>
           <Field label="Giờ nhận phòng *"><input type="time" name="time" value={form.time} onChange={change} required /></Field>
           <Field label="Số lượng khách *"><input type="number" name="guestCount" min="1" value={form.guestCount} onChange={change} required /></Field>
-          <Field label="Hạng phòng *"><select name="roomTypeId" value={selectedType?.id || ''} onChange={(event) => setForm((current) => ({ ...current, roomTypeId: event.target.value, roomId: '' }))} required><option value="" disabled>Chọn hạng phòng</option>{roomTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></Field>
+          <Field label="Hạng phòng *"><select name="roomTypeId" value={selectedType?.id || ''} onChange={(event) => { autoSelectRoom.current = false; setFormError(''); setForm((current) => ({ ...current, roomTypeId: event.target.value, roomId: '' })); }} required><option value="" disabled>Chọn hạng phòng</option>{roomTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></Field>
         </div>
 
         <div className={`booking-availability-banner${availabilityError ? ' is-error' : ''}`} role="status">
@@ -182,7 +213,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
 
         <div className="booking-section-title-row"><h3>Chọn phòng cụ thể</h3><span>Có thể gán sau khi tạo</span></div>
         <div className="booking-room-choice-grid">
-          {availableRooms.length ? availableRooms.map((room) => <button key={room.id} type="button" className={`booking-room-choice${form.roomId === room.id ? ' is-selected' : ''}`} onClick={() => setForm((current) => ({ ...current, roomId: room.id }))}>
+          {availableRooms.length ? availableRooms.map((room) => <button key={room.id} type="button" className={`booking-room-choice${form.roomId === room.id ? ' is-selected' : ''}`} onClick={() => { autoSelectRoom.current = false; setFormError(''); setForm((current) => ({ ...current, roomId: room.id })); }}>
             <strong>{room.code} · {room.name}</strong><small>{selectedType?.name} · tối đa {room.capacity} khách</small>{form.roomId === room.id && <span className="booking-choice-check">✓</span>}
           </button>) : <div className="booking-room-empty">{loadingAvailability ? 'Đang tải phòng…' : 'Không có phòng trống trong khung giờ đã chọn.'}</div>}
         </div>
@@ -230,7 +261,7 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
         <div className="booking-summary-total"><strong>Còn lại dự kiến</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
         <div className="booking-summary-hint">Booking giữ phòng theo ngày/giờ đã chọn.<br />Giá cuối có thể thay đổi khi checkout.</div>
         <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || loadingAvailability || !chosenRoom}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>
-        <button className="booking-summary-cancel" type="button" onClick={onBack}>Hủy</button>
+        <button className="booking-summary-cancel" type="button" onClick={cancelDraft}>Hủy</button>
       </aside>
     </form>}
   </div>;

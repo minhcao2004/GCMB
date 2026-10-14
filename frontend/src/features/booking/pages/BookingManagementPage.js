@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Brand from '../../../shared/components/Brand';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
@@ -110,7 +111,7 @@ export function AppShell({ user, branchName, busy, onLogout, children, breadcrum
       <div className="booking-brand"><Brand /></div>
       <span className="booking-role-chip">LỄ TÂN</span>
       <nav className="booking-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms'].includes(icon)} onClick={() => { if (icon === 'booking') navigate('/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); }}>
+        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms'].includes(icon)} onClick={() => { if (icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); }}>
           <Icon name={icon} /><span>{label}</span>
         </button>)}
       </nav>
@@ -526,7 +527,7 @@ export default function BookingManagementPage() {
   // Đăng xuất rồi chuyển về trang đăng nhập.
   const logout = async () => {
     setBusy(true);
-    try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }
+    try { await authApi.logout(); clearBookingDraft(user); navigate('/dang-nhap', { replace: true }); }
     catch (requestError) { const errors = apiErrors(requestError); setError(errors.form || Object.values(errors)[0]); }
     finally { setBusy(false); }
   };
@@ -536,6 +537,7 @@ export default function BookingManagementPage() {
     setBusy(true);
     try {
       const result = await bookingApi.create(payload);
+      clearBookingDraft(user);
       const booking = result.booking;
       setSelectedDate(toLocalDateInput(new Date(booking.plannedStart)));
       setSelectedId(booking.id);
@@ -652,7 +654,7 @@ export default function BookingManagementPage() {
   const openEdit = (booking) => navigate(`/le-tan/bookings/${booking.id}/edit`);
   // Quay về danh sách khi đóng bảng check-in.
   const closeCheckIn = () => navigate('/le-tan/bookings');
-  const mainContent = createMode ? <BookingCreatePage options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
+  const mainContent = createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
       <div><h1>Booking</h1><p>Theo dõi lịch đặt và check-in khách trong ca</p></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
