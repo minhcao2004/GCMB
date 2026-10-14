@@ -1,9 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import HomePage from '../features/landing/pages/HomePage';
 import { useState } from 'react';
 import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
+import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
@@ -19,6 +19,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/bookings/new" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/edit" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/check-in" element={<BookingManagementPage />} />
+    <Route path="/le-tan/phong" element={<RoomOverviewPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
     <Route path="/ke-toan" element={<RoleHomePage role="ACCOUNTANT" />} />

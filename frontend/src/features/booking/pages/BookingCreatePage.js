@@ -206,10 +206,10 @@ export default function BookingCreatePage({ options, optionsLoading, optionsErro
         <div className="booking-section-title-row booking-deposit-heading"><h3>Tiền cọc</h3><label className="booking-toggle"><span>Có thu cọc</span><input type="checkbox" name="depositEnabled" checked={form.depositEnabled} onChange={change} /><i /></label></div>
         <div className="booking-form-grid booking-deposit-grid">
           <Field label="Số tiền cọc"><div className="booking-money-input"><input name="depositAmount" inputMode="numeric" value={formatMoneyInput(form.depositAmount)} onChange={change} disabled={!form.depositEnabled} placeholder="0" aria-label="Số tiền cọc" /><span>đ</span></div></Field>
-          <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="CARD">Thẻ</option><option value="QR">QR</option></select></Field>
+          <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></Field>
           <Field label="Mã giao dịch / ghi chú"><input name="transaction" value={form.transaction} onChange={change} disabled={!form.depositEnabled} placeholder="Ví dụ: CK-245781" /></Field>
         </div>
-        <p className="booking-feature-note">Chỉ bật “Có thu cọc” khi đã thực sự nhận tiền. Khoản thu được ghi nhận ngay khi tạo booking; có thể nhập mã giao dịch để đối chiếu.</p>
+        <p className="booking-feature-note">Chỉ bật “Có thu cọc” khi đã thực sự nhận tiền. Với chuyển khoản, hãy kiểm tra tiền đã vào tài khoản trước khi tạo booking; có thể nhập mã giao dịch để đối chiếu.</p>
         <Field label="Ghi chú booking" className="booking-note-field"><textarea name="note" rows="2" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></Field>
       </section>
 

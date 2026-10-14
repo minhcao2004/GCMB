@@ -1,0 +1,238 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { apiErrors, authApi } from '../../auth/services/authApi';
+import { bookingApi } from '../services/bookingApi';
+import { formatVnd, toLocalDateInput } from '../data/bookingData';
+import { AppShell } from './BookingManagementPage';
+import BookingStayDialog from './BookingStayDialog';
+import '../styles/booking.css';
+import '../styles/rooms.css';
+
+function errorText(error) {
+  const errors = apiErrors(error);
+  return errors.form || Object.values(errors)[0] || 'Không tải được dữ liệu phòng.';
+}
+
+function clockTime(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function dateTimeText(value, timezone) {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat('vi-VN', { timeZone: timezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
+}
+
+function floorOf(code) {
+  const match = String(code || '').match(/\d/);
+  return match ? match[0] : null;
+}
+
+function statusText(status) {
+  return ({ occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống' })[status];
+}
+
+async function bookingsForDate(date) {
+  const params = { dateFrom: date, dateTo: date, size: 100 };
+  const first = await bookingApi.list({ ...params, page: 0 });
+  if (first.totalPages <= 1) return first.items || [];
+  const rest = await Promise.all(Array.from({ length: first.totalPages - 1 }, (_, index) => bookingApi.list({ ...params, page: index + 1 })));
+  return [...(first.items || []), ...rest.flatMap((page) => page.items || [])];
+}
+
+export default function RoomOverviewPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [options, setOptions] = useState(null);
+  const [date, setDate] = useState(() => toLocalDateInput(new Date(Date.now() + 5 * 60000)));
+  const [time, setTime] = useState(() => clockTime(new Date(Date.now() + 5 * 60000)));
+  const [search, setSearch] = useState('');
+  const [tier, setTier] = useState('all');
+  const [floor, setFloor] = useState('all');
+  const [status, setStatus] = useState('all');
+  const [bookings, setBookings] = useState([]);
+  const [available, setAvailable] = useState([]);
+  const [vacancyLoaded, setVacancyLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [selectedRoomId, setSelectedRoomId] = useState(() => location.state?.roomId || '');
+  const [preferredRoomId, setPreferredRoomId] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [stayMode, setStayMode] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [reload, setReload] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => { document.title = 'Phòng | GenZ Cinema & Music Box'; }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    authApi.me().then((identity) => {
+      if (!active) return;
+      if (identity.role !== 'RECEPTIONIST') navigate(identity.destination, { replace: true });
+      else { setUser(identity); setAuthError(''); }
+    }).catch((error) => {
+      if (!active) return;
+      if (error.response?.status === 401) navigate('/dang-nhap', { replace: true });
+      else setAuthError(errorText(error));
+    });
+    return () => { active = false; };
+  }, [navigate, retry]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true;
+    bookingApi.options().then((value) => { if (active) setOptions(value); })
+      .catch((error) => { if (active) setLoadError(errorText(error)); });
+    return () => { active = false; };
+  }, [user]);
+
+  const slot = useMemo(() => new Date(`${date}T${time}:00`), [date, time]);
+  useEffect(() => {
+    if (!options || Number.isNaN(slot.getTime())) return undefined;
+    let active = true;
+    setLoading(true);
+    setLoadError('');
+    const list = bookingsForDate(date);
+    // API availability chỉ nhận thời điểm tương lai; danh sách booking vẫn xem được ngày đã qua.
+    const canCheckVacancy = slot.getTime() > Date.now();
+    const vacancies = canCheckVacancy ? Promise.allSettled((options.roomTypes || []).map((roomType) => bookingApi.availability({
+      roomTypeId: roomType.id,
+      plannedStart: slot.toISOString(),
+      plannedEnd: new Date(slot.getTime() + 60 * 60000).toISOString(),
+      pricingMode: 'HOURLY',
+    }).then((result) => ({ type: roomType, rooms: result.rooms || [] })))) : Promise.resolve([]);
+    Promise.allSettled([list, vacancies]).then(([listResult, vacancyResult]) => {
+      if (!active) return;
+      if (listResult.status === 'fulfilled') setBookings(listResult.value);
+      else { setBookings([]); setLoadError(errorText(listResult.reason)); }
+      const fulfilled = vacancyResult.status === 'fulfilled' ? vacancyResult.value.filter((item) => item.status === 'fulfilled') : [];
+      setAvailable(fulfilled.flatMap((item) => item.value.rooms.map((room) => ({ ...room, roomTypeName: item.value.type.name }))));
+      setVacancyLoaded(fulfilled.length > 0);
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user, options, date, slot, reload]);
+
+  const rooms = useMemo(() => {
+    const byRoom = new Map();
+    available.forEach((room) => byRoom.set(room.id, { ...room, status: 'vacant' }));
+    bookings.forEach((booking) => {
+      if (!booking.roomId || !['IN_HOUSE', 'CONFIRMED'].includes(booking.status)) return;
+      const overlaps = new Date(booking.plannedStart) <= slot && new Date(booking.plannedEnd) > slot;
+      const upcoming = booking.status === 'CONFIRMED' && new Date(booking.plannedStart) > slot;
+      if (!overlaps && !upcoming && !(booking.status === 'IN_HOUSE' && Math.abs(slot.getTime() - Date.now()) < 10 * 60000)) return;
+      const existing = byRoom.get(booking.roomId);
+      if (existing?.status === 'occupied' && booking.status !== 'IN_HOUSE') return;
+      if (existing?.status === 'reserved' && booking.status === 'CONFIRMED'
+          && new Date(existing.booking.plannedStart) <= new Date(booking.plannedStart)) return;
+      byRoom.set(booking.roomId, {
+        id: booking.roomId, code: booking.roomCode, name: booking.roomName,
+        roomTypeName: booking.roomTypeName, capacity: options?.roomTypes?.find((type) => type.name === booking.roomTypeName)?.capacity,
+        status: booking.status === 'IN_HOUSE' ? 'occupied' : 'reserved', booking,
+      });
+    });
+    return [...byRoom.values()].sort((a, b) => String(a.code).localeCompare(String(b.code), 'vi-VN', { numeric: true }));
+  }, [available, bookings, slot, options]);
+
+  useEffect(() => {
+    if (!rooms.length) { setSelectedRoomId(''); return; }
+    if (preferredRoomId) {
+      if (rooms.some((room) => room.id === preferredRoomId)) { setSelectedRoomId(preferredRoomId); setPreferredRoomId(''); }
+      return;
+    }
+    if (!rooms.some((room) => room.id === selectedRoomId)) setSelectedRoomId((rooms.find((room) => room.status === 'occupied') || rooms[0]).id);
+  }, [rooms, selectedRoomId, preferredRoomId]);
+
+  const selected = rooms.find((room) => room.id === selectedRoomId) || null;
+  const selectedBooking = selected?.booking;
+  useEffect(() => {
+    if (!selectedBooking) { setDetail(null); return undefined; }
+    let active = true;
+    setDetail(null);
+    bookingApi.detail(selectedBooking.id).then((value) => { if (active) setDetail(value); })
+      .catch((error) => { if (active) setLoadError(errorText(error)); });
+    return () => { active = false; };
+  }, [selectedBooking, reload]);
+
+  const floors = [...new Set(rooms.map((room) => floorOf(room.code)).filter(Boolean))].sort();
+  const visible = rooms.filter((room) => {
+    const keyword = search.trim().toLocaleLowerCase('vi-VN');
+    return (floor === 'all' || floorOf(room.code) === floor)
+      && (status === 'all' || room.status === status)
+      && (tier === 'all' || room.roomTypeName === tier)
+      && (!keyword || [room.code, room.name, room.booking?.contactName, room.booking?.code].some((part) => String(part || '').toLocaleLowerCase('vi-VN').includes(keyword)));
+  });
+  const counts = Object.fromEntries(['vacant', 'reserved', 'occupied'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
+  const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
+  const currentBooking = detail?.booking?.id === selected?.booking?.id ? detail.booking : selected?.booking;
+  const detailReady = !selected?.booking || detail?.booking?.id === selected.booking.id;
+  const meter = detail?.booking?.id === selected?.booking?.id ? detail.meter : null;
+  const activeCombo = detailReady ? detail?.charges?.find((charge) => charge.status === 'ACTIVE' && (charge.comboId || charge.kind === 'COMBO'))?.description : null;
+  const checkinMs = currentBooking?.actualCheckin ? new Date(currentBooking.actualCheckin).getTime() : NaN;
+  const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((now - checkinMs) / 1000)) : null;
+  const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
+
+  const logout = async () => {
+    setBusy(true);
+    try { await authApi.logout(); navigate('/dang-nhap', { replace: true }); }
+    catch (error) { setLoadError(errorText(error)); }
+    finally { setBusy(false); }
+  };
+
+  const saveStay = async (action, payload) => {
+    if (!currentBooking) return { error: 'Chưa chọn phòng đang sử dụng.' };
+    setBusy(true);
+    try {
+      const result = action === 'change' ? await bookingApi.changeRoom(currentBooking.id, payload)
+        : action === 'extend' ? await bookingApi.extendStay(currentBooking.id, payload)
+          : action === 'meterStart' ? await bookingApi.startHourlyMeter(currentBooking.id)
+            : await bookingApi.stopHourlyMeter(currentBooking.id);
+      if (action === 'change') setPreferredRoomId(result.booking.booking.roomId);
+      if (action === 'change' || action === 'extend') setStayMode(null);
+      setNotice(action === 'change' ? `Đã đổi sang phòng ${result.booking.booking.roomCode}. Điều chỉnh ${formatVnd(result.adjustmentAmount)}.`
+        : action === 'extend' ? `Đã gia hạn đến ${dateTimeText(result.endsAt, timezone)}. Phụ thu ${formatVnd(result.quote.expectedAmount)}.`
+          : action === 'meterStart' ? 'Đã bật đồng hồ giờ lẻ.' : `Đã dừng đồng hồ; chốt ${result.meter.billedMinutes} phút và ${formatVnd(result.meter.amount)}.`);
+      setReload((value) => value + 1);
+      return { ok: true, detail: ['meterStart', 'meterStop'].includes(action) ? result : undefined };
+    } catch (error) { return { error: errorText(error) }; }
+    finally { setBusy(false); }
+  };
+
+  if (!user) return <main className="booking-auth-state">{authError ? <div className="booking-auth-message" role="alert">{authError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div> : <p role="status">Đang kiểm tra phiên đăng nhập…</p>}</main>;
+
+  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms">
+    <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1><p>Theo dõi trạng thái và thao tác nhanh tại quầy</p></div></div>
+    {notice && <div className="booking-live-notice" role="status"><span>✓</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+    {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
+    <div className="room-layout">
+      <section className="room-board" aria-label="Sơ đồ phòng">
+        <div className="room-toolbar">
+          <label className="room-search"><span className="sr-only">Tìm phòng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phòng, booking, khách…" /></label>
+          <label className="room-date"><span className="sr-only">Ngày xem phòng</span><input type="date" value={date} onChange={(event) => setDate(event.target.value || toLocalDateInput(new Date()))} /></label>
+          <label className="room-time"><span className="sr-only">Giờ xem phòng</span><input type="time" value={time} onChange={(event) => setTime(event.target.value || clockTime(new Date(Date.now() + 5 * 60000)))} /></label>
+          <label className="room-tier"><span className="sr-only">Hạng phòng</span><select value={tier} onChange={(event) => setTier(event.target.value)}><option value="all">Hạng phòng</option>{(options?.roomTypes || []).map((type) => <option key={type.id} value={type.name}>{type.name}</option>)}</select></label>
+        </div>
+        <p className="room-view-note">Phòng trống được kiểm tra cho 60 phút từ thời điểm chọn. Trạng thái đang sử dụng lấy từ booking hiện tại.</p>
+        <div className="room-board-heading"><h2>Sơ đồ phòng</h2><span>Hiển thị {visible.length}/{rooms.length} phòng</span></div>
+        <div className="room-floors" role="group" aria-label="Lọc tầng"><button type="button" className={floor === 'all' ? 'is-active' : ''} onClick={() => setFloor('all')}>Tất cả</button>{floors.map((value) => <button type="button" key={value} className={floor === value ? 'is-active' : ''} onClick={() => setFloor(value)}>Tầng {value}</button>)}</div>
+        <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
+        {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">Không có phòng phù hợp với bộ lọc này.{!vacancyLoaded && ' Dữ liệu phòng trống hiện chưa có cho thời điểm đã chọn.'}</p> : <div className="room-grid">{visible.map((room) => <button type="button" key={room.id} className={`room-card room-card-${room.status}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}><strong>{room.code} {room.name}</strong><small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small><span>{statusText(room.status)}</span><em>{room.status === 'occupied' ? `${dateTimeText(room.booking?.actualCheckin || room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'reserved' ? `${dateTimeText(room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : 'Sẵn sàng'}</em></button>)}</div>}
+      </section>
+      <aside className="room-detail" aria-label="Phòng đang chọn">
+        <span className="room-detail-label">Phòng đang chọn</span>
+        {selected ? <><h2>{selected.code} · {selected.name}</h2><span className={`room-detail-status ${selected.status}`}>{statusText(selected.status)}</span><p>{selected.roomTypeName || 'Phòng'}{selected.capacity ? ` · tối đa ${selected.capacity} người` : ''}</p>
+          {currentBooking && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong><small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
+          {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
+          <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled>Checkout &amp; lập bill</button><small className="room-checkout-note">Checkout và các thao tác khác sẽ được kết nối khi có luồng tương ứng.</small>
+        </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
+      </aside>
+    </div>
+    {stayMode && currentBooking && <BookingStayDialog key={`${currentBooking.id}-${stayMode}`} booking={currentBooking} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayMode(null)} onSave={saveStay} busy={busy} timezone={timezone} />}
+  </AppShell>;
+}
