@@ -58,7 +58,8 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
   const combos = selectedType?.combos || [];
   const selectedCombo = combos.find((item) => item.id === form.comboId) || combos[0] || null;
-  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : Number(form.durationHours) * 60;
+  const hourlyDurationValid = /^(?:[1-9]|1\d|2[0-4])$/.test(String(form.durationHours));
+  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyDurationValid ? Number(form.durationHours) * 60 : null;
   const plannedStart = useMemo(() => {
     if (!form.date || !form.time) return null;
     const date = new Date(`${form.date}T${form.time}:00`);
@@ -150,6 +151,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
     setFormError('');
     if (!form.contactName.trim()) return setFormError('Vui lòng nhập họ tên khách.');
     if (!form.contactPhone.trim()) return setFormError('Vui lòng nhập số điện thoại.');
+    if (form.pricingMode === 'HOURLY' && !hourlyDurationValid) return setFormError('Thời lượng thuê phải là số giờ nguyên từ 1 đến 24.');
     if (!plannedStart || !plannedEnd) return setFormError('Vui lòng chọn thời gian nhận phòng hợp lệ.');
     if (!chosenRoom) return setFormError('Chọn một phòng đang trống trong khung giờ này.');
     if (Number(form.guestCount) < 1 || Number(form.guestCount) > chosenRoom.capacity) return setFormError(`Phòng này nhận tối đa ${chosenRoom.capacity} khách.`);
@@ -230,7 +232,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
               <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
-          </div> : <Field label="Thời lượng thuê"><select name="durationHours" value={form.durationHours} onChange={change}><option value="2">2 giờ</option><option value="3">3 giờ</option><option value="4">4 giờ</option><option value="6">6 giờ</option></select></Field>}
+          </div> : <Field label="Thời lượng thuê (giờ)"><input type="number" name="durationHours" min="1" max="24" step="1" inputMode="numeric" required value={form.durationHours} onChange={change} aria-invalid={!hourlyDurationValid} aria-describedby="booking-duration-help" /><small id="booking-duration-help" className={!hourlyDurationValid ? 'booking-inline-error' : ''}>{hourlyDurationValid ? 'Nhập số giờ nguyên từ 1 đến 24.' : 'Thời lượng thuê phải là số giờ nguyên từ 1 đến 24.'}</small></Field>}
         </div>
 
         <div className="booking-form-divider" />

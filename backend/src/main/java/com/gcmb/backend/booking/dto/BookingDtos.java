@@ -30,7 +30,7 @@ public final class BookingDtos {
     public record Availability(UUID branchId, UUID roomTypeId, Instant plannedStart, Instant plannedEnd,
                                List<AvailableRoom> rooms, PriceQuote quote) {}
     // Danh sách phòng hợp lệ khi sửa booking.
-    public record BookingEditOptions(List<AvailableRoom> rooms) {}
+    public record BookingEditOptions(List<AvailableRoom> rooms, List<ComboOption> combos, PriceQuote quote) {}
 
     // Dữ liệu phòng hiện tại, phòng có thể đổi và combo có thể gia hạn.
     public record StayOptions(UUID currentRoomId, String currentRoomCode, UUID currentRoomTypeId, String currentRoomTypeName,
@@ -62,7 +62,7 @@ public final class BookingDtos {
                                        String contactPhone, String channel, String note, Integer guestCount,
                                        BigDecimal depositAmount, String paymentMethod, String paymentReference) {}
     // Các trường có thể sửa trước giờ bắt đầu booking.
-    public record UpdateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd,
+    public record UpdateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd, String pricingMode, UUID comboId,
                                        String contactName, String contactPhone, String note) {}
     // Lý do hủy và thông tin người nhận nếu cần hoàn cọc.
     public record CancelBookingRequest(String reason, String beneficiaryName, String bankAccount, String bankName) {}

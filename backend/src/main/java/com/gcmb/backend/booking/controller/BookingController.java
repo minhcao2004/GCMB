@@ -67,8 +67,10 @@ public class BookingController {
     public BookingDtos.BookingEditOptions editOptions(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID bookingId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedStart,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedEnd) {
-        return bookings.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant());
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedEnd,
+            @RequestParam(required = false) String pricingMode,
+            @RequestParam(required = false) UUID comboId) {
+        return bookings.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant(), pricingMode, comboId);
     }
 
     @GetMapping("/bookings/{bookingId}/stay-options")

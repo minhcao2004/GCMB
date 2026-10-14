@@ -101,7 +101,7 @@ function initials(user) {
 }
 
 // Dựng khung điều hướng, thanh đầu và nút đăng xuất của lễ tân.
-export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking' }) {
+export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking', hideSearch = false }) {
   const navigate = useNavigate();
   const now = new Date();
   const currentDate = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
@@ -124,7 +124,7 @@ export function AppShell({ user, branchName, busy, onLogout, children, breadcrum
       <header className="booking-topbar">
         <p><span>Lễ tân</span><b>/</b><strong>{breadcrumb}</strong></p>
         <div className="booking-topbar-tools">
-          <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'} /></label>
+          {!hideSearch && <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'} /></label>}
           <span className="booking-topbar-datetime">{currentDate} {currentTime}</span>
           <button type="button" className="booking-topbar-logout" disabled={busy} onClick={onLogout}>
             <Icon name="logout" /><span>Đăng xuất</span>
@@ -627,7 +627,7 @@ export default function BookingManagementPage() {
       setSelectedDate(toLocalDateInput(new Date(updated.plannedStart)));
       setSelectedId(updated.id);
       setNoticeKind('success');
-      setNotice(`Đã cập nhật booking ${updated.code}. Tiền cọc và giá đã chốt được giữ nguyên.`);
+      setNotice(`Đã cập nhật booking ${updated.code}. Giá mới: ${formatVnd(updated.expectedAmount)}; tiền cọc đã ghi được giữ nguyên.`);
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
       return { ok: true };
