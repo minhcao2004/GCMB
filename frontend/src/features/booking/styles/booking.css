@@ -139,7 +139,7 @@
 .booking-details { position: sticky; top: 14px; min-width: 0; max-height: calc(100vh - 28px); max-height: calc(100dvh - 28px); overflow-y: auto; overscroll-behavior-y: auto; padding: 17px 19px; }
 .booking-details h2 { margin: 0 0 2px; color: var(--booking-ink); font-size: 17px; line-height: 1.4; }
 .booking-detail-code { display: block; margin: 1px 0 12px; color: #ca2b86; font-size: 13px; }
-.booking-details > .booking-status { margin-bottom: 13px; }
+.booking-details-scroll > .booking-status { margin-bottom: 13px; }
 .booking-detail-divider { height: 1px; margin: 1px 0 4px; background: var(--booking-line); }
 .booking-detail-deposit { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin: 9px 0; padding: 10px 11px; border: 1px solid #e7edf2; border-radius: 9px; background: #f8fafc; }
 .booking-detail-deposit > div { display: flex; flex-direction: column; gap: 3px; }
@@ -163,6 +163,7 @@
 .booking-deposit-status.is-refund { color: #176b50; background: #e5f7ef; }
 .booking-deposit-status.is-danger { color: #a93c44; background: #fff0f1; }
 .booking-detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.booking-details-actions-title { display: block; color: #75808f; font-size: 10px; line-height: 1.2; }
 .booking-detail-actions button { min-height: 40px; border: 1px solid #d6dce5; border-radius: 9px; padding: 7px 10px; color: #445166; background: #f7f9fc; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .booking-detail-actions .booking-detail-action-edit:hover { border-color: #9caec7; background: #eef3f9; }
 .booking-detail-actions button:disabled { cursor: not-allowed; opacity: .5; }
@@ -460,4 +461,126 @@
   .booking-room-choice-grid { grid-template-columns: 1fr; }
   .booking-pricing-options { grid-template-columns: 1fr; }
   .booking-package-grid { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 1000px) {
+  .booking-app--fit {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .booking-app--fit .booking-workspace { height: 100%; min-height: 0; overflow: hidden; }
+  .booking-app--fit .booking-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px 22px 10px;
+  }
+  .booking-app--fit .booking-page-heading { flex: 0 0 auto; margin-bottom: 8px; }
+  .booking-app--fit .booking-page-heading p { margin-top: 4px; }
+  .booking-app--fit .booking-live-notice,.booking-app--fit .booking-inline-error { flex: 0 0 auto; }
+  .booking-app--fit .booking-filters {
+    flex: 0 0 auto;
+    min-height: 0;
+    grid-template-columns: minmax(300px, 1.2fr) minmax(180px, 1fr) minmax(150px, .65fr);
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 8px 14px;
+  }
+  .booking-app--fit .booking-filter-date-group { gap: 7px; }
+  .booking-app--fit .booking-date-buttons button,
+  .booking-app--fit .booking-date-picker,
+  .booking-app--fit .booking-room-filter select,
+  .booking-app--fit .booking-search-field { height: 38px; }
+  .booking-app--fit .booking-date-buttons button { min-width: 78px; padding: 0 9px; }
+  .booking-app--fit .booking-date-picker { min-width: 138px; padding: 0 8px; }
+  .booking-app--fit .booking-status-tabs { flex: 0 0 auto; min-height: 38px; gap: 6px; margin-bottom: 8px; padding: 4px 10px; }
+  .booking-app--fit .booking-filter-chip { min-height: 30px; padding: 0 10px; }
+  .booking-app--fit .booking-content-grid {
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, .94fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+  .booking-app--fit .booking-table-card { height: 100%; min-height: 0; }
+  .booking-app--fit .booking-table-scroll { height: 100%; min-height: 0; max-height: none; }
+  .booking-app--fit .booking-details {
+    display: flex;
+    flex-direction: column;
+    position: static;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    padding: 13px 14px;
+  }
+  .booking-app--fit .booking-details-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+  .booking-app--fit .booking-details-actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--booking-line);
+    background: #fff;
+  }
+  .booking-app--fit .booking-detail-code { margin-bottom: 6px; }
+  .booking-app--fit .booking-details-scroll > .booking-status { margin-bottom: 8px; }
+  .booking-app--fit .booking-detail-deposit { margin: 5px 0; padding: 7px 9px; }
+  .booking-app--fit .booking-detail-list > div { min-height: 30px; }
+  .booking-app--fit .booking-detail-room-ready { margin: 6px 0; }
+  .booking-app--fit .booking-detail-checkin { min-height: 36px; }
+  .booking-app--fit .booking-detail-no-show,
+  .booking-app--fit .booking-detail-room-link { min-height: 36px; margin-top: 0; }
+  .booking-app--fit .booking-detail-actions { gap: 6px; margin-top: 0; }
+  .booking-app--fit .booking-detail-actions button { min-height: 36px; padding: 6px 7px; }
+}
+
+.booking-edit-dialog {
+  width: min(1000px, 100%);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 18px 28px;
+}
+.booking-edit-dialog .booking-cancel-title { margin-bottom: 10px; }
+.booking-edit-dialog form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 9px 18px;
+}
+.booking-edit-dialog form > .booking-cancel-section-title,
+.booking-edit-dialog form > .booking-form-grid,
+.booking-edit-dialog form > .booking-section-title-row,
+.booking-edit-dialog form > .booking-edit-summary,
+.booking-edit-dialog form > .booking-inline-error,
+.booking-edit-dialog form > .booking-cancel-buttons { grid-column: 1 / -1; }
+.booking-edit-dialog form > .booking-cancel-section-title { margin: 0 0 1px; }
+.booking-edit-dialog form > .booking-edit-section-title { margin-top: 3px; }
+.booking-edit-dialog .booking-form-grid { gap: 8px 12px; margin-bottom: 0; }
+.booking-edit-dialog .booking-edit-pricing-mode {
+  grid-column: 1;
+  min-height: 40px;
+  align-self: start;
+  margin: 22px 0 0;
+}
+.booking-edit-dialog .booking-edit-combo { grid-column: 2; margin: 0; }
+.booking-edit-dialog .booking-edit-combo small { font-size: 10px; line-height: 1.35; }
+.booking-edit-dialog .booking-edit-summary { gap: 8px 14px; margin: 2px 0 0; padding: 9px 12px; font-size: 10px; }
+.booking-edit-dialog .booking-edit-summary strong { font-size: 11px; }
+.booking-edit-dialog .booking-note-field textarea { min-height: 64px; }
+.booking-edit-dialog form > .booking-inline-error { margin: 0; padding: 8px 10px; }
+.booking-edit-dialog .booking-cancel-buttons { margin-top: 0; padding-top: 1px; }
+
+@media (max-width: 850px) {
+  .booking-edit-dialog { max-height: calc(100svh - 16px); padding: 18px 15px; }
+  .booking-edit-dialog form { grid-template-columns: minmax(0, 1fr); }
+  .booking-edit-dialog .booking-edit-pricing-mode,
+  .booking-edit-dialog .booking-edit-combo { grid-column: 1; }
+  .booking-edit-dialog .booking-edit-pricing-mode { margin-top: 0; }
 }
