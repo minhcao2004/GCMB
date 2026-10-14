@@ -6,7 +6,7 @@ import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
-import { formatVnd, toLocalDateInput } from '../data/bookingData';
+import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 
 const navigation = [
@@ -44,6 +44,10 @@ function Icon({ name, size = 18 }) {
 
 // Lấy ngày hôm nay theo giờ địa phương cho bộ lọc lịch.
 function localToday() { return toLocalDateInput(new Date()); }
+// Chỉ khôi phục ngày điều hướng nếu đúng định dạng và là ngày lịch hợp lệ.
+function bookingDateFromNavigation(value) {
+  return isLocalDateInput(value) ? value : localToday();
+}
 // Lấy ngày kế tiếp theo giờ địa phương cho bộ lọc lịch.
 function localTomorrow() { const date = new Date(); date.setDate(date.getDate() + 1); return toLocalDateInput(date); }
 // Định dạng một phần thời gian theo múi giờ chi nhánh.
@@ -111,7 +115,7 @@ export function AppShell({ user, branchName, busy, onLogout, children, breadcrum
       <div className="booking-brand"><Brand /></div>
       <span className="booking-role-chip">LỄ TÂN</span>
       <nav className="booking-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms'].includes(icon)} onClick={() => { if (icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); }}>
+        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms', 'deposit'].includes(icon)} onClick={() => { if (icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); if (icon === 'deposit') navigate('/le-tan/deposits'); }}>
           <Icon name={icon} /><span>{label}</span>
         </button>)}
       </nav>
@@ -124,7 +128,7 @@ export function AppShell({ user, branchName, busy, onLogout, children, breadcrum
       <header className="booking-topbar">
         <p><span>Lễ tân</span><b>/</b><strong>{breadcrumb}</strong></p>
         <div className="booking-topbar-tools">
-          {!hideSearch && <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'} /></label>}
+          {!hideSearch && <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : activeTab === 'deposit' ? 'Tìm giao dịch tiền cọc' : 'Tìm kiếm booking'} /></label>}
           <span className="booking-topbar-datetime">{currentDate} {currentTime}</span>
           <button type="button" className="booking-topbar-logout" disabled={busy} onClick={onLogout}>
             <Icon name="logout" /><span>Đăng xuất</span>
@@ -439,14 +443,14 @@ export default function BookingManagementPage() {
   const [options, setOptions] = useState(null);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState('');
-  const [selectedDate, setSelectedDate] = useState(localToday);
+  const [selectedDate, setSelectedDate] = useState(() => bookingDateFromNavigation(location.state?.bookingDate));
   const [activeFilter, setActiveFilter] = useState('all');
   const [roomTier, setRoomTier] = useState('all');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(() => location.state?.bookingId || '');
   const [detail, setDetail] = useState(null);
   const [notice, setNotice] = useState('');
   const [noticeKind, setNoticeKind] = useState('success');
@@ -486,9 +490,15 @@ export default function BookingManagementPage() {
 
   useEffect(() => {
     if (!user || createMode) return undefined;
+    if (selectedDate !== '' && !isLocalDateInput(selectedDate)) {
+      setSelectedDate(localToday());
+      return undefined;
+    }
     let active = true;
     setListLoading(true);
-    bookingApi.list({ dateFrom: selectedDate, dateTo: selectedDate, search: search.trim() || undefined, page: 0, size: 100 })
+    const params = { search: search.trim() || undefined, page: 0, size: 100 };
+    if (isLocalDateInput(selectedDate)) { params.dateFrom = selectedDate; params.dateTo = selectedDate; }
+    bookingApi.list(params)
       .then((result) => {
         if (!active) return;
         const items = result.items || [];

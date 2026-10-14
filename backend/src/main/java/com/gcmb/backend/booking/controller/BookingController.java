@@ -2,10 +2,13 @@ package com.gcmb.backend.booking.controller;
 
 import com.gcmb.backend.administration.auth.dto.response.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
+import com.gcmb.backend.booking.dto.DepositDtos;
+import com.gcmb.backend.booking.service.DepositManagementService;
 import com.gcmb.backend.booking.service.BookingService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,9 +25,45 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/reception")
 public class BookingController {
     private final BookingService bookings;
+    private final DepositManagementService deposits;
 
     // Service chịu trách nhiệm quy tắc nghiệp vụ và phạm vi chi nhánh.
-    public BookingController(BookingService bookings) { this.bookings = bookings; }
+    public BookingController(BookingService bookings, DepositManagementService deposits) {
+        this.bookings = bookings;
+        this.deposits = deposits;
+    }
+
+    @GetMapping("/deposits")
+    // GET: danh sách tiền cọc, tổng hợp và bộ lọc trong phạm vi chi nhánh lễ tân.
+    public DepositDtos.DepositPage deposits(@AuthenticationPrincipal Identity identity,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return deposits.list(identity, dateFrom, dateTo, status, method, search, page, size);
+    }
+
+    @GetMapping("/deposits/eligible-refund-bookings")
+    // GET: các booking đã hủy còn cọc và chưa có yêu cầu hoàn đang xử lý.
+    public List<DepositDtos.RefundableBooking> eligibleRefundBookings(@AuthenticationPrincipal Identity identity) {
+        return deposits.eligibleRefundBookings(identity);
+    }
+
+    @GetMapping("/deposits/{bookingId}")
+    // GET: chi tiết và lịch sử tiền cọc của một booking trong chi nhánh hiện tại.
+    public DepositDtos.DepositDetail depositDetail(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return deposits.detail(identity, bookingId);
+    }
+
+    @PostMapping("/deposits/refund-requests")
+    // POST: tạo yêu cầu chờ kế toán xử lý; lễ tân không ghi nhận đã hoàn tiền.
+    public DepositDtos.RefundRequestResult createDepositRefundRequest(@AuthenticationPrincipal Identity identity,
+            @RequestBody DepositDtos.CreateRefundRequest request) {
+        return deposits.createRefundRequest(identity, request);
+    }
 
     @GetMapping("/booking-options")
     // GET: trả lựa chọn hạng phòng và combo cho lễ tân.
