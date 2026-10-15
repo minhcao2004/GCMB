@@ -74,6 +74,19 @@ public class BookingController {
         return bookings.options(identity);
     }
 
+    @GetMapping("/rooms")
+    public List<BookingDtos.RoomSummary> rooms(@AuthenticationPrincipal Identity identity) {
+        return bookings.rooms(identity);
+    }
+
+    @PostMapping("/rooms/{roomId}/finish-cleaning")
+    public void finishCleaning(@AuthenticationPrincipal Identity identity, @PathVariable UUID roomId) {
+        audit.record("ROOM_CLEANING_COMPLETED", "ROOM", roomId, () -> {
+            bookings.finishCleaning(identity, roomId);
+            return null;
+        }, null);
+    }
+
     @GetMapping("/availability")
     // GET: báo phòng trống và giá cho khoảng thời gian yêu cầu.
     public BookingDtos.Availability availability(@AuthenticationPrincipal Identity identity,

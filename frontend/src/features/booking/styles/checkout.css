@@ -8,6 +8,8 @@
 .co-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(290px,1fr); gap: 20px; align-items: start; }
 .co-card { background: white; border-radius: 13px; padding: 18px; margin-bottom: 12px; min-width: 0; }
 .co-summary { position: sticky; top: 18px; }
+.checkout-page .co-invoice-title { display: flex; flex-direction: column; gap: 6px; }
+.co-invoice-title small { font-weight: 400; overflow-wrap: anywhere; }
 .checkout-page button { padding: 11px 16px; border: 1px solid #e1e7ef; border-radius: 9px; background: #f7f9fc; color: #526078; font: inherit; cursor: pointer; }
 .checkout-page button:disabled { opacity: .45; cursor: not-allowed; }
 .checkout-page .co-primary { width: 100%; background: #ed148d; border-color: #ed148d; color: white; font-weight: 650; min-height: 44px; margin-top: 20px; }
@@ -24,7 +26,8 @@
 .co-fee { display: grid; grid-template-columns: 1.5fr 1fr auto; gap: 8px; margin: 12px 0; }
 .co-inspection { display: flex; align-items: center; gap: 9px; margin-bottom: 15px; background: #e7f8ef; color: #0b975d; border-radius: 8px; padding: 13px; }
 .co-inspection input { accent-color: #0b975d; }
-.co-totals > div { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #e8edf4; }
+.co-totals > div { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid #e8edf4; }
+.co-totals dd { text-align: right; }
 .co-totals dd { margin: 0; }
 .co-total, .co-amount-banner { background: #effbfe; border-radius: 9px; padding: 20px; margin: 20px 0; }
 .co-total small, .co-amount-banner small { display: block; color: #008da5; }

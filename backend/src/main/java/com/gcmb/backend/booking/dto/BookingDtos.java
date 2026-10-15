@@ -13,6 +13,9 @@ public final class BookingDtos {
 
     // Lựa chọn ban đầu theo chi nhánh cho biểu mẫu tạo booking.
     public record BookingOptions(UUID branchId, String branchName, String timezone, List<RoomTypeOption> roomTypes) {}
+
+    public record RoomSummary(UUID id, String code, String name, int capacity, UUID roomTypeId,
+                              String roomTypeName, String operatingStatus) {}
     // Hạng phòng cùng sức chứa và combo được phép chọn.
     public record RoomTypeOption(UUID id, String code, String name, String mode, int capacity, List<ComboOption> combos) {}
     // Phiên bản và thời hạn của một combo dùng để báo giá.

@@ -29,7 +29,7 @@ function floorOf(code) {
 }
 
 function statusText(status) {
-  return ({ occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống' })[status];
+  return ({ occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống', cleaning: 'Đang dọn', maintenance: 'Bảo trì', inactive: 'Ngừng hoạt động' })[status];
 }
 
 async function bookingsForDate(date) {
@@ -53,8 +53,7 @@ export default function RoomOverviewPage() {
   const [floor, setFloor] = useState('all');
   const [status, setStatus] = useState('all');
   const [bookings, setBookings] = useState([]);
-  const [available, setAvailable] = useState([]);
-  const [vacancyLoaded, setVacancyLoaded] = useState(false);
+  const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState(() => location.state?.roomId || '');
@@ -98,50 +97,40 @@ export default function RoomOverviewPage() {
   // Dùng giờ hiện tại cộng 5 phút cho ngày đã chọn, thống nhất với bộ lọc không có ô giờ.
   const slot = useMemo(() => new Date(`${date}T${clockTime(new Date((currentMinute + 5) * 60000))}:00`), [date, currentMinute]);
   useEffect(() => {
-    if (!options || Number.isNaN(slot.getTime())) return undefined;
+    if (!user || Number.isNaN(slot.getTime())) return undefined;
     let active = true;
     setLoading(true);
     setLoadError('');
-    const list = bookingsForDate(date);
-    // API availability chỉ nhận thời điểm tương lai; danh sách booking vẫn xem được ngày đã qua.
-    const canCheckVacancy = slot.getTime() > Date.now();
-    const vacancies = canCheckVacancy ? Promise.allSettled((options.roomTypes || []).map((roomType) => bookingApi.availability({
-      roomTypeId: roomType.id,
-      plannedStart: slot.toISOString(),
-      plannedEnd: new Date(slot.getTime() + 60 * 60000).toISOString(),
-      pricingMode: 'HOURLY',
-    }).then((result) => ({ type: roomType, rooms: result.rooms || [] })))) : Promise.resolve([]);
-    Promise.allSettled([list, vacancies]).then(([listResult, vacancyResult]) => {
+    Promise.all([bookingsForDate(date), bookingApi.rooms()]).then(([list, roomList]) => {
       if (!active) return;
-      if (listResult.status === 'fulfilled') setBookings(listResult.value);
-      else { setBookings([]); setAvailable([]); setVacancyLoaded(false); setLoadError(errorText(listResult.reason)); return; }
-      const fulfilled = vacancyResult.status === 'fulfilled' ? vacancyResult.value.filter((item) => item.status === 'fulfilled') : [];
-      setAvailable(fulfilled.flatMap((item) => item.value.rooms.map((room) => ({ ...room, roomTypeName: item.value.type.name }))));
-      setVacancyLoaded(fulfilled.length > 0);
-    }).finally(() => { if (active) setLoading(false); });
+      setBookings(list);
+      setInventory(roomList);
+    }).catch((error) => { if (active) setLoadError(errorText(error)); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [user, options, date, slot, reload]);
+  }, [user, date, slot, reload]);
 
   const rooms = useMemo(() => {
     const byRoom = new Map();
-    available.forEach((room) => byRoom.set(room.id, { ...room, status: 'vacant' }));
+    inventory.forEach((room) => byRoom.set(room.id, { ...room, status: ({ AVAILABLE: 'vacant', CLEANING: 'cleaning', UNDER_MAINTENANCE: 'maintenance', INACTIVE: 'inactive' })[room.operatingStatus] || 'inactive' }));
     bookings.forEach((booking) => {
       if (!booking.roomId || !['IN_HOUSE', 'CONFIRMED'].includes(booking.status)) return;
       const overlaps = new Date(booking.plannedStart) <= slot && new Date(booking.plannedEnd) > slot;
       const upcoming = booking.status === 'CONFIRMED' && new Date(booking.plannedStart) > slot;
       if (!overlaps && !upcoming && booking.status !== 'IN_HOUSE') return;
       const existing = byRoom.get(booking.roomId);
+      if (existing && !['vacant', 'reserved', 'occupied'].includes(existing.status) && booking.status !== 'IN_HOUSE') return;
       if (existing?.status === 'occupied' && booking.status !== 'IN_HOUSE') return;
       if (existing?.status === 'reserved' && booking.status === 'CONFIRMED'
           && new Date(existing.booking.plannedStart) <= new Date(booking.plannedStart)) return;
       byRoom.set(booking.roomId, {
         id: booking.roomId, code: booking.roomCode, name: booking.roomName,
-        roomTypeName: booking.roomTypeName, capacity: options?.roomTypes?.find((type) => type.name === booking.roomTypeName)?.capacity,
+        roomTypeName: booking.roomTypeName, capacity: existing?.capacity || options?.roomTypes?.find((type) => type.name === booking.roomTypeName)?.capacity,
         status: booking.status === 'IN_HOUSE' ? 'occupied' : 'reserved', booking,
       });
     });
     return [...byRoom.values()].sort((a, b) => String(a.code).localeCompare(String(b.code), 'vi-VN', { numeric: true }));
-  }, [available, bookings, slot, options]);
+  }, [inventory, bookings, slot, options]);
 
   useEffect(() => {
     if (!rooms.length) { setSelectedRoomId(''); return; }
@@ -171,7 +160,7 @@ export default function RoomOverviewPage() {
       && (tier === 'all' || room.roomTypeName === tier)
       && (!keyword || [room.code, room.name, room.booking?.contactName, room.booking?.code].some((part) => String(part || '').toLocaleLowerCase('vi-VN').includes(keyword)));
   });
-  const counts = Object.fromEntries(['vacant', 'reserved', 'occupied'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
+  const counts = Object.fromEntries(['vacant', 'reserved', 'occupied', 'cleaning', 'maintenance', 'inactive'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
   const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
   const currentBooking = selectedDetail?.booking || selectedBooking || null;
@@ -189,6 +178,18 @@ export default function RoomOverviewPage() {
     setBusy(true);
     try { await authApi.logout(); clearBookingDraft(user); navigate('/dang-nhap', { replace: true }); }
     catch (error) { setLoadError(errorText(error)); }
+    finally { setBusy(false); }
+  };
+
+  const finishCleaning = async () => {
+    if (busy || selected?.status !== 'cleaning') return;
+    setBusy(true);
+    setLoadError('');
+    try {
+      await bookingApi.finishCleaning(selected.id);
+      setNotice(`Đã xác nhận dọn xong phòng ${selected.code}.`);
+      setReload((value) => value + 1);
+    } catch (error) { setLoadError(errorText(error)); }
     finally { setBusy(false); }
   };
 
@@ -222,19 +223,20 @@ export default function RoomOverviewPage() {
         <div className="room-toolbar">
           <label className="room-search"><span className="sr-only">Tìm phòng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phòng, booking, khách…" /></label>
           <label className="room-date"><span className="sr-only">Ngày xem phòng</span><input type="date" value={date} onChange={(event) => setSelectedDate(event.target.value)} /></label>
-          <label className="room-tier"><span className="sr-only">Hạng phòng</span><select value={tier} onChange={(event) => setTier(event.target.value)}><option value="all">Hạng phòng</option>{(options?.roomTypes || []).map((type) => <option key={type.id} value={type.name}>{type.name}</option>)}</select></label>
+          <label className="room-tier"><span className="sr-only">Hạng phòng</span><select value={tier} onChange={(event) => setTier(event.target.value)}><option value="all">Hạng phòng</option>{[...new Set(rooms.map((room) => room.roomTypeName).filter(Boolean))].sort().map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         </div>
-        <p className="room-view-note">Phòng trống được kiểm tra cho 60 phút từ giờ hiện tại (cộng 5 phút) của ngày đã chọn. Trạng thái đang sử dụng lấy từ booking hiện tại.</p>
+        <p className="room-view-note">Hiển thị danh sách phòng của cơ sở. Lịch đặt theo ngày đã chọn; trạng thái vận hành và khách đang sử dụng lấy từ hiện tại.</p>
         <div className="room-board-heading"><h2>Sơ đồ phòng</h2><span>Hiển thị {visible.length}/{rooms.length} phòng</span></div>
         <div className="room-floors" role="group" aria-label="Lọc tầng"><button type="button" className={floor === 'all' ? 'is-active' : ''} onClick={() => setFloor('all')}>Tất cả</button>{floors.map((value) => <button type="button" key={value} className={floor === value ? 'is-active' : ''} onClick={() => setFloor(value)}>Tầng {value}</button>)}</div>
-        <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
-        {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">Không có phòng phù hợp với bộ lọc này.{!vacancyLoaded && ' Dữ liệu phòng trống hiện chưa có cho thời điểm đã chọn.'}</p> : <div className="room-grid">{visible.map((room) => <button type="button" key={room.id} className={`room-card room-card-${room.status}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}><strong>{room.code} {room.name}</strong><small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small><span>{statusText(room.status)}</span><em>{room.status === 'occupied' ? `${dateTimeText(room.booking?.actualCheckin || room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'reserved' ? `${dateTimeText(room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : 'Sẵn sàng'}</em></button>)}</div>}
+        <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied', 'cleaning', 'maintenance', 'inactive'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
+        {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">{loadError ? 'Chưa tải được danh sách phòng. Vui lòng thử lại.' : 'Không có phòng phù hợp với bộ lọc này.'}</p> : <div className="room-grid">{visible.map((room) => <button type="button" key={room.id} className={`room-card room-card-${room.status}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}><strong>{room.code} {room.name}</strong><small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small><span>{statusText(room.status)}</span><em>{room.status === 'occupied' ? `${dateTimeText(room.booking?.actualCheckin || room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'reserved' ? `${dateTimeText(room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'vacant' ? 'Sẵn sàng' : statusText(room.status)}</em></button>)}</div>}
       </section>
       <aside className="room-detail" aria-label="Phòng đang chọn">
         <span className="room-detail-label">Phòng đang chọn</span>
         {selected ? <><h2>{selected.code} · {selected.name}</h2><span className={`room-detail-status ${selected.status}`}>{statusText(selected.status)}</span><p>{selected.roomTypeName || 'Phòng'}{selected.capacity ? ` · tối đa ${selected.capacity} người` : ''}</p>
           {currentBooking && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className="is-ended">Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
+          {selected.status === 'cleaning' && <><button type="button" className="room-checkout" disabled={busy || loading} onClick={finishCleaning}>{busy ? 'Đang xác nhận…' : 'Dọn xong → Trống'}</button><p>Chỉ xác nhận khi phòng đã dọn xong và sẵn sàng nhận khách.</p></>}
           <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
       </aside>

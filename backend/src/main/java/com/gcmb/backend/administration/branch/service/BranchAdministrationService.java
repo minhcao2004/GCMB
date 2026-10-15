@@ -78,13 +78,19 @@ public class BranchAdministrationService {
     public Map<String, Object> update(UUID id, BranchCommand input) {
         validate(input);
         lock(id);
-        if (!get(id).get("code").equals(input.code().trim().toUpperCase(Locale.ROOT))) {
-            throw failure(HttpStatus.BAD_REQUEST, "Mã cơ sở không thay đổi sau khi tạo.");
+        String code = input.code().trim().toUpperCase(Locale.ROOT);
+        if (Boolean.TRUE.equals(db.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE upper(code)=? AND id<>?)", Boolean.class, code, id))) {
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở đã tồn tại.");
         }
-        db.update("""
-            UPDATE gcmb.branch SET name=?,address=?,phone=?,notes=?,updated_at=CURRENT_TIMESTAMP
-            WHERE id=?
-            """, input.name().trim(), input.address().trim(), clean(input.phone()), clean(input.notes()), id);
+        try {
+            db.update("""
+                UPDATE gcmb.branch SET code=?,name=?,address=?,phone=?,notes=?,updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """, code, input.name().trim(), input.address().trim(), clean(input.phone()), clean(input.notes()), id);
+        } catch (DataIntegrityViolationException e) {
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở đã tồn tại hoặc dữ liệu không hợp lệ.");
+        }
         return get(id);
     }
 
@@ -236,8 +242,8 @@ public class BranchAdministrationService {
         if (clean(input.address()).isEmpty() || clean(input.address()).length() > 2000) {
             throw failure(HttpStatus.BAD_REQUEST, "Nhập địa chỉ cơ sở (tối đa 2000 ký tự).");
         }
-        if (!clean(input.phone()).isEmpty() && !clean(input.phone()).matches("[+0-9() .-]{6,30}")) {
-            throw failure(HttpStatus.BAD_REQUEST, "Điện thoại liên hệ không hợp lệ (6–30 ký tự).");
+        if (!clean(input.phone()).isEmpty() && !clean(input.phone()).matches("0[0-9]{6,14}")) {
+            throw failure(HttpStatus.BAD_REQUEST, "Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.");
         }
         if (clean(input.notes()).length() > 4000) {
             throw failure(HttpStatus.BAD_REQUEST, "Ghi chú tối đa 4000 ký tự.");

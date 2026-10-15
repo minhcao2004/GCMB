@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
-import { formatDate, formatVnd } from '../data/bookingData';
+import { formatDate, formatVnd, formatMoneyInput } from '../data/bookingData';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
 function localDate(value = new Date()) {
@@ -12,12 +12,6 @@ function localDate(value = new Date()) {
 // Chuyển ngày và giờ nhập trên máy thành mốc ISO gửi backend.
 function dateTimeIso(date, time) {
   return new Date(`${date}T${time}:00`).toISOString();
-}
-
-// Chỉ giữ chữ số và thêm dấu phân nhóm cho tiền cọc.
-function formatMoneyInput(value) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 // Bọc nhãn và trường nhập thống nhất trong biểu mẫu.
@@ -80,9 +74,12 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const validSchedule = Boolean(plannedStart && plannedEnd && plannedStart > new Date() && plannedEnd > plannedStart);
   const pricingSelectionValid = form.pricingMode === 'COMBO' ? Boolean(selectedCombo) : hourlyDurationValid;
   const depositAmountValid = Number.isFinite(depositAmount) && depositAmount > 0;
+  const contactPhoneError = !form.contactPhone.trim() ? 'Nhập số điện thoại.'
+    : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
+      ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
   const bookingBlockers = [];
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
-  if (!form.contactPhone.trim()) bookingBlockers.push('Nhập số điện thoại.');
+  if (contactPhoneError) bookingBlockers.push(contactPhoneError);
   if (!selectedType) bookingBlockers.push('Chọn hạng phòng.');
   if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date() ? 'Chọn ngày giờ nhận phòng trong tương lai.' : 'Chọn ngày giờ nhận phòng hợp lệ.');
   if (!guestCountValid) bookingBlockers.push(chosenRoom && guestCount > chosenRoom.capacity ? `Giảm số khách còn tối đa ${chosenRoom.capacity} người.` : 'Nhập số khách từ 1 trở lên.');
@@ -93,7 +90,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   if (form.depositEnabled && !depositAmountValid) bookingBlockers.push('Nhập số tiền cọc đã thực sự nhận.');
   const bookingReady = !optionsLoading && !loadingAvailability && !availabilityError && bookingBlockers.length === 0 && Boolean(chosenRoom);
   const showContactNameError = Boolean(touched.contactName && !form.contactName.trim());
-  const showContactPhoneError = Boolean(touched.contactPhone && !form.contactPhone.trim());
+  const showContactPhoneError = Boolean((touched.contactPhone || form.contactPhone) && contactPhoneError);
   const showScheduleError = Boolean((touched.date || touched.time) && !validSchedule);
   const showGuestCountError = Boolean(touched.guestCount && !guestCountValid);
   const showRoomTypeError = Boolean(touched.roomTypeId && !selectedType);
@@ -238,8 +235,8 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
             {showContactNameError && <small id="booking-contact-name-error" className="booking-field-error" aria-live="polite">Nhập họ tên khách.</small>}
           </Field>
           <Field label="Số điện thoại *" className={showContactPhoneError ? 'is-invalid' : ''}>
-            <input name="contactPhone" value={form.contactPhone} onChange={change} onBlur={() => markTouched('contactPhone')} inputMode="tel" autoComplete="tel" placeholder="Nhập số điện thoại" required aria-invalid={showContactPhoneError} aria-describedby={showContactPhoneError ? 'booking-contact-phone-error' : undefined} />
-            {showContactPhoneError && <small id="booking-contact-phone-error" className="booking-field-error" aria-live="polite">Nhập số điện thoại.</small>}
+            <input type="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} onBlur={() => markTouched('contactPhone')} inputMode="numeric" autoComplete="tel" placeholder="Nhập số điện thoại" required aria-invalid={showContactPhoneError} aria-describedby={showContactPhoneError ? 'booking-contact-phone-error' : undefined} />
+            {showContactPhoneError && <small id="booking-contact-phone-error" className="booking-field-error" aria-live="polite">{contactPhoneError}</small>}
           </Field>
         </div>
         <div className="booking-form-grid booking-schedule-grid">

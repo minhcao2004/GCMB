@@ -39,6 +39,8 @@ export default function BranchManagementPage({ onAccounts }) {
   const selected = branches.find((branch) => branch.branchId === selectedId);
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
   const isStatus = modal === 'SUSPENDED' || modal === 'CLOSED';
+  const phoneError = form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
+    ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
 
   async function refresh() {
     setLoading(true);
@@ -103,6 +105,11 @@ export default function BranchManagementPage({ onAccounts }) {
   async function save(event) {
     event.preventDefault();
     if (busy) return;
+    if ((modal === 'create' || modal === 'edit') && phoneError) {
+      setModalError('');
+      event.currentTarget.querySelector('input[type="tel"]')?.focus();
+      return;
+    }
     setBusy(true);
     setModalError('');
     try {
@@ -221,10 +228,11 @@ export default function BranchManagementPage({ onAccounts }) {
           <div className="ba-modal-body">
             <p className="ba-subtitle">{selected && modal !== 'create' ? `${selected.code} · ${selected.branchName}` : 'Thông tin cơ sở được quản lý tập trung'}</p>
             {(modal === 'create' || modal === 'edit') && <div className="ba-fields">
-              <label>Mã cơ sở<input required readOnly={modal === 'edit'} pattern="[A-Za-z0-9_-]{2,60}" title="Mã không chứa khoảng trắng, gồm 2–60 chữ cái, số, gạch ngang hoặc gạch dưới" maxLength="60" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} /></label>
+              <label>Mã cơ sở<input required pattern="[A-Za-z0-9_\-]{2,60}" title="Mã không chứa khoảng trắng, gồm 2–60 chữ cái, số, gạch ngang hoặc gạch dưới" maxLength="60" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} /></label>
               <label>Tên cơ sở<input required maxLength="200" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
               <label>Địa chỉ<input required maxLength="2000" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
-              <label>Điện thoại liên hệ<input type="tel" maxLength="30" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+              <label>Điện thoại liên hệ<input type="tel" inputMode="numeric" maxLength="30" value={form.phone} aria-invalid={!!phoneError} aria-describedby={phoneError ? 'branch-phone-error' : undefined} onChange={(e) => { setForm({ ...form, phone: e.target.value }); setModalError(''); }} /></label>
+              {phoneError && <span id="branch-phone-error" role="alert" style={{ color: '#c52e4a' }}>{phoneError}</span>}
               <label>Ghi chú vận hành<textarea rows="4" maxLength="4000" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
               <aside className="ba-info"><strong>Quản lý phụ trách</strong><span>Có thể gán quản lý tại trang chi tiết sau khi lưu cơ sở.</span></aside>
             </div>}

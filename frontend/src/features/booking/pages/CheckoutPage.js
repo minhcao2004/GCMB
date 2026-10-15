@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { checkoutApi as api } from '../services/checkoutApi';
-import { formatVnd } from '../data/bookingData';
+import { formatVnd, formatMoneyInput } from '../data/bookingData';
 import '../styles/checkout.css';
 const usedTime = data => {
   const minutes = Math.max(0, Math.floor((new Date(data.checkoutAt).getTime() - new Date(data.checkin).getTime()) / 60000));
@@ -38,7 +38,6 @@ export default function CheckoutPage() {
   const [inspectionNote, setInspectionNote] = useState('');
   const [fees, setFees] = useState([]);
   const [method, setMethod] = useState('CASH');
-  const [cashAmount, setCashAmount] = useState('');
   const [cashTendered, setCashTendered] = useState('');
   useEffect(() => {
     let active = true;
@@ -102,6 +101,10 @@ export default function CheckoutPage() {
   }
   function issue(event) {
     event.preventDefault();
+    if (fees.some(fee => !Number.isSafeInteger(Number(fee.amount)) || Number(fee.amount) <= 0)) {
+      setError('Phụ phí phải là số tiền nguyên lớn hơn 0.');
+      return;
+    }
     run(async () => {
       const result = await api.issue(bookingId, {
         inspected,
@@ -116,11 +119,16 @@ export default function CheckoutPage() {
   }
   function pay(event) {
     event.preventDefault();
+    if (method !== 'BANK_TRANSFER' && (!Number.isSafeInteger(Number(cashTendered)) || Number(cashTendered) < 0 || (method === 'CASH' && Number(cashTendered) < paymentDue))) {
+      setError('Nhập số tiền mặt hợp lệ; nếu trả toàn bộ bằng tiền mặt thì tiền khách đưa phải đủ số cần thu.');
+      return;
+    }
     run(async () => {
+      const paymentMethod = method === 'MIXED' ? (cashDue === 0 ? 'BANK_TRANSFER' : bankDue === 0 ? 'CASH' : 'MIXED') : method;
       const result = await api.plan(billId, {
-        method,
-        cashAmount: method === 'MIXED' ? Number(cashAmount) : null,
-        cashTendered: method === 'BANK_TRANSFER' ? null : Number(cashTendered)
+        method: paymentMethod,
+        cashAmount: paymentMethod === 'MIXED' ? cashDue : null,
+        cashTendered: paymentMethod === 'BANK_TRANSFER' ? null : Number(cashTendered)
       });
       setData(result);
       if (result.readyToComplete) setData(await api.complete(billId));
@@ -139,7 +147,6 @@ export default function CheckoutPage() {
       // Hủy yêu cầu trên server trước khi mở lại lựa chọn, không chỉ ẩn QR ở giao diện.
       setData(await api.changeMethod(billId));
       setMethod('CASH');
-      setCashAmount('');
       setCashTendered('');
     });
   }
@@ -149,7 +156,8 @@ export default function CheckoutPage() {
   const amount = Number(data?.amount || 0) + (bookingId ? extra : 0);
   const depositAmount = Number(data?.depositApplied ?? data?.depositBalance ?? 0);
   const paymentDue = Number(data?.remaining ?? Math.max(0, amount - depositAmount));
-  const cashDue = method === 'MIXED' ? Number(cashAmount || 0) : paymentDue;
+  const cashDue = method === 'BANK_TRANSFER' ? 0 : method === 'MIXED' ? Math.min(Number(cashTendered || 0), paymentDue) : paymentDue;
+  const bankDue = method === 'CASH' ? 0 : Math.max(0, paymentDue - cashDue);
   const change = Math.max(0, Number(cashTendered || 0) - cashDue);
   if (!user) return <div className="checkout-page">
     <p role={error ? 'alert' : 'status'}>{error || 'Đang kiểm tra tài khoản…'}</p>
@@ -217,9 +225,9 @@ export default function CheckoutPage() {
                 ...f,
                 reason: e.target.value
               } : f))} />
-              <input aria-label={`Số tiền phụ phí ${index + 1}`} type="number" min="1" step="1" required placeholder="Số tiền" value={fee.amount} onChange={e => setFees(fees.map((f, i) => i === index ? {
+              <input aria-label={`Số tiền phụ phí ${index + 1}`} type="text" inputMode="numeric" required placeholder="Số tiền" value={formatMoneyInput(fee.amount)} onChange={e => /^[0-9.]*$/.test(e.target.value) && setFees(fees.map((f, i) => i === index ? {
                 ...f,
-                amount: e.target.value
+                amount: e.target.value.replace(/\./g, '')
               } : f))} />
               <button type="button" aria-label="Xóa phụ phí" onClick={() => setFees(fees.filter((_, i) => i !== index))}>×</button>
             </div>)}
@@ -238,12 +246,7 @@ export default function CheckoutPage() {
         </div>
         <aside className="co-card co-summary">
           <h2>Tóm tắt thanh toán</h2>
-          <Summary lines={data.lines} extra={extra} />
-          <dl className="co-totals"><Info label="Cọc sẽ áp dụng" value={`−${formatVnd(depositAmount)}`} /></dl>
-          <div className="co-total">
-            <small>TỔNG THANH TOÁN</small>
-            <strong>{formatVnd(paymentDue)}</strong>
-          </div>
+          <Summary lines={data.lines} extra={extra} amount={amount} depositAmount={depositAmount} paymentDue={paymentDue} preview />
           <p className="co-note">Giữ giá booking đã xác nhận. Tiền sử dụng sẽ được chốt khi lập bill.</p>
           <button className="co-primary" disabled={busy || !inspected || data.hasPendingRefund || depositAmount > amount || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : 'Tiếp tục thanh toán'}</button>
         </aside>
@@ -255,22 +258,20 @@ export default function CheckoutPage() {
         <div className="co-grid">
           <section className="co-card">
             <h2>{settled ? 'Thanh toán hoàn tất' : 'Phương thức thanh toán'}</h2>
-            {settled ? <><div className="co-success">Đã hoàn tất bill. Phòng đã chuyển sang Chờ vệ sinh.</div><button onClick={() => window.print()}>In hóa đơn</button></> : paymentDue === 0 && !planned ? <><div className="co-success">Bill không còn khoản phải thu sau khi áp dụng cọc.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill</button></> : !planned ? <form onSubmit={pay}>
+            {settled ? <><div className="co-success">Đã hoàn tất hóa đơn. Phòng chuyển sang Đang dọn. Sau khi dọn xong, vào màn Phòng và bấm Dọn xong → Trống để nhận khách tiếp theo.</div><button onClick={() => window.print()}>In hóa đơn</button></> : paymentDue === 0 && !planned ? <><div className="co-success">Bill không còn khoản phải thu sau khi áp dụng cọc.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill</button></> : !planned ? <form onSubmit={pay}>
               <div className="co-methods">{[['CASH', 'Tiền mặt'], ['BANK_TRANSFER', 'SePay'], ['MIXED', 'Kết hợp']].map(([value, label]) => <button key={value} type="button" className={method === value ? 'selected' : ''} onClick={() => setMethod(value)}>{label}</button>)}</div>
-              {method === 'MIXED' && <label className="co-field">
-                Phần tiền mặt
-                <input type="number" required min="1" max={paymentDue - 1} step="1" value={cashAmount} onChange={e => setCashAmount(e.target.value)} />
-              </label>}
+              {method === 'CASH' && <p className="co-note">Tiền mặt cần thu: <strong>{formatVnd(paymentDue)}</strong> (đã trừ cọc và khoản đã thanh toán).</p>}
               {method !== 'BANK_TRANSFER' && <><label className="co-field">
-                  Số tiền khách đưa
-                  <input type="number" required min={cashDue} step="1" value={cashTendered} onChange={e => setCashTendered(e.target.value)} />
-                </label><div className="co-quick">{[cashDue, 250000, 300000, 500000].filter((value, index, all) => value >= cashDue && all.indexOf(value) === index).map(value => <button key={value} type="button" onClick={() => setCashTendered(String(value))}>{formatVnd(value)}</button>)}</div><div className="co-success">
+                  Tiền mặt khách đưa
+                  <input type="text" inputMode="numeric" required value={formatMoneyInput(cashTendered)} aria-describedby="co-cash-tendered-help" onChange={e => /^[0-9.]*$/.test(e.target.value) && setCashTendered(e.target.value.replace(/\./g, ''))} />
+                  <small id="co-cash-tendered-help">{method === 'MIXED' ? 'Hệ thống tự trừ tiền mặt khỏi số còn phải thanh toán. Phần thiếu sẽ thanh toán bằng QR; đưa dư thì trả lại tiền thừa.' : 'Nhập tiền khách đưa để tính tiền thừa. Tiền khách đưa phải đủ số cần thu.'}</small>
+                </label><div className="co-quick">{[paymentDue, 250000, 300000, 500000].filter((value, index, all) => value > 0 && value >= paymentDue && all.indexOf(value) === index).map(value => <button key={value} type="button" onClick={() => setCashTendered(String(value))}>{value === paymentDue ? `Đưa đủ ${formatVnd(value)}` : formatVnd(value)}</button>)}</div><div className="co-success">
                   <small>TIỀN THỪA TRẢ KHÁCH</small>
                   <strong>{formatVnd(change)}</strong>
                 </div></>}
-              {method !== 'CASH' && <p className="co-note">Chuyển khoản {formatVnd(paymentDue - (method === 'MIXED' ? cashDue : 0))} qua QR SePay. Hệ thống chỉ ghi nhận khi nhận webhook khớp giao dịch.</p>}
-              {!data.sepayReady && method !== 'CASH' && <div className="co-warning">Chưa cấu hình SePay. Bạn có thể dùng tiền mặt hoặc cấu hình ngân hàng trước.</div>}
-              <button className="co-primary" disabled={busy || (!data.sepayReady && method !== 'CASH')}>{busy ? 'Đang xử lý…' : method === 'CASH' ? 'Hoàn tất thanh toán tiền mặt' : method === 'MIXED' ? 'Lưu phân bổ tạm & tạo QR' : 'Tạo mã QR SePay'}</button>
+              {method !== 'CASH' && <p className="co-note">{bankDue > 0 ? <>Cần chuyển khoản: <strong>{formatVnd(bankDue)}</strong> qua QR SePay. Khoản chuyển được ghi nhận sau khi hệ thống xác nhận nhận tiền.</> : 'Tiền mặt đã đủ thanh toán, không cần tạo QR.'}</p>}
+              {!data.sepayReady && bankDue > 0 && <div className="co-warning">Chưa cấu hình SePay. Bạn có thể dùng tiền mặt hoặc cấu hình ngân hàng trước.</div>}
+              <button className="co-primary" disabled={busy || (!data.sepayReady && bankDue > 0)}>{busy ? 'Đang xử lý…' : bankDue === 0 ? 'Hoàn tất thanh toán tiền mặt' : 'Tạo mã QR SePay'}</button>
             </form> : <>
               <div className="co-methods">{[['CASH', 'Tiền mặt'], ['BANK_TRANSFER', 'SePay'], ['MIXED', 'Kết hợp']].map(([value, label]) => <button key={value} type="button" disabled className={value === (data.request ? Number(data.plannedCash) > 0 || data.payments?.some(payment => payment.method === 'CASH') ? 'MIXED' : 'BANK_TRANSFER' : 'CASH') ? 'selected' : ''}>{label}</button>)}</div>
               {!data.payments?.length && (Number(data.plannedCash) > 0 || ['PENDING', 'EXPIRED'].includes(data.request?.status)) && <>
@@ -297,9 +298,9 @@ export default function CheckoutPage() {
             </>}
           </section>
           <aside className="co-card co-summary co-print">
-            <h2>
+            <h2 className="co-invoice-title">
               Hóa đơn
-              <small>{data.number}</small>
+              <small>Mã hóa đơn: {data.number}</small>
             </h2>
             <p>{data.room} · {data.customer}</p>
             <p>
@@ -310,14 +311,8 @@ export default function CheckoutPage() {
               {dateTime(data.checkoutAt)}
             </p>
             <Lines lines={data.lines} />
-            <div className="co-total">
-              <small>TỔNG HÓA ĐƠN</small>
-              <strong>{formatVnd(amount)}</strong>
-            </div>
-            <p>Cọc đã áp dụng: −{formatVnd(depositAmount)}</p>
-            <p>Đã thu thêm: {formatVnd(data.paid)}</p>
-            <p>Còn phải thu: {formatVnd(data.remaining)}</p>
-            <small>{settled ? 'Đã hoàn tất' : 'Bill đang chờ thanh toán'}</small>
+            <Summary lines={data.lines} amount={amount} depositAmount={depositAmount} paid={Number(data.paid || 0)} paymentDue={paymentDue} />
+            <small>{settled ? 'Đã hoàn tất thanh toán' : 'Hóa đơn đang chờ hoàn tất thanh toán'}</small>
           </aside>
         </div>
       </>}
@@ -353,7 +348,23 @@ function Lines({
 }
 function Summary({
   lines,
-  extra
+  extra = 0,
+  amount,
+  depositAmount,
+  paid = 0,
+  paymentDue,
+  preview = false
 }) {
-  return <dl className="co-totals">{[['ROOM', 'Tiền phòng'], ['FNB', 'F&B'], ['SURCHARGE', 'Phụ phí']].map(([category, label]) => <Info key={category} label={label} value={formatVnd(lines.filter(line => line.category === category).reduce((sum, line) => sum + Number(line.amount), category === 'SURCHARGE' ? extra : 0))} />)}</dl>;
+  return <>
+    <dl className="co-totals">
+      {[['ROOM', 'Tiền phòng'], ['FNB', 'F&B'], ['SURCHARGE', 'Phụ phí']].map(([category, label]) => <Info key={category} label={label} value={formatVnd(lines.filter(line => line.category === category).reduce((sum, line) => sum + Number(line.amount), category === 'SURCHARGE' ? extra : 0))} />)}
+      <Info label="Tổng hóa đơn (gồm phụ phí)" value={formatVnd(amount)} />
+      <Info label={preview ? 'Tiền cọc sẽ áp dụng' : 'Tiền cọc đã áp dụng'} value={depositAmount > 0 ? `−${formatVnd(depositAmount)}` : formatVnd(0)} />
+      {paid > 0 && <Info label="Trừ khoản đã thanh toán" value={`−${formatVnd(paid)}`} />}
+    </dl>
+    <div className="co-total">
+      <small>CÒN PHẢI THANH TOÁN</small>
+      <strong>{formatVnd(paymentDue)}</strong>
+    </div>
+  </>;
 }
