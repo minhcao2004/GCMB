@@ -64,7 +64,7 @@ The current scope excludes a customer booking portal, hardware barcode-scanner i
 | Communication | REST API with JSON |
 | External integrations | SePay, email service, cloud storage |
 | Version control | Git and GitHub |
-| Testing | JUnit and API testing tools such as Postman |
+| Testing | Manual testing; Java manual runner and individual API requests such as Postman |
 | Deployment target | Docker on VPS/Cloud |
 
 Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, and the frontend lockfile. Use the versions committed by the team.
@@ -305,18 +305,16 @@ Obtain development accounts through the team's agreed seed or account-provisioni
 
 ## Testing
 
-Run commands from the corresponding project directory.
+Run compilation/build checks from the corresponding project directory:
 
 | Check | Windows PowerShell | macOS/Linux |
 | --- | --- | --- |
-| Backend tests (`backend/`) | `.\mvnw.cmd test` | `./mvnw test` |
-| Backend verification (`backend/`) | `.\mvnw.cmd verify` | `./mvnw verify` |
-| Frontend tests (`frontend/`) | `npm.cmd test -- --watchAll=false` | `npm test -- --watchAll=false` |
+| Backend test-source compilation only (`backend/`) | `.\mvnw.cmd -DskipTests test-compile` | `./mvnw -DskipTests test-compile` |
 | Frontend production build (`frontend/`) | `npm.cmd run build` | `npm run build` |
 
-These commands assume the standard Maven and Create React App scripts are present. Database-dependent tests must use a separate test database and the configuration defined by the test suite.
+Compilation/build success is not a manual test verdict. Database-dependent manual cases use a separate test database with reproducible fixtures. Keep stable case IDs/keys and synchronize case code, Report 5 and coverage. New or materially changed cases stay Pending/Not Run until the tester runs and evaluates them.
 
-Prioritize tests for booking conflicts, role and branch access, bill/deposit calculations, stock movements, payroll calculations, and financial reconciliation. API/system tests and UAT should cover complete workflows and their failure cases. Do not use production customer or financial data for testing.
+Phạm vi hiện tại chỉ là manual UT: kiểm tra method/class thật với dependency stub khi cần, quan sát return value, exception và side effects để tester tự đối chiếu. Không thêm kịch bản hoặc worksheet test ở cấp khác khi chưa được yêu cầu. Không dùng dữ liệu khách hàng hoặc tài chính production.
 
 ## Contributing
 
