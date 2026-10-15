@@ -1,16 +1,19 @@
 import { useEffect } from 'react';
 
+// Đăng ký hiệu ứng cuộn cho trang giới thiệu và dọn listener khi rời trang.
 export function useLandingEffects() {
   useEffect(() => {
     const header = document.getElementById('header');
     const heroPhoto = document.getElementById('hero-photo');
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let ticking = false;
+    // Cập nhật vị trí hiệu ứng trong một khung hình.
     const update = () => {
       header?.classList.toggle('stuck', window.scrollY > 80);
       if (heroPhoto) heroPhoto.style.transform = !reducedMotion.matches && window.innerWidth > 720 && window.scrollY < window.innerHeight * 1.4 ? `translateY(${window.scrollY * 0.18}px)` : 'none';
       ticking = false;
     };
+    // Gộp nhiều sự kiện cuộn vào một lần cập nhật bằng requestAnimationFrame.
     const schedule = () => { if (!ticking) { window.requestAnimationFrame(update); ticking = true; } };
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', update);

@@ -146,10 +146,13 @@ public class AccountRepository {
         );
         db.update("UPDATE gcmb.employee SET user_id=? WHERE id=?", id, request.employeeId());
         db.update(
-                "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id) VALUES (?,?,'CREATE_USER_ACCOUNT','USER_ACCOUNT',?)",
-                actor,
-                request.branchId(),
-                id
+                """
+                INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
+                SELECT ?,u.branch_id,'CREATE_USER_ACCOUNT','USER_ACCOUNT',u.id,
+                    jsonb_build_object('username',u.username,'email',u.email,'role',r.code,'status',u.status,
+                        'actorRole',(SELECT ar.code FROM gcmb.user_account au JOIN gcmb.role ar ON ar.id=au.role_id WHERE au.id=?))
+                FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
+                """, actor, actor, id
         );
         return id;
     }

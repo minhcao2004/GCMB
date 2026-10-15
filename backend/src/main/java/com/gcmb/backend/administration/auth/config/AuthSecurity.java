@@ -1,9 +1,15 @@
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
+
  * Author: HuyDV
  * Created: 10/10/2026
  * Description: Cấu hình bảo mật API, CORS, CSRF và phân quyền truy cập theo vai trò.
+
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Cấu hình bảo mật và quyền truy cập API.
+
  */
 
 package com.gcmb.backend.administration.auth.config;
@@ -25,6 +31,7 @@ import org.springframework.web.cors.CorsConfiguration;
 @Configuration
 @EnableConfigurationProperties(AuthSettings.class)
 public class AuthSecurity {
+    // Cấu hình CORS, CSRF, quyền theo vai trò và bộ lọc phiên cho toàn bộ API.
     @Bean SecurityFilterChain security(HttpSecurity http, AuthService auth, AuthSettings policy) throws Exception {
         CookieCsrfTokenRepository csrf = new CookieCsrfTokenRepository();
         csrf.setCookieCustomizer(cookie -> cookie.path("/api").sameSite("Lax").httpOnly(true).secure(policy.secureCookie()));
@@ -32,7 +39,7 @@ public class AuthSecurity {
             .cors(cors -> cors.configurationSource(request -> {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(List.of(policy.frontendOrigin()));
-                config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN"));
                 config.setAllowCredentials(true); return config;
             }))
@@ -42,7 +49,7 @@ public class AuthSecurity {
             .formLogin(config -> config.disable()).httpBasic(config -> config.disable()).logout(config -> config.disable())
             .authorizeHttpRequests(config -> config
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/health", "/api/v1/auth/login", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
-                .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/account/profile").authenticated()
+                .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/change-password", "/api/v1/account/profile").authenticated()
                 .requestMatchers("/api/v1/head-office/**").hasRole("HEAD_OFFICE_MANAGER")
                 .requestMatchers("/api/v1/branch-management/**").hasRole("BRANCH_MANAGER")
                 .requestMatchers("/api/v1/reception/**").hasRole("RECEPTIONIST")

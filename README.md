@@ -148,10 +148,6 @@ Within a backend feature, create `controller/`, `service/`, `repository/`, `enti
 
 ## Getting Started
 
-**Current local quick start:** copy `backend/.env.example` to `backend/.env`, fill the database credentials, keep PostgreSQL running, then run `npm.cmd start` from `frontend/`. This command starts both servers and waits for the backend before starting React. Open `http://localhost:3000/dang-nhap`. No separate IntelliJ BackendApplication run is needed. See [authentication and local setup](docs/AUTHENTICATION.md).
-
-The separate-server instructions below remain available for debugging; use `npm run start:frontend` when the backend is already running in IntelliJ.
-
 ### Prerequisites
 
 - JDK 17; `JAVA_HOME` must point to the JDK.
@@ -226,7 +222,7 @@ Open a second terminal at the repository root.
 ```powershell
 cd frontend
 npm.cmd ci
-npm.cmd run start:frontend
+npm.cmd start
 ```
 
 **macOS/Linux:**
@@ -234,7 +230,7 @@ npm.cmd run start:frontend
 ```bash
 cd frontend
 npm ci
-npm run start:frontend
+npm start
 ```
 
 `npm ci` requires a committed `package-lock.json` matching `package.json`. If the project has no lockfile yet, run `npm install` once and commit the generated lockfile.
@@ -243,6 +239,8 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 
 ### Troubleshooting
 
+Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/main/java/com/gcmb/backend/BackendApplication.java`. Maven chỉ định lớp này trong `pom.xml`; cấu hình Run của IDE cũng cần dùng đúng tên package. Nếu IDE còn chọn `com.gcmb.BackendApplication`, xóa cấu hình Run cũ và chọn lại lớp hiện tại.
+
 | Problem | Check or action |
 | --- | --- |
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
@@ -250,10 +248,9 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
+| `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
 
 ## Configuration
-
-Authentication implementation, one-command startup, SMTP setup and tests: [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 | File | Purpose |
 | --- | --- |
@@ -288,6 +285,10 @@ The directory alone does not run migrations. If the team selects Flyway, configu
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
 
 ## Usage
+
+Quản lý cơ sở UC-09–13: xem [nghiệp vụ, API và migration V11](docs/UC09-13_Branch_Administration.md).
+
+Quản lý hạng phòng UC-14–18: xem [luồng thao tác, API và bàn giao](docs/UC14-18_Room_Types.md).
 
 Once the relevant features and development accounts are available:
 
@@ -335,6 +336,11 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
+Audit logs record successful data changes by all roles: accounts, passwords, rooms, room types, prices, combos, branch-manager assignments, and booking operations. Views, searches, filters, pagination, availability checks, and quote calculations are excluded. Audit details show approved before/after fields and actor roles, with no passwords, hashes, or tokens. New business-write APIs must integrate audit in the same transaction. Accountant-specific business APIs are not yet implemented in this checkout.
+
+
+Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38–UC40 (check-in, room change, stay extension), and UC43 (create a deposit refund request). Checkout, bill settlement, and payment are separate use cases.
+
 The detailed project references are:
 
 - Report 1 — Project Introduction.
@@ -363,3 +369,5 @@ Technical setup references: [Create React App environment variables](https://cre
 ## License
 
 GCMB is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
+
+Reception merge integration: `AppShell` keeps the shared manager sidebar and DashboardTopbar (including profile access), and supports Thanh’s Booking/Rooms navigation, booking drafts, activeTab and hideSearch.

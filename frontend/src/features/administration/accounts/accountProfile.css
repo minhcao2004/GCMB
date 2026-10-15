@@ -5,6 +5,15 @@
  * Created: 12/10/2026
  * Description: Bố cục thông tin cá nhân và biểu mẫu cập nhật tài khoản.
  */
+.profile-dashboard-context { display: contents; }
+.profile-tabs { display: flex; gap: 8px; padding: 16px 28px; border-bottom: 1px solid #e7eaf0; }
+.profile-tabs button[aria-pressed='true'] { color: #ce0876; background: #fdecf5; border-color: #f5c7e1; }
+.profile-password-title { font-size: 18px; margin: 0 0 8px; }
+.profile-password-intro { color: #637089; margin-bottom: 24px; }
+.profile-password-input { position: relative; }
+.profile-password-input input { padding-right: 70px; }
+.profile-password-input button { position: absolute; right: 5px; top: 5px; padding: 6px 10px; border: 0; color: #637089; }
+
 .profile-information {
   display: grid;
   grid-template-columns: 1fr 1fr;

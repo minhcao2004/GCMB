@@ -7,6 +7,7 @@
  */
 
 const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+// Kiểm tra email đã trim và giới hạn độ dài trước khi gọi API.
 export function emailError(value) {
   const email = value.trim();
   if (!email) return 'Vui lòng nhập email';
@@ -14,6 +15,7 @@ export function emailError(value) {
   if (!emailPattern.test(email) || email.indexOf('@') > 64 || email.startsWith('.') || email.includes('..') || email.includes('.@')) return 'Email không đúng định dạng';
   return '';
 }
+// Kiểm tra trường bắt buộc theo từng bước đăng nhập hoặc khôi phục.
 export function validate(mode, values) {
   const errors = {};
   if (mode === 'forgot') {

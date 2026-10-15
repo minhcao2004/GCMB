@@ -1,9 +1,11 @@
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
+
  * Author: HuyDV
  * Created: 10/10/2026
  * Description: Định dạng trang theo vai trò và khung quản lý cấp cao, gồm menu, vùng nội dung và bố cục trên màn hình nhỏ.
+
  */
 
 .dashboard-page { min-height: 100vh; min-height: 100svh; box-sizing: border-box; padding: 32px; background: #fff; color: #222; }
@@ -21,9 +23,10 @@
 .manager-brand { padding: 8px 0; background: #fff; }
 .manager-sidebar .manager-role { margin: 10px 4px 12px; padding: 7px 10px; border-radius: 6px; background: #e7f8fb; color: #08758a; font-size: 10px; font-weight: 700; letter-spacing: .4px; }
 .manager-sidebar .manager-navigation { position: static; display: flex; flex-direction: column; gap: 6px; padding: 0; background: transparent; font-size: 12px; }
-.manager-navigation button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; border: 0; padding: 12px; border-radius: 8px; color: #637089; background: transparent; text-align: left; font-size: 12px; }
-.manager-navigation button:hover { background: #f5f7fa; }
-.manager-navigation button[aria-current='page'] { background: #fdecf5; color: #ce0876; font-weight: 600; }
+.manager-navigation button,.manager-navigation a { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; box-sizing: border-box; border: 0; padding: 12px; border-radius: 8px; color: #637089; background: transparent; text-align: left; text-decoration: none; font: inherit; font-size: 12px; cursor: pointer; }
+.manager-navigation button:hover,.manager-navigation a:hover { background: #f5f7fa; }
+.manager-navigation button[aria-current='page'],.manager-navigation a[aria-current='page'] { background: #fdecf5; color: #ce0876; font-weight: 600; }
+.manager-navigation a::after { display: none; }
 .manager-navigation svg { width: 18px; height: 18px; flex-shrink: 0; }
 .manager-sidebar-footer { margin: auto 6px 0; padding-top: 24px; font-size: 10px; }
 .manager-sidebar-footer strong { display: block; border-top: 1px solid #edf0f5; padding-top: 18px; }
@@ -35,6 +38,11 @@
 .manager-account { display: flex; align-items: center; gap: 16px; }
 .manager-account > span { overflow-wrap: anywhere; }
 .manager-account button { border-color: #e4e9f1; font-size: 11px; white-space: nowrap; }
+.manager-topbar { flex-shrink: 0; flex-wrap: wrap; line-height: 1.65; }
+.manager-topbar p { line-height: 1.6; }
+.manager-account { margin-left: auto; flex-wrap: wrap; }
+.manager-account button { padding: 10px 16px; border: 1px solid #e4e9f1; border-radius: 6px; background: #fff; color: #222; font-family: inherit; cursor: pointer; }
+.manager-account button:disabled { opacity: .6; cursor: not-allowed; }
 .manager-content { flex: 1; background: #fff; margin-top: 6px; border-radius: 6px; padding: 24px; }
 .manager-content h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: normal; line-height: 1.5; }
 .dashboard-page-manager > .dashboard-error { background: #fff; padding: 16px; margin-top: 12px; }

@@ -68,11 +68,12 @@ public class AccountProfileRepository {
                     jsonb_build_object('username',CAST(? AS text),'fullName',CAST(? AS text),
                         'phone',CAST(? AS text),'email',CAST(? AS text)),
                     jsonb_build_object('username',CAST(? AS text),'fullName',CAST(? AS text),
-                        'phone',CAST(? AS text),'email',CAST(? AS text)))
+                        'phone',CAST(? AS text),'email',CAST(? AS text),
+                        'actorRole',(SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?)))
                 """,
                 after.account().id(), after.account().branchId(), after.account().id(),
                 before.account().username(), before.fullName(), before.phone(), before.account().email(),
-                after.account().username(), after.fullName(), after.phone(), after.account().email()
+                after.account().username(), after.fullName(), after.phone(), after.account().email(), after.account().id()
         );
     }
 }
