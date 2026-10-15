@@ -55,6 +55,15 @@ public class AuthController {
         cookie(response, "", 0);
         return Map.of("message", "Đặt lại mật khẩu thành công");
     }
+    public record ChangePasswordRequest(String currentPassword, String password, String confirmation) {}
+
+    @PostMapping("/change-password")
+    public Map<String, String> changePassword(@AuthenticationPrincipal Identity identity,
+            @RequestBody ChangePasswordRequest body) {
+        auth.changePassword(identity, body.currentPassword(), body.password(), body.confirmation());
+        return Map.of("message", "Đổi mật khẩu thành công.");
+    }
+
     // Trả danh tính đã được bộ lọc phiên xác thực.
     @GetMapping("/me") public Identity me(@AuthenticationPrincipal Identity identity) { return identity; }
     // Thu hồi token phía server và xóa cookie phía trình duyệt.

@@ -12,6 +12,7 @@ import { roleNames } from './accountAccessApi';
 import './accounts.css';
 import './accountAccess.css';
 import './accountProfile.css';
+import ChangePasswordForm from './ChangePasswordForm';
 
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
 
@@ -20,6 +21,7 @@ export default function AccountProfileDialog({ onClose }) {
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({ fullName: '', phone: '', email: '', currentPassword: '' });
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState('profile');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [notice, setNotice] = useState('');
@@ -129,7 +131,11 @@ export default function AccountProfileDialog({ onClose }) {
         </div>
         <button onClick={onClose} disabled={busy} aria-label="Đóng">×</button>
       </div>
-      <form className="account-create-form" onSubmit={save}>
+      <div className="profile-tabs" aria-label="Mục tài khoản">
+        <button type="button" disabled={busy} aria-pressed={tab === 'profile'} onClick={() => setTab('profile')}>Thông tin cá nhân</button>
+        <button type="button" disabled={busy} aria-pressed={tab === 'password'} onClick={() => { cancelEdit(); setNotice(''); setTab('password'); }}>Đổi mật khẩu</button>
+      </div>
+      {tab === 'password' ? <ChangePasswordForm busy={busy} onBusyChange={setBusy} onCancel={() => setTab('profile')} /> : <form className="account-create-form" onSubmit={save}>
         <div className="account-form-body">
           {Object.entries(errors).map(([field, message]) => (
             <p key={field} className="account-error" role="alert">{message}</p>
@@ -191,7 +197,7 @@ export default function AccountProfileDialog({ onClose }) {
             </button>
           ))}
         </div>
-      </form>
+      </form>}
     </dialog>
   );
 }

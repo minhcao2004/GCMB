@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import Brand from '../../../shared/components/Brand';
+import BrandWordmark from '../../../shared/components/BrandWordmark';
+import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
+import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
@@ -94,47 +97,89 @@ function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
-// Lấy chữ cái đại diện cho tài khoản đang đăng nhập.
-function initials(user) {
-  const value = user?.fullName || user?.username || 'MC';
-  return value.split(/[\s._-]+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join('') || 'MC';
-}
-
-// Dựng khung điều hướng, thanh đầu và nút đăng xuất của lễ tân.
-export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking' }) {
+// HuyDV - 14/10/2026: Giữ khung đồng bộ, ghép điều hướng Booking/Phòng của Thanh.
+export function AppShell({
+  user,
+  branchName,
+  busy,
+  onLogout,
+  children,
+  breadcrumb,
+  search = '',
+  onSearchChange,
+  activeTab = 'booking',
+  hideSearch = false,
+}) {
   const navigate = useNavigate();
-  const now = new Date();
-  const currentDate = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
-  const currentTime = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
-  return <div className="booking-app">
-    <aside className="booking-sidebar">
-      <div className="booking-brand"><Brand /></div>
-      <span className="booking-role-chip">LỄ TÂN</span>
-      <nav className="booking-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms'].includes(icon)} onClick={() => { if (icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); }}>
-          <Icon name={icon} /><span>{label}</span>
-        </button>)}
-      </nav>
-      <div className="booking-sidebar-footer">
-        <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
-        <small>Đang làm việc · Lễ tân</small>
-      </div>
-    </aside>
-    <div className="booking-workspace">
-      <header className="booking-topbar">
-        <p><span>Lễ tân</span><b>/</b><strong>{breadcrumb}</strong></p>
-        <div className="booking-topbar-tools">
-          <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'} /></label>
-          <span className="booking-topbar-datetime">{currentDate} {currentTime}</span>
-          <button type="button" className="booking-topbar-logout" disabled={busy} onClick={onLogout}>
-            <Icon name="logout" /><span>Đăng xuất</span>
-          </button>
-          <span className="booking-user-avatar" aria-label={user?.username}>{initials(user)}</span>
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  function selectTab(icon) {
+    if (icon === 'booking') {
+      navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
+    } else if (icon === 'rooms') {
+      navigate('/le-tan/phong');
+    } else if (icon === 'payments') {
+      navigate('/le-tan/thanh-toan');
+    }
+  }
+
+  return (
+    <>
+      <div className="booking-app reception-dashboard">
+        <div className="head-office-dashboard">
+          <aside className="manager-sidebar">
+            <div className="manager-brand"><BrandWordmark /></div>
+            <p className="manager-role">LỄ TÂN</p>
+            <nav className="manager-navigation" aria-label="Điều hướng lễ tân">
+              {navigation.map(([label, icon]) => (
+                <button
+                  type="button"
+                  key={label}
+                  aria-current={icon === activeTab ? 'page' : undefined}
+                  aria-disabled={!['booking', 'rooms', 'payments'].includes(icon)}
+                  onClick={() => selectTab(icon)}
+                >
+                  <Icon name={icon} /><span>{label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="manager-sidebar-footer">
+              <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
+              <p>Đang làm việc · Lễ tân</p>
+            </div>
+          </aside>
+          <div className="manager-workspace">
+            <DashboardTopbar
+              role="LỄ TÂN"
+              page={breadcrumb}
+              user={user}
+              busy={busy}
+              onLogout={onLogout}
+              onProfile={() => setProfileOpen(true)}
+            >
+              {!hideSearch && (
+                <label className="booking-global-search">
+                  <Icon name="search" />
+                  <input
+                    value={search}
+                    onChange={(event) => onSearchChange?.(event.target.value)}
+                    placeholder="Tìm phòng, booking, khách hàng..."
+                    aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'}
+                  />
+                </label>
+              )}
+            </DashboardTopbar>
+            <main className="booking-main" id="main">{children}</main>
+          </div>
         </div>
-      </header>
-      <main className="booking-main" id="main">{children}</main>
-    </div>
-  </div>;
+      </div>
+      {profileOpen && (
+        <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
+          <AccountProfileDialog onClose={() => setProfileOpen(false)} />
+        </div>
+      )}
+    </>
+  );
 }
 // Chọn lớp CSS theo trạng thái booking.
 function statusClass(id) { return `booking-status booking-status-${id}`; }
@@ -627,7 +672,7 @@ export default function BookingManagementPage() {
       setSelectedDate(toLocalDateInput(new Date(updated.plannedStart)));
       setSelectedId(updated.id);
       setNoticeKind('success');
-      setNotice(`Đã cập nhật booking ${updated.code}. Tiền cọc và giá đã chốt được giữ nguyên.`);
+      setNotice(`Đã cập nhật booking ${updated.code}. Giá mới: ${formatVnd(updated.expectedAmount)}; tiền cọc đã ghi được giữ nguyên.`);
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
       return { ok: true };

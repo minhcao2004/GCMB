@@ -31,7 +31,15 @@
 .booking-app h2 { letter-spacing: normal; }
 
 .booking-app header { position: static; inset: auto; z-index: auto; padding: 0; }
-.booking-app { display: flex; border-left: 5px solid var(--booking-pink); }
+.booking-app { padding: 4px; background: #e4e9f1; }
+.reception-dashboard { font-family: 'Be Vietnam Pro', Arial, sans-serif; }
+.reception-dashboard .manager-sidebar { line-height: 1.65; }
+.reception-dashboard .booking-main { margin-top: 6px; border-radius: 6px; padding: 24px; }
+.reception-dashboard .booking-global-search { display: flex; min-width: 0; width: clamp(180px, 23vw, 330px); height: 34px; margin-left: auto; }
+.reception-dashboard .booking-global-search svg { width: 18px; height: 18px; flex-shrink: 0; }
+@media (max-width: 720px) {
+  .reception-dashboard .booking-global-search { order: 3; width: 100%; }
+}
 .booking-sidebar { position: sticky; top: 0; align-self: flex-start; width: 218px; height: 100vh; height: 100dvh; flex: 0 0 218px; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior-y: auto; padding: 14px 12px 16px; background: #fff; }
 .booking-brand { height: 124px; display: flex; align-items: center; padding: 0 4px; }
 .booking-brand .brand { width: 100%; justify-content: flex-start; gap: 8px; }
@@ -318,6 +326,9 @@
 .booking-edit-dialog .booking-edit-section-title { margin-top: 18px; }
 .booking-edit-dialog .booking-schedule-grid { margin-bottom: 0; }
 .booking-edit-dialog .booking-edit-summary { margin-top: 18px; margin-bottom: 0; }
+.booking-edit-dialog .booking-edit-combo { margin-top: 16px; }
+.booking-edit-dialog .booking-edit-combo small { color: #66758a; font-size: 11px; line-height: 1.5; }
+.booking-edit-dialog .booking-edit-summary { flex-wrap: wrap; }
 .booking-edit-dialog .booking-note-field textarea { min-height: 70px; }
 .booking-detail-stay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
 .booking-detail-stay-actions button { min-height: 42px; border: 1px solid #f1c8df; border-radius: 9px; color: #b72e7d; background: #fff7fb; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }

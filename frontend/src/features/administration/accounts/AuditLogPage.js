@@ -14,6 +14,19 @@ import './accountAccess.css';
 
 const initialFilters = { q: '', action: '', branchId: '', from: '', to: '', page: 0 };
 const statusNames = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
+const entityNames = { USER_ACCOUNT: 'Tài khoản', ROOM: 'Phòng', ROOM_TYPE: 'Hạng phòng', PRICE_RULE: 'Quy tắc giá', COMBO: 'Combo', BOOKING: 'Booking', BRANCH: 'Cơ sở' };
+const fieldNames = {
+  billId: 'ID bill', cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', updated_at: 'Cập nhật lúc', closed_on: 'Ngày đóng',
+  username: 'Tên đăng nhập', role: 'Vai trò', branchName: 'Cơ sở', status: 'Trạng thái', fullName: 'Họ tên', email: 'Email', phone: 'Số điện thoại',
+  id: 'ID', code: 'Mã', name: 'Tên', branch_id: 'ID cơ sở', room_type_id: 'ID hạng phòng', mode: 'Loại dịch vụ', capacity: 'Sức chứa',
+  description: 'Mô tả', floor_number: 'Tầng', operating_status: 'Trạng thái phòng', status_reason: 'Lý do trạng thái', expected_ready_at: 'Dự kiến sẵn sàng',
+  active: 'Đang áp dụng', version: 'Phiên bản', valid_from: 'Hiệu lực từ', valid_to: 'Hiệu lực đến', minute_from: 'Phút bắt đầu', minute_to: 'Phút kết thúc',
+  weekdays: 'Ngày trong tuần', day_kind: 'Loại ngày', specific_date: 'Ngày cụ thể', hourly_price: 'Giá giờ', overtime_hourly_price: 'Giá vượt giờ',
+  billing_step_minutes: 'Bước tính phút', priority: 'Ưu tiên', price: 'Giá', duration_minutes: 'Thời lượng (phút)', deposit_required: 'Cọc yêu cầu',
+  day_group: 'Nhóm ngày', min_guests: 'Số khách tối thiểu', included_description: 'Dịch vụ bao gồm', contact_name: 'Tên khách', contact_phone: 'Điện thoại khách',
+  guest_count: 'Số khách', planned_start: 'Giờ hẹn', planned_end: 'Giờ kết thúc', actual_checkin: 'Check-in thực tế', actual_checkout: 'Check-out thực tế',
+  note: 'Ghi chú', channel: 'Kênh đặt', pricing_mode: 'Cách tính giá', managerId: 'ID quản lý', event: 'Chi tiết nghiệp vụ',
+};
 
 function time(value) {
   return new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -128,7 +141,7 @@ export default function AuditLogPage({ onAccounts }) {
                       <td>{time(entry.createdAt)}</td>
                       <td><strong>{entry.actorName}</strong><small>{entry.actorUsername}</small></td>
                       <td>{actionNames[entry.action] || entry.action}</td>
-                      <td><strong>{entry.entityName}</strong><small>{entry.entityType === 'USER_ACCOUNT' ? 'Tài khoản' : entry.entityType}</small></td>
+                      <td><strong>{entry.entityName}</strong><small>{entityNames[entry.entityType] || entry.entityType}</small></td>
                       <td>{entry.branchName}</td>
                       <td><button className="account-link" onClick={() => setSelected(entry.id)}>Chi tiết</button></td>
                     </tr>
@@ -177,7 +190,7 @@ function AuditDetail({ id, onClose }) {
     };
   }, [id]);
 
-  const fields = [
+  const legacyFields = [
     ['username', 'Tên đăng nhập'],
     ...(detail?.event.action === 'UPDATE_ACCOUNT_INFORMATION' ? [
       ['fullName', 'Họ và tên'],
@@ -189,11 +202,18 @@ function AuditDetail({ id, onClose }) {
     ['status', 'Truy cập'],
     ]),
   ];
+  const before = detail?.beforeValues || detail?.before;
+  const after = detail?.afterValues || detail?.after;
+  const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])];
+  const fields = keys.length ? keys.map(key => [key, fieldNames[key] || key]) : legacyFields;
   function value(snapshot, field) {
     const text = snapshot?.[field];
     if (field === 'role') return roleNames[text] || text || '—';
     if (field === 'status') return statusNames[text] || text || '—';
-    return text || '—';
+    if (text == null) return '—';
+    if (typeof text === 'boolean') return text ? 'Có' : 'Không';
+    if (typeof text === 'object') return JSON.stringify(text, null, 2);
+    return String(text);
   }
 
   return (
@@ -208,6 +228,7 @@ function AuditDetail({ id, onClose }) {
             <dl>
               <dt>Thời điểm</dt><dd>{time(detail.event.createdAt)}</dd>
               <dt>Người thực hiện</dt><dd>{detail.event.actorName}</dd>
+              <dt>Vai trò</dt><dd>{roleNames[detail.actorRole] || detail.actorRole || 'Không xác định'}</dd>
               <dt>Hành động</dt><dd>{actionNames[detail.event.action] || detail.event.action}</dd>
               <dt>Đối tượng</dt><dd>{detail.event.entityName}</dd>
               <dt>Mã đối tượng</dt><dd>{detail.event.entityId || '—'}</dd>
@@ -217,7 +238,7 @@ function AuditDetail({ id, onClose }) {
               <thead><tr><th>Thông tin</th><th>Trước</th><th>Sau</th></tr></thead>
               <tbody>
                 {fields.map(([field, label]) => (
-                  <tr key={field}><td>{label}</td><td>{value(detail.before, field)}</td><td>{value(detail.after, field)}</td></tr>
+                  <tr key={field}><td>{label}</td><td style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value(before, field)}</td><td style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value(after, field)}</td></tr>
                 ))}
               </tbody>
             </table>

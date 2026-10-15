@@ -47,8 +47,7 @@ export default function RoomOverviewPage() {
   const [authError, setAuthError] = useState('');
   const [retry, setRetry] = useState(0);
   const [options, setOptions] = useState(null);
-  const [date, setDate] = useState(() => toLocalDateInput(new Date(Date.now() + 5 * 60000)));
-  const [time, setTime] = useState(() => clockTime(new Date(Date.now() + 5 * 60000)));
+  const [selectedDate, setSelectedDate] = useState('');
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState('all');
   const [floor, setFloor] = useState('all');
@@ -94,7 +93,10 @@ export default function RoomOverviewPage() {
     return () => { active = false; };
   }, [user]);
 
-  const slot = useMemo(() => new Date(`${date}T${time}:00`), [date, time]);
+  const currentMinute = Math.floor(now / 60000);
+  const date = selectedDate || toLocalDateInput(new Date((currentMinute + 5) * 60000));
+  // HuyDV - 15/10/2026: Dùng giờ hiện tại cộng 5 phút cho ngày đã chọn, thống nhất với bộ lọc không có ô giờ.
+  const slot = useMemo(() => new Date(`${date}T${clockTime(new Date((currentMinute + 5) * 60000))}:00`), [date, currentMinute]);
   useEffect(() => {
     if (!options || Number.isNaN(slot.getTime())) return undefined;
     let active = true;
@@ -211,7 +213,7 @@ export default function RoomOverviewPage() {
 
   if (!user) return <main className="booking-auth-state">{authError ? <div className="booking-auth-message" role="alert">{authError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div> : <p role="status">Đang kiểm tra phiên đăng nhập…</p>}</main>;
 
-  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms">
+  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms" hideSearch>
     <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1><p>Theo dõi trạng thái và thao tác nhanh tại quầy</p></div></div>
     {notice && <div className="booking-live-notice" role="status"><span>✓</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
     {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
@@ -219,11 +221,10 @@ export default function RoomOverviewPage() {
       <section className="room-board" aria-label="Sơ đồ phòng">
         <div className="room-toolbar">
           <label className="room-search"><span className="sr-only">Tìm phòng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phòng, booking, khách…" /></label>
-          <label className="room-date"><span className="sr-only">Ngày xem phòng</span><input type="date" value={date} onChange={(event) => setDate(event.target.value || toLocalDateInput(new Date()))} /></label>
-          <label className="room-time"><span className="sr-only">Giờ xem phòng</span><input type="time" value={time} onChange={(event) => setTime(event.target.value || clockTime(new Date(Date.now() + 5 * 60000)))} /></label>
+          <label className="room-date"><span className="sr-only">Ngày xem phòng</span><input type="date" value={date} onChange={(event) => setSelectedDate(event.target.value)} /></label>
           <label className="room-tier"><span className="sr-only">Hạng phòng</span><select value={tier} onChange={(event) => setTier(event.target.value)}><option value="all">Hạng phòng</option>{(options?.roomTypes || []).map((type) => <option key={type.id} value={type.name}>{type.name}</option>)}</select></label>
         </div>
-        <p className="room-view-note">Phòng trống được kiểm tra cho 60 phút từ thời điểm chọn. Trạng thái đang sử dụng lấy từ booking hiện tại.</p>
+        <p className="room-view-note">Phòng trống được kiểm tra cho 60 phút từ giờ hiện tại (cộng 5 phút) của ngày đã chọn. Trạng thái đang sử dụng lấy từ booking hiện tại.</p>
         <div className="room-board-heading"><h2>Sơ đồ phòng</h2><span>Hiển thị {visible.length}/{rooms.length} phòng</span></div>
         <div className="room-floors" role="group" aria-label="Lọc tầng"><button type="button" className={floor === 'all' ? 'is-active' : ''} onClick={() => setFloor('all')}>Tất cả</button>{floors.map((value) => <button type="button" key={value} className={floor === value ? 'is-active' : ''} onClick={() => setFloor(value)}>Tầng {value}</button>)}</div>
         <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
@@ -234,7 +235,7 @@ export default function RoomOverviewPage() {
         {selected ? <><h2>{selected.code} · {selected.name}</h2><span className={`room-detail-status ${selected.status}`}>{statusText(selected.status)}</span><p>{selected.roomTypeName || 'Phòng'}{selected.capacity ? ` · tối đa ${selected.capacity} người` : ''}</p>
           {currentBooking && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className="is-ended">Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
-          <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled>Checkout &amp; lập bill</button><small className="room-checkout-note">Checkout và các thao tác khác sẽ được kết nối khi có luồng tương ứng.</small>
+          <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
       </aside>
     </div>

@@ -50,6 +50,19 @@ export const roleNames = {
 };
 
 export const actionNames = {
+  CHANGE_PASSWORD: 'Đổi mật khẩu',
+  CREATE_ROOM: 'Thêm phòng', UPDATE_ROOM: 'Sửa phòng', DELETE_ROOM: 'Xóa phòng', UPDATE_ROOM_STATUS: 'Đổi trạng thái phòng',
+  CHANGE_BILL_PAYMENT_METHOD: 'Đổi phương thức thanh toán bill',
+  RENEW_BILL_QR: 'Gia hạn mã QR bill', ISSUE_BILL: 'Lập bill', PLAN_BILL_PAYMENT: 'Ghi nhận thanh toán bill', CONFIRM_SEPAY_PAYMENT: 'SePay xác nhận thanh toán', CHECKOUT_BOOKING: 'Hoàn tất checkout',
+  CREATE_BRANCH: 'Thêm cơ sở', UPDATE_BRANCH: 'Sửa cơ sở', DEACTIVATE_BRANCH: 'Ngừng hoạt động cơ sở',
+  CREATE_ROOM_TYPE: 'Thêm hạng phòng', UPDATE_ROOM_TYPE: 'Sửa hạng phòng', DELETE_ROOM_TYPE: 'Xóa hạng phòng',
+  DEACTIVATE_ROOM_TYPE: 'Ngừng sử dụng hạng phòng',
+  CREATE_PRICE_RULE: 'Thêm giá / quy tắc giá', UPDATE_PRICE_RULE: 'Sửa giá / quy tắc giá', DELETE_PRICE_RULE: 'Xóa quy tắc giá',
+  CREATE_COMBO: 'Thêm combo', UPDATE_COMBO: 'Sửa combo', DELETE_COMBO: 'Xóa combo',
+  ASSIGN_BRANCH_MANAGER: 'Gán / chuyển quản lý cơ sở',
+  BOOKING_CREATED: 'Tạo booking', BOOKING_UPDATED: 'Sửa booking', BOOKING_CANCELLED: 'Hủy booking',
+  BOOKING_CHECKED_IN: 'Check-in', BOOKING_NO_SHOW: 'Đánh dấu không đến', BOOKING_ROOM_CHANGED: 'Đổi phòng',
+  BOOKING_EXTENDED: 'Gia hạn', HOURLY_METER_STARTED: 'Bắt đầu tính giờ lẻ', HOURLY_METER_STOPPED: 'Chốt giờ lẻ',
   UPDATE_ACCOUNT_INFORMATION: 'Cập nhật thông tin tài khoản',
   CREATE_USER_ACCOUNT: 'Tạo tài khoản',
   SET_ACCOUNT_ROLE: 'Thay đổi vai trò / phạm vi',

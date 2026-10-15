@@ -44,7 +44,8 @@ class BookingServiceCheckInTest {
         when(repository.hasRoomOverlap(eq(roomId), any(Instant.class), any(Instant.class), eq(bookingId))).thenReturn(true);
 
         BookingFailure failure = assertThrows(BookingFailure.class,
-            () -> service.checkIn(new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId));
+            () -> service.checkIn(new Identity(
+                actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId));
 
         assertEquals(409, failure.status());
         verify(repository, never()).checkInBooking(any(), any(), any());
