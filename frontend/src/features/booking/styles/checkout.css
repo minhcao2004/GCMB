@@ -1,0 +1,55 @@
+/** HuyDV - 14/10/2026: Giao diện checkout và thanh toán dùng chung khung lễ tân. */
+.checkout-page { color: #202338; font-size: 13px; line-height: 1.6; }
+.checkout-page * { box-sizing: border-box; }
+.checkout-page h1 { margin: 0; font-size: 24px; }
+.checkout-page h2 { margin: 0 0 16px; font-size: 16px; letter-spacing: normal; line-height: 1.4; }
+.checkout-page p { color: #748096; font-size: 12px; }
+.checkout-page small { font-size: 11px; color: #748096; }
+.co-heading { position: static; display: flex; align-items: center; justify-content: space-between; padding: 0 !important; margin-bottom: 22px; color: inherit; }
+.co-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(290px,1fr); gap: 20px; align-items: start; }
+.co-card { background: white; border-radius: 13px; padding: 18px; margin-bottom: 12px; min-width: 0; }
+.co-summary { position: sticky; top: 18px; }
+.checkout-page button { padding: 11px 16px; border: 1px solid #e1e7ef; border-radius: 9px; background: #f7f9fc; color: #526078; font: inherit; cursor: pointer; }
+.checkout-page button:disabled { opacity: .45; cursor: not-allowed; }
+.checkout-page .co-primary { width: 100%; background: #ed148d; border-color: #ed148d; color: white; font-weight: 650; min-height: 44px; margin-top: 20px; }
+.checkout-page input:not([type=checkbox]), .checkout-page textarea { width: 100%; border: 1px solid #dce4ef; border-radius: 9px; padding: 13px; color: #202338; background: #fbfcfe; font: inherit; }
+.checkout-page input:focus-visible, .checkout-page textarea:focus-visible, .checkout-page button:focus-visible { outline: 2px solid #55cadd; outline-offset: 2px; }
+.co-time-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; background: #f8fafc; border-radius: 9px; padding: 12px; }
+.checkout-page dt { color: #8390a3; font-size: 11px; }
+.checkout-page dd { margin: 6px 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.co-lines { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+.co-lines th { text-align: left; padding: 10px; background: #f8fafc; font-size: 10px; color: #748096; }
+.co-lines td { border-bottom: 1px solid #e8edf4; padding: 9px 10px; }
+.co-lines td:last-child { text-align: right; white-space: nowrap; }
+.co-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.co-fee { display: grid; grid-template-columns: 1.5fr 1fr auto; gap: 8px; margin: 12px 0; }
+.co-inspection { display: flex; align-items: center; gap: 9px; margin-bottom: 15px; background: #e7f8ef; color: #0b975d; border-radius: 8px; padding: 13px; }
+.co-inspection input { accent-color: #0b975d; }
+.co-totals > div { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #e8edf4; }
+.co-totals dd { margin: 0; }
+.co-total, .co-amount-banner { background: #effbfe; border-radius: 9px; padding: 20px; margin: 20px 0; }
+.co-total small, .co-amount-banner small { display: block; color: #008da5; }
+.co-total strong, .co-amount-banner strong, .co-success strong { display: block; font-size: 29px; margin-top: 7px; }
+.co-note { padding: 15px; background: #f5f7fb; border-radius: 8px; }
+.co-methods, .co-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.co-methods .selected { background: #e5f9fd; color: #008da5; border-color: #8ed7e4; }
+.co-field { display: grid; gap: 9px; margin: 18px 0; color: #748096; }
+.co-field input { font-size: 23px !important; font-weight: 650 !important; }
+.co-success, .co-warning, .co-error { padding: 16px; border-radius: 9px; margin: 16px 0; font-size: 12px; }
+.co-success { background: #e7f8ef; color: #09965c; }
+.co-warning { background: #fff5e4; color: #b2791c; }
+.co-error { background: #ffeef1; color: #c53350; }
+.co-transfer { display: grid; grid-template-columns: minmax(150px,220px) 1fr; gap: 16px; margin-top: 20px; }
+.co-transfer img { width: 100%; border: 1px solid #e5eaf1; border-radius: 10px; align-self: start; }
+.co-transfer dl { background: #f8fafc; padding: 16px; margin: 0; border-radius: 9px; }
+.co-list { overflow-x: auto; }
+.co-list table { border-collapse: collapse; width: 100%; }
+.co-list td, .co-list th { padding: 14px; text-align: left; border-bottom: 1px solid #e8edf4; }
+@media(max-width:900px) { .co-grid { grid-template-columns: 1fr; } .co-summary { position: static; } }
+@media(max-width:550px) { .co-time-grid, .co-transfer { grid-template-columns: 1fr; } .co-fee { grid-template-columns: 1fr; } .co-heading h1 { font-size: 21px; } }
+@media print {
+  .manager-sidebar, .manager-topbar, .checkout-page > .co-heading, .co-amount-banner, .co-grid > section, .co-error { display: none !important; }
+  .co-grid { display: block; }
+  .co-print { position: static; width: 100%; }
+  .booking-main { padding: 0; }
+}

@@ -52,6 +52,8 @@ export const roleNames = {
 export const actionNames = {
   CHANGE_PASSWORD: 'Đổi mật khẩu',
   CREATE_ROOM: 'Thêm phòng', UPDATE_ROOM: 'Sửa phòng', DELETE_ROOM: 'Xóa phòng', UPDATE_ROOM_STATUS: 'Đổi trạng thái phòng',
+  CHANGE_BILL_PAYMENT_METHOD: 'Đổi phương thức thanh toán bill',
+  RENEW_BILL_QR: 'Gia hạn mã QR bill', ISSUE_BILL: 'Lập bill', PLAN_BILL_PAYMENT: 'Ghi nhận thanh toán bill', CONFIRM_SEPAY_PAYMENT: 'SePay xác nhận thanh toán', CHECKOUT_BOOKING: 'Hoàn tất checkout',
   CREATE_BRANCH: 'Thêm cơ sở', UPDATE_BRANCH: 'Sửa cơ sở', DEACTIVATE_BRANCH: 'Ngừng hoạt động cơ sở',
   CREATE_ROOM_TYPE: 'Thêm hạng phòng', UPDATE_ROOM_TYPE: 'Sửa hạng phòng', DELETE_ROOM_TYPE: 'Xóa hạng phòng',
   DEACTIVATE_ROOM_TYPE: 'Ngừng sử dụng hạng phòng',

@@ -118,6 +118,8 @@ export function AppShell({
       navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
     } else if (icon === 'rooms') {
       navigate('/le-tan/phong');
+    } else if (icon === 'payments') {
+      navigate('/le-tan/thanh-toan');
     }
   }
 
@@ -134,7 +136,7 @@ export function AppShell({
                   type="button"
                   key={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'payments'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>

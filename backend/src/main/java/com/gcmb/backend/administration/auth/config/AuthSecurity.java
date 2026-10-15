@@ -43,11 +43,13 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                 config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN"));
                 config.setAllowCredentials(true); return config;
             }))
-            .csrf(config -> config.csrfTokenRepository(csrf))
+            .csrf(config -> config.csrfTokenRepository(csrf)
+                .ignoringRequestMatchers("/api/v1/payments/sepay/webhook"))
             .sessionManagement(config -> config.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .requestCache(config -> config.disable())
             .formLogin(config -> config.disable()).httpBasic(config -> config.disable()).logout(config -> config.disable())
             .authorizeHttpRequests(config -> config
+                .requestMatchers("/api/v1/payments/sepay/webhook").permitAll()
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/health", "/api/v1/auth/login", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
                 .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/change-password", "/api/v1/account/profile").authenticated()
                 .requestMatchers("/api/v1/head-office/**").hasRole("HEAD_OFFICE_MANAGER")
