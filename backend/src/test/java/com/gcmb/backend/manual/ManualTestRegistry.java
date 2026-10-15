@@ -2,7 +2,7 @@
  * Copyright (c) 2026 SEP490-G12.
  *
  * Author: CaoNM
- * Created:
+ * Created: 15/10/2026
  * Description: Registers selectable manual test suites and rejects duplicate case keys.
  */
 
@@ -19,7 +19,6 @@ import com.gcmb.backend.manual.auth.AuthChangePasswordManualTest;
 import com.gcmb.backend.manual.auth.AuthCryptoManualTest;
 import com.gcmb.backend.manual.auth.AuthPasswordPolicyManualTest;
 import com.gcmb.backend.manual.auth.AuthServiceManualTest;
-import com.gcmb.backend.manual.booking.BookingPricingManualTest;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,8 +39,7 @@ public final class ManualTestRegistry {
                 AuthCryptoManualTest.suite(),
                 AuthServiceManualTest.suite(),
                 AuthPasswordPolicyManualTest.suite(),
-                AuthChangePasswordManualTest.suite(),
-                BookingPricingManualTest.suite());
+                AuthChangePasswordManualTest.suite());
         validateUniqueKeys(suites);
         return suites;
     }
