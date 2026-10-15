@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 13/10/2026
+ * Description: Captures test outcomes and renders exceptions and mock invocations.
+ */
+
 package com.gcmb.backend.manual;
 
 import com.gcmb.backend.administration.auth.exception.AuthFailure;

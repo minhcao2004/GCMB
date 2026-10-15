@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 14/10/2026
+ * Description: Covers the authenticated password-change workflow and its side effects.
+ */
+
 package com.gcmb.backend.manual.auth;
 
 import com.gcmb.backend.administration.auth.repository.AuthRepository;

@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 13/10/2026
+ * Description: Covers token generation, hashing and password verification behavior.
+ */
+
 package com.gcmb.backend.manual.auth;
 
 import com.gcmb.backend.administration.auth.security.AuthCrypto;

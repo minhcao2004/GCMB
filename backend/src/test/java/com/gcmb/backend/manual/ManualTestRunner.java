@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 13/10/2026
+ * Description: Provides an interactive CLI for selecting and executing manual test cases.
+ */
+
 package com.gcmb.backend.manual;
 
 import java.util.ArrayList;

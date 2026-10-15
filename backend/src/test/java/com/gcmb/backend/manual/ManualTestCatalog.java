@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 13/10/2026
+ * Description: Exports the manual test catalog for discovery and documentation.
+ */
+
 package com.gcmb.backend.manual;
 
 import java.nio.file.Files;

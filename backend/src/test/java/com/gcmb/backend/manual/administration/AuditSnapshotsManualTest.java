@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 14/10/2026
+ * Description: Covers filtering and redaction of audit snapshot data.
+ */
+
 package com.gcmb.backend.manual.administration;
 
 import com.gcmb.backend.administration.audit.service.AuditSnapshots;

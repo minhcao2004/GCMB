@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 14/10/2026
+ * Description: Covers transactional audit recording around data mutations.
+ */
+
 package com.gcmb.backend.manual.administration;
 
 import com.gcmb.backend.administration.audit.service.MutationAudit;

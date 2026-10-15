@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 13/10/2026
+ * Description: Covers password policy validation and rejection cases.
+ */
+
 package com.gcmb.backend.manual.auth;
 
 import com.gcmb.backend.administration.auth.validator.AuthValidation;

@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: CaoNM
+ * Created: 14/10/2026
+ * Description: Covers account-access authorization rules for administrative operations.
+ */
+
 package com.gcmb.backend.manual.administration;
 
 import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.Deactivate;
