@@ -25,6 +25,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class AuthErrors {
@@ -45,6 +46,9 @@ public class AuthErrors {
         String message=e.getReason()==null?"Yêu cầu không hợp lệ":e.getReason();
         return ResponseEntity.status(status).body(Map.of("message",message,"errors",Map.of("form",message)));
     }
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    // Trả lỗi tham số URL không đúng kiểu như ngày ISO không hợp lệ.
+    ResponseEntity<?> invalidParameter() { return error(400, "Tham số yêu cầu không hợp lệ"); }
     @ExceptionHandler(Exception.class)
     // Ghi stack trace phía server nhưng che chi tiết nội bộ khỏi client.
     ResponseEntity<?> unexpected(Exception e) {

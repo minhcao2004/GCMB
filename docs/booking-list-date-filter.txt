@@ -1,0 +1,7 @@
+Danh sách booking: bộ lọc ngày sau khi tải lại
+
+Ngày được chuyển từ màn hình khác chỉ được khôi phục khi có định dạng YYYY-MM-DD và là một ngày lịch hợp lệ. Giá trị sai định dạng quay về ngày hiện tại theo giờ máy. Trước khi gọi API, trạng thái ngày cũng được kiểm tra để không gửi hàm JavaScript hoặc chuỗi sai định dạng thành dateFrom/dateTo.
+
+Khi người dùng xóa bộ lọc ngày, yêu cầu danh sách bỏ qua dateFrom và dateTo để tải booking ở mọi ngày. Không gửi chuỗi ngày rỗng lên backend.
+
+Danh sách tiền cọc: dateFrom/dateTo chỉ được gửi khi là chuỗi ngày lịch hợp lệ theo định dạng YYYY-MM-DD. Ngày không hợp lệ được khôi phục về khoảng ngày mặc định của màn hình; ngày bị xóa được bỏ khỏi yêu cầu. Backend trả lỗi 400 cho tham số không đúng kiểu thay vì báo lỗi máy chủ 503.
