@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
@@ -110,7 +111,7 @@ public final class AuditManualTest {
 
         cases.add(test("detail-found", "UTC011", "detailReturnsExistingReadOnlyProjection", 24,
                 "Audit entry exists", "audit id",
-                "Return the same AuditDetail projection and call repository.detail", () -> {
+                "Return the same AuditDetail including beforeValues, afterValues and actorRole; call repository.detail", () -> {
                     AuditRepository repository = mock(AuditRepository.class);
                     AuditDetail detail = detail();
                     when(repository.detail(AUDIT_ID)).thenReturn(detail);
@@ -140,7 +141,9 @@ public final class AuditManualTest {
                 "staff", "RECEPTIONIST", "Ho Tay", "ACTIVE", "Nhan vien", "staff@example.com", "0900000000");
         Snapshot after = new Snapshot(
                 "staff", "ACCOUNTANT", "Toan chuoi", "ACTIVE", "Nhan vien", "staff@example.com", "0900000000");
-        return new AuditDetail(entry(), before, after);
+        return new AuditDetail(entry(), before, after,
+                Map.of("username", "staff", "role", "RECEPTIONIST"),
+                Map.of("username", "staff", "role", "ACCOUNTANT"), "HEAD_OFFICE_MANAGER");
     }
 
     private static ManualTestCase test(
@@ -153,7 +156,7 @@ public final class AuditManualTest {
             String expected,
             ManualTestCase.Executor executor) {
         return new ManualTestCase(
-                "audit/" + key, documentId, null, "AuditServiceTest", method, "Unit",
+                "audit/" + key, documentId, "UC-08", "AuditManualTest", method, "Unit",
                 "Audit Log Management!A" + row, preconditions, input, expected, executor);
     }
 }

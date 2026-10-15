@@ -1,14 +1,14 @@
 package com.gcmb.backend.manual.auth;
 
 import com.gcmb.backend.administration.auth.repository.AuthRepository;
+import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.administration.auth.entity.Account;
 import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.auth.service.AuthService;
 import com.gcmb.backend.administration.auth.service.RecoveryMailer;
 import com.gcmb.backend.manual.ManualTestCase;
-import com.gcmb.backend.manual.ManualTestResult;
 import com.gcmb.backend.manual.ManualTestSuite;
 import com.gcmb.backend.manual.ManualTestSupport;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,9 +26,9 @@ public final class AuthChangePasswordManualTest {
                 "auth-change-password/contract", "UTC045", "UTC-PAM-CHANGE-PASSWORD-003",
                 "AuthChangePasswordContractTest", "rejectsNewPasswordEqualToCurrentPassword", "Contract",
                 "Personal Account Management!A59",
-                "AuthService should expose changePassword(UUID, currentPassword, newPassword, confirmation)",
+                "Active account linked to Identity; current password matches stored hash",
                 "currentPassword=newPassword=confirmation='Current1!'",
-                "Method exists and throws AuthFailure status=400 without changing password or revoking tokens",
+                "AuthFailure status=400 on password; no password/session/reset write",
                 () -> {
                     AuthRepository repository = mock(AuthRepository.class);
                     AuthCrypto crypto = mock(AuthCrypto.class);
@@ -36,19 +36,13 @@ public final class AuthChangePasswordManualTest {
                     when(crypto.token()).thenReturn("D".repeat(43));
                     when(crypto.encode("D".repeat(43))).thenReturn("{pbkdf2-gcmb}dummy");
                     AuthService service = new AuthService(repository, crypto, mailer);
-                    try {
-                        Method method = AuthService.class.getDeclaredMethod(
-                                "changePassword", UUID.class, String.class, String.class, String.class);
-                        ManualTestResult observation = ManualTestSupport.observeVoid(
-                                () -> method.invoke(service, USER_ID, "Current1!", "Current1!", "Current1!"),
-                                repository, crypto, mailer);
-                        return observation;
-                    } catch (NoSuchMethodException missing) {
-                        return new ManualTestResult(
-                                "Required method was not found by reflection",
-                                missing.getClass().getName() + ": " + missing.getMessage(),
-                                ManualTestSupport.renderInvocations(repository, crypto, mailer));
-                    }
+                    Identity identity = new Identity(USER_ID, "staff", "RECEPTIONIST", "/le-tan", null, null);
+                    when(repository.findByUsername("staff")).thenReturn(new Account(USER_ID, "staff",
+                            "staff@example.com", "stored-hash", "ACTIVE", "RECEPTIONIST", null, null));
+                    when(crypto.matches("Current1!", "stored-hash")).thenReturn(true);
+                    return ManualTestSupport.observeVoid(
+                            () -> service.changePassword(identity, "Current1!", "Current1!", "Current1!"),
+                            repository, crypto, mailer);
                 });
         return new ManualTestSuite("Authentication", "AuthChangePasswordContract", List.of(contract));
     }

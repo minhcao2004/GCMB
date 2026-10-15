@@ -161,7 +161,7 @@ public final class AuthServiceManualTest {
                     Context context = context();
                     String username = "u".repeat(100);
                     when(context.repository.findByUsername(username))
-                            .thenReturn(new Account(USER_ID, username, EMAIL, PASSWORD_HASH, "ACTIVE", "RECEPTIONIST"));
+                            .thenReturn(new Account(USER_ID, username, EMAIL, PASSWORD_HASH, "ACTIVE", "RECEPTIONIST", null, null));
                     when(context.crypto.matches(PASSWORD, PASSWORD_HASH)).thenReturn(true);
                     when(context.crypto.token()).thenReturn(SESSION_TOKEN);
                     return ManualTestSupport.observe(
@@ -438,7 +438,7 @@ public final class AuthServiceManualTest {
                 "Repository returns Identity for hashed token", "token='S' repeated 43",
                 "Return same Identity and look up SHA-256 hash of token", () -> {
                     Context context = context();
-                    Identity identity = new Identity(USER_ID, USERNAME, "RECEPTIONIST", "/le-tan");
+                    Identity identity = new Identity(USER_ID, USERNAME, "RECEPTIONIST", "/le-tan", null,null);
                     when(context.repository.findSession(AuthCrypto.hash(SESSION_TOKEN))).thenReturn(identity);
                     return ManualTestSupport.observe(
                             () -> context.service.authenticate(SESSION_TOKEN),
@@ -560,7 +560,7 @@ public final class AuthServiceManualTest {
     }
 
     private static Account account(String status, String role) {
-        return new Account(USER_ID, USERNAME, EMAIL, PASSWORD_HASH, status, role);
+        return new Account(USER_ID, USERNAME, EMAIL, PASSWORD_HASH, status, role,null,null);
     }
 
     private static Reset reset(Instant usedAt, Instant revokedAt) {
