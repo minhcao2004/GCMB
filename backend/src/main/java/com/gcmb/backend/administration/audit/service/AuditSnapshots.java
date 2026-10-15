@@ -16,7 +16,7 @@ public final class AuditSnapshots {
     private AuditSnapshots() {}
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> FIELDS = Set.of(
-        "address","notes","updated_at","closed_on","username","role","branchName","status","fullName","email","phone","id","code","name",
+        "billId","cashAmount","bankAmount","address","notes","updated_at","closed_on","username","role","branchName","status","fullName","email","phone","id","code","name",
         "branch_id","room_type_id","mode","capacity","description","floor_number","operating_status",
         "status_reason","expected_ready_at","active","version","valid_from","valid_to","minute_from",
         "minute_to","weekdays","day_kind","specific_date","hourly_price","overtime_hourly_price",

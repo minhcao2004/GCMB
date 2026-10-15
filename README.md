@@ -286,18 +286,11 @@ Add a new migration for changes to an already-shared schema. Preserve applied mi
 
 ## Usage
 
-Quản lý cơ sở UC-09–13: xem [nghiệp vụ, API và migration V11](docs/UC09-13_Branch_Administration.md).
+### Checkout, bill và SePay (14/10/2026)
 
-Quản lý hạng phòng UC-14–18: xem [luồng thao tác, API và bàn giao](docs/UC14-18_Room_Types.md).
+Lễ tân chọn phòng đang sử dụng → **Checkout & lập bill**. Kiểm tra tiền phòng theo giá đã xác nhận, F&B đã SERVED (không tính lại món combo giá 0), phụ phí có lý do và xác nhận đã kiểm tra phòng. **Tiếp tục thanh toán** chốt bill và thời điểm ngừng tính sử dụng; sau đó phí/order/đổi phòng/gia hạn bị khóa. Khách trả sớm vẫn giữ các khoản booking đã xác nhận; không tự tính lại bằng bảng giá mới. Nếu đã quá giờ mà chưa có phiên giờ lẻ, cần xác nhận gia hạn trước; đồng hồ giờ lẻ đang chạy được dừng bằng service hiện hành khi chốt bill.
 
-Once the relevant features and development accounts are available:
-
-1. Sign in with a role-appropriate account and work within the permitted branch scope.
-2. Configure branches, room categories, prices, rooms, and staff access.
-3. Create a walk-in or advance booking after checking availability; record a deposit where applicable.
-4. Check the customer in and manage room changes, extensions, and F&B orders during the session.
-5. Review room and F&B charges at checkout, apply eligible adjustments, deduct the deposit, and record payment.
-6. Complete daily cash closing and reconciliation, attendance closing, payroll, and management reporting as authorized.
+Trong thanh toán chọn **Tiền mặt**, **SePay** hoặc **Kết hợp**. Phần tiền mặt nhập khi tạo QR được lưu thành phân bổ tạm trên bill, chưa tạo payment và không hiển thị là đã thu. **Đổi phương thức** hủy QR cũ, xóa toàn bộ phân bổ tạm và đưa form về tổng bill ban đầu. Bill 170.000đ nhập tạm 50.000đ tiền mặt + QR 120.000đ: sau đặt lại vẫn cần thanh toán 170.000đ, không giữ 50.000đ. Khi SePay đã xác nhận chuyển khoản hoặc có khoản thu thực tế, không cho đặt lại. Webhook của mã đã hủy được lưu EXCEPTION, không cộng vào bill; hủy QR không hủy giao dịch tại ngân hàng. Lễ tân bấm **Hoàn tất thanh toán** mới ghi tiền mặt, tiền khách đưa và tiền thừa trong cùng giao dịch kết thúc bill. Trường readyToComplete cho biết tổng khoản thu thực tế + tiền mặt dự kiến bằng đúng net_amount; tổng paid vẫn chỉ gồm payment thật. QR có hạn 30 phút, có thể gia hạn cùng mã sau hết hạn. Hoàn tất chuyển bill SETTLED, booking COMPLETED, allocation FINISHED và phòng CLEANING; gửi lặp không thu hai lần. Menu **Thanh toán** tra cứu 100 bill gần nhất của cơ sở; có in bill qua trình duyệt.
 
 Customers scan the in-room QR code to view the F&B menu and submit an order for their active room session.
 
@@ -334,11 +327,6 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
-Audit logs record successful data changes by all roles: accounts, passwords, rooms, room types, prices, combos, branch-manager assignments, and booking operations. Views, searches, filters, pagination, availability checks, and quote calculations are excluded. Audit details show approved before/after fields and actor roles, with no passwords, hashes, or tokens. New business-write APIs must integrate audit in the same transaction. Accountant-specific business APIs are not yet implemented in this checkout.
-
-
-Current Dev 2 scope: UC34–UC37 (create, view, update, cancel bookings), UC38–UC40 (check-in, room change, stay extension), and UC43 (create a deposit refund request). Checkout, bill settlement, and payment are separate use cases.
-
 The detailed project references are:
 
 - Report 1 — Project Introduction.
@@ -368,4 +356,5 @@ Technical setup references: [Create React App environment variables](https://cre
 
 GCMB is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
 
-Reception merge integration: `AppShell` keeps the shared manager sidebar and DashboardTopbar (including profile access), and supports Thanh’s Booking/Rooms navigation, booking drafts, activeTab and hideSearch.
+
+Reception merge (15/10/2026): màn Phòng giữ bộ lọc ngày và lấy giờ hiện tại cộng 5 phút, không có ô chọn giờ riêng. AppShell dùng giao diện chung và ẩn ô tìm kiếm trên topbar khi màn Phòng đã có ô tìm kiếm. Giữ luồng đổi phòng/gia hạn và nối Checkout & lập bill tới các route thanh toán.

@@ -16,7 +16,7 @@ const initialFilters = { q: '', action: '', branchId: '', from: '', to: '', page
 const statusNames = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
 const entityNames = { USER_ACCOUNT: 'Tài khoản', ROOM: 'Phòng', ROOM_TYPE: 'Hạng phòng', PRICE_RULE: 'Quy tắc giá', COMBO: 'Combo', BOOKING: 'Booking', BRANCH: 'Cơ sở' };
 const fieldNames = {
-  address: 'Địa chỉ', notes: 'Ghi chú vận hành', updated_at: 'Cập nhật lúc', closed_on: 'Ngày đóng',
+  billId: 'ID bill', cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', updated_at: 'Cập nhật lúc', closed_on: 'Ngày đóng',
   username: 'Tên đăng nhập', role: 'Vai trò', branchName: 'Cơ sở', status: 'Trạng thái', fullName: 'Họ tên', email: 'Email', phone: 'Số điện thoại',
   id: 'ID', code: 'Mã', name: 'Tên', branch_id: 'ID cơ sở', room_type_id: 'ID hạng phòng', mode: 'Loại dịch vụ', capacity: 'Sức chứa',
   description: 'Mô tả', floor_number: 'Tầng', operating_status: 'Trạng thái phòng', status_reason: 'Lý do trạng thái', expected_ready_at: 'Dự kiến sẵn sàng',
