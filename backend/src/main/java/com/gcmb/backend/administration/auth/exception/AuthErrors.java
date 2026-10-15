@@ -42,13 +42,18 @@ public class AuthErrors {
     ResponseEntity<?> badRequest() { return error(400, "Dữ liệu gửi lên không hợp lệ"); }
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<?> responseStatus(ResponseStatusException e) {
-        HttpStatusCode status=e.getStatusCode();
-        String message=e.getReason()==null?"Yêu cầu không hợp lệ":e.getReason();
-        return ResponseEntity.status(status).body(Map.of("message",message,"errors",Map.of("form",message)));
+        HttpStatusCode status = e.getStatusCode();
+        String message = e.getReason() == null ? "Yêu cầu không hợp lệ" : e.getReason();
+        return ResponseEntity.status(status).body(Map.of(
+            "message", message,
+            "errors", Map.of("form", message)
+        ));
     }
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     // Trả lỗi tham số URL không đúng kiểu như ngày ISO không hợp lệ.
-    ResponseEntity<?> invalidParameter() { return error(400, "Tham số yêu cầu không hợp lệ"); }
+    ResponseEntity<?> invalidParameter() {
+        return error(400, "Tham số yêu cầu không hợp lệ");
+    }
     @ExceptionHandler(Exception.class)
     // Ghi stack trace phía server nhưng che chi tiết nội bộ khỏi client.
     ResponseEntity<?> unexpected(Exception e) {

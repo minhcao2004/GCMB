@@ -92,7 +92,7 @@ public class RoomCatalogService {
         return roomType(id);
     }
 
-    // HuyDV - 14/10/2026: Chỉ ngừng chọn cho phòng mới, giữ nguyên các tham chiếu lịch sử.
+    // Chỉ ngừng chọn cho phòng mới, giữ nguyên các tham chiếu lịch sử.
     @Transactional
     public RoomTypeView deactivateRoomType(UUID id) {
         int updated = db.update("UPDATE gcmb.room_type SET active=false WHERE id=?", id);

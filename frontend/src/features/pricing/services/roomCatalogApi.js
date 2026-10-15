@@ -26,7 +26,7 @@ export const roomCatalogApi = {
   priceRules: async () => (await api.get('/head-office/price-rules')).data,
   createRoomType: data => mutate('post', '/head-office/room-types', data),
   updateRoomType: (id, data) => mutate('put', `/head-office/room-types/${id}`, data),
-  // HuyDV - 14/10/2026: Ngừng sử dụng không xóa dữ liệu liên quan.
+  // Ngừng sử dụng không xóa dữ liệu liên quan.
   deactivateRoomType: id => mutate('post', `/head-office/room-types/${id}/deactivate`),
   deleteRoomType: id => mutate('delete', `/head-office/room-types/${id}`),
   createPriceRule: data => mutate('post', '/head-office/price-rules', data),

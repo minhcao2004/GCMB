@@ -3,6 +3,7 @@
  * Author: HuyDV
  * Created: 14/10/2026
  * Description: Kiểm tra phòng, chốt bill và thanh toán tiền mặt/SePay/kết hợp.
+ * Updated: 15/10/2026 - Hiển thị cọc đã áp dụng và phần tiền còn phải thu.
  */
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -146,7 +147,8 @@ export default function CheckoutPage() {
   const settled = data?.status === 'SETTLED';
   const extra = fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
   const amount = Number(data?.amount || 0) + (bookingId ? extra : 0);
-  const paymentDue = Number(data?.remaining ?? amount);
+  const depositAmount = Number(data?.depositApplied ?? data?.depositBalance ?? 0);
+  const paymentDue = Number(data?.remaining ?? Math.max(0, amount - depositAmount));
   const cashDue = method === 'MIXED' ? Number(cashAmount || 0) : paymentDue;
   const change = Math.max(0, Number(cashTendered || 0) - cashDue);
   if (!user) return <div className="checkout-page">
@@ -230,18 +232,20 @@ export default function CheckoutPage() {
               Đã kiểm tra phòng và xác nhận các khoản phí
             </label>
             <textarea aria-label="Kết quả kiểm tra phòng" maxLength="2000" placeholder="Kết quả kiểm tra / ghi chú" value={inspectionNote} onChange={e => setInspectionNote(e.target.value)} />
-            {data.hasHeldDeposit && <div className="co-warning">Booking đang giữ cọc; chức năng này tạm chưa xử lý cọc nên chưa thể chốt bill.</div>}
+            {data.hasPendingRefund && <div className="co-warning">Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.</div>}
+            {depositAmount > amount && <div className="co-warning">Số dư cọc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán.</div>}
           </section>
         </div>
         <aside className="co-card co-summary">
           <h2>Tóm tắt thanh toán</h2>
           <Summary lines={data.lines} extra={extra} />
+          <dl className="co-totals"><Info label="Cọc sẽ áp dụng" value={`−${formatVnd(depositAmount)}`} /></dl>
           <div className="co-total">
             <small>TỔNG THANH TOÁN</small>
-            <strong>{formatVnd(amount)}</strong>
+            <strong>{formatVnd(paymentDue)}</strong>
           </div>
           <p className="co-note">Giữ giá booking đã xác nhận. Tiền sử dụng sẽ được chốt khi lập bill.</p>
-          <button className="co-primary" disabled={busy || !inspected || data.hasHeldDeposit || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : 'Tiếp tục thanh toán'}</button>
+          <button className="co-primary" disabled={busy || !inspected || data.hasPendingRefund || depositAmount > amount || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : 'Tiếp tục thanh toán'}</button>
         </aside>
       </form> : <>
         <div className="co-amount-banner">
@@ -251,7 +255,7 @@ export default function CheckoutPage() {
         <div className="co-grid">
           <section className="co-card">
             <h2>{settled ? 'Thanh toán hoàn tất' : 'Phương thức thanh toán'}</h2>
-            {settled ? <><div className="co-success">Đã hoàn tất bill. Phòng đã chuyển sang Chờ vệ sinh.</div><button onClick={() => window.print()}>In hóa đơn</button></> : amount === 0 ? <><div className="co-success">Bill không có khoản phải thu.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill 0đ</button></> : !planned ? <form onSubmit={pay}>
+            {settled ? <><div className="co-success">Đã hoàn tất bill. Phòng đã chuyển sang Chờ vệ sinh.</div><button onClick={() => window.print()}>In hóa đơn</button></> : paymentDue === 0 && !planned ? <><div className="co-success">Bill không còn khoản phải thu sau khi áp dụng cọc.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill</button></> : !planned ? <form onSubmit={pay}>
               <div className="co-methods">{[['CASH', 'Tiền mặt'], ['BANK_TRANSFER', 'SePay'], ['MIXED', 'Kết hợp']].map(([value, label]) => <button key={value} type="button" className={method === value ? 'selected' : ''} onClick={() => setMethod(value)}>{label}</button>)}</div>
               {method === 'MIXED' && <label className="co-field">
                 Phần tiền mặt
@@ -310,7 +314,8 @@ export default function CheckoutPage() {
               <small>TỔNG HÓA ĐƠN</small>
               <strong>{formatVnd(amount)}</strong>
             </div>
-            <p>Đã nhận: {formatVnd(data.paid)}</p>
+            <p>Cọc đã áp dụng: −{formatVnd(depositAmount)}</p>
+            <p>Đã thu thêm: {formatVnd(data.paid)}</p>
             <p>Còn phải thu: {formatVnd(data.remaining)}</p>
             <small>{settled ? 'Đã hoàn tất' : 'Bill đang chờ thanh toán'}</small>
           </aside>

@@ -64,7 +64,8 @@ public class BookingController {
     // POST: tạo yêu cầu chờ kế toán xử lý; lễ tân không ghi nhận đã hoàn tiền.
     public DepositDtos.RefundRequestResult createDepositRefundRequest(@AuthenticationPrincipal Identity identity,
             @RequestBody DepositDtos.CreateRefundRequest request) {
-        return deposits.createRefundRequest(identity, request);
+        return audit.record("REQUEST_DEPOSIT_REFUND", "BOOKING", request == null ? null : request.bookingId(),
+            () -> deposits.createRefundRequest(identity, request), null);
     }
 
     @GetMapping("/booking-options")

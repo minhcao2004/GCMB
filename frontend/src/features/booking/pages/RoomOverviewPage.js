@@ -95,7 +95,7 @@ export default function RoomOverviewPage() {
 
   const currentMinute = Math.floor(now / 60000);
   const date = selectedDate || toLocalDateInput(new Date((currentMinute + 5) * 60000));
-  // HuyDV - 15/10/2026: Dùng giờ hiện tại cộng 5 phút cho ngày đã chọn, thống nhất với bộ lọc không có ô giờ.
+  // Dùng giờ hiện tại cộng 5 phút cho ngày đã chọn, thống nhất với bộ lọc không có ô giờ.
   const slot = useMemo(() => new Date(`${date}T${clockTime(new Date((currentMinute + 5) * 60000))}:00`), [date, currentMinute]);
   useEffect(() => {
     if (!options || Number.isNaN(slot.getTime())) return undefined;

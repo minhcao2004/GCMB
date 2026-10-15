@@ -101,7 +101,6 @@ function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
-// HuyDV - 14/10/2026: Giữ khung đồng bộ, ghép điều hướng Booking/Phòng của Thanh.
 export function AppShell({
   user,
   branchName,

@@ -13,9 +13,10 @@ const statusLabels = {
   PENDING_REFUND: 'Chờ hoàn',
   REFUNDED: 'Đã hoàn',
   FORFEITED: 'Hủy cọc',
+  APPLIED: 'Đã trừ vào bill',
 };
 const methodLabels = {
-  BANK_TRANSFER: 'Chuyển khoản Tingbox',
+  BANK_TRANSFER: 'Chuyển khoản',
   MANUAL_TRANSFER: 'Chuyển khoản',
   CASH: 'Tiền mặt',
   CARD: 'Thẻ',
@@ -136,7 +137,8 @@ function DepositDetails({ detail, loading, error, onOpenBooking }) {
   const item = detail.deposit;
   const amountLabel = item.status === 'PENDING_REFUND' ? 'Số tiền chờ hoàn'
     : item.status === 'REFUNDED' ? 'Số tiền đã hoàn'
-      : item.status === 'FORFEITED' ? 'Số tiền hủy cọc' : 'Số dư đang giữ';
+      : item.status === 'FORFEITED' ? 'Số tiền hủy cọc'
+        : item.status === 'APPLIED' ? 'Số tiền đã trừ bill' : 'Số dư đang giữ';
 
   return <aside className="deposit-details-card" aria-label="Chi tiết tiền cọc">
     <div className="deposit-details-scroll">
@@ -308,6 +310,9 @@ export default function DepositManagementPage() {
 
   if (authError) return <main className="booking-auth-state"><p>{authError}</p><button type="button" onClick={() => setRetryAuth((value) => value + 1)}>Thử lại</button></main>;
 
+  // Chờ xác thực trước khi dựng thanh tài khoản và các thao tác tiền cọc.
+  if (!user) return <main className="booking-auth-state"><p role="status">Đang kiểm tra phiên đăng nhập…</p></main>;
+
   return <AppShell user={user} branchName={data?.branchName} busy={logoutBusy} onLogout={logout}
     breadcrumb="Tiền cọc" activeTab="deposit" search={search} onSearchChange={(value) => { setSearch(value); setPage(0); }} fitViewport>
     <div className="deposit-page">
@@ -335,7 +340,7 @@ export default function DepositManagementPage() {
           <span className="deposit-date-separator" aria-hidden="true">—</span>
           <label className="deposit-filter-date"><span className="sr-only">Đến ngày</span><input type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(0); }} /></label>
           <label className="deposit-filter-select"><span className="sr-only">Trạng thái</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); }}>
-            <option value="">Trạng thái · Tất cả</option><option value="HELD">Đang giữ</option><option value="PENDING_REFUND">Chờ hoàn</option><option value="REFUNDED">Đã hoàn</option><option value="FORFEITED">Hủy cọc</option>
+            <option value="">Trạng thái · Tất cả</option><option value="HELD">Đang giữ</option><option value="PENDING_REFUND">Chờ hoàn</option><option value="REFUNDED">Đã hoàn</option><option value="FORFEITED">Hủy cọc</option><option value="APPLIED">Đã trừ vào bill</option>
           </select></label>
           <label className="deposit-filter-select"><span className="sr-only">Phương thức</span><select value={method} onChange={(event) => { setMethod(event.target.value); setPage(0); }}>
             <option value="">Phương thức · Tất cả</option><option value="BANK_TRANSFER">Chuyển khoản Tingbox</option><option value="MANUAL_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="CARD">Thẻ</option><option value="QR">QR</option><option value="MULTIPLE">Nhiều phương thức</option>

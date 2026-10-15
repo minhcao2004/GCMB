@@ -64,6 +64,7 @@
 .deposit-status--held { color: #159264; background: #e5f7ef; }
 .deposit-status--pending-refund { color: #c78313; background: #fff5e5; }
 .deposit-status--refunded { color: #168eb8; background: #e8f6fc; }
+.deposit-status--applied { color: #087f93; background: #e8f8fb; }
 .deposit-status--forfeited { color: #d94b5a; background: #fcecef; }
 .deposit-table-footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 16px; border-top: 1px solid var(--booking-line); color: #929dad; background: #fff; font-size: 10px; }
 .deposit-pagination { display: flex; align-items: center; gap: 9px; }

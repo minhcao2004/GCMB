@@ -19,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 // Luồng lễ tân chỉ theo dõi tiền cọc và gửi yêu cầu hoàn cho kế toán.
 public class DepositManagementService {
-    private static final Set<String> STATUSES = Set.of("HELD", "PENDING_REFUND", "REFUNDED", "FORFEITED");
+    // Cọc đã trừ bill vẫn có thể tra cứu và xem lịch sử APPLY.
+    private static final Set<String> STATUSES = Set.of("HELD", "PENDING_REFUND", "REFUNDED", "FORFEITED", "APPLIED");
     private static final Set<String> METHODS = Set.of("BANK_TRANSFER", "MANUAL_TRANSFER", "CASH", "CARD", "QR", "MULTIPLE");
 
     private final BookingRepository bookings;
@@ -89,6 +90,9 @@ public class DepositManagementService {
         String reason = required(request.reason(), "reason", "Lý do hoàn cọc", 1000);
         UUID refundRequestId = bookings.createDepositRefundRequest(branch.id(), request.bookingId(), depositId, balance,
             reason, beneficiary, bank, account, identity.id());
+        // Sự kiện cùng giao dịch giúp audit và lịch sử booking theo dõi yêu cầu hoàn.
+        bookings.event(request.bookingId(), identity.id(), "BOOKING_DEPOSIT_REFUND_REQUESTED", reason,
+            java.util.Map.of("refundRequestId", refundRequestId.toString(), "depositAmount", balance));
         return new DepositDtos.RefundRequestResult(refundRequestId, request.bookingId(), balance, "REQUESTED");
     }
 

@@ -52,7 +52,7 @@ public class RoomCatalogController {
         return audit.record("UPDATE_ROOM_TYPE","ROOM_TYPE",id,()->service.updateRoomType(id, command),RoomTypeView::id);
     }
 
-    // HuyDV - 14/10/2026: Ghi thay đổi trạng thái và nhật ký trong cùng giao dịch.
+    // Ghi thay đổi trạng thái và nhật ký trong cùng giao dịch.
     @PostMapping("/api/v1/head-office/room-types/{id}/deactivate")
     public RoomTypeView deactivateRoomType(@PathVariable UUID id) {
         return audit.record("DEACTIVATE_ROOM_TYPE", "ROOM_TYPE", id,

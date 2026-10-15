@@ -121,7 +121,6 @@
 @media (max-width: 900px) { .manager-content-catalog { padding: 20px 16px; } .room-catalog-filters { grid-template-columns: 1fr 1fr; } .room-search { grid-column: 1 / -1; } .catalog-form-layout { grid-template-columns: 1fr; } .catalog-drawer { width: min(600px,78vw); } }
 @media (max-width: 600px) { .room-catalog-title-row { align-items: flex-start; flex-direction: column; } .room-catalog-filters { grid-template-columns: 1fr; } .room-search { grid-column: auto; } .room-catalog-tabs { overflow-x: auto; } .room-catalog-tabs button { flex-shrink: 0; } .catalog-table-footer { padding: 12px; } .catalog-view-prices { margin-top: 22px; } .catalog-editor-fields.two-col { grid-template-columns: 1fr; } .catalog-editor-fields .span-two,.catalog-days { grid-column: auto; } .catalog-editor-header h1 { font-size: 22px; } .catalog-form-card,.catalog-preview-card { padding: 16px; } .catalog-editor-footer .catalog-primary { min-width: 0; flex: 1; } .catalog-drawer { width: 100%; } .catalog-drawer .catalog-editor-header,.catalog-drawer .catalog-editor-body,.catalog-drawer .catalog-editor-footer { padding-left: 18px; padding-right: 18px; } }
 
-/* HuyDV - 14/10/2026: Bộ lọc và thao tác của danh mục hạng phòng. */
 .room-catalog-filters:has(> select:last-child:nth-child(3)) {
   grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(150px, 1fr));
 }

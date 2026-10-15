@@ -3,9 +3,9 @@ export default function DashboardTopbar({ role, page, user, busy, onProfile, onL
     <p>{role} <span>/ {page}</span></p>
     {children}
     <div className="manager-account">
-      <span>{user.username}</span>
-      <button onClick={onProfile}>Thông tin tài khoản</button>
-      <button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
+      <span>{user?.username || 'Đang tải…'}</span>
+      <button type="button" disabled={!user} onClick={onProfile}>Thông tin tài khoản</button>
+      <button type="button" disabled={!user || busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
     </div>
   </div>;
 }

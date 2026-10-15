@@ -55,7 +55,7 @@ public class DepositRepository {
             SELECT b.branch_id,b.id AS booking_id,b.code AS booking_code,b.contact_name AS customer_name,
                    b.contact_phone AS phone,lr.room_code,lr.room_name,
                    COALESCE(b.actual_checkin,b.planned_start) AS check_in_at,
-                   l.received_amount,l.balance,l.refunded_amount,l.forfeited_amount,l.refund_transactions,
+                   l.received_amount,l.applied_amount,l.balance,l.refunded_amount,l.forfeited_amount,l.refund_transactions,
                    COALESCE(rr.pending_amount,0) AS pending_amount,
                    COALESCE(rr.pending_count,0) AS pending_count,
                    rr.latest_request_status,
@@ -66,12 +66,14 @@ public class DepositRepository {
                         WHEN l.balance<=0 AND l.refunded_amount>0 THEN 'REFUNDED'
                         WHEN l.balance<=0 AND l.forfeited_amount>0 THEN 'FORFEITED'
                         WHEN l.balance>0 THEN 'HELD'
+                        WHEN l.applied_amount>0 THEN 'APPLIED'
                         WHEN l.refunded_amount>0 THEN 'REFUNDED'
                         WHEN l.forfeited_amount>0 THEN 'FORFEITED'
                         ELSE 'SETTLED' END AS status,
                    CASE WHEN COALESCE(rr.pending_amount,0)>0 THEN rr.pending_amount
                         WHEN l.balance>0 THEN GREATEST(l.balance-COALESCE(rr.pending_amount,0),0)
                         WHEN l.refunded_amount>0 THEN l.refunded_amount
+                        WHEN l.applied_amount>0 THEN l.applied_amount
                         ELSE l.forfeited_amount END AS amount,
                    (b.status='CANCELLED' AND l.balance>0 AND ec.booking_id IS NOT NULL
                     AND NOT EXISTS (
