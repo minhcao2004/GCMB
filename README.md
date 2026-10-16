@@ -292,6 +292,17 @@ Lễ tân chọn phòng đang sử dụng → **Checkout & lập bill**. Kiểm 
 
 Trong thanh toán chọn **Tiền mặt**, **SePay** hoặc **Kết hợp**. Phần tiền mặt nhập khi tạo QR được lưu thành phân bổ tạm trên bill, chưa tạo payment và không hiển thị là đã thu. **Đổi phương thức** hủy QR cũ, xóa toàn bộ phân bổ tạm và đưa form về tổng bill ban đầu. Bill 170.000đ nhập tạm 50.000đ tiền mặt + QR 120.000đ: sau đặt lại vẫn cần thanh toán 170.000đ, không giữ 50.000đ. Khi SePay đã xác nhận chuyển khoản hoặc có khoản thu thực tế, không cho đặt lại. Webhook của mã đã hủy được lưu EXCEPTION, không cộng vào bill; hủy QR không hủy giao dịch tại ngân hàng. Lễ tân bấm **Hoàn tất thanh toán** mới ghi tiền mặt, tiền khách đưa và tiền thừa trong cùng giao dịch kết thúc bill. Trường readyToComplete cho biết tổng khoản thu thực tế + tiền mặt dự kiến bằng đúng net_amount; tổng paid vẫn chỉ gồm payment thật. QR có hạn 30 phút, có thể gia hạn cùng mã sau hết hạn. Hoàn tất chuyển bill SETTLED, booking COMPLETED, allocation FINISHED và phòng CLEANING; gửi lặp không thu hai lần. Menu **Thanh toán** tra cứu 100 bill gần nhất của cơ sở; có in bill qua trình duyệt.
 
+
+Dữ liệu hoàn cọc local (15/10/2026), tài khoản test.rec.ha tại TEST_CS_B: phòng TEST_REFUND_01; BK-20261015-E6426634 cọc 100.000đ và BK-20261015-53FBBC28 cọc 150.000đ đã hủy sớm, có yêu cầu REQUESTED; BK-20261015-D79299DC cọc 80.000đ đã hủy đủ điều kiện, chưa gửi yêu cầu. Thông tin nhận hoàn dùng TEST BANK / 0000000000, hoàn toàn giả lập. Đây là dữ liệu thêm theo yêu cầu trên database local, không phải migration và chưa ghi nhận khoản hoàn thực tế.
+
+### Ghép tiền cọc vào checkout (15/10/2026)
+
+Đã ghép màn Tiền cọc của Thanh vào AppShell chung, giữ cả menu Tiền cọc và Thanh toán. Màn Tiền cọc chờ xác thực trước khi dựng AppShell; thanh tài khoản dùng chung xử lý trường hợp chưa có user và khóa thao tác tài khoản trong thời gian đó. AuthErrors xử lý cả ResponseStatusException và MethodArgumentTypeMismatchException. Các endpoint danh sách/chi tiết/yêu cầu hoàn cọc được giữ cùng MutationAudit của booking.
+
+Khi lập bill, GCMB khóa booking và ví cọc, kiểm tra yêu cầu hoàn đang REQUESTED/APPROVED/PROCESSING, rồi ghi deposit_entry.kind=APPLY cho số dư cọc đã nhận. Không ghi thêm payment cho cọc, không sửa sổ cọc gốc; gọi lặp không trừ lần hai. Tổng bill vẫn giữ nguyên; depositApplied là cọc đã trừ, paid là khoản thu thêm, remaining = amount - depositApplied - paid. Tiền mặt/QR chỉ thu phần remaining. Ví dụ bill 170.000đ, cọc 50.000đ: cần thu thêm 120.000đ. Đổi phương thức chỉ hủy phân bổ tiền mặt/QR tạm, không hủy cọc đã áp dụng. Hoàn tất khi depositApplied + paid + plannedCash bằng tổng bill. Nếu cọc bằng bill thì hoàn tất không cần thu thêm.
+
+API preview checkout trả depositBalance và hasPendingRefund; API bill trả depositApplied. Màn Tiền cọc có trạng thái APPLIED (Đã trừ vào bill) và lịch sử APPLY, không làm mất hồ sơ sau khi dùng hết cọc. Chưa triển khai hoàn cọc dư khi checkout: dữ liệu cọc âm/vượt tổng bill bị từ chối để kiểm tra; luồng yêu cầu hoàn của Thanh vẫn áp dụng cho booking đã hủy. Không có migration mới, dùng sổ cọc hiện hữu V1/V8/V9 và bill V12/V13.
+
 Customers scan the in-room QR code to view the F&B menu and submit an order for their active room session.
 
 Obtain development accounts through the team's agreed seed or account-provisioning process. No demo credentials are specified here.

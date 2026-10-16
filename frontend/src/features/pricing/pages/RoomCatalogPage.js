@@ -246,7 +246,7 @@ export default function RoomCatalogPage() {
     }
   };
 
-  // HuyDV - 14/10/2026: Chỉ gửi yêu cầu sau khi người dùng xác nhận.
+  // Chỉ gửi yêu cầu sau khi người dùng xác nhận.
   const deactivate = async () => {
     if (busy || !pendingDeactivate) return;
     setBusy(true);

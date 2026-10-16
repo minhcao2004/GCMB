@@ -102,6 +102,7 @@ public class AccountRepository {
     }
 
     public boolean lockAvailableEmployee(UUID id) {
+        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
         return !db.queryForList(
                 "SELECT id FROM gcmb.employee WHERE id=? AND status='ACTIVE' AND user_id IS NULL FOR UPDATE",
                 UUID.class,

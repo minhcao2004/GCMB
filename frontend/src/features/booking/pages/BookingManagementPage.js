@@ -9,7 +9,7 @@ import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
-import { formatVnd, toLocalDateInput } from '../data/bookingData';
+import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 
 const navigation = [
@@ -47,6 +47,10 @@ function Icon({ name, size = 18 }) {
 
 // Lấy ngày hôm nay theo giờ địa phương cho bộ lọc lịch.
 function localToday() { return toLocalDateInput(new Date()); }
+// Chỉ khôi phục ngày điều hướng nếu đúng định dạng và là ngày lịch hợp lệ.
+function bookingDateFromNavigation(value) {
+  return isLocalDateInput(value) ? value : localToday();
+}
 // Lấy ngày kế tiếp theo giờ địa phương cho bộ lọc lịch.
 function localTomorrow() { const date = new Date(); date.setDate(date.getDate() + 1); return toLocalDateInput(date); }
 // Định dạng một phần thời gian theo múi giờ chi nhánh.
@@ -97,7 +101,6 @@ function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
-// HuyDV - 14/10/2026: Giữ khung đồng bộ, ghép điều hướng Booking/Phòng của Thanh.
 export function AppShell({
   user,
   branchName,
@@ -109,6 +112,7 @@ export function AppShell({
   onSearchChange,
   activeTab = 'booking',
   hideSearch = false,
+  fitViewport = false,
 }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -120,12 +124,14 @@ export function AppShell({
       navigate('/le-tan/phong');
     } else if (icon === 'payments') {
       navigate('/le-tan/thanh-toan');
+    } else if (icon === 'deposit') {
+      navigate('/le-tan/deposits');
     }
   }
 
   return (
     <>
-      <div className="booking-app reception-dashboard">
+      <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''}`}>
         <div className="head-office-dashboard">
           <aside className="manager-sidebar">
             <div className="manager-brand"><BrandWordmark /></div>
@@ -136,7 +142,7 @@ export function AppShell({
                   type="button"
                   key={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms', 'payments'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'payments', 'deposit'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>
@@ -164,7 +170,7 @@ export function AppShell({
                     value={search}
                     onChange={(event) => onSearchChange?.(event.target.value)}
                     placeholder="Tìm phòng, booking, khách hàng..."
-                    aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : 'Tìm kiếm booking'}
+                    aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : activeTab === 'deposit' ? 'Tìm giao dịch tiền cọc' : 'Tìm kiếm booking'}
                   />
                 </label>
               )}
@@ -206,30 +212,35 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
   const canMarkNoShow = canCheckIn && hasReservedRoom && new Date(booking.plannedStart).getTime() <= now.getTime();
   const room = [booking.roomCode, booking.roomName].filter(Boolean).join(' · ') || 'Chưa gán phòng';
   return <aside className="booking-details">
-    <h2>Chi tiết</h2>
-    <strong className="booking-detail-code">{booking.code}</strong>
-    <span className={statusClass(statusId(booking.status))}>{statusLabel(booking.status)}</span>
-    <div className="booking-detail-divider" />
-    <section className={`booking-detail-deposit${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`} aria-label="Thông tin tiền cọc">
-      <div><span>Tiền cọc đã nhận</span><strong>{formatVnd(depositReceived)}</strong></div>
-      <div><span className="booking-deposit-status">{depositStatus}</span>{depositDisposition && <small>{depositDisposition}</small>}</div>
-    </section>
-    <div className="booking-detail-divider" />
-    <dl className="booking-detail-list">
-      <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
-      <div><dt>Số điện thoại</dt><dd>{booking.contactPhone || '—'}</dd></div>
-      <div><dt>Thời gian</dt><dd>{timeText(booking.plannedStart, timezone)} · {dateText(booking.plannedStart, timezone)}</dd></div>
-      <div><dt>Số khách</dt><dd>{booking.guestCount || '—'}</dd></div>
-      <div><dt>Hạng phòng</dt><dd>{booking.roomTypeName || booking.roomName || '—'}</dd></div>
-      <div><dt>Phòng</dt><dd>{room}</dd></div>
-      <div><dt>Giá dự kiến</dt><dd>{formatVnd(booking.expectedAmount)}</dd></div>
-    </dl>
-    {detail?.note && <p className="booking-detail-note">{detail.note}</p>}
-    <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
-    <button type="button" className="booking-button booking-button-primary booking-detail-checkin" onClick={onCheckIn} disabled={!canCheckIn}>Check-in</button>
-    {canMarkNoShow && <button type="button" className="booking-button booking-button-danger booking-detail-no-show" onClick={() => onNoShow(booking)}>Đánh dấu no-show</button>}
-    {booking.status === 'IN_HOUSE' && <button type="button" className="booking-detail-room-link" onClick={() => navigate('/le-tan/phong', { state: { roomId: booking.roomId } })}>Xem phòng và thao tác lưu trú</button>}
-    <div className="booking-detail-actions"><button type="button" className="booking-detail-action-edit" disabled={!canEdit} onClick={() => onEdit(booking)}>Sửa booking</button><button type="button" className="booking-detail-action-cancel is-danger" disabled={!canCheckIn} onClick={() => onCancel(booking)}>Hủy booking</button></div>
+    <div className="booking-details-scroll">
+      <h2>Chi tiết</h2>
+      <strong className="booking-detail-code">{booking.code}</strong>
+      <span className={statusClass(statusId(booking.status))}>{statusLabel(booking.status)}</span>
+      <div className="booking-detail-divider" />
+      <section className={`booking-detail-deposit${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`} aria-label="Thông tin tiền cọc">
+        <div><span>Tiền cọc đã nhận</span><strong>{formatVnd(depositReceived)}</strong></div>
+        <div><span className="booking-deposit-status">{depositStatus}</span>{depositDisposition && <small>{depositDisposition}</small>}</div>
+      </section>
+      <div className="booking-detail-divider" />
+      <dl className="booking-detail-list">
+        <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
+        <div><dt>Số điện thoại</dt><dd>{booking.contactPhone || '—'}</dd></div>
+        <div><dt>Thời gian</dt><dd>{timeText(booking.plannedStart, timezone)} · {dateText(booking.plannedStart, timezone)}</dd></div>
+        <div><dt>Số khách</dt><dd>{booking.guestCount || '—'}</dd></div>
+        <div><dt>Hạng phòng</dt><dd>{booking.roomTypeName || booking.roomName || '—'}</dd></div>
+        <div><dt>Phòng</dt><dd>{room}</dd></div>
+        <div><dt>Giá dự kiến</dt><dd>{formatVnd(booking.expectedAmount)}</dd></div>
+      </dl>
+      {detail?.note && <p className="booking-detail-note">{detail.note}</p>}
+      <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
+    </div>
+    <div className="booking-details-actions" role="group" aria-label="Thao tác booking">
+      <strong className="booking-details-actions-title">Thao tác</strong>
+      <button type="button" className="booking-button booking-button-primary booking-detail-checkin" onClick={onCheckIn} disabled={!canCheckIn}>Check-in</button>
+      {canMarkNoShow && <button type="button" className="booking-button booking-button-danger booking-detail-no-show" onClick={() => onNoShow(booking)}>Đánh dấu no-show</button>}
+      {booking.status === 'IN_HOUSE' && <button type="button" className="booking-detail-room-link" onClick={() => navigate('/le-tan/phong', { state: { roomId: booking.roomId } })}>Xem phòng và thao tác lưu trú</button>}
+      <div className="booking-detail-actions"><button type="button" className="booking-detail-action-edit" disabled={!canEdit} onClick={() => onEdit(booking)}>Sửa booking</button><button type="button" className="booking-detail-action-cancel is-danger" disabled={!canCheckIn} onClick={() => onCancel(booking)}>Hủy booking</button></div>
+    </div>
   </aside>;
 }
 
@@ -479,14 +490,14 @@ export default function BookingManagementPage() {
   const [options, setOptions] = useState(null);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState('');
-  const [selectedDate, setSelectedDate] = useState(localToday);
+  const [selectedDate, setSelectedDate] = useState(() => bookingDateFromNavigation(location.state?.bookingDate));
   const [activeFilter, setActiveFilter] = useState('all');
   const [roomTier, setRoomTier] = useState('all');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(() => location.state?.bookingId || '');
   const [detail, setDetail] = useState(null);
   const [notice, setNotice] = useState('');
   const [noticeKind, setNoticeKind] = useState('success');
@@ -526,9 +537,15 @@ export default function BookingManagementPage() {
 
   useEffect(() => {
     if (!user || createMode) return undefined;
+    if (selectedDate !== '' && !isLocalDateInput(selectedDate)) {
+      setSelectedDate(localToday());
+      return undefined;
+    }
     let active = true;
     setListLoading(true);
-    bookingApi.list({ dateFrom: selectedDate, dateTo: selectedDate, search: search.trim() || undefined, page: 0, size: 100 })
+    const params = { search: search.trim() || undefined, page: 0, size: 100 };
+    if (isLocalDateInput(selectedDate)) { params.dateFrom = selectedDate; params.dateTo = selectedDate; }
+    bookingApi.list(params)
       .then((result) => {
         if (!active) return;
         const items = result.items || [];
@@ -744,7 +761,7 @@ export default function BookingManagementPage() {
     </div>
   </>;
 
-  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={createMode ? 'Booking / Tạo booking' : editMode ? 'Booking / Sửa booking' : 'Booking'} search={search} onSearchChange={setSearch}>
+  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={createMode ? 'Booking / Tạo booking' : editMode ? 'Booking / Sửa booking' : 'Booking'} search={search} onSearchChange={setSearch} fitViewport={!createMode}>
     {mainContent}
     {editMode && <BookingEditDialog bookingId={bookingId} timezone={timezone} onClose={() => navigate('/le-tan/bookings')} onUpdate={updateBooking} />}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} busy={busy} error={checkInError} />}

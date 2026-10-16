@@ -85,6 +85,9 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     && (form?.pricingMode !== 'HOURLY' || (hourlyDurationValid && durationMinutes === Number(form.durationHours) * 60)));
   const formReady = Boolean(form?.startDate && form?.startTime && form?.endDate && form?.endTime);
   const booking = detail?.booking;
+  const contactPhoneError = !form?.contactPhone.trim() ? 'Nhập số điện thoại.'
+    : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
+      ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
   const currentCombo = detail?.charges?.find((charge) => charge.status === 'ACTIVE' && charge.comboId);
 
   useEffect(() => {
@@ -145,6 +148,7 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     event.preventDefault();
     setFormError('');
     if (!form?.contactName.trim()) return setFormError('Vui lòng nhập tên khách.');
+    if (contactPhoneError) return setFormError(contactPhoneError);
     if (!periodValid) return setFormError('Kiểm tra lại thời gian booking.');
     if (form.pricingMode === 'COMBO' && !form.comboId) return setFormError('Vui lòng chọn combo.');
     if (!quote) return setFormError('Chưa có báo giá cho thời gian đã chọn.');
@@ -222,7 +226,7 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
         <h3 className="booking-cancel-section-title">Thông tin booking</h3>
         <div className="booking-form-grid booking-customer-grid">
           <label className="booking-form-field"><span>Tên khách *</span><input name="contactName" maxLength="200" value={form.contactName} onChange={change} /></label>
-          <label className="booking-form-field"><span>Số điện thoại</span><input name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} /></label>
+          <label className={`booking-form-field ${contactPhoneError ? 'is-invalid' : ''}`}><span>Số điện thoại *</span><input type="tel" inputMode="numeric" autoComplete="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} aria-invalid={!!contactPhoneError} aria-describedby={contactPhoneError ? 'booking-edit-phone-error' : undefined} />{contactPhoneError && <small id="booking-edit-phone-error" className="booking-field-error" aria-live="polite">{contactPhoneError}</small>}</label>
         </div>
         <h3 className="booking-cancel-section-title booking-edit-section-title">Thời gian sử dụng</h3>
         <div className="booking-form-grid booking-schedule-grid">

@@ -15,13 +15,14 @@ jest.mock('../../auth/services/authApi', () => ({
   apiErrors: () => ({ form: 'Không thể tải dữ liệu.' }),
 }));
 jest.mock('../services/bookingApi', () => ({
-  bookingApi: { options: jest.fn(), listAll: jest.fn(), availability: jest.fn(), detail: jest.fn() },
+  bookingApi: { options: jest.fn(), rooms: jest.fn(), listAll: jest.fn(), availability: jest.fn(), detail: jest.fn() },
 }));
 
 test('renders the room page while data is loading and when no room is returned', async () => {
   authApi.me.mockResolvedValue({ username: 'reception', role: 'RECEPTIONIST' });
   bookingApi.options.mockResolvedValue({ branchName: 'Cơ sở Hải Phòng', timezone: 'Asia/Ho_Chi_Minh', roomTypes: [] });
   bookingApi.listAll.mockResolvedValue([]);
+  bookingApi.rooms.mockResolvedValue([]);
 
   render(<RoomOverviewPage />);
 
@@ -42,6 +43,7 @@ test('keeps an in-house room occupied after its planned end', async () => {
   bookingApi.options.mockResolvedValue({ branchName: 'Cơ sở Hải Phòng', timezone: 'Asia/Ho_Chi_Minh', roomTypes: [{ id: 'type-1', name: 'Music Box demo', capacity: 4 }] });
   bookingApi.listAll.mockImplementation((params) => Promise.resolve(params.status === 'IN_HOUSE' ? [booking] : []));
   bookingApi.availability.mockResolvedValue({ rooms: [{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4 }] });
+  bookingApi.rooms.mockResolvedValue([{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4, roomTypeName: 'Music Box demo', operatingStatus: 'AVAILABLE' }]);
   bookingApi.detail.mockResolvedValue({ booking, charges: [], meter: null });
 
   render(<RoomOverviewPage />);

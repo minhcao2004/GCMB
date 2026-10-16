@@ -25,6 +25,13 @@ export function toLocalDateInput(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Chỉ chấp nhận chuỗi ngày lịch hợp lệ trước khi gửi bộ lọc lên API.
+export function isLocalDateInput(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && toLocalDateInput(parsed) === value;
+}
+
 // Ghép ngày và giờ nhập thành Date theo múi giờ máy.
 export function fromDateAndTime(date, time) {
   if (!date || !time) return null;
@@ -35,6 +42,11 @@ export function fromDateAndTime(date, time) {
 // Định dạng số tiền theo đồng Việt Nam.
 export function formatVnd(value) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value) || 0)}đ`;
+}
+
+export function formatMoneyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 // Định dạng ngày cho giao diện.

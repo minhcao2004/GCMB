@@ -30,6 +30,9 @@
 .room-card-vacant > span { color: #168956; background: #e5f8ed; }
 .room-card-reserved > span { color: #b72875; background: #fce8f3; }
 .room-card-occupied > span { color: #167da2; background: #e5f5fb; }
+.room-card-cleaning > span, .room-detail-status.cleaning, .room-status-filters button.cleaning { color: #966111; background: #fff4da; }
+.room-card-maintenance > span, .room-detail-status.maintenance, .room-status-filters button.maintenance { color: #b13b3b; background: #ffeded; }
+.room-card-inactive > span, .room-detail-status.inactive, .room-status-filters button.inactive { color: #647185; background: #edf0f4; }
 .room-card em { overflow: hidden; color: #647185; font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .room-empty { margin: 0; border-radius: 12px; padding: 22px; color: #526075; background: #fff; font-size: 12px; }
 .room-detail { position: sticky; top: 14px; min-width: 0; border-radius: 15px; padding: 20px; background: #fff; }

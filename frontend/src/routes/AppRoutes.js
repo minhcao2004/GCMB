@@ -13,6 +13,7 @@ import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
+import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
@@ -33,6 +34,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/bookings/:bookingId/checkout" element={<CheckoutPage />} />
     <Route path="/le-tan/bills/:billId" element={<CheckoutPage />} />
     <Route path="/le-tan/thanh-toan" element={<CheckoutPage />} />
+    <Route path="/le-tan/deposits" element={<DepositManagementPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
     <Route path="/ke-toan" element={<RoleHomePage role="ACCOUNTANT" />} />

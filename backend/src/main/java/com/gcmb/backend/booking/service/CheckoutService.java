@@ -3,6 +3,7 @@
  * Author: HuyDV
  * Created: 14/10/2026
  * Description: Chốt giá đã xác nhận, ghi bill/thanh toán và kết thúc sử dụng phòng.
+ * Updated: 15/10/2026 - Áp dụng cọc đã thu, chỉ thanh toán phần còn lại.
  */
 package com.gcmb.backend.booking.service;
 
@@ -64,7 +65,8 @@ public class CheckoutService {
         result.put("lines", sourceLines(bookingId));
         result.put("amount", total(sourceLines(bookingId)));
         result.put("pendingOrders", pendingOrders(bookingId));
-        result.put("hasHeldDeposit", repository.depositBalance(bookingId).signum() != 0);
+        result.put("depositBalance", repository.depositBalance(bookingId));
+        result.put("hasPendingRefund", hasPendingRefund(bookingId));
         result.put("sepayReady", sepay.ready());
         return result;
     }
@@ -87,9 +89,8 @@ public class CheckoutService {
         requireInHouse(booking.status());
         if (input == null || !input.inspected()) throw fail(400, "Xác nhận đã kiểm tra phòng trước khi lập bill.");
         if (input.inspectionNote() != null && input.inspectionNote().length() > 2000) throw fail(400, "Ghi chú kiểm tra tối đa 2000 ký tự.");
-        if (repository.depositBalance(bookingId).signum() != 0) {
-            throw fail(409, "Booking đang giữ cọc. Phiên bản này chưa xử lý cọc, chưa thể chốt bill để tránh thu trùng.");
-        }
+        UUID deposit = repository.lockDeposit(bookingId);
+        if (hasPendingRefund(bookingId)) throw fail(409, "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.");
         if (!pendingOrders(bookingId).isEmpty()) throw fail(409, "Còn order chưa phục vụ. Hoàn tất hoặc hủy order trước khi chốt bill.");
         var meter = repository.meter(bookingId);
         if (meter != null && "RUNNING".equals(meter.status())) bookings.stopHourlyMeter(actor, bookingId);
@@ -113,6 +114,10 @@ public class CheckoutService {
         List<Map<String, Object>> lines = sourceLines(bookingId);
         if (lines.isEmpty()) throw fail(409, "Booking chưa có giá đã xác nhận.");
         BigDecimal amount = total(lines);
+        BigDecimal heldDeposit = repository.depositBalance(bookingId);
+        if (heldDeposit.signum() < 0 || heldDeposit.compareTo(amount) > 0) {
+            throw fail(409, "Số dư cọc không hợp lệ hoặc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán.");
+        }
         UUID id = UUID.randomUUID();
         String number = "HD" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
         db.update("""
@@ -128,7 +133,14 @@ public class CheckoutService {
                 """, id, line.get("chargeId"), line.get("orderId"), line.get("description"),
                 line.get("quantity"), line.get("unitPrice"), line.get("amount"));
         }
-        audit(actor.id(), branch, bookingId, "ISSUE_BILL", Map.of("billId", id, "amount", amount));
+        // Dùng bút toán APPLY; không sửa tiền cọc gốc và không tạo khoản thu lần hai.
+        if (heldDeposit.signum() > 0) {
+            db.update("""
+                INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,bill_id,actor_id,reason,idempotency_key)
+                VALUES (?,'APPLY',?,?,?,'Trừ cọc đã thu vào bill checkout',?)
+                """, deposit, heldDeposit, id, actor.id(), "CHECKOUT-DEPOSIT-" + id);
+        }
+        audit(actor.id(), branch, bookingId, "ISSUE_BILL", Map.of("billId", id, "amount", amount, "depositAmount", heldDeposit));
         return bill(actor, id);
     }
 
@@ -137,6 +149,7 @@ public class CheckoutService {
             SELECT b.id,b.booking_id AS "bookingId",b.number,b.status,b.net_amount AS amount,
                 b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
                 b.planned_cash AS "plannedCash",b.planned_cash_tendered AS "plannedCashTendered",
+                COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
                 k.code AS "bookingCode",k.contact_name AS customer,k.actual_checkin AS checkin,
                 COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
                     WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
@@ -152,8 +165,8 @@ public class CheckoutService {
             FROM gcmb.bill_line l LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
             WHERE l.bill_id=? ORDER BY l.created_at,l.id
             """, id));
-        result.put("remaining", decimal(result, "amount").subtract(decimal(result, "paid")));
-        result.put("readyToComplete", decimal(result, "paid").add(decimal(result, "plannedCash")).compareTo(decimal(result, "amount")) == 0);
+        result.put("remaining", decimal(result, "amount").subtract(decimal(result, "depositApplied")).subtract(decimal(result, "paid")));
+        result.put("readyToComplete", decimal(result, "paid").add(decimal(result, "plannedCash")).add(decimal(result, "depositApplied")).compareTo(decimal(result, "amount")) == 0);
         result.put("sepayReady", sepay.ready());
         var requests = db.queryForList("""
             SELECT q.id,q.reference_code AS reference,q.expected_amount AS amount,q.status,q.expires_at AS "expiresAt",
@@ -215,7 +228,7 @@ public class CheckoutService {
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
         BigDecimal received = decimal(bill, "paid");
         BigDecimal cash = decimal(bill, "plannedCash");
-        if (received.add(cash).compareTo(decimal(bill, "amount")) != 0) throw fail(409, "Bill chưa được thanh toán đủ; chờ SePay xác nhận hoặc nhập tiền mặt.");
+        if (received.add(cash).add(decimal(bill, "depositApplied")).compareTo(decimal(bill, "amount")) != 0) throw fail(409, "Bill chưa được thanh toán đủ; chờ SePay xác nhận hoặc nhập tiền mặt.");
         UUID bookingId = (UUID) bill.get("bookingId");
         var allocation = repository.currentAllocationForUpdate(bookingId);
         if (allocation == null || !"OCCUPIED".equals(allocation.state())) throw fail(409, "Không có phiên sử dụng đang hoạt động.");
@@ -238,7 +251,7 @@ public class CheckoutService {
             VALUES (?, ?, ?, 'CLEANING','Khách đã checkout',?)
             """, allocation.roomId(), branch(actor), allocation.operatingStatus(), actor.id());
         repository.event(bookingId, actor.id(), "BOOKING_CHECKED_OUT", null, Map.of("billId", id.toString()));
-        audit(actor.id(), branch(actor), bookingId, "CHECKOUT_BOOKING", Map.of("billId", id, "amount", received));
+        audit(actor.id(), branch(actor), bookingId, "CHECKOUT_BOOKING", Map.of("billId", id, "amount", received, "depositAmount", decimal(bill, "depositApplied")));
         return bill(actor, id);
     }
 
@@ -326,6 +339,13 @@ public class CheckoutService {
             Timestamp.from(occurred), "SEPAY-" + payload.id());
         audit(null, (UUID) request.get("branch_id"), (UUID) request.get("booking_id"), "CONFIRM_SEPAY_PAYMENT",
             Map.of("billId", request.get("bill_id"), "amount", payload.transferAmount()));
+    }
+
+    private boolean hasPendingRefund(UUID bookingId) {
+        return !db.queryForList("""
+            SELECT id FROM gcmb.refund_request WHERE booking_id=? AND kind='DEPOSIT'
+                AND status IN ('REQUESTED','APPROVED','PROCESSING')
+            """, bookingId).isEmpty();
     }
 
     private UUID bankAccount() {

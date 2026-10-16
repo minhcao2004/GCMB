@@ -58,6 +58,25 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
+    public List<BookingDtos.RoomSummary> rooms(Identity identity) {
+        return repository.rooms(branch(identity).id()).stream()
+            .map(room -> new BookingDtos.RoomSummary(room.id(), room.code(), room.name(), room.capacity(),
+                room.roomTypeId(), room.roomTypeName(), room.operatingStatus())).toList();
+    }
+
+    @Transactional
+    public void finishCleaning(Identity identity, UUID roomId) {
+        UUID branchId = branch(identity).id();
+        String status = repository.lockRoomStatus(branchId, roomId);
+        if (status == null) throw new BookingFailure(404, "form", "Không tìm thấy phòng trong cơ sở của bạn");
+        if (!"CLEANING".equals(status) && !"AVAILABLE".equals(status))
+            throw new BookingFailure(409, "form", "Chỉ xác nhận dọn xong cho phòng đang dọn");
+        if (repository.roomHasOccupant(branchId, roomId))
+            throw new BookingFailure(409, "form", "Phòng vẫn có khách đang sử dụng; cần checkout trước");
+        if ("CLEANING".equals(status)) repository.completeRoomCleaning(branchId, roomId, identity.id());
+    }
+
+    @Transactional(readOnly = true)
     // Kiểm tra khoảng đặt trong tương lai, trả phòng còn trống và báo giá từ cấu hình.
     public BookingDtos.Availability availability(Identity identity, UUID roomTypeId, Instant start, Instant end,
             String pricingMode, UUID comboId) {
@@ -367,7 +386,7 @@ public class BookingService {
         BookingDtos.PriceQuote quote = pricing.quote(room.roomTypeId(), branch.id(), branch.timezone(),
             request.plannedStart(), request.plannedEnd(), request.pricingMode(), request.comboId());
         String contactName = required(request.contactName(), "contactName", "Tên khách", 200);
-        String contactPhone = nullable(request.contactPhone(), "contactPhone", 30);
+        String contactPhone = contactPhone(request.contactPhone());
         String note = nullable(request.note(), "note", 2000);
         BigDecimal depositAmount = request.depositAmount() == null ? BigDecimal.ZERO : request.depositAmount();
         BigDecimal normalizedDepositAmount = depositAmount.stripTrailingZeros();
@@ -580,7 +599,7 @@ public class BookingService {
             if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict();
         }
         String contactName = request.contactName() == null ? booking.contactName() : required(request.contactName(), "contactName", "Tên khách", 200);
-        String contactPhone = request.contactPhone() == null ? booking.contactPhone() : nullable(request.contactPhone(), "contactPhone", 30);
+        String contactPhone = request.contactPhone() == null ? booking.contactPhone() : contactPhone(request.contactPhone());
         String note = request.note() == null ? booking.note() : nullable(request.note(), "note", 2000);
         repository.updateBooking(bookingId, contactName, contactPhone, start, end, note);
         UUID allocationId = allocationChanged ? insertAllocation(branch, bookingId, targetRoom.id(), start, end, actorId) : current.id();
@@ -1061,6 +1080,13 @@ public class BookingService {
         String trimmed = value.trim();
         if (trimmed.length() > max) throw new BookingFailure(400, field, label + " không được vượt quá " + max + " ký tự");
         return trimmed;
+    }
+
+    private static String contactPhone(String value) {
+        String phone = required(value, "contactPhone", "Số điện thoại", 15);
+        if (!phone.matches("0[0-9]{6,14}"))
+            throw new BookingFailure(400, "contactPhone", "Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.");
+        return phone;
     }
 
     // Dùng chính sách mặc định: chuỗi rỗng được xem như không có giá trị.
