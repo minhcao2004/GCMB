@@ -15,6 +15,7 @@ import com.gcmb.backend.administration.accounts.dto.AccountDtos.EmployeeOption;
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.Option;
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.Options;
 import com.gcmb.backend.administration.accounts.repository.AccountRepository;
+import com.gcmb.backend.administration.branch.service.BranchAdministrationService;
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
 import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import java.util.List;
@@ -50,6 +51,9 @@ class AccountServiceTest {
     @Mock
     private AuthCrypto crypto;
 
+    @Mock
+    private BranchAdministrationService branches;
+
     private AccountService service;
     private UUID employeeId;
     private UUID branchId;
@@ -59,7 +63,7 @@ class AccountServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AccountService(repository, crypto);
+        service = new AccountService(repository, crypto, branches);
         employeeId = UUID.randomUUID();
         branchId = UUID.randomUUID();
         roleId = UUID.randomUUID();

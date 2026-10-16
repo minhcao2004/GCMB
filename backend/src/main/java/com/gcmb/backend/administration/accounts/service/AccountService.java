@@ -10,6 +10,7 @@ package com.gcmb.backend.administration.accounts.service;
 
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.*;
 import com.gcmb.backend.administration.accounts.repository.AccountRepository;
+import com.gcmb.backend.administration.branch.service.BranchAdministrationService;
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
 import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.auth.validator.AuthValidation;
@@ -23,10 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountService {
     private final AccountRepository repository;
     private final AuthCrypto crypto;
+    private final BranchAdministrationService branches;
 
-    public AccountService(AccountRepository repository, AuthCrypto crypto) {
+    public AccountService(AccountRepository repository, AuthCrypto crypto, BranchAdministrationService branches) {
         this.repository = repository;
         this.crypto = crypto;
+        this.branches = branches;
     }
 
     @Transactional(readOnly = true)
@@ -79,16 +82,16 @@ public class AccountService {
             }
         }
         try {
-            return repository.find(
-                repository.insert(
+            UUID id = repository.insert(
                     input,
                     username,
                     email,
                     crypto.encode(input.password()),
                     role,
                     actor
-                )
-            );
+                );
+            if ("BRANCH_MANAGER".equals(input.role())) branches.syncAccountManager(id, actor);
+            return repository.find(id);
         } catch (DuplicateKeyException ex) {
             throw new AuthFailure(409, "form", "Tên đăng nhập hoặc email vừa được sử dụng. Vui lòng kiểm tra lại");
         }

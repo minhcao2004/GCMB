@@ -11,6 +11,7 @@ import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.*;
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.administration.accounts.repository.AccountAccessRepository;
 import com.gcmb.backend.administration.accounts.repository.AccountRepository;
+import com.gcmb.backend.administration.branch.service.BranchAdministrationService;
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
 import com.gcmb.backend.administration.auth.validator.AuthValidation;
 import java.util.List;
@@ -23,10 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountAccessService {
     private final AccountRepository accounts;
     private final AccountAccessRepository access;
+    private final BranchAdministrationService branches;
 
-    public AccountAccessService(AccountRepository accounts, AccountAccessRepository access) {
+    public AccountAccessService(AccountRepository accounts, AccountAccessRepository access, BranchAdministrationService branches) {
         this.accounts = accounts;
         this.access = access;
+        this.branches = branches;
     }
 
     private AccountView editable(UUID id, UUID actor) {
@@ -60,10 +63,12 @@ public class AccountAccessService {
         if (!chain && (input.branchId() == null || !accounts.activeBranch(input.branchId()))) {
             throw new AuthFailure(400, "branchId", "Vui lòng chọn cơ sở đang hoạt động");
         }
-        if (before.role().equals(input.role()) && Objects.equals(before.branchId(), input.branchId())) {
+        if (!"BRANCH_MANAGER".equals(input.role()) && before.role().equals(input.role())
+                && Objects.equals(before.branchId(), input.branchId())) {
             return before;
         }
         access.setRole(id, roleId, input.branchId());
+        branches.syncAccountManager(id, actor);
         // Buộc đăng nhập lại để phiên cũ không tiếp tục sử dụng phạm vi quyền trước đó.
         access.revokeTokens(id);
         AccountView after = accounts.find(id);
@@ -76,6 +81,7 @@ public class AccountAccessService {
         String reason = AuthValidation.required(input.reason(), "reason", "lý do thu hồi", 1000, true);
         AccountView before = editable(id, actor);
         access.deactivate(id);
+        branches.syncAccountManager(id, actor);
         access.revokeTokens(id);
         AccountView after = accounts.find(id);
         access.audit(actor, "DEACTIVATE_USER_ACCOUNT", before, after, reason);

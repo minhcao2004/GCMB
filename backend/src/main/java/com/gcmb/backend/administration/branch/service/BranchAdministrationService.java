@@ -155,6 +155,10 @@ public class BranchAdministrationService {
 
     @Transactional
     public Map<String, Object> assign(UUID branchId, UUID userId, Identity actor) {
+        return assign(branchId, userId, actor.id(), actor.role());
+    }
+
+    private Map<String, Object> assign(UUID branchId, UUID userId, UUID actorId, String actorRole) {
         if (userId == null) {
             throw failure(HttpStatus.BAD_REQUEST, "Chọn tài khoản quản lý cơ sở.");
         }
@@ -174,6 +178,7 @@ public class BranchAdministrationService {
             throw failure(HttpStatus.CONFLICT, "Chỉ gán quản lý cho cơ sở đang hoạt động.");
         }
         if (userId.equals(get(branchId).get("managerId"))) {
+            db.update("UPDATE gcmb.user_account SET branch_id=? WHERE id=?", branchId, userId);
             return get(branchId);
         }
         // Chuyển quản lý phải ghi cả cơ sở được gán và cơ sở mất phân công trước đó.
@@ -186,7 +191,7 @@ public class BranchAdministrationService {
             FROM gcmb.branch b LEFT JOIN gcmb.branch_manager_assignment a ON a.branch_id=b.id
             WHERE (b.id=? OR a.user_id=?) AND a.user_id IS DISTINCT FROM
                 CASE WHEN b.id=? THEN CAST(? AS uuid) ELSE NULL END
-            """, actor.id(), branchId, userId, actor.role(), branchId, userId, branchId, userId);
+            """, actorId, branchId, userId, actorRole, branchId, userId, branchId, userId);
         // Xóa phạm vi dự phòng cũ để quản lý bị thay không còn quyền vào cơ sở cũ.
         db.update("""
             UPDATE gcmb.user_account SET branch_id=NULL WHERE id IN
@@ -199,9 +204,39 @@ public class BranchAdministrationService {
             """, branchId, userId);
         db.update("DELETE FROM gcmb.branch_manager_assignment WHERE branch_id=? OR user_id=?", branchId, userId);
         db.update("INSERT INTO gcmb.branch_manager_assignment(branch_id,user_id,assigned_by) VALUES(?,?,?)",
-            branchId, userId, actor.id());
+            branchId, userId, actorId);
         db.update("UPDATE gcmb.user_account SET branch_id=? WHERE id=?", branchId, userId);
         return get(branchId);
+    }
+
+    // Hai màn tài khoản và cơ sở dùng chung một luồng phân công trong cùng giao dịch.
+    @Transactional
+    public void syncAccountManager(UUID userId, UUID actorId) {
+        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        var account = db.queryForMap("""
+            SELECT u.branch_id,u.status,r.code FROM gcmb.user_account u
+            JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
+            """, userId);
+        if ("BRANCH_MANAGER".equals(account.get("code")) && !"REVOKED".equals(account.get("status"))
+                && account.get("branch_id") != null) {
+            String actorRole = db.queryForObject("""
+                SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
+                """, String.class, actorId);
+            assign((UUID) account.get("branch_id"), userId, actorId, actorRole);
+            return;
+        }
+        db.update("""
+            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
+            SELECT ?,b.id,'UNASSIGN_BRANCH_MANAGER','BRANCH',b.id,
+                jsonb_build_object('name',b.name,'managerId',a.user_id),
+                jsonb_build_object('name',b.name,'managerId',NULL)
+            FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id WHERE a.user_id=?
+            """, actorId, userId);
+        db.update("""
+            UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id IN
+                (SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?)
+            """, userId);
+        db.update("DELETE FROM gcmb.branch_manager_assignment WHERE user_id=?", userId);
     }
 
     public List<Map<String, Object>> staff(UUID id) {

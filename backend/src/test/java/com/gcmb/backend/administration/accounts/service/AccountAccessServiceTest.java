@@ -14,6 +14,7 @@ import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.SetRole;
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.administration.accounts.repository.AccountAccessRepository;
 import com.gcmb.backend.administration.accounts.repository.AccountRepository;
+import com.gcmb.backend.administration.branch.service.BranchAdministrationService;
 import com.gcmb.backend.administration.auth.exception.AuthFailure;
 import java.util.List;
 import java.util.UUID;
@@ -45,6 +46,9 @@ class AccountAccessServiceTest {
     @Mock
     private AccountAccessRepository access;
 
+    @Mock
+    private BranchAdministrationService branches;
+
     private AccountAccessService service;
     private UUID actorId;
     private UUID targetId;
@@ -53,7 +57,7 @@ class AccountAccessServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AccountAccessService(accounts, access);
+        service = new AccountAccessService(accounts, access, branches);
         actorId = UUID.randomUUID();
         targetId = UUID.randomUUID();
         branchId = UUID.randomUUID();

@@ -81,16 +81,17 @@ public class BookingRepository {
                            Instant originalAllocationEnd, Instant reservedUntil, BigDecimal hourlyPrice,
                            String status, Instant stoppedAt, Integer billedMinutes, BigDecimal amount) {}
 
-    // Tìm chi nhánh đang hoạt động mà nhân viên được phép thao tác.
+    // Ưu tiên phạm vi tài khoản đã phân quyền; phân công nhân viên là dự phòng cho dữ liệu cũ.
     public BranchScope branchScope(UUID userId) {
         List<BranchScope> rows = db.query("""
             SELECT b.id, b.name, b.timezone
-            FROM gcmb.employee e
-            JOIN gcmb.employee_assignment ea ON ea.employee_id=e.id
-            JOIN gcmb.branch b ON b.id=ea.branch_id
-            WHERE e.user_id=? AND e.status='ACTIVE'
+            FROM gcmb.user_account u
+            JOIN gcmb.employee e ON e.user_id=u.id AND e.status='ACTIVE'
+            LEFT JOIN gcmb.employee_assignment ea ON ea.employee_id=e.id
               AND ea.valid_from <= CURRENT_TIMESTAMP
               AND (ea.valid_to IS NULL OR ea.valid_to > CURRENT_TIMESTAMP)
+            JOIN gcmb.branch b ON b.id=COALESCE(u.branch_id,ea.branch_id)
+            WHERE u.id=? AND u.status='ACTIVE'
               AND b.status='ACTIVE'
             ORDER BY ea.valid_from DESC
             LIMIT 1
