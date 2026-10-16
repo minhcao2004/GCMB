@@ -4,7 +4,7 @@ import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 
-const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân', ACCOUNTANT: 'Kế toán' };
+const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân' };
 // Kiểm tra phiên/đúng vai trò trước khi hiển thị trang sau đăng nhập.
 export default function RoleHomePage({ role }) {
   const [user, setUser] = useState(null);

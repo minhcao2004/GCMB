@@ -182,6 +182,7 @@
 .booking-schedule-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .booking-form-field { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: #596575; font-size: 10px; }
 .booking-form-field input,.booking-form-field select,.booking-form-field textarea { width: 100%; min-height: 40px; border: 1px solid #e3e7eb; border-radius: 8px; outline: 0; padding: 0 12px; color: #272b40; background: #fafbfd; font: inherit; font-size: 11px; }
+.booking-form-field .booking-time-input,.booking-field .booking-time-input { font-size: 14px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .booking-form-field textarea { min-height: 42px; resize: vertical; padding-top: 9px; }
 .booking-form-field input:focus,.booking-form-field select:focus,.booking-form-field textarea:focus { border-color: #70cddd; box-shadow: 0 0 0 3px rgba(112, 205, 221, .14); }
 .booking-form-field.is-invalid { color: #9f505b; }

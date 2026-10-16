@@ -13,6 +13,16 @@ const navigation = [
   ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
   ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Kho hàng', 'inventory'], ['Báo sự cố', 'issues'],
 ];
+const accountingNavigation = [
+  ['Tổng quan', 'overview'],
+  ['Thu & cấp quỹ', 'payments', true],
+  ['Chi & hoàn ứng', 'plus', true],
+  ['Đối soát chốt quỹ', 'calendar', true],
+  ['Hoàn tiền cọc', 'deposit'],
+  ['Lương nhân viên', 'booking', true],
+  ['Báo cáo tài chính', 'orders', true],
+  ['Danh mục chi phí', 'inventory', true],
+];
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
@@ -104,36 +114,55 @@ function initials(user) {
   return value.split(/[\s._-]+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join('') || 'MC';
 }
 
-// Dựng khung điều hướng, thanh đầu và nút đăng xuất của lễ tân.
-export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking', hideSearch = false, fitViewport = false }) {
+// Dựng khung điều hướng, thanh đầu và nút đăng xuất theo vai trò.
+export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking', hideSearch = false, fitViewport = false, audience = 'receptionist' }) {
   const navigate = useNavigate();
+  const isAccountant = audience === 'accountant';
+  const navItems = isAccountant ? accountingNavigation : navigation;
+  const roleLabel = isAccountant ? 'Kế toán thu chi' : 'Lễ tân';
   const now = new Date();
   const currentDate = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
   const currentTime = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
-  return <div className={`booking-app${fitViewport ? ' booking-app--fit' : ''}`}>
+  const currentMonth = new Intl.DateTimeFormat('vi-VN', { month: '2-digit', year: 'numeric' }).format(now);
+  const shellClassName = `booking-app${fitViewport ? ' booking-app--fit' : ''}${isAccountant ? ' booking-app--accountant' : ''}`;
+  return <div className={shellClassName}>
     <aside className="booking-sidebar">
       <div className="booking-brand"><Brand /></div>
-      <span className="booking-role-chip">LỄ TÂN</span>
-      <nav className="booking-navigation" aria-label="Điều hướng lễ tân">
-        {navigation.map(([label, icon]) => <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`} aria-current={icon === activeTab ? 'page' : undefined} aria-disabled={!['booking', 'rooms', 'deposit'].includes(icon)} onClick={() => { if (icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings'); if (icon === 'rooms') navigate('/le-tan/phong'); if (icon === 'deposit') navigate('/le-tan/deposits'); }}>
+      <span className="booking-role-chip">{isAccountant ? 'KẾ TOÁN THU CHI' : 'LỄ TÂN'}</span>
+      <nav className="booking-navigation" aria-label={`Điều hướng ${roleLabel.toLowerCase()}`}>
+        {navItems.map(([label, icon, unavailable]) => {
+          const isUnavailable = isAccountant && Boolean(unavailable);
+          return <button type="button" key={label} className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`}
+            aria-current={icon === activeTab ? 'page' : undefined}
+            aria-disabled={isAccountant ? isUnavailable : !['booking', 'rooms', 'deposit'].includes(icon)}
+            disabled={isUnavailable} title={isUnavailable ? 'Đang phát triển' : undefined}
+            onClick={() => {
+              if (isUnavailable) return;
+              if (isAccountant && icon === 'overview') navigate('/ke-toan');
+              if (isAccountant && icon === 'deposit') navigate('/ke-toan/hoan-coc');
+              if (!isAccountant && icon === 'booking') navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
+              if (!isAccountant && icon === 'rooms') navigate('/le-tan/phong');
+              if (!isAccountant && icon === 'deposit') navigate('/le-tan/deposits');
+            }}>
           <Icon name={icon} /><span>{label}</span>
-        </button>)}
+        </button>;
+        })}
       </nav>
       <div className="booking-sidebar-footer">
-        <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
-        <small>Đang làm việc · Lễ tân</small>
+        <strong>{isAccountant ? 'GenZ Cinema & Music Box' : branchName || 'Cơ sở theo tài khoản'}</strong>
+        <small>{isAccountant ? `Phạm vi: ${branchName || 'cơ sở được phân công'}` : `Đang làm việc · ${roleLabel}`}</small>
       </div>
     </aside>
     <div className="booking-workspace">
       <header className="booking-topbar">
-        <p><span>Lễ tân</span><b>/</b><strong>{breadcrumb}</strong></p>
+        <p><span>{roleLabel}</span><b>/</b><strong>{breadcrumb}</strong></p>
         <div className="booking-topbar-tools">
-          {!hideSearch && <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm phòng, booking, khách hàng..." aria-label={activeTab === 'rooms' ? 'Tìm kiếm phòng' : activeTab === 'deposit' ? 'Tìm giao dịch tiền cọc' : 'Tìm kiếm booking'} /></label>}
-          <span className="booking-topbar-datetime">{currentDate} {currentTime}</span>
+          {!hideSearch && <label className="booking-global-search"><Icon name="search" /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={isAccountant ? 'Tìm booking, khách hàng, ngân hàng...' : 'Tìm phòng, booking, khách hàng...'} aria-label={isAccountant ? 'Tìm yêu cầu hoàn cọc' : activeTab === 'rooms' ? 'Tìm kiếm phòng' : activeTab === 'deposit' ? 'Tìm giao dịch tiền cọc' : 'Tìm kiếm booking'} /></label>}
+          <span className="booking-topbar-datetime">{isAccountant ? `Tháng ${currentMonth}` : `${currentDate} ${currentTime}`}</span>
           <button type="button" className="booking-topbar-logout" disabled={busy} onClick={onLogout}>
             <Icon name="logout" /><span>Đăng xuất</span>
           </button>
-          <span className="booking-user-avatar" aria-label={user?.username}>{initials(user)}</span>
+          <span className="booking-user-avatar" aria-label={user?.username}>{isAccountant ? 'GZ' : initials(user)}</span>
         </div>
       </header>
       <main className="booking-main" id="main">{children}</main>
@@ -178,7 +207,7 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
       <dl className="booking-detail-list">
         <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
         <div><dt>Số điện thoại</dt><dd>{booking.contactPhone || '—'}</dd></div>
-        <div><dt>Thời gian</dt><dd>{timeText(booking.plannedStart, timezone)} · {dateText(booking.plannedStart, timezone)}</dd></div>
+        <div><dt>Giờ hẹn lúc đặt</dt><dd>{timeText(booking.plannedStart, timezone)} · {dateText(booking.plannedStart, timezone)}</dd></div>
         <div><dt>Số khách</dt><dd>{booking.guestCount || '—'}</dd></div>
         <div><dt>Hạng phòng</dt><dd>{booking.roomTypeName || booking.roomName || '—'}</dd></div>
         <div><dt>Phòng</dt><dd>{room}</dd></div>
@@ -235,7 +264,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
       <div className="booking-checkin-heading"><div><h2 id="booking-checkin-title">Check-in booking</h2><strong>{booking.code}</strong></div><button className="booking-panel-close" type="button" onClick={onClose} aria-label="Đóng">×</button></div>
       <section className="booking-checkin-section"><h3>Khách hàng</h3><strong className="booking-checkin-customer">{booking.contactName}</strong><p>{booking.contactPhone || 'Chưa có số điện thoại'} · {booking.guestCount ? `${booking.guestCount} khách` : 'Chưa cập nhật số khách'}</p></section>
       <section className="booking-checkin-section"><h3>Thông tin đặt phòng</h3><div className="booking-checkin-grid">
-        <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
+        <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
         <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{booking.roomCode ? `${booking.roomCode} · ${booking.roomName || ''}` : 'Chưa gán'}</strong></div>
       </div></section>
       <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
@@ -359,7 +388,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
         </div>
         <div className="booking-cancel-next-step"><strong>Tạo yêu cầu hoàn {formatVnd(depositAmount)} và chuyển Kế toán xử lý.</strong><p>Lễ tân không đánh dấu giao dịch là đã hoàn.</p></div>
       </>}
-      {hasDeposit && !refundEligible && <div className="booking-cancel-forfeit-note"><strong>{formatVnd(depositAmount)} cọc sẽ chuyển thành “Tiền hủy cọc”.</strong><p>Booking chuyển sang Đã hủy, phòng được giải phóng.</p><small>Lý do và thời điểm hủy được lưu trong lịch sử.</small></div>}
+      {hasDeposit && !refundEligible && <div className="booking-cancel-forfeit-note"><strong>{formatVnd(depositAmount)} cọc sẽ chuyển thành “Cọc không hoàn”.</strong><p>Booking chuyển sang Đã hủy, phòng được giải phóng.</p><small>Lý do và thời điểm hủy được lưu trong lịch sử.</small></div>}
       {detailLoading && <p role="status">Đang tải số dư cọc và điều kiện hoàn…</p>}
       {cancelError && <p className="booking-inline-error" role="alert">{cancelError}</p>}
       <div className="booking-cancel-buttons"><button className={`booking-button ${refundEligible ? 'booking-button-primary' : 'booking-button-danger'}`} type="button" disabled={!reason.trim() || missingRefundDetails || !cancellationAllowed || busy || !currentDetail || detailLoading || Boolean(detailError)} onClick={() => onConfirm(booking, { reason: reason.trim(), beneficiaryName: beneficiaryName.trim(), bankAccount: bankAccount.trim(), bankName: bankName.trim() })}>{cancelButtonLabel}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose}>Quay lại</button></div>
@@ -589,7 +618,7 @@ export default function BookingManagementPage() {
       if (result.refundRequestId) {
         message = `Đã hủy booking ${booking.code} và tạo yêu cầu hoàn ${formatVnd(result.depositAmount)} cho Kế toán.`;
       } else if (result.depositOutcome === 'NON_REFUNDABLE') {
-        message = `Đã hủy booking ${booking.code}; ${formatVnd(result.depositAmount)} đã chuyển thành tiền hủy cọc.`;
+        message = `Đã hủy booking ${booking.code}; ${formatVnd(result.depositAmount)} đã chuyển thành cọc không hoàn.`;
       }
       setNoticeKind('success');
       setNotice(message);
@@ -692,7 +721,7 @@ export default function BookingManagementPage() {
     <div className="booking-content-grid">
       <section className="booking-table-card" aria-label="Danh sách booking">
         <div className="booking-table-scroll"><table className="booking-table">
-          <thead><tr><th>Mã booking</th><th>Giờ</th><th>Khách hàng / SĐT</th><th>Hạng / Phòng</th><th>Cọc đã nhận</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+          <thead><tr><th>Mã booking</th><th>Giờ hẹn</th><th>Khách hàng / SĐT</th><th>Hạng / Phòng</th><th>Cọc đã nhận</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
           <tbody>{visibleRows.map((item) => {
             const selectedRow = item.id === selected?.id;
             const lateMinutes = item.status === 'CONFIRMED' ? Math.floor((Date.now() - new Date(item.plannedStart).getTime()) / 60000) : 0;
