@@ -13,7 +13,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 
+/**
+ * Run main() in the IDE to select a subfeature and test case.
+ * Program arguments: --list, or --case TC-BKG-001 (legacy keys also work).
+ * Compare Expected, Actual, exceptions and dependency calls; record the result yourself.
+ */
 public final class ManualTestRunner {
     private static final String LINE = "====================================";
 
@@ -21,6 +28,8 @@ public final class ManualTestRunner {
     }
 
     public static void main(String[] args) {
+        System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
         List<ManualTestSuite> suites = ManualTestRegistry.suites();
         if (args.length == 1 && "--list".equals(args[0])) {
             printAll(suites);
@@ -126,8 +135,6 @@ public final class ManualTestRunner {
         System.out.println("TEST KEY: " + testCase.key());
         System.out.println("TEST CLASS: " + testCase.sourceClass());
         System.out.println("TEST METHOD: " + testCase.sourceMethod());
-        System.out.println("TEST TYPE: " + testCase.testType());
-        System.out.println("TRACEABILITY: " + testCase.traceability());
         System.out.println(LINE);
         section("PRECONDITIONS", testCase.preconditions());
         section("INPUT", testCase.input());
@@ -167,8 +174,7 @@ public final class ManualTestRunner {
             for (ManualTestCase testCase : suite.cases()) {
                 total++;
                 System.out.println(testCase.key() + " | " + testCase.displayId()
-                        + " | " + testCase.sourceClass() + "." + testCase.sourceMethod()
-                        + " | " + testCase.traceability());
+                        + " | " + testCase.sourceClass() + "." + testCase.sourceMethod());
             }
         }
         System.out.println();
@@ -179,7 +185,7 @@ public final class ManualTestRunner {
     private static void findByKey(List<ManualTestSuite> suites, String key) {
         for (ManualTestSuite suite : suites) {
             for (ManualTestCase testCase : suite.cases()) {
-                if (testCase.key().equals(key)) {
+                if (testCase.key().equalsIgnoreCase(key) || testCase.id().equalsIgnoreCase(key)) {
                     execute(testCase);
                     return;
                 }

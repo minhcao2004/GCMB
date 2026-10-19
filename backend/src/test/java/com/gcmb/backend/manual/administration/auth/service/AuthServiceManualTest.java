@@ -6,7 +6,7 @@
  * Description: Covers login, recovery, password reset, session authentication and logout.
  */
 
-package com.gcmb.backend.manual.auth;
+package com.gcmb.backend.manual.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.dto.response.Identity;
 import com.gcmb.backend.administration.auth.entity.Account;
@@ -76,7 +76,8 @@ public final class AuthServiceManualTest {
             int row = (Integer) data[4];
             cases.add(test("login-" + role.toLowerCase() + "-" + remember, id, "UTC-PAM-LOGIN-001",
                     "loginReturnsIdentityDestinationAndCreatesHashedSession[" + role + ", remember=" + remember + "]",
-                    row, "ACTIVE account; password matches; role is supported",
+                    row, "ACTIVE account; password matches; role is supported"
+                            + ("BRANCH_MANAGER".equals(role) ? "; assigned branchId=40000000-0000-0000-0000-000000000004" : ""),
                     "username='  staff  ', remember=" + remember,
                     "Identity role=" + role + ", destination=" + destination
                             + "; token=" + SESSION_TOKEN + "; seconds=" + (remember ? Integer.MAX_VALUE : -1)
@@ -550,7 +551,12 @@ public final class AuthServiceManualTest {
     }
 
     private static void arrangeLogin(Context context, String role) {
-        when(context.repository.findByUsername(USERNAME)).thenReturn(account("ACTIVE", role));
+        // Approved fixture correction for existing positive BM login cases UTC005/UTC006.
+        Account loginAccount = "BRANCH_MANAGER".equals(role)
+                ? new Account(USER_ID, USERNAME, EMAIL, PASSWORD_HASH, "ACTIVE", role,
+                        java.util.UUID.fromString("40000000-0000-0000-0000-000000000004"), "Chi nhánh kiểm thử")
+                : account("ACTIVE", role);
+        when(context.repository.findByUsername(USERNAME)).thenReturn(loginAccount);
         when(context.crypto.matches(PASSWORD, PASSWORD_HASH)).thenReturn(true);
         when(context.crypto.token()).thenReturn(SESSION_TOKEN);
     }
@@ -592,9 +598,14 @@ public final class AuthServiceManualTest {
             String input,
             String expected,
             ManualTestCase.Executor executor) {
-        return new ManualTestCase(
-                "auth-service/" + key, documentId, sourceId, "AuthServiceTest", method, "Unit",
-                "Personal Account Management!A" + row, preconditions, input, expected, executor);
+        return new ManualTestCase("auth-service/" + key,
+                ManualTestCase.identifier(documentId, sourceId),
+                "AuthServiceTest",
+                method,
+                preconditions,
+                input,
+                expected,
+                executor);
     }
 
     private record Context(

@@ -6,7 +6,7 @@
  * Description: Covers the authenticated password-change workflow and its side effects.
  */
 
-package com.gcmb.backend.manual.auth;
+package com.gcmb.backend.manual.administration.auth.service;
 
 import com.gcmb.backend.administration.auth.repository.AuthRepository;
 import com.gcmb.backend.administration.auth.dto.response.Identity;
@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.clearInvocations;
 
 public final class AuthChangePasswordManualTest {
     private static final UUID USER_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
@@ -30,13 +31,13 @@ public final class AuthChangePasswordManualTest {
     }
 
     public static ManualTestSuite suite() {
-        ManualTestCase contract = new ManualTestCase(
-                "auth-change-password/contract", "UTC045", "UTC-PAM-CHANGE-PASSWORD-003",
-                "AuthChangePasswordContractTest", "rejectsNewPasswordEqualToCurrentPassword", "Contract",
-                "Personal Account Management!A59",
-                "Active account linked to Identity; current password matches stored hash",
+        ManualTestCase contract = new ManualTestCase("auth-change-password/contract",
+                ManualTestCase.identifier("UTC045", "UTC-PAM-CHANGE-PASSWORD-003"),
+                "AuthChangePasswordManualTest",
+                "rejectsNewPasswordEqualToCurrentPassword",
+                "ACTIVE account matches signed-in Identity.id()/username(); current password matches stored hash; AuthService.changePassword(Identity, String, String, String)",
                 "currentPassword=newPassword=confirmation='Current1!'",
-                "AuthFailure status=400 on password; no password/session/reset write",
+                "AuthFailure status=400, message='Mật khẩu mới phải khác mật khẩu hiện tại'; findByUsername('staff'), verify current and new password against stored hash; no changePassword, revokePendingResets, revokeTokens or mailer call",
                 () -> {
                     AuthRepository repository = mock(AuthRepository.class);
                     AuthCrypto crypto = mock(AuthCrypto.class);
@@ -48,6 +49,8 @@ public final class AuthChangePasswordManualTest {
                     when(repository.findByUsername("staff")).thenReturn(new Account(USER_ID, "staff",
                             "staff@example.com", "stored-hash", "ACTIVE", "RECEPTIONIST", null, null));
                     when(crypto.matches("Current1!", "stored-hash")).thenReturn(true);
+                    // Observe only the business call; constructor dummy-hash setup is excluded.
+                    clearInvocations(repository, crypto, mailer);
                     return ManualTestSupport.observeVoid(
                             () -> service.changePassword(identity, "Current1!", "Current1!", "Current1!"),
                             repository, crypto, mailer);

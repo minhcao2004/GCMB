@@ -6,7 +6,7 @@
  * Description: Covers transactional audit recording around data mutations.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.audit.service;
 
 import com.gcmb.backend.administration.audit.service.MutationAudit;
 import com.gcmb.backend.administration.auth.dto.response.Identity;
@@ -68,10 +68,14 @@ public final class MutationAuditManualTest {
     }
 
     private static ManualTestCase test(int number, String key, String type, String input, String expected) {
-        return new ManualTestCase("audit-mutation/" + key, "UTC%03d".formatted(number), "UC-08/NFR Audit Trail",
-            "MutationAuditManualTest", "record(" + key + ")", "Unit", "Audit Log Management!A" + (number + 15),
-            "Real MutationAudit; mocked JdbcTemplate/transaction manager/operation; synthetic Identity; context restored after case.",
-            input, expected, () -> observe(key, type));
+        return new ManualTestCase("audit-mutation/" + key,
+                ManualTestCase.identifier("UTC%03d".formatted(number), "UC-08/NFR Audit Trail"),
+                "MutationAuditManualTest",
+                "record(" + key + ")",
+                "Real MutationAudit; mocked JdbcTemplate/transaction manager/operation; synthetic Identity; context restored after case.",
+                input,
+                expected,
+                () -> observe(key, type));
     }
 
     @SuppressWarnings("unchecked")

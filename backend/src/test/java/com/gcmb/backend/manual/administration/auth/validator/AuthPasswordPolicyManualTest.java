@@ -6,7 +6,7 @@
  * Description: Covers password policy validation and rejection cases.
  */
 
-package com.gcmb.backend.manual.auth;
+package com.gcmb.backend.manual.administration.auth.validator;
 
 import com.gcmb.backend.administration.auth.validator.AuthValidation;
 import com.gcmb.backend.manual.ManualTestCase;
@@ -30,11 +30,12 @@ public final class AuthPasswordPolicyManualTest {
                 "acceptsPasswordAtSixtyFourCharacterUpperBoundary", 91, "Aa1!" + "b".repeat(60),
                 "Password and confirmation match at length 64", "Complete without exception"));
 
-        cases.add(new ManualTestCase(
-                "password-policy/mismatch", "UTC053", "UTC-PAM-CHANGE-PASSWORD-002",
-                "AuthPasswordPolicyTest", "rejectsPasswordWhenConfirmationDoesNotMatch", "Unit",
-                "Personal Account Management!A67 contains the same mismatch input in reset()",
-                "No setup required", "password='Aa1!bcde', confirmation='Aa1!bcdf'",
+        cases.add(new ManualTestCase("password-policy/mismatch",
+                ManualTestCase.identifier("UTC053", "UTC-PAM-CHANGE-PASSWORD-002"),
+                "AuthPasswordPolicyTest",
+                "rejectsPasswordWhenConfirmationDoesNotMatch",
+                "No setup required",
+                "password='Aa1!bcde', confirmation='Aa1!bcdf'",
                 "AuthFailure status=400; message='Mật khẩu xác nhận không khớp'",
                 () -> ManualTestSupport.observeVoid(() -> AuthValidation.password(VALID, "Aa1!bcdf"))));
 
@@ -86,10 +87,13 @@ public final class AuthPasswordPolicyManualTest {
             String password,
             String preconditions,
             String expected) {
-        return new ManualTestCase(
-                "password-policy/" + key, documentId, sourceId, "AuthPasswordPolicyTest", method, "Unit",
-                "Personal Account Management!A" + row, preconditions,
+        return new ManualTestCase("password-policy/" + key,
+                ManualTestCase.identifier(documentId, sourceId),
+                "AuthPasswordPolicyTest",
+                method,
+                preconditions,
                 "password=confirmation='" + password.replace(" ", "␠") + "'; length=" + password.length(),
-                expected, () -> ManualTestSupport.observeVoid(() -> AuthValidation.password(password, password)));
+                expected,
+                () -> ManualTestSupport.observeVoid(() -> AuthValidation.password(password, password)));
     }
 }

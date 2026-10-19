@@ -6,7 +6,7 @@
  * Description: Covers filtering and redaction of audit snapshot data.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.audit.service;
 
 import com.gcmb.backend.administration.audit.service.AuditSnapshots;
 import com.gcmb.backend.manual.ManualTestCase;
@@ -40,10 +40,13 @@ public final class AuditSnapshotsManualTest {
     }
 
     private static ManualTestCase test(int number, String key, String method, String json, String expected) {
-        return new ManualTestCase("audit-snapshots/" + key, "UTC%03d".formatted(number), "UC-08",
-            "AuditSnapshotsManualTest", method, "Unit", "Audit Log Management!A" + (number + 14),
-            "Call real AuditSnapshots.read; synthetic JSON only; no database.",
-            json == null ? "Java null snapshot" : json, expected,
-            () -> ManualTestSupport.observe(() -> AuditSnapshots.read(json)));
+        return new ManualTestCase("audit-snapshots/" + key,
+                ManualTestCase.identifier("UTC%03d".formatted(number), "UC-08"),
+                "AuditSnapshotsManualTest",
+                method,
+                "Call real AuditSnapshots.read; synthetic JSON only; no database.",
+                json == null ? "Java null snapshot" : json,
+                expected,
+                () -> ManualTestSupport.observe(() -> AuditSnapshots.read(json)));
     }
 }

@@ -6,7 +6,7 @@
  * Description: Covers audit repository queries, row mapping and snapshot sanitization.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.audit.repository;
 
 import com.gcmb.backend.administration.audit.repository.AuditRepository;
 import com.gcmb.backend.manual.*;
@@ -52,10 +52,14 @@ public final class AuditRepositoryManualTest {
     }
 
     private static ManualTestCase test(int number, String key, String method, String input, String expected) {
-        return new ManualTestCase("audit-repository/" + key, "UTC%03d".formatted(number), "UC-08",
-            "AuditRepositoryManualTest", method + "(" + key + ")", "Unit", "Audit Log Management!A" + (number + 16),
-            "Real repository; mocked JdbcTemplate/ResultSet. Tester inspects returned data and generated SQL/arguments; no live DB.",
-            input, expected, () -> observe(key));
+        return new ManualTestCase("audit-repository/" + key,
+                ManualTestCase.identifier("UTC%03d".formatted(number), "UC-08"),
+                "AuditRepositoryManualTest",
+                method + "(" + key + ")",
+                "Real repository; mocked JdbcTemplate/ResultSet. Tester inspects returned data and generated SQL/arguments; no live DB.",
+                input,
+                expected,
+                () -> observe(key));
     }
 
     @SuppressWarnings("unchecked")

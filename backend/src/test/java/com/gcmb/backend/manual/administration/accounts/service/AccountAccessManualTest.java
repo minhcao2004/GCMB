@@ -6,7 +6,7 @@
  * Description: Covers account-access authorization rules for administrative operations.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.accounts.service;
 
 import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.Deactivate;
 import com.gcmb.backend.administration.accounts.dto.AccountAccessDtos.PermissionView;
@@ -15,6 +15,7 @@ import com.gcmb.backend.administration.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.administration.accounts.repository.AccountAccessRepository;
 import com.gcmb.backend.administration.accounts.repository.AccountRepository;
 import com.gcmb.backend.administration.accounts.service.AccountAccessService;
+import com.gcmb.backend.administration.branch.service.BranchAdministrationService;
 import com.gcmb.backend.manual.ManualTestCase;
 import com.gcmb.backend.manual.ManualTestSuite;
 import com.gcmb.backend.manual.ManualTestSupport;
@@ -53,7 +54,7 @@ public final class AccountAccessManualTest {
                     when(context.accounts.activeBranch(BRANCH_ID)).thenReturn(true);
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole("RECEPTIONIST", BRANCH_ID), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("self-modification", "UTC034", "UTC-ACL-004",
@@ -67,7 +68,7 @@ public final class AccountAccessManualTest {
                         String deactivate = ManualTestSupport.capture(
                                 () -> context.service.deactivate(ACTOR_ID, new Deactivate("Resigned"), ACTOR_ID));
                         return "setRole: " + role + System.lineSeparator() + "deactivate: " + deactivate;
-                    }, context.accounts, context.access);
+                    }, context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("stale-permission", "UTC035", "UTC-ACL-005",
@@ -78,7 +79,7 @@ public final class AccountAccessManualTest {
                     when(context.access.lockManagement(ACTOR_ID)).thenReturn(false);
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole("ACCOUNTANT", null), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("missing-target", "UTC036", "UTC-ACL-006", "editableRejectsMissingTargetAccount", 51,
@@ -89,7 +90,7 @@ public final class AccountAccessManualTest {
                     when(context.access.lockAccount(TARGET_ID)).thenReturn(false);
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole("ACCOUNTANT", null), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("revoked-target", "UTC037", "UTC-ACL-007", "editableRejectsAlreadyRevokedTarget", 52,
@@ -99,7 +100,7 @@ public final class AccountAccessManualTest {
                     arrangeEditable(context, account("RECEPTIONIST", BRANCH_ID, "REVOKED"));
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole("ACCOUNTANT", null), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("unknown-role", "UTC038", "UTC-ACL-008", "setRoleRejectsUnknownRole", 53,
@@ -110,7 +111,7 @@ public final class AccountAccessManualTest {
                     when(context.accounts.roleId("UNKNOWN")).thenReturn(null);
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole("UNKNOWN", BRANCH_ID), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         Object[][] scopes = {
@@ -138,7 +139,7 @@ public final class AccountAccessManualTest {
                         }
                         return ManualTestSupport.observe(
                                 () -> context.service.setRole(TARGET_ID, new SetRole(role, scope), ACTOR_ID),
-                                context.accounts, context.access);
+                                context.accounts, context.access, context.branches);
                     }));
         }
 
@@ -146,14 +147,14 @@ public final class AccountAccessManualTest {
                 "deactivateTrimsReasonRevokesSessionsAndAudits", 58,
                 "Actor may manage an ACTIVE target; before/after snapshots are available",
                 "reason='  Resigned  '",
-                "Trim reason, deactivate, revoke tokens, audit snapshots and return the after account", () -> {
+                "Trim reason, deactivate, synchronize branch manager, revoke tokens, audit snapshots and return the after account", () -> {
                     Context context = context();
                     AccountView before = account("RECEPTIONIST", BRANCH_ID, "ACTIVE");
                     AccountView after = account("RECEPTIONIST", BRANCH_ID, "REVOKED");
                     arrangeEditable(context, before, after);
                     return ManualTestSupport.observe(
                             () -> context.service.deactivate(TARGET_ID, new Deactivate("  Resigned  "), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 }));
 
         Object[][] reasons = {{"UTC043", "null", null, 59}, {"UTC044", "blank", " ", 60},
@@ -170,7 +171,7 @@ public final class AccountAccessManualTest {
                         Context context = context();
                         return ManualTestSupport.observe(
                                 () -> context.service.deactivate(TARGET_ID, new Deactivate(reason), ACTOR_ID),
-                                context.accounts, context.access);
+                                context.accounts, context.access, context.branches);
                     }));
         }
 
@@ -184,7 +185,7 @@ public final class AccountAccessManualTest {
                     when(context.accounts.roleId("RECEPTIONIST")).thenReturn(ROLE_ID);
                     when(context.access.permissions("RECEPTIONIST")).thenReturn(permissions);
                     return ManualTestSupport.observe(
-                            () -> context.service.permissions("RECEPTIONIST"), context.accounts, context.access);
+                            () -> context.service.permissions("RECEPTIONIST"), context.accounts, context.access, context.branches);
                 }));
 
         cases.add(test("permissions-invalid", "UTC047", "UTC-ACL-013", "permissionsRejectsInvalidRole", 63,
@@ -193,7 +194,7 @@ public final class AccountAccessManualTest {
                     Context context = context();
                     when(context.accounts.roleId("UNKNOWN")).thenReturn(null);
                     return ManualTestSupport.observe(
-                            () -> context.service.permissions("UNKNOWN"), context.accounts, context.access);
+                            () -> context.service.permissions("UNKNOWN"), context.accounts, context.access, context.branches);
                 }));
 
         return new ManualTestSuite("Administration", "AccountAccessService", cases);
@@ -210,7 +211,7 @@ public final class AccountAccessManualTest {
                         : "setRoleAssignsChainRoleRevokesSessionsAndAudits",
                 row, "Actor may manage an ACTIVE target; role exists" + (branchRole ? "; branch is active" : ""),
                 "role=" + role + ", branchId=" + scope,
-                "Set role, revoke tokens, audit before/after and return the after account", () -> {
+                "Set role, synchronize branch manager, revoke tokens, audit before/after and return the after account", () -> {
                     Context context = context();
                     AccountView before = account(branchRole ? "ACCOUNTANT" : "RECEPTIONIST",
                             branchRole ? null : BRANCH_ID, "ACTIVE");
@@ -222,14 +223,15 @@ public final class AccountAccessManualTest {
                     }
                     return ManualTestSupport.observe(
                             () -> context.service.setRole(TARGET_ID, new SetRole(role, scope), ACTOR_ID),
-                            context.accounts, context.access);
+                            context.accounts, context.access, context.branches);
                 });
     }
 
     private static Context context() {
         AccountRepository accounts = mock(AccountRepository.class);
         AccountAccessRepository access = mock(AccountAccessRepository.class);
-        return new Context(accounts, access, new AccountAccessService(accounts, access));
+        BranchAdministrationService branches = mock(BranchAdministrationService.class);
+        return new Context(accounts, access, branches, new AccountAccessService(accounts, access, branches));
     }
 
     private static void arrangeEditable(Context context, AccountView... sequence) {
@@ -255,14 +257,20 @@ public final class AccountAccessManualTest {
             String input,
             String expected,
             ManualTestCase.Executor executor) {
-        return new ManualTestCase(
-                "account-access/" + key, documentId, sourceId, "AccountAccessServiceTest", method, "Unit",
-                "User Account Management!A" + workbookRow, preconditions, input, expected, executor);
+        return new ManualTestCase("account-access/" + key,
+                ManualTestCase.identifier(documentId, sourceId),
+                "AccountAccessServiceTest",
+                method,
+                preconditions,
+                input,
+                expected,
+                executor);
     }
 
     private record Context(
             AccountRepository accounts,
             AccountAccessRepository access,
+            BranchAdministrationService branches,
             AccountAccessService service) {
     }
 }

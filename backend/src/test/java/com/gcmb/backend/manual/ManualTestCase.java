@@ -2,33 +2,21 @@
  * Copyright (c) 2026 SEP490-G12.
  *
  * Author: CaoNM
- * Created: 13/10/2026
- * Description: Defines the metadata and executable action for a manual test case.
+ * Created: 20/10/2026
+ * Description: Describes one selectable manual test and its executable action.
  */
 
 package com.gcmb.backend.manual;
 
 import java.util.Objects;
 
-/** Metadata and isolated executable for one selectable manual test data set. */
-public record ManualTestCase(
-        String key,
-        String documentTestCaseId,
-        String sourceTestCaseId,
-        String sourceClass,
-        String sourceMethod,
-        String testType,
-        String traceability,
-        String preconditions,
-        String input,
-        String expectedResult,
-        Executor executor) {
-
+public record ManualTestCase(String key,String id,String sourceClass,String sourceMethod,
+    String preconditions,String input,String expectedResult,Executor executor) {
     public ManualTestCase {
         Objects.requireNonNull(key);
+        Objects.requireNonNull(id);
         Objects.requireNonNull(sourceClass);
         Objects.requireNonNull(sourceMethod);
-        Objects.requireNonNull(testType);
         Objects.requireNonNull(preconditions);
         Objects.requireNonNull(input);
         Objects.requireNonNull(expectedResult);
@@ -36,18 +24,14 @@ public record ManualTestCase(
     }
 
     public String displayId() {
-        String document = documentTestCaseId == null || documentTestCaseId.isBlank()
-                ? "UNMAPPED"
-                : documentTestCaseId;
-        if (sourceTestCaseId == null || sourceTestCaseId.isBlank()
-                || sourceTestCaseId.equals(document)) {
-            return document;
-        }
-        return document + " / " + sourceTestCaseId;
+        return id;
     }
 
-    @FunctionalInterface
-    public interface Executor {
+    public static String identifier(String documentId,String sourceId) {
+        String document=documentId==null||documentId.isBlank()?"UNMAPPED":documentId;
+        return sourceId==null||sourceId.isBlank()||sourceId.equals(document)?document:document+" / "+sourceId;
+    }
+    @FunctionalInterface public interface Executor {
         ManualTestResult execute() throws Exception;
     }
 }

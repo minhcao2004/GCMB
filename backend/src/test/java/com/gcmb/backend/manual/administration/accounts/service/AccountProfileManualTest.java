@@ -6,7 +6,7 @@
  * Description: Covers profile retrieval, updates and account-profile validation rules.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.accounts.service;
 
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.administration.accounts.dto.AccountProfileDtos.Profile;
@@ -329,10 +329,14 @@ public final class AccountProfileManualTest {
             String input,
             String expected,
             ManualTestCase.Executor executor) {
-        return new ManualTestCase(
-                "account-profile/" + key, documentId, sourceId, "AccountProfileServiceTest", method, "Unit",
-                "Personal Account Management!A" + workbookRow,
-                preconditions, input, expected, executor);
+        return new ManualTestCase("account-profile/" + key,
+                ManualTestCase.identifier(documentId, sourceId),
+                "AccountProfileServiceTest",
+                method,
+                preconditions,
+                input,
+                expected,
+                executor);
     }
 
     private record Context(

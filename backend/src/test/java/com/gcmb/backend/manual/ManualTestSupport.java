@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.mockito.Mockito;
 import org.mockito.invocation.Invocation;
@@ -81,9 +82,21 @@ public final class ManualTestSupport {
         if (failure instanceof AuthFailure authFailure) {
             return authFailure.getClass().getName()
                     + " {status=" + authFailure.status()
+                    + ", errors=" + errorFields(authFailure)
                     + ", message=" + authFailure.getMessage() + "}";
         }
         return failure.getClass().getName() + ": " + safeValue(failure.getMessage());
+    }
+
+    /** AuthFailure exposes status but keeps its field-error map package-private. */
+    public static Map<?, ?> errorFields(AuthFailure failure) {
+        try {
+            var errors = AuthFailure.class.getDeclaredField("errors");
+            errors.setAccessible(true);
+            return (Map<?, ?>) errors.get(failure);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Cannot observe AuthFailure field errors", exception);
+        }
     }
 
     private static Throwable unwrap(Throwable failure) {

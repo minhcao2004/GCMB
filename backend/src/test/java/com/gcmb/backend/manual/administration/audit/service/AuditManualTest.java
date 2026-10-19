@@ -6,7 +6,7 @@
  * Description: Covers audit search, detail and access-control behavior.
  */
 
-package com.gcmb.backend.manual.administration;
+package com.gcmb.backend.manual.administration.audit.service;
 
 import com.gcmb.backend.administration.audit.dto.AuditDtos.AuditDetail;
 import com.gcmb.backend.administration.audit.dto.AuditDtos.AuditEntry;
@@ -163,8 +163,13 @@ public final class AuditManualTest {
             String input,
             String expected,
             ManualTestCase.Executor executor) {
-        return new ManualTestCase(
-                "audit/" + key, documentId, "UC-08", "AuditManualTest", method, "Unit",
-                "Audit Log Management!A" + row, preconditions, input, expected, executor);
+        return new ManualTestCase("audit/" + key,
+                ManualTestCase.identifier(documentId, "UC-08"),
+                "AuditManualTest",
+                method,
+                preconditions,
+                input,
+                expected,
+                executor);
     }
 }

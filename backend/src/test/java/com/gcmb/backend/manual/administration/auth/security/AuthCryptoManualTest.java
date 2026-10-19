@@ -6,7 +6,7 @@
  * Description: Covers token generation, hashing and password verification behavior.
  */
 
-package com.gcmb.backend.manual.auth;
+package com.gcmb.backend.manual.administration.auth.security;
 
 import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.auth.validator.AuthValidation;
@@ -97,9 +97,14 @@ public final class AuthCryptoManualTest {
             String input,
             String expected,
             ManualTestCase.Executor executor) {
-        return new ManualTestCase(
-                "auth-crypto/" + key, null, null, "AuthCryptoTest", method, "Unit",
-                "No confirmed workbook row; original test method retained", preconditions, input, expected, executor);
+        return new ManualTestCase("auth-crypto/" + key,
+                ManualTestCase.identifier(null, null),
+                "AuthCryptoTest",
+                method,
+                preconditions,
+                input,
+                expected,
+                executor);
     }
 
     private static String printable(String value) {
