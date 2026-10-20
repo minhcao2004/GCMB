@@ -587,7 +587,7 @@ export default function BookingManagementPage() {
   const [selectedDate, setSelectedDate] = useState(() => bookingDateFromNavigation(location.state?.bookingDate));
   const [activeFilter, setActiveFilter] = useState('all');
   const [roomTier, setRoomTier] = useState('all');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => location.state?.search || '');
   const [rows, setRows] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
