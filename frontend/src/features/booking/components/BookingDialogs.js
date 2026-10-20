@@ -7,7 +7,9 @@ import {
   formatVnd,
   fromDateAndTime,
   hasRoomConflict,
+  isValidTimeInput,
 } from '../data/bookingData';
+import TimeInput from './TimeInput';
 
 // Định dạng ngày địa phương cho biểu mẫu booking minh họa.
 const localDate = (date) => {
@@ -63,6 +65,19 @@ function TextField({ label, name, value, onChange, error, ...inputProps }) {
   </label>;
 }
 
+// Hiển thị trường nhập giờ 24 tiếng cùng hướng dẫn và lỗi xác thực.
+function TimeField({ label, name, value, onChange, error }) {
+  const hintId = name + '-hint';
+  const errorId = name + '-error';
+  return <label className="booking-field">
+    <span>{label}</span>
+    <TimeInput name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : hintId} />
+    {error
+      ? <small id={errorId} className="booking-field-error" role="alert">{error}</small>
+      : <small id={hintId} className="booking-field-hint">Định dạng 24 giờ, ví dụ 14:30.</small>}
+  </label>;
+}
+
 // Xử lý tạo/sửa booking trong luồng dữ liệu minh họa phía client.
 export function BookingFormDialog({ open, mode, booking, bookings, selectedDate, onClose, onSubmit }) {
   const [form, setForm] = useState(() => freshForm(selectedDate));
@@ -111,9 +126,9 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
     if (!digits) nextErrors.phone = 'Nhập số điện thoại.';
     else if (digits.length < 9 || digits.length > 11) nextErrors.phone = 'Số điện thoại cần có từ 9 đến 11 chữ số.';
     if (!form.startDate) nextErrors.startDate = 'Chọn ngày bắt đầu.';
-    if (!form.startTime) nextErrors.startTime = 'Chọn giờ bắt đầu.';
+    if (!isValidTimeInput(form.startTime)) nextErrors.startTime = form.startTime ? 'Nhập giờ theo định dạng 24 giờ, ví dụ 14:30.' : 'Chọn giờ bắt đầu.';
     if (!form.endDate) nextErrors.endDate = 'Chọn ngày kết thúc.';
-    if (!form.endTime) nextErrors.endTime = 'Chọn giờ kết thúc.';
+    if (!isValidTimeInput(form.endTime)) nextErrors.endTime = form.endTime ? 'Nhập giờ theo định dạng 24 giờ, ví dụ 14:30.' : 'Chọn giờ kết thúc.';
     if (start && end && end <= start) nextErrors.endTime = 'Thời gian kết thúc phải sau thời gian bắt đầu.';
     if (!editing && form.source === 'advance' && start && start <= now) nextErrors.startTime = 'Booking đặt trước cần có giờ bắt đầu trong tương lai.';
     if (!room) nextErrors.roomId = 'Chọn một phòng đang hoạt động và còn trống.';
@@ -188,9 +203,9 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
               <legend>Thời gian và số khách</legend>
               <div className="booking-time-grid">
                 <TextField label="Ngày bắt đầu *" name="startDate" type="date" value={form.startDate} onChange={updateField} error={errors.startDate} />
-                <TextField label="Giờ bắt đầu *" name="startTime" type="time" value={form.startTime} onChange={updateField} error={errors.startTime} />
+                <TimeField label="Giờ bắt đầu *" name="startTime" value={form.startTime} onChange={updateField} error={errors.startTime} />
                 <TextField label="Ngày kết thúc *" name="endDate" type="date" value={form.endDate} onChange={updateField} error={errors.endDate} />
-                <TextField label="Giờ kết thúc *" name="endTime" type="time" value={form.endTime} onChange={updateField} error={errors.endTime} />
+                <TimeField label="Giờ kết thúc *" name="endTime" value={form.endTime} onChange={updateField} error={errors.endTime} />
                 <TextField label="Số khách" name="guestCount" type="number" min="1" max="12" value={form.guestCount} onChange={updateField} error={errors.guestCount} />
               </div>
             </fieldset>

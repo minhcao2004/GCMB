@@ -7,6 +7,7 @@ import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
 import com.gcmb.backend.booking.repository.DepositRepository;
+import com.gcmb.backend.booking.repository.DepositRepository.RefundRequestRow;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,11 +18,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-// Luồng lễ tân chỉ theo dõi tiền cọc và gửi yêu cầu hoàn cho kế toán.
+// Lễ tân gửi yêu cầu; kế toán xác nhận giao dịch hoàn trong phạm vi chi nhánh.
 public class DepositManagementService {
     // Cọc đã trừ bill vẫn có thể tra cứu và xem lịch sử APPLY.
     private static final Set<String> STATUSES = Set.of("HELD", "PENDING_REFUND", "REFUNDED", "FORFEITED", "APPLIED");
     private static final Set<String> METHODS = Set.of("BANK_TRANSFER", "MANUAL_TRANSFER", "CASH", "CARD", "QR", "MULTIPLE");
+    private static final Set<String> OPEN_REFUND_STATUSES = Set.of("REQUESTED", "APPROVED", "PROCESSING");
 
     private final BookingRepository bookings;
     private final DepositRepository deposits;
@@ -96,6 +98,43 @@ public class DepositManagementService {
         return new DepositDtos.RefundRequestResult(refundRequestId, request.bookingId(), balance, "REQUESTED");
     }
 
+    @Transactional(readOnly = true)
+    public DepositDtos.RefundRequestQueue refundRequests(Identity identity) {
+        BranchScope branch = branch(identity);
+        return new DepositDtos.RefundRequestQueue(branch.name(), deposits.refundRequests(branch.id()));
+    }
+
+    @Transactional
+    public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
+                                                               DepositDtos.CompleteRefundRequest request) {
+        if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
+        if (request == null) throw new BookingFailure(400, "externalReference", "Vui lòng nhập mã giao dịch hoàn");
+        String reference = required(request.externalReference(), "externalReference", "Mã giao dịch hoàn", 200);
+        BranchScope branch = branch(identity);
+        RefundRequestRow initial = deposits.refundRequest(branch.id(), requestId, false);
+        if (initial == null) throw refundRequestNotFound();
+        if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
+
+        if (bookings.lockBookingId(initial.bookingId(), branch.id()) == null) throw notFound();
+        BookingRow booking = bookings.booking(initial.bookingId(), branch.id());
+        if (booking == null) throw notFound();
+        if (!"CANCELLED".equals(booking.status()))
+            throw new BookingFailure(409, "requestId", "Chỉ booking đã hủy mới được hoàn tiền cọc");
+        UUID depositId = bookings.lockDeposit(initial.bookingId());
+        if (depositId == null || !depositId.equals(initial.depositId()))
+            throw new BookingFailure(409, "requestId", "Tài khoản cọc của booking đã thay đổi; vui lòng tải lại yêu cầu");
+
+        RefundRequestRow locked = deposits.refundRequest(branch.id(), requestId, true);
+        if (locked == null) throw refundRequestNotFound();
+        if (!OPEN_REFUND_STATUSES.contains(locked.status())) throw refundAlreadyProcessed();
+        BigDecimal balance = bookings.depositBalance(locked.bookingId());
+        if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
+            throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
+        if (!deposits.completeRefundRequest(branch.id(), locked, identity.id(), reference))
+            throw refundAlreadyProcessed();
+        return new DepositDtos.RefundCompletionResult(locked.id(), locked.bookingId(), locked.amount(), "PAID");
+    }
+
     private BranchScope branch(Identity identity) {
         BranchScope scope = bookings.branchScope(identity.id());
         if (scope == null) throw new BookingFailure(403, "form", "Tài khoản chưa được phân công tại chi nhánh đang hoạt động");
@@ -118,5 +157,13 @@ public class DepositManagementService {
 
     private static BookingFailure notFound() {
         return new BookingFailure(404, "bookingId", "Không tìm thấy booking hoặc tiền cọc tại chi nhánh đang làm việc");
+    }
+
+    private static BookingFailure refundRequestNotFound() {
+        return new BookingFailure(404, "requestId", "Không tìm thấy yêu cầu hoàn cọc tại chi nhánh đang làm việc");
+    }
+
+    private static BookingFailure refundAlreadyProcessed() {
+        return new BookingFailure(409, "requestId", "Yêu cầu hoàn cọc đã được xử lý; vui lòng tải lại danh sách");
     }
 }

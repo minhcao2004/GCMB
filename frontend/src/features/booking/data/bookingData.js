@@ -32,9 +32,14 @@ export function isLocalDateInput(value) {
   return !Number.isNaN(parsed.getTime()) && toLocalDateInput(parsed) === value;
 }
 
-// Ghép ngày và giờ nhập thành Date theo múi giờ máy.
+// Chỉ chấp nhận giờ theo định dạng 24 tiếng HH:mm.
+export function isValidTimeInput(value) {
+  return typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+// Ghép ngày và giờ nhập hợp lệ thành Date theo múi giờ máy.
 export function fromDateAndTime(date, time) {
-  if (!date || !time) return null;
+  if (!date || !isValidTimeInput(time)) return null;
   const value = new Date(`${date}T${time}:00`);
   return Number.isNaN(value.getTime()) ? null : value;
 }

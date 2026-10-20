@@ -723,7 +723,7 @@ public class BookingRepository {
                 ) AS amount
             ) received ON true
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY " + plannedStart + " DESC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY " + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return db.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),
