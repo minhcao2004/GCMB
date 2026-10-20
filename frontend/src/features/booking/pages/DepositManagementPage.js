@@ -12,8 +12,9 @@ const statusLabels = {
   HELD: 'Đang giữ',
   PENDING_REFUND: 'Chờ hoàn',
   REFUNDED: 'Đã hoàn',
-    FORFEITED: 'Cọc không hoàn',
+  FORFEITED: 'Cọc không hoàn',
   APPLIED: 'Đã trừ vào bill',
+};
 const statusPriority = { PENDING_REFUND: 0, REFUNDED: 1, HELD: 2, FORFEITED: 3 };
 const methodLabels = {
   BANK_TRANSFER: 'Chuyển khoản',

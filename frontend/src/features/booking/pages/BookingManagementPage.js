@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import Brand from '../../../shared/components/Brand';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
@@ -111,12 +112,6 @@ function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Nếu phòng không sẵn sàng, hãy đổi phòng trước khi check-in.';
 }
-// Lấy chữ cái đại diện cho tài khoản đang đăng nhập.
-function initials(user) {
-  const value = user?.fullName || user?.username || 'MC';
-  return value.split(/[\s._-]+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join('') || 'MC';
-}
-
 export function AppShell({
   user,
   branchName,
@@ -278,16 +273,6 @@ export function AppShell({
         </div>
       </div>
 
-      {profileOpen && (
-        <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
-          <AccountProfileDialog onClose={() => setProfileOpen(false)} />
-        </div>
-      )}
-    </>
-  );
-}
-        </div>
-      </div>
       {profileOpen && (
         <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
           <AccountProfileDialog onClose={() => setProfileOpen(false)} />

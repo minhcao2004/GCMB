@@ -1,3 +1,4 @@
+.booking-app--accountant { display: flex; }
 .booking-app--accountant .booking-brand .brand { min-height: 120px; padding: 8px 9px; background: #f4f4f4; }
 .booking-app--accountant .booking-role-chip { letter-spacing: .25px; }
 .booking-app--accountant .booking-topbar > p > span { color: #6f7b8c; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }

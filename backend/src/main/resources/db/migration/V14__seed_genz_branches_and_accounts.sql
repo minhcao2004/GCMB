@@ -1,5 +1,5 @@
 -- Production branch and account data for GenZ Cinema.
--- This migration removes only fixed UC34-37, UC39-40 and UC44 fixture rows.
+-- This migration replaces fixed UC34-37, UC39-40 and UC44 fixtures while preserving operational history.
 -- Cinema prices and combos already come from V3__room_price_catalog.sql.
 SET LOCAL search_path TO gcmb, public;
 
@@ -53,18 +53,15 @@ DELETE FROM gcmb.booking
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR code LIKE 'DEMO-UC3437-%';
 
-DELETE FROM gcmb.financial_account
+UPDATE gcmb.financial_account
+SET active = FALSE
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR code LIKE 'DEMO-UC3437-%';
 
 DELETE FROM gcmb.employee_assignment
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR employee_id::text LIKE '34370000-0000-4000-8000-000000000%'
-   OR branch_id::text LIKE '34370000-0000-4000-8000-000000000%'
-   OR assigned_by::text IN (
-       '34370000-0000-4000-8000-000000000003',
-       '44440000-0000-4000-8000-000000000001'
-   );
+   OR branch_id::text LIKE '34370000-0000-4000-8000-000000000%';
 
 DELETE FROM gcmb.branch_manager_assignment
 WHERE branch_id::text LIKE '34370000-0000-4000-8000-000000000%'
@@ -76,7 +73,8 @@ WHERE branch_id::text LIKE '34370000-0000-4000-8000-000000000%'
 DELETE FROM gcmb.room_operating_status_history
 WHERE room_id::text LIKE '34370000-0000-4000-8000-000000000%';
 
-DELETE FROM gcmb.employee
+UPDATE gcmb.employee
+SET status = 'INACTIVE'
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR id = '44440000-0000-4000-8000-000000000002'
    OR code LIKE 'DEMO-UC3437-%'
@@ -89,50 +87,51 @@ WHERE user_id::text IN (
 );
 
 DELETE FROM gcmb.audit_event
-WHERE branch_id::text = '34370000-0000-4000-8000-000000000001'
-   OR actor_id::text IN (
-       '34370000-0000-4000-8000-000000000003',
-       '44440000-0000-4000-8000-000000000001'
-   );
+WHERE branch_id::text = '34370000-0000-4000-8000-000000000001';
 
 ALTER TABLE gcmb.booking_event ENABLE TRIGGER immutable_booking_event;
 ALTER TABLE gcmb.deposit_entry ENABLE TRIGGER immutable_deposit_entry;
 ALTER TABLE gcmb.payment ENABLE TRIGGER immutable_payment;
 ALTER TABLE gcmb.audit_event ENABLE TRIGGER immutable_audit;
 
-DELETE FROM gcmb.user_account
+-- Keep old identities for booking and financial foreign keys; revoke their logins and
+-- detach them from disposable branches before those branches are suspended below.
+UPDATE gcmb.user_account
+SET status = 'REVOKED', branch_id = NULL, locked_until = NULL
 WHERE id::text IN (
     '34370000-0000-4000-8000-000000000003',
     '44440000-0000-4000-8000-000000000001'
 )
    OR username IN ('uc3437.demo', 'uc44.accountant');
 
-DELETE FROM gcmb.room
+-- Keep legacy catalog rows referenced by bookings, allocations, and charges.
+-- Disable them instead of deleting rows protected by RESTRICT foreign keys.
+UPDATE gcmb.room
+SET operating_status = 'INACTIVE'
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR code LIKE 'DEMO-MB-%'
    OR code LIKE 'DEMO-CIN-%';
 
-DELETE FROM gcmb.price_rule
+UPDATE gcmb.price_rule
+SET active = FALSE
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR name LIKE 'UC34-37 %'
    OR name LIKE 'UC39-40 %';
 
-DELETE FROM gcmb.combo_item
-WHERE combo_id IN (
-    SELECT id FROM gcmb.combo WHERE code LIKE 'DEMO-UC3437-%' OR code LIKE 'DEMO-UC3940-%'
-);
-
-DELETE FROM gcmb.combo
+UPDATE gcmb.combo
+SET active = FALSE
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR code LIKE 'DEMO-UC3437-%'
    OR code LIKE 'DEMO-UC3940-%';
 
-DELETE FROM gcmb.room_type
+UPDATE gcmb.room_type
+SET active = FALSE
 WHERE id::text LIKE '34370000-0000-4000-8000-000000000%'
    OR code LIKE 'DEMO-UC3437-%'
    OR code LIKE 'DEMO-UC3940-%';
 
-DELETE FROM gcmb.branch
+UPDATE gcmb.branch
+SET status = 'SUSPENDED'
 WHERE id::text = '34370000-0000-4000-8000-000000000001'
    OR code = 'DEMO-UC3437';
 
