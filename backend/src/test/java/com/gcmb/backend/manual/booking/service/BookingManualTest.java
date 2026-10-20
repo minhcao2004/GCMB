@@ -227,7 +227,9 @@ public final class BookingManualTest extends ManualScenarios<BookingFixture> {
             11,
             () -> new BookingFixture(new CreateBookingRequest(R,time("10:00:00"),time("12:00:00"),"HOURLY",null,"An","0901234567","PHONE",null,1,BigDecimal.ZERO,null,null)),
             e -> e.service.create(e.actor,(CreateBookingRequest)e.cmd));
-        define("TC-BKG-012", "Booking Management", "BookingService.create",
+        define("TC-BKG-012",
+            "Booking Management",
+            "BookingService.create",
             "BookingService thật; BookingRepository/BookingPricingService mock, ObjectMapper thật. Identity U/RECEPTIONIST;" +
             " scope B; room R/RT/AVAILABLE/capacity4; overlap=false. Request: " +
             "roomId=R,start=10:00,end=12:00,channel=PHONE,guestCount=1,mode=HOURLY,comboId=null,contactName=An,contactPhone=0901234567,note=null,depositAmount=0,paymentMethod=null,paymentReference=null." +
@@ -243,11 +245,7 @@ public final class BookingManualTest extends ManualScenarios<BookingFixture> {
             "V08: paymentReference=\"   \"\n" +
             "V09: paymentReference=\"R\"×120\n" +
             "V10: paymentReference=\"R\"×121",
-            "V01,V02,V03: Trả F_detail; insertBooking note=null.\n" +
-            "V04: Trả F_detail; insertBooking note trim dài2000.\n" +
-            "V05: BF(400,note); không insertBooking.\n" +
-            "V06,V07,V08,V09: Trả F_detail; không receiveDeposit vì depositAmount=0.\n" +
-            "V10: BF(400,paymentReference); không insertBooking.",
+            "V01,V02,V03: Trả F_detail; insertBooking note=null.\nV04: Trả F_detail; insertBooking note trim dài2000.\nV05: BF(400,note); không insertBooking.\nV06,V07,V08,V09: Trả F_detail; không receiveDeposit vì depositAmount=0.\nV10: Trả F_detail; depositAmount=0 nên bỏ qua paymentReference dài121; không receiveDeposit.",
             10,
             () -> new BookingFixture(new CreateBookingRequest(R,time("10:00:00"),time("12:00:00"),"HOURLY",null,"An","0901234567","PHONE",null,1,BigDecimal.ZERO,null,null)),
             e -> e.service.create(e.actor,(CreateBookingRequest)e.cmd));
@@ -812,7 +810,7 @@ public final class BookingManualTest extends ManualScenarios<BookingFixture> {
             created(e);
             e.none(e.repo,"receiveDeposit");
         });
-        commandInvalid(b(12),"paymentReference","R".repeat(121));
+        valid(b(12),e->e.command("paymentReference","R".repeat(121)),e->{created(e);e.none(e.repo,"receiveDeposit");});
         bad(b(15),e->e.answers.put("hasRoomOverlap",true),409,"roomId");
         for(String msg:Arrays.asList("no_room_overlap","no_booking_parallel_rooms","unrelated_constraint",null)) {
             boolean translated=msg!=null&&msg.startsWith("no_");

@@ -27,6 +27,8 @@ import com.gcmb.backend.manual.booking.service.BookingManualTest;
 import com.gcmb.backend.manual.booking.service.BookingPricingManualTest;
 import com.gcmb.backend.manual.booking.service.CheckoutManualTest;
 import com.gcmb.backend.manual.booking.service.DepositManagementManualTest;
+import com.gcmb.backend.manual.booking.service.DepositRefundManualTest;
+import com.gcmb.backend.manual.booking.repository.DepositRepositoryManualTest;
 import com.gcmb.backend.manual.booking.service.RoomStayManualTest;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -61,6 +63,8 @@ public final class ManualTestRegistry {
         suites.addAll(RoomStayManualTest.suites());
         suites.addAll(CheckoutManualTest.suites());
         suites.addAll(DepositManagementManualTest.suites());
+        suites.addAll(DepositRefundManualTest.suites());
+        suites.addAll(DepositRepositoryManualTest.suites());
         validateUniqueKeys(suites);
         Map<String,ManualTestSuite> grouped=new LinkedHashMap<>();
         for(ManualTestSuite suite:suites) {

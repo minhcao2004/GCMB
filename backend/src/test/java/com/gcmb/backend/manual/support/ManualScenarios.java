@@ -63,6 +63,22 @@ public abstract class ManualScenarios<F extends ManualFixture> {
         if(cases.putIfAbsent(id,new Case<>(id,subfeature,method,pre,input,expected,count,fixture,action))!=null)throw new IllegalStateException("Duplicate case "+id);
     }
 
+    /** Keeps each example's description, setup and observation checks together. */
+    public record Example<F>(String input,String expected,Consumer<F> setup,int status,String field,Consumer<F> inspect) {}
+
+    protected final void examples(String id,String subfeature,String method,String pre,Supplier<F> fixture,
+            Function<F,Object> action,List<Example<F>> examples) {
+        StringBuilder input=new StringBuilder(),expected=new StringBuilder();
+        for(int i=0;i<examples.size();i++) {
+            String label=String.format("V%02d: ",i+1);
+            if(i>0){input.append('\n');expected.append('\n');}
+            input.append(label).append(examples.get(i).input());
+            expected.append(label).append(examples.get(i).expected());
+        }
+        define(id,subfeature,method,pre,input.toString(),expected.toString(),examples.size(),fixture,action);
+        for(Example<F> example:examples)add(id,example.setup(),example.status(),example.field(),example.inspect());
+    }
+
     public final void add(String id,Consumer<F> setup,int status,String field,Consumer<F> inspect) {
         Case<F> test=cases.get(id);
         if(test==null)throw new IllegalArgumentException("Unknown case "+id);
