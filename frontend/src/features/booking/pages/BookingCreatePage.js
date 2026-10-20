@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
-import { formatDate, formatVnd, formatMoneyInput } from '../data/bookingData';
+import TimeInput from '../components/TimeInput';
+import { formatDate, formatMoneyInput, formatVnd, isValidTimeInput } from '../data/bookingData';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
 function localDate(value = new Date()) {
@@ -39,6 +40,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [touched, setTouched] = useState({});
+  const paymentReferenceInput = useRef(null);
   const depositAmountEdited = useRef(Boolean(savedDraft.current?.depositAmountEdited));
   const autoSelectRoom = useRef(!savedDraft.current?.form?.roomId);
 
@@ -56,7 +58,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const hourlyDurationValid = /^(?:[1-9]|1\d|2[0-4])$/.test(String(form.durationHours));
   const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyDurationValid ? Number(form.durationHours) * 60 : null;
   const plannedStart = useMemo(() => {
-    if (!form.date || !form.time) return null;
+    if (!form.date || !isValidTimeInput(form.time)) return null;
     const date = new Date(`${form.date}T${form.time}:00`);
     return Number.isNaN(date.getTime()) ? null : date;
   }, [form.date, form.time]);
@@ -69,14 +71,19 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const quote = availability?.quote;
   const estimatedAmount = Number(quote?.expectedAmount || selectedCombo?.price || 0);
   const depositAmount = form.depositEnabled ? Number(form.depositAmount || 0) : 0;
+  const paymentMethod = String(form.paymentMethod || '').trim().toUpperCase();
+  const cashPayment = paymentMethod === 'CASH';
   const guestCount = Number(form.guestCount);
   const guestCountValid = Number.isInteger(guestCount) && guestCount >= 1 && (!chosenRoom || guestCount <= chosenRoom.capacity);
   const validSchedule = Boolean(plannedStart && plannedEnd && plannedStart > new Date() && plannedEnd > plannedStart);
   const pricingSelectionValid = form.pricingMode === 'COMBO' ? Boolean(selectedCombo) : hourlyDurationValid;
   const depositAmountValid = Number.isFinite(depositAmount) && depositAmount > 0;
-  const contactPhoneError = !form.contactPhone.trim() ? 'Nhập số điện thoại.'
-    : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
-      ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
+ const contactPhoneError = !form.contactPhone.trim() ? 'Nhập số điện thoại.'
+  : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
+    ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
+
+const paymentReferenceRequired = form.depositEnabled && depositAmountValid && !cashPayment;
+const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transaction.trim());
   const bookingBlockers = [];
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
   if (contactPhoneError) bookingBlockers.push(contactPhoneError);
@@ -88,6 +95,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
     bookingBlockers.push(availabilityError ? 'Không xác nhận được phòng trống; hãy đổi lịch hoặc hạng phòng để thử lại.' : availableRooms.length ? 'Chọn một phòng còn trống.' : 'Đổi thời gian hoặc hạng phòng để tìm phòng trống.');
   }
   if (form.depositEnabled && !depositAmountValid) bookingBlockers.push('Nhập số tiền cọc đã thực sự nhận.');
+  if (!paymentReferenceValid) bookingBlockers.push('Nhập mã giao dịch / ghi chú khi thu tiền cọc.');
   const bookingReady = !optionsLoading && !loadingAvailability && !availabilityError && bookingBlockers.length === 0 && Boolean(chosenRoom);
   const showContactNameError = Boolean(touched.contactName && !form.contactName.trim());
   const showContactPhoneError = Boolean((touched.contactPhone || form.contactPhone) && contactPhoneError);
@@ -98,6 +106,10 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const showComboError = Boolean(form.pricingMode === 'COMBO' && !selectedCombo && (touched.pricingMode || touched.comboId));
   const showDurationError = Boolean(form.pricingMode === 'HOURLY' && !hourlyDurationValid && touched.durationHours);
   const showDepositAmountError = Boolean(form.depositEnabled && !depositAmountValid && (touched.depositEnabled || touched.depositAmount));
+  const showPaymentReferenceError = Boolean(paymentReferenceRequired && !paymentReferenceValid && touched.transaction);
+  const paymentReferenceServerError = /mã giao dịch\s*\/\s*ghi chú/i.test(formError) ? formError : '';
+  const paymentReferenceFieldError = showPaymentReferenceError || Boolean(paymentReferenceServerError);
+  const paymentReferenceFieldErrorText = paymentReferenceServerError || 'Nhập mã giao dịch / ghi chú khi thu tiền cọc.';
   const scheduleErrorMessage = plannedStart && plannedStart <= new Date()
     ? 'Thời gian nhận phòng cần ở tương lai.'
     : 'Vui lòng chọn ngày và giờ nhận phòng hợp lệ.';
@@ -106,6 +118,12 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
     : availableRooms.length
       ? 'Chọn một phòng còn trống.'
       : 'Không có phòng trống; hãy đổi ngày giờ hoặc hạng phòng.';
+
+  useEffect(() => {
+    if (paymentReferenceServerError) {
+      paymentReferenceInput.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+  }, [paymentReferenceServerError]);
 
   useEffect(() => {
     if (!form.roomTypeId && roomTypes[0]) setForm((current) => ({ ...current, roomTypeId: roomTypes[0].id }));
@@ -208,7 +226,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
         note: form.note.trim() || null,
         guestCount: Number(form.guestCount),
         depositAmount: form.depositEnabled ? depositAmount : 0,
-        paymentMethod: form.depositEnabled && depositAmount > 0 ? form.paymentMethod : null,
+        paymentMethod: form.depositEnabled && depositAmount > 0 ? paymentMethod : null,
         paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
       });
       if (result?.ok) clearBookingDraft(user);
@@ -244,7 +262,8 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
             <input type="date" name="date" value={form.date} onChange={change} onBlur={() => markTouched('date')} required aria-invalid={showScheduleError} aria-describedby={showScheduleError ? 'booking-schedule-error' : undefined} />
           </Field>
           <Field label="Giờ nhận phòng *" className={showScheduleError ? 'is-invalid' : ''}>
-            <input type="time" name="time" value={form.time} onChange={change} onBlur={() => markTouched('time')} required aria-invalid={showScheduleError} aria-describedby={showScheduleError ? 'booking-schedule-error' : undefined} />
+            <TimeInput name="time" value={form.time} onChange={change} onBlur={() => markTouched('time')} required aria-invalid={showScheduleError} aria-describedby={showScheduleError ? 'booking-time-help booking-schedule-error' : 'booking-time-help'} />
+            <small id="booking-time-help" className="booking-field-hint">Nhập theo định dạng 24 giờ, ví dụ 14:30.</small>
           </Field>
           <Field label="Số lượng khách *" className={showGuestCountError ? 'is-invalid' : ''}>
             <input type="number" name="guestCount" min="1" value={form.guestCount} onChange={change} onBlur={() => markTouched('guestCount')} required aria-invalid={showGuestCountError} aria-describedby={showGuestCountError ? 'booking-guest-count-error' : undefined} />
@@ -300,9 +319,12 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
             {showDepositAmountError && <small id="booking-deposit-error" className="booking-field-error" aria-live="polite">Nhập số tiền cọc đã thực sự nhận.</small>}
           </Field>
           <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></Field>
-          <Field label="Mã giao dịch / ghi chú"><input name="transaction" value={form.transaction} onChange={change} disabled={!form.depositEnabled} placeholder="Ví dụ: CK-245781" /></Field>
+          <Field label={`Mã giao dịch / ghi chú${paymentReferenceRequired ? ' *' : ''}`} className={paymentReferenceFieldError ? 'is-invalid' : ''}>
+            <input ref={paymentReferenceInput} name="transaction" value={form.transaction} onChange={change} onBlur={() => markTouched('transaction')} disabled={!form.depositEnabled} required={paymentReferenceRequired} maxLength={120} placeholder="Ví dụ: CK-245781" aria-invalid={paymentReferenceFieldError} aria-describedby={paymentReferenceFieldError ? 'booking-deposit-reference-error' : undefined} />
+            {paymentReferenceFieldError && <small id="booking-deposit-reference-error" className="booking-field-error" aria-live="polite">{paymentReferenceFieldErrorText}</small>}
+          </Field>
         </div>
-        <p className="booking-feature-note">Chỉ bật “Có thu cọc” khi đã thực sự nhận tiền. Với chuyển khoản, hãy kiểm tra tiền đã vào tài khoản trước khi tạo booking; có thể nhập mã giao dịch để đối chiếu.</p>
+        <p className="booking-feature-note">Chỉ bật “Có thu cọc” khi đã thực sự nhận tiền. Tiền mặt không cần mã giao dịch / ghi chú; với chuyển khoản, hãy nhập thông tin để đối chiếu và kiểm tra tiền đã vào tài khoản trước khi tạo booking.</p>
         <Field label="Ghi chú booking" className="booking-note-field"><textarea name="note" rows="2" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></Field>
       </section>
 

@@ -394,11 +394,14 @@ public class BookingService {
                 || normalizedDepositAmount.precision() - normalizedDepositAmount.scale() > 18)
             throw new BookingFailure(400, "depositAmount", "Số tiền cọc phải là số nguyên không âm, tối đa 18 chữ số");
         String paymentMethod = null;
-        String paymentReference = nullable(request.paymentReference(), "paymentReference", 120);
+        String paymentReference = null;
         if (depositAmount.signum() > 0) {
             paymentMethod = request.paymentMethod() == null ? "" : request.paymentMethod().trim().toUpperCase(Locale.ROOT);
             if (!Set.of("BANK_TRANSFER", "CASH", "CARD", "QR").contains(paymentMethod))
                 throw new BookingFailure(400, "paymentMethod", "Vui lòng chọn phương thức thu cọc hợp lệ");
+            paymentReference = nullable(request.paymentReference(), "paymentReference", 120);
+            if (!"CASH".equals(paymentMethod) && paymentReference == null)
+                throw new BookingFailure(400, "paymentReference", "Nhập mã giao dịch / ghi chú khi thu cọc bằng phương thức này");
         }
         // Chuyển khoản do lễ tân xác nhận thủ công khác khoản được webhook ngân hàng đối soát.
         String recordedPaymentMethod = "BANK_TRANSFER".equals(paymentMethod) ? "MANUAL_TRANSFER" : paymentMethod;

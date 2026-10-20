@@ -12,9 +12,10 @@ const statusLabels = {
   HELD: 'Đang giữ',
   PENDING_REFUND: 'Chờ hoàn',
   REFUNDED: 'Đã hoàn',
-  FORFEITED: 'Hủy cọc',
+  FORFEITED: 'Cọc không hoàn',
   APPLIED: 'Đã trừ vào bill',
 };
+const statusPriority = { PENDING_REFUND: 0, REFUNDED: 1, HELD: 2, FORFEITED: 3 };
 const methodLabels = {
   BANK_TRANSFER: 'Chuyển khoản',
   MANUAL_TRANSFER: 'Chuyển khoản',
@@ -137,9 +138,9 @@ function DepositDetails({ detail, loading, error, onOpenBooking }) {
   const item = detail.deposit;
   const amountLabel = item.status === 'PENDING_REFUND' ? 'Số tiền chờ hoàn'
     : item.status === 'REFUNDED' ? 'Số tiền đã hoàn'
-      : item.status === 'FORFEITED' ? 'Số tiền hủy cọc'
+      : item.status === 'FORFEITED' ? 'Số tiền cọc không hoàn'
         : item.status === 'APPLIED' ? 'Số tiền đã trừ bill' : 'Số dư đang giữ';
-
+        
   return <aside className="deposit-details-card" aria-label="Chi tiết tiền cọc">
     <div className="deposit-details-scroll">
       <header className="deposit-details-heading">
@@ -277,7 +278,8 @@ export default function DepositManagementPage() {
     return () => { active = false; };
   }, [dialogOpen]);
 
-  const items = data?.items || [];
+  const items = [...(data?.items || [])].sort((left, right) =>
+    (statusPriority[left.status] ?? 4) - (statusPriority[right.status] ?? 4));
   const summary = data?.summary || {};
   const summaryUnavailable = loading || Boolean(loadError) || !data;
   const detailsUnavailable = loadError ? 'Danh sách chưa tải được nên chưa thể xem chi tiết.' : detailError;
@@ -330,7 +332,7 @@ export default function DepositManagementPage() {
         <SummaryCard title="Đang giữ" amount={summary.heldAmount} count={summary.heldBookings} suffix="booking" tone="held" unavailable={summaryUnavailable} />
         <SummaryCard title="Chờ hoàn" amount={summary.pendingRefundAmount} count={summary.pendingRequests} suffix="yêu cầu" tone="pending" unavailable={summaryUnavailable} />
         <SummaryCard title="Đã hoàn" amount={summary.refundedAmount} count={summary.refundTransactions} suffix="giao dịch" tone="refunded" unavailable={summaryUnavailable} />
-        <SummaryCard title="Hủy cọc" amount={summary.forfeitedAmount} count={summary.forfeitedBookings} suffix="booking" tone="forfeited" unavailable={summaryUnavailable} />
+        <SummaryCard title="Cọc không hoàn" amount={summary.forfeitedAmount} count={summary.forfeitedBookings} suffix="booking" tone="forfeited" unavailable={summaryUnavailable} />
       </section>
 
       <section className="deposit-filter-card" aria-label="Lọc giao dịch tiền cọc">
@@ -340,7 +342,7 @@ export default function DepositManagementPage() {
           <span className="deposit-date-separator" aria-hidden="true">—</span>
           <label className="deposit-filter-date"><span className="sr-only">Đến ngày</span><input type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(0); }} /></label>
           <label className="deposit-filter-select"><span className="sr-only">Trạng thái</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); }}>
-            <option value="">Trạng thái · Tất cả</option><option value="HELD">Đang giữ</option><option value="PENDING_REFUND">Chờ hoàn</option><option value="REFUNDED">Đã hoàn</option><option value="FORFEITED">Hủy cọc</option><option value="APPLIED">Đã trừ vào bill</option>
+            <option value="">Trạng thái · Tất cả</option><option value="HELD">Đang giữ</option><option value="PENDING_REFUND">Chờ hoàn</option><option value="REFUNDED">Đã hoàn</option><option value="FORFEITED">Cọc không hoàn</option>
           </select></label>
           <label className="deposit-filter-select"><span className="sr-only">Phương thức</span><select value={method} onChange={(event) => { setMethod(event.target.value); setPage(0); }}>
             <option value="">Phương thức · Tất cả</option><option value="BANK_TRANSFER">Chuyển khoản Tingbox</option><option value="MANUAL_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="CARD">Thẻ</option><option value="QR">QR</option><option value="MULTIPLE">Nhiều phương thức</option>

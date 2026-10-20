@@ -15,6 +15,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 // Đọc danh sách tiền cọc, các bút toán và lịch sử xử lý theo chi nhánh.
 public class DepositRepository {
+    public record RefundRequestRow(UUID id, UUID bookingId, UUID depositId, BigDecimal amount,
+                                   String reason, String status) {}
+
     private static final String DEPOSIT_VIEW = """
         WITH ledger AS (
             SELECT d.id AS deposit_id, d.booking_id,
@@ -141,7 +144,7 @@ public class DepositRepository {
                    v.amount,v.received_amount,v.balance,v.pending_amount,v.refunded_amount,v.forfeited_amount,
                    v.payment_method,v.status,v.latest_request_status,v.activity_at,v.can_request_refund
             FROM deposit_view v
-            """ + FILTERS + " ORDER BY v.activity_at DESC NULLS LAST,v.booking_code LIMIT ? OFFSET ?";
+            """ + FILTERS + " ORDER BY CASE v.status WHEN 'PENDING_REFUND' THEN 0 WHEN 'REFUNDED' THEN 1 WHEN 'HELD' THEN 2 WHEN 'FORFEITED' THEN 3 ELSE 4 END, v.activity_at DESC NULLS LAST,v.booking_code LIMIT ? OFFSET ?";
         Object[] filters = filterParameters(branchId, dateFrom, dateTo, timezone, status, method, search);
         Object[] params = java.util.Arrays.copyOf(filters, filters.length + 2);
         params[filters.length] = size;
@@ -172,6 +175,54 @@ public class DepositRepository {
         return db.query(sql, (rs, rowNum) -> new DepositDtos.RefundableBooking(
             rs.getObject("booking_id", UUID.class), rs.getString("booking_code"), rs.getString("customer_name"),
             rs.getString("phone"), instant(rs, "cancelled_at"), rs.getBigDecimal("amount")), branchId);
+    }
+
+    public List<DepositDtos.RefundRequestItem> refundRequests(UUID branchId) {
+        return db.query("""
+            SELECT r.id,r.booking_id,b.code,b.contact_name,b.contact_phone,r.amount,r.reason,
+                   r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference
+            FROM gcmb.refund_request r
+            JOIN gcmb.booking b ON b.id=r.booking_id
+            WHERE r.branch_id=? AND r.kind='DEPOSIT'
+            ORDER BY CASE WHEN r.status IN ('REQUESTED','APPROVED','PROCESSING') THEN 0 ELSE 1 END,
+                     r.created_at DESC,r.id DESC
+            """, (rs, rowNum) -> new DepositDtos.RefundRequestItem(
+                rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class), rs.getString("code"),
+                rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
+                rs.getString("reason"), rs.getString("beneficiary_name"), rs.getString("bank_name"),
+                rs.getString("bank_account"), rs.getString("status"), instant(rs, "created_at"),
+                instant(rs, "paid_at"), rs.getString("external_reference")), branchId);
+    }
+
+    public RefundRequestRow refundRequest(UUID branchId, UUID requestId, boolean lock) {
+        String lockClause = lock ? " FOR UPDATE" : "";
+        List<RefundRequestRow> rows = db.query("""
+            SELECT id,booking_id,deposit_id,amount,reason,status
+            FROM gcmb.refund_request
+            WHERE branch_id=? AND id=? AND kind='DEPOSIT'
+            """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
+                rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
+                rs.getObject("deposit_id", UUID.class), rs.getBigDecimal("amount"),
+                rs.getString("reason"), rs.getString("status")), branchId, requestId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public boolean completeRefundRequest(UUID branchId, RefundRequestRow request, UUID actorId, String externalReference) {
+        int updated = db.update("""
+            UPDATE gcmb.refund_request
+            SET status='PAID',processed_by=?,paid_at=CURRENT_TIMESTAMP,external_reference=?
+            WHERE id=? AND branch_id=? AND kind='DEPOSIT'
+              AND status IN ('REQUESTED','APPROVED','PROCESSING')
+            """, actorId, externalReference, request.id(), branchId);
+        if (updated != 1) return false;
+
+        int inserted = db.update("""
+            INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,refund_id,actor_id,reason,idempotency_key)
+            VALUES(?,'REFUND',?,?,?,?,?)
+            """, request.depositId(), request.amount(), request.id(), actorId, request.reason(),
+            "DEPOSIT-REFUND-" + request.id());
+        if (inserted != 1) throw new IllegalStateException("Deposit refund entry was not recorded");
+        return true;
     }
 
     public boolean canRequestRefund(UUID branchId, UUID bookingId) {

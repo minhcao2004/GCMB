@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
-import { formatVnd } from '../data/bookingData';
+import TimeInput from '../components/TimeInput';
+import { formatVnd, isValidTimeInput } from '../data/bookingData';
 
 // Tách thời điểm ISO thành ngày/giờ nhập theo múi giờ chi nhánh.
 function partsInZone(value, timezone) {
@@ -15,7 +16,7 @@ function partsInZone(value, timezone) {
 
 // Đổi ngày/giờ tại chi nhánh về ISO, kể cả sai lệch múi giờ.
 function instantInZone(date, time, timezone) {
-  if (!date || !time) return null;
+  if (!date || !isValidTimeInput(time)) return null;
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute] = time.split(':').map(Number);
   if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
@@ -148,8 +149,12 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     event.preventDefault();
     setFormError('');
     if (!form?.contactName.trim()) return setFormError('Vui lòng nhập tên khách.');
-    if (contactPhoneError) return setFormError(contactPhoneError);
-    if (!periodValid) return setFormError('Kiểm tra lại thời gian booking.');
+if (contactPhoneError) return setFormError(contactPhoneError);
+if (!periodValid) return setFormError(
+  !isValidTimeInput(form?.startTime) || !isValidTimeInput(form?.endTime)
+    ? 'Nhập giờ nhận và giờ trả theo định dạng 24 giờ, ví dụ 14:30.'
+    : 'Kiểm tra lại thời gian booking.',
+);
     if (form.pricingMode === 'COMBO' && !form.comboId) return setFormError('Vui lòng chọn combo.');
     if (!quote) return setFormError('Chưa có báo giá cho thời gian đã chọn.');
     if (!form.roomId) return setFormError('Vui lòng chọn phòng.');
@@ -231,9 +236,9 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
         <h3 className="booking-cancel-section-title booking-edit-section-title">Thời gian sử dụng</h3>
         <div className="booking-form-grid booking-schedule-grid">
           <label className="booking-form-field"><span>Ngày nhận phòng</span><input type="date" name="startDate" value={form.startDate} onChange={change} /></label>
-          <label className="booking-form-field"><span>Giờ nhận phòng</span><input type="time" name="startTime" value={form.startTime} onChange={change} /></label>
+          <label className="booking-form-field"><span>Giờ nhận phòng</span><TimeInput name="startTime" value={form.startTime} onChange={change} aria-invalid={!isValidTimeInput(form.startTime)} aria-describedby="booking-edit-start-time-hint" /><small id="booking-edit-start-time-hint" className="booking-field-hint">Định dạng 24 giờ, ví dụ 14:30.</small></label>
           <label className="booking-form-field"><span>Ngày trả phòng</span><input type="date" name="endDate" value={form.endDate} onChange={change} readOnly={form.pricingMode === 'HOURLY'} /></label>
-          <label className="booking-form-field"><span>Giờ trả phòng</span><input type="time" name="endTime" value={form.endTime} onChange={change} readOnly={form.pricingMode === 'HOURLY'} /></label>
+          <label className="booking-form-field"><span>Giờ trả phòng</span><TimeInput name="endTime" value={form.endTime} onChange={change} readOnly={form.pricingMode === 'HOURLY'} aria-invalid={!isValidTimeInput(form.endTime)} aria-describedby="booking-edit-end-time-hint" /><small id="booking-edit-end-time-hint" className="booking-field-hint">{form.pricingMode === 'HOURLY' ? 'Tự động tính theo thời lượng thuê.' : 'Định dạng 24 giờ, ví dụ 14:30.'}</small></label>
         </div>
         <div className="booking-pricing-mode booking-edit-pricing-mode" role="group" aria-label="Hình thức tính giá">
           <button type="button" className={form.pricingMode === 'HOURLY' ? 'is-selected' : ''} onClick={() => changeMode('HOURLY')}>Tính giờ</button>
