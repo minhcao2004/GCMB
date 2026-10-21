@@ -1,12 +1,5 @@
-.booking-app--accountant { display: flex; }
-.booking-app--accountant .booking-brand .brand { min-height: 120px; padding: 8px 9px; background: #f4f4f4; }
-.booking-app--accountant .booking-role-chip { letter-spacing: .25px; }
-.booking-app--accountant .booking-topbar > p > span { color: #6f7b8c; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
-.booking-app--accountant .booking-sidebar-footer { padding-inline: 3px; }
-.booking-app--accountant .booking-sidebar-footer strong { font-size: 11px; }
-.booking-app--accountant .booking-sidebar-footer small { line-height: 1.5; }
-.booking-app--accountant .booking-nav-item:disabled { color: #536071; cursor: not-allowed; }
-.booking-app--accountant .booking-nav-item:disabled svg { color: #a7b0bd; }
+.booking-app--accountant .manager-navigation button:disabled { color: #536071; cursor: not-allowed; opacity: 1; }
+.booking-app--accountant .manager-navigation button:disabled svg { color: #a7b0bd; }
 
 .accounting-refund-page { display: flex; flex-direction: column; gap: 14px; }
 .accounting-refund-page .deposit-page-heading { margin-bottom: 0; }
@@ -47,28 +40,20 @@
 .accounting-refund-page :focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 
 @media (max-width: 850px) {
-  .booking-app--accountant { flex-direction: column; }
-  .booking-app--accountant .booking-sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 4;
-    align-self: stretch;
+  .booking-app--accountant .head-office-dashboard { flex-direction: column; }
+  .booking-app--accountant .manager-sidebar {
+    box-sizing: border-box;
     width: 100%;
-    height: auto;
-    flex: 0 0 auto;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--booking-line);
+    border-radius: 0 10px 10px 0;
   }
-  .booking-app--accountant .booking-brand,
-  .booking-app--accountant .booking-role-chip,
-  .booking-app--accountant .booking-sidebar-footer { display: none; }
-  .booking-app--accountant .booking-navigation { width: max-content; display: flex; flex-direction: row; gap: 5px; margin: 0; }
-  .booking-app--accountant .booking-nav-item { width: auto; min-width: max-content; min-height: 42px; flex: 0 0 auto; gap: 9px; padding: 0 12px; }
-  .booking-app--accountant .booking-nav-item span { display: inline; }
-  .booking-app--accountant .booking-nav-item svg { flex-basis: 16px; width: 16px; height: 16px; }
-  .booking-app--accountant .booking-workspace { min-height: 0; }
+  .booking-app--accountant .manager-brand { padding: 8px; }
+  .booking-app--accountant .manager-sidebar .manager-navigation {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .booking-app--accountant .manager-navigation button { width: auto; flex-shrink: 0; }
+  .booking-app--accountant .manager-sidebar-footer { display: none; }
+  .booking-app--accountant .manager-workspace { min-height: 0; padding-left: 0; margin-top: 6px; }
   .accounting-refund-summary { gap: 10px; }
   .accounting-refund-metric { min-height: 92px; padding: 14px 16px; }
   .accounting-refund-search { flex-basis: 250px; }
@@ -86,10 +71,6 @@
 }
 
 @media (max-width: 620px) {
-  .booking-app--accountant .booking-topbar > p { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .booking-app--accountant .booking-topbar-tools { gap: 6px; }
-  .booking-app--accountant .booking-topbar-logout { min-width: 34px; padding-inline: 8px; }
-  .booking-app--accountant .booking-topbar-logout span { display: none; }
   .accounting-refund-summary { grid-template-columns: minmax(0, 1fr); }
   .accounting-refund-metric { min-height: 76px; padding: 12px 15px; }
   .accounting-refund-controls { align-items: stretch; flex-direction: column; }

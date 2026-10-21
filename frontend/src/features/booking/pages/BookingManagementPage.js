@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import Brand from '../../../shared/components/Brand';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
@@ -132,7 +131,7 @@ export function AppShell({
 
   if (isAccountant) {
     const navItems = accountingNavigation;
-    const roleLabel = 'Kế toán thu chi';
+    const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
       month: '2-digit',
@@ -140,66 +139,59 @@ export function AppShell({
     }).format(now);
 
     return (
-      <div className={`booking-app${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
-        <aside className="booking-sidebar">
-          <div className="booking-brand"><Brand /></div>
-          <span className="booking-role-chip">KẾ TOÁN THU CHI</span>
-          <nav className="booking-navigation" aria-label="Điều hướng kế toán thu chi">
-            {navItems.map(([label, icon, unavailable]) => (
-              <button
-                type="button"
-                key={label}
-                className={`booking-nav-item${icon === activeTab ? ' is-active' : ''}`}
-                aria-current={icon === activeTab ? 'page' : undefined}
-                aria-disabled={Boolean(unavailable)}
-                disabled={Boolean(unavailable)}
-                title={unavailable ? 'Đang phát triển' : undefined}
-                onClick={() => {
-                  if (unavailable) return;
-                  if (icon === 'overview') navigate('/ke-toan');
-                  if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
-                }}
-              >
-                <Icon name={icon} /><span>{label}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="booking-sidebar-footer">
-            <strong>GenZ Cinema &amp; Music Box</strong>
-            <small>Phạm vi: {branchName || 'cơ sở được phân công'}</small>
-          </div>
-        </aside>
+      <>
+        <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
+          <div className="head-office-dashboard">
+            <aside className="manager-sidebar" aria-label="Kế toán thu chi">
+              <div className="manager-brand"><BrandWordmark /></div>
+              <p className="manager-role">KẾ TOÁN THU CHI</p>
+              <nav className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+                {navItems.map(([label, icon, unavailable]) => (
+                  <button
+                    type="button"
+                    key={label}
+                    aria-current={icon === activeTab ? 'page' : undefined}
+                    aria-disabled={Boolean(unavailable)}
+                    disabled={Boolean(unavailable)}
+                    title={unavailable ? 'Đang phát triển' : undefined}
+                    onClick={() => {
+                      if (unavailable) return;
+                      if (icon === 'overview') navigate('/ke-toan');
+                      if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
+                    }}
+                  >
+                    <Icon name={icon} /><span>{label}</span>
+                  </button>
+                ))}
+              </nav>
+              <div className="manager-sidebar-footer">
+                <strong>GenZ Cinema &amp; Music Box</strong>
+                <p>Phạm vi: {branchName || 'cơ sở được phân công'}</p>
+              </div>
+            </aside>
 
-        <div className="booking-workspace">
-          <header className="booking-topbar">
-            <p><span>{roleLabel}</span><b>/</b><strong>{breadcrumb}</strong></p>
-            <div className="booking-topbar-tools">
-              {!hideSearch && (
-                <label className="booking-global-search">
-                  <Icon name="search" />
-                  <input
-                    value={search}
-                    onChange={(event) => onSearchChange?.(event.target.value)}
-                    placeholder="Tìm booking, khách hàng, ngân hàng..."
-                    aria-label="Tìm yêu cầu hoàn cọc"
-                  />
-                </label>
-              )}
-              <span className="booking-topbar-datetime">Tháng {currentMonth}</span>
-              <button
-                type="button"
-                className="booking-topbar-logout"
-                disabled={busy}
-                onClick={onLogout}
+            <div className="manager-workspace">
+              <DashboardTopbar
+                role={roleLabel}
+                page={breadcrumb}
+                user={user}
+                busy={busy}
+                onLogout={onLogout}
+                onProfile={() => setProfileOpen(true)}
               >
-                <Icon name="logout" /><span>Đăng xuất</span>
-              </button>
-              <span className="booking-user-avatar" aria-label={user?.username}>GZ</span>
+                <span className="booking-topbar-datetime">Tháng {currentMonth}</span>
+              </DashboardTopbar>
+              <main className="booking-main" id="main">{children}</main>
             </div>
-          </header>
-          <main className="booking-main" id="main">{children}</main>
+          </div>
         </div>
-      </div>
+
+        {profileOpen && (
+          <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
+            <AccountProfileDialog onClose={() => setProfileOpen(false)} />
+          </div>
+        )}
+      </>
     );
   }
 
