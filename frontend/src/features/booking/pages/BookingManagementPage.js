@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Brand from '../../../shared/components/Brand';
+import BrandWordmark from '../../../shared/components/BrandWordmark';
+import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
@@ -118,6 +120,55 @@ function initials(user) {
 export function AppShell({ user, branchName, busy, onLogout, children, breadcrumb, search, onSearchChange, activeTab = 'booking', hideSearch = false, fitViewport = false, audience = 'receptionist' }) {
   const navigate = useNavigate();
   const isAccountant = audience === 'accountant';
+  if (isAccountant) {
+    const roleLabel = 'KẾ TOÁN THU CHI';
+    const now = new Date();
+    const currentMonth = new Intl.DateTimeFormat('vi-VN', { month: '2-digit', year: 'numeric' }).format(now);
+
+    return <div className={'booking-app reception-dashboard' + (fitViewport ? ' booking-app--fit' : '') + ' booking-app--accountant'}>
+      <div className="head-office-dashboard">
+        <aside className="manager-sidebar" aria-label="Kế toán thu chi">
+          <div className="manager-brand"><BrandWordmark /></div>
+          <p className="manager-role">{roleLabel}</p>
+          <nav className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+            {accountingNavigation.map(([label, icon, unavailable]) => (
+              <button
+                type="button"
+                key={label}
+                aria-current={icon === activeTab ? 'page' : undefined}
+                aria-disabled={Boolean(unavailable)}
+                disabled={Boolean(unavailable)}
+                title={unavailable ? 'Đang phát triển' : undefined}
+                onClick={() => {
+                  if (unavailable) return;
+                  if (icon === 'overview') navigate('/ke-toan');
+                  if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
+                }}
+              >
+                <Icon name={icon} /><span>{label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="manager-sidebar-footer">
+            <strong>GenZ Cinema &amp; Music Box</strong>
+            <p>Phạm vi: {branchName || 'cơ sở được phân công'}</p>
+          </div>
+        </aside>
+
+        <div className="manager-workspace">
+          <div className="manager-topbar">
+            <p>{roleLabel} <span>/ {breadcrumb}</span></p>
+            <div className="manager-account">
+              <span>Tháng {currentMonth}</span>
+              <span>{user?.username}</span>
+              <button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
+            </div>
+          </div>
+          <main className="booking-main" id="main">{children}</main>
+        </div>
+      </div>
+    </div>;
+  }
   const navItems = isAccountant ? accountingNavigation : navigation;
   const roleLabel = isAccountant ? 'Kế toán thu chi' : 'Lễ tân';
   const now = new Date();
