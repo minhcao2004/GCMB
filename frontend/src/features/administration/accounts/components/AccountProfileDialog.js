@@ -6,12 +6,12 @@
  * Description: Xem, sửa và hủy chỉnh sửa thông tin của chính người đang đăng nhập.
  */
 import { useEffect, useRef, useState } from 'react';
-import { apiErrors } from '../../auth/services/authApi';
-import { accountProfileApi } from './accountProfileApi';
-import { roleNames } from './accountAccessApi';
-import './accounts.css';
-import './accountAccess.css';
-import './accountProfile.css';
+import { apiErrors } from '../../../auth/services/authApi';
+import { accountProfileApi } from '../services/accountProfileApi';
+import { roleNames } from '../services/accountAccessApi';
+import '../styles/accounts.css';
+import '../styles/accountAccess.css';
+import '../styles/accountProfile.css';
 import ChangePasswordForm from './ChangePasswordForm';
 
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };

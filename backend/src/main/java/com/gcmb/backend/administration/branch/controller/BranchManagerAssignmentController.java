@@ -63,6 +63,12 @@ public class BranchManagerAssignmentController {
             () -> service.deactivate(id, body), result -> id);
     }
 
+    @PostMapping("/{id}/reactivate")
+    public Map<String, Object> reactivate(@PathVariable UUID id) {
+        return audit.record("REACTIVATE_BRANCH", "BRANCH", id,
+            () -> service.reactivate(id), result -> id);
+    }
+
     @GetMapping("/managers")
     public List<Map<String, Object>> managers() {
         return service.managers();

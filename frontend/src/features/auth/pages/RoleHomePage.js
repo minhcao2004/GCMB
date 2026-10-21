@@ -14,7 +14,7 @@ import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
-import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
+import AccountProfileDialog from '../../administration/accounts/components/AccountProfileDialog';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân', ACCOUNTANT: 'Kế toán' };
 // Kiểm tra phiên/đúng vai trò trước khi hiển thị trang sau đăng nhập.

@@ -6,7 +6,7 @@
  * Description: Gọi API danh sách tài khoản, dữ liệu lựa chọn và tạo tài khoản với mã bảo vệ CSRF.
  */
 
-import api from '../../../api/client';
+import api from '../../../../api/client';
 
 const path = '/head-office/accounts';
 export const accountApi = {

@@ -6,27 +6,85 @@
  * Description: Tra cứu nhật ký theo khoảng ngày, người thực hiện, hành động và cơ sở.
  */
 import { useEffect, useRef, useState } from 'react';
-import { apiErrors } from '../../auth/services/authApi';
-import { accountApi } from './accountApi';
-import { accountAccessApi, actionNames, roleNames } from './accountAccessApi';
-import './accounts.css';
-import './accountAccess.css';
+import { apiErrors } from '../../../auth/services/authApi';
+import { accountApi } from '../services/accountApi';
+import { accountAccessApi, actionNames, roleNames } from '../services/accountAccessApi';
+import '../styles/accounts.css';
+import '../styles/accountAccess.css';
 
 const initialFilters = { q: '', action: '', branchId: '', from: '', to: '', page: 0 };
-const statusNames = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
-const entityNames = { USER_ACCOUNT: 'Tài khoản', ROOM: 'Phòng', ROOM_TYPE: 'Hạng phòng', PRICE_RULE: 'Quy tắc giá', COMBO: 'Combo', BOOKING: 'Booking', BRANCH: 'Cơ sở' };
+const statusNames = {
+  ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi', INACTIVE: 'Ngừng hoạt động', SUSPENDED: 'Tạm ngừng', CLOSED: 'Đã đóng',
+  CONFIRMED: 'Đã xác nhận', IN_HOUSE: 'Đang sử dụng', COMPLETED: 'Đã hoàn tất', CANCELLED: 'Đã hủy', NO_SHOW: 'Không đến',
+  AVAILABLE: 'Sẵn sàng', OCCUPIED: 'Đang sử dụng', CLEANING: 'Đang dọn', MAINTENANCE: 'Bảo trì', OUT_OF_SERVICE: 'Ngừng sử dụng',
+  PHONE: 'Điện thoại', WALK_IN: 'Khách trực tiếp', FACEBOOK: 'Facebook', ZALO: 'Zalo', OTHER: 'Khác',
+  HOURLY: 'Theo giờ', COMBO: 'Theo combo', CINEMA: 'Xem phim', MUSIC: 'Âm nhạc',
+  CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', SEPAY: 'SePay', SYSTEM: 'Hệ thống',
+  WEEKDAY: 'Ngày thường', WEEKEND: 'Cuối tuần', HOLIDAY: 'Ngày lễ',
+};
+const entityNames = { USER_ACCOUNT: 'Tài khoản', ROOM: 'Phòng', ROOM_TYPE: 'Hạng phòng', PRICE_RULE: 'Quy tắc giá', COMBO: 'Combo', BOOKING: 'Đặt phòng', BRANCH: 'Cơ sở' };
 const fieldNames = {
-  billId: 'ID bill', cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', updated_at: 'Cập nhật lúc', closed_on: 'Ngày đóng',
+  cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', closed_on: 'Ngày đóng',
   username: 'Tên đăng nhập', role: 'Vai trò', branchName: 'Cơ sở', status: 'Trạng thái', fullName: 'Họ tên', email: 'Email', phone: 'Số điện thoại',
-  id: 'ID', code: 'Mã', name: 'Tên', branch_id: 'ID cơ sở', room_type_id: 'ID hạng phòng', mode: 'Loại dịch vụ', capacity: 'Sức chứa',
+  name: 'Tên', mode: 'Loại dịch vụ', capacity: 'Sức chứa',
   description: 'Mô tả', floor_number: 'Tầng', operating_status: 'Trạng thái phòng', status_reason: 'Lý do trạng thái', expected_ready_at: 'Dự kiến sẵn sàng',
-  active: 'Đang áp dụng', version: 'Phiên bản', valid_from: 'Hiệu lực từ', valid_to: 'Hiệu lực đến', minute_from: 'Phút bắt đầu', minute_to: 'Phút kết thúc',
+  active: 'Đang áp dụng', valid_from: 'Hiệu lực từ', valid_to: 'Hiệu lực đến', minute_from: 'Phút bắt đầu', minute_to: 'Phút kết thúc',
   weekdays: 'Ngày trong tuần', day_kind: 'Loại ngày', specific_date: 'Ngày cụ thể', hourly_price: 'Giá giờ', overtime_hourly_price: 'Giá vượt giờ',
   billing_step_minutes: 'Bước tính phút', priority: 'Ưu tiên', price: 'Giá', duration_minutes: 'Thời lượng (phút)', deposit_required: 'Cọc yêu cầu',
   day_group: 'Nhóm ngày', min_guests: 'Số khách tối thiểu', included_description: 'Dịch vụ bao gồm', contact_name: 'Tên khách', contact_phone: 'Điện thoại khách',
   guest_count: 'Số khách', planned_start: 'Giờ hẹn', planned_end: 'Giờ kết thúc', actual_checkin: 'Check-in thực tế', actual_checkout: 'Check-out thực tế',
-  note: 'Ghi chú', channel: 'Kênh đặt', pricing_mode: 'Cách tính giá', managerId: 'ID quản lý', event: 'Chi tiết nghiệp vụ',
+  note: 'Ghi chú', channel: 'Kênh đặt', pricing_mode: 'Cách tính giá',
+  roomCode: 'Phòng', plannedEnd: 'Giờ kết thúc', startsAt: 'Giờ bắt đầu', endsAt: 'Giờ kết thúc',
+  updatedAmount: 'Tiền phòng', addedAmount: 'Tiền gia hạn', amount: 'Số tiền', adjustmentAmount: 'Tiền điều chỉnh',
+  depositBalance: 'Số dư cọc', depositReceived: 'Cọc đã nhận', depositAmount: 'Tiền cọc', depositMethod: 'Hình thức nhận cọc',
+  earlyCheckIn: 'Nhận phòng sớm', actualCheckin: 'Giờ nhận phòng', hours: 'Số giờ', billedMinutes: 'Số phút tính phí',
+  hourlyPrice: 'Giá giờ', startedAt: 'Bắt đầu tính giờ', stoppedAt: 'Dừng tính giờ',
+  combos: 'Combo', priceRules: 'Quy tắc giá',
 };
+
+const moneyFields = new Set(['cashAmount', 'bankAmount', 'hourly_price', 'overtime_hourly_price', 'price', 'deposit_required',
+  'updatedAmount', 'addedAmount', 'amount', 'adjustmentAmount', 'depositBalance', 'depositReceived', 'depositAmount', 'hourlyPrice']);
+const dateFields = new Set(['expected_ready_at', 'valid_from', 'valid_to', 'specific_date', 'closed_on', 'planned_start',
+  'planned_end', 'actual_checkin', 'actual_checkout', 'plannedEnd', 'startsAt', 'endsAt', 'actualCheckin', 'startedAt', 'stoppedAt']);
+
+export function auditValue(value, field) {
+  if (value == null || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Có' : 'Không';
+  if (field === 'role') return roleNames[value] || 'Không xác định';
+  if (moneyFields.has(field) && Number.isFinite(Number(value))) return `${Number(value).toLocaleString('vi-VN')} ₫`;
+  if (dateFields.has(field) && !Number.isNaN(Date.parse(value))) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split('-').reverse().join('/') : time(value);
+  }
+  if (Array.isArray(value)) {
+    if (field === 'weekdays') return value.map(day => ({ 1: 'Thứ hai', 2: 'Thứ ba', 3: 'Thứ tư', 4: 'Thứ năm', 5: 'Thứ sáu', 6: 'Thứ bảy', 7: 'Chủ nhật' }[day] || '—')).join(', ');
+    return value.map(item => typeof item === 'object' && item ? [item.name, item.price != null ? auditValue(item.price, 'price') : item.hourly_price != null ? auditValue(item.hourly_price, 'hourly_price') : null].filter(Boolean).join(' · ') : '').filter(Boolean).join(', ') || '—';
+  }
+  if (typeof value === 'object' || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(String(value))) return '—';
+  return statusNames[value] || String(value);
+}
+
+export function auditRows(detail) {
+  const before = detail?.beforeValues || detail?.before || {};
+  const after = detail?.afterValues || detail?.after || {};
+  const rows = [];
+  function add(field, previous, next) {
+    if (!fieldNames[field]) return;
+    const oldValue = auditValue(previous, field);
+    const newValue = auditValue(next, field);
+    if (oldValue !== newValue) rows.push({ field, label: fieldNames[field], before: oldValue, after: newValue });
+  }
+  new Set([...Object.keys(before), ...Object.keys(after)]).forEach(field => add(field, before[field], after[field]));
+  // The previous snapshot's event belongs to an earlier action, not the before-state of this action.
+  const event = after.event;
+  if (event && event.type === detail?.event?.action) {
+    const previousFields = { roomCode: 'previousRoomCode', updatedAmount: 'previousAmount', startsAt: 'previousStart', endsAt: 'previousEnd' };
+    Object.entries(event.details || {}).forEach(([field, value]) => {
+      if (field === 'plannedEnd' && rows.some(row => row.field === 'planned_end')) return;
+      add(field, event.details[previousFields[field]], value);
+    });
+  }
+  return rows;
+}
 
 function time(value) {
   return new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -105,7 +163,7 @@ export default function AuditLogPage({ onAccounts }) {
         </div>
         <input
           aria-label="Tìm nhật ký"
-          placeholder="Người / mã đối tượng"
+          placeholder="Tìm theo tên người / đối tượng"
           maxLength={200}
           value={filters.q}
           onChange={(event) => filter('q', event.target.value)}
@@ -139,7 +197,7 @@ export default function AuditLogPage({ onAccounts }) {
                   {page.items.map((entry) => (
                     <tr key={entry.id}>
                       <td>{time(entry.createdAt)}</td>
-                      <td><strong>{entry.actorName}</strong><small>{entry.actorUsername}</small></td>
+                      <td><strong>{entry.actorName}</strong></td>
                       <td>{actionNames[entry.action] || entry.action}</td>
                       <td><strong>{entry.entityName}</strong><small>{entityNames[entry.entityType] || entry.entityType}</small></td>
                       <td>{entry.branchName}</td>
@@ -190,31 +248,7 @@ function AuditDetail({ id, onClose }) {
     };
   }, [id]);
 
-  const legacyFields = [
-    ['username', 'Tên đăng nhập'],
-    ...(detail?.event.action === 'UPDATE_ACCOUNT_INFORMATION' ? [
-      ['fullName', 'Họ và tên'],
-      ['email', 'Email'],
-      ['phone', 'Số điện thoại'],
-    ] : [
-    ['role', 'Vai trò'],
-    ['branchName', 'Phạm vi'],
-    ['status', 'Truy cập'],
-    ]),
-  ];
-  const before = detail?.beforeValues || detail?.before;
-  const after = detail?.afterValues || detail?.after;
-  const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])];
-  const fields = keys.length ? keys.map(key => [key, fieldNames[key] || key]) : legacyFields;
-  function value(snapshot, field) {
-    const text = snapshot?.[field];
-    if (field === 'role') return roleNames[text] || text || '—';
-    if (field === 'status') return statusNames[text] || text || '—';
-    if (text == null) return '—';
-    if (typeof text === 'boolean') return text ? 'Có' : 'Không';
-    if (typeof text === 'object') return JSON.stringify(text, null, 2);
-    return String(text);
-  }
+  const rows = auditRows(detail);
 
   return (
     <dialog ref={dialog} className="account-drawer" aria-labelledby="audit-detail-title" onCancel={onClose}>
@@ -231,17 +265,17 @@ function AuditDetail({ id, onClose }) {
               <dt>Vai trò</dt><dd>{roleNames[detail.actorRole] || detail.actorRole || 'Không xác định'}</dd>
               <dt>Hành động</dt><dd>{actionNames[detail.event.action] || detail.event.action}</dd>
               <dt>Đối tượng</dt><dd>{detail.event.entityName}</dd>
-              <dt>Mã đối tượng</dt><dd>{detail.event.entityId || '—'}</dd>
-              <dt>Lý do</dt><dd>{detail.event.reason || 'Không có'}</dd>
+              <dt>Cơ sở</dt><dd>{detail.event.branchName}</dd>
+              {(detail.event.reason || (detail.afterValues?.event?.type === detail.event.action && detail.afterValues.event.reason)) && <><dt>Lý do</dt><dd>{detail.event.reason || detail.afterValues.event.reason}</dd></>}
             </dl>
-            <table className="access-permission-table">
+            {rows.length ? <table className="access-permission-table">
               <thead><tr><th>Thông tin</th><th>Trước</th><th>Sau</th></tr></thead>
               <tbody>
-                {fields.map(([field, label]) => (
-                  <tr key={field}><td>{label}</td><td style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value(before, field)}</td><td style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value(after, field)}</td></tr>
+                {rows.map(row => (
+                  <tr key={row.field}><td>{row.label}</td><td>{row.before}</td><td>{row.after}</td></tr>
                 ))}
               </tbody>
-            </table>
+            </table> : <p>Đã ghi nhận thao tác. Không có thay đổi thông tin cần hiển thị.</p>}
           </>
         )}
       </div>

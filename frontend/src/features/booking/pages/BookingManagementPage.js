@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
-import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
+import AccountProfileDialog from '../../administration/accounts/components/AccountProfileDialog';
 import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
