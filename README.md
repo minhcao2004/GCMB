@@ -136,7 +136,7 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `administration` | Accounts, access, branches, room configuration, pricing, packages, and audit history. |
+| `backoffice` | Accounts, access, branches, room configuration, pricing, packages, and audit history. |
 | `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
 | `inventory` | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
 | `workforce` | Staff, assignments, shifts, attendance, and payroll. |
@@ -146,7 +146,7 @@ F&B charges are linked to an active booking and included in its checkout bill. O
 
 Within a backend feature, create `controller/`, `service/`, `repository/`, `entity/`, and `dto/` as needed. Within a frontend feature, use `pages/`, `components/`, `services/`, `hooks/`, and `styles/` as needed.
 
-Frontend account management lives in `frontend/src/features/administration/accounts/`: `pages/` contains `AccountsPage` and `AuditLogPage`; `components/` contains account dialogs and the password form; `services/` contains API clients; `styles/` contains CSS. `CreateAccountDrawer` remains inside `pages/AccountsPage.js`. The parent dashboard remains at `frontend/src/features/auth/components/HeadOfficeDashboard.js`.
+Frontend account management lives in `frontend/src/features/backoffice/accounts/`: `pages/` contains `AccountsPage` and `AuditLogPage`; `components/` contains account dialogs and the password form; `services/` contains API clients; `styles/` contains CSS. `CreateAccountDrawer` remains inside `pages/AccountsPage.js`. The parent dashboard remains at `frontend/src/features/auth/components/HeadOfficeDashboard.js`.
 
 ## Getting Started
 
