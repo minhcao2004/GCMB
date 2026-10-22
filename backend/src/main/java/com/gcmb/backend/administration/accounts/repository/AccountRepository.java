@@ -10,6 +10,7 @@ package com.gcmb.backend.administration.accounts.repository;
 
 import com.gcmb.backend.administration.accounts.dto.AccountDtos.*;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -55,7 +56,10 @@ public class AccountRepository {
             where += " AND " + BRANCH + "=?";
             args.add(branch);
         }
-        long total = db.queryForObject("SELECT count(*) " + JOINS + where, Long.class, args.toArray());
+        long total = Objects.requireNonNull(
+                db.queryForObject("SELECT count(*) " + JOINS + where, Long.class, args.toArray()),
+                "Account count query returned null"
+        );
         args.add(size);
         args.add((long) page * size);
         return new AccountPage(
@@ -103,22 +107,23 @@ public class AccountRepository {
 
     public boolean lockAvailableEmployee(UUID id) {
         db.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        return !db.queryForList(
+        return !db.query(
                 "SELECT id FROM gcmb.employee WHERE id=? AND status='ACTIVE' AND user_id IS NULL FOR UPDATE",
-                UUID.class,
+                (rs, n) -> rs.getObject("id", UUID.class),
                 id
         ).isEmpty();
     }
 
     public UUID roleId(String code) {
-        var ids = db.queryForList("SELECT id FROM gcmb.role WHERE code=?", UUID.class, code);
+        var ids = db.query("SELECT id FROM gcmb.role WHERE code=?",
+                (rs, n) -> rs.getObject("id", UUID.class), code);
         return ids.isEmpty() ? null : ids.get(0);
     }
 
     public boolean activeBranch(UUID branch) {
-        return !db.queryForList(
+        return !db.query(
                 "SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",
-                UUID.class,
+                (rs, n) -> rs.getObject("id", UUID.class),
                 branch
         ).isEmpty();
     }
@@ -127,11 +132,11 @@ public class AccountRepository {
         if (!List.of("username", "email").contains(column)) {
             throw new IllegalArgumentException();
         }
-        return db.queryForObject(
+        return Objects.requireNonNull(db.queryForObject(
                 "SELECT count(*) FROM gcmb.user_account WHERE lower(" + column + ")=lower(?)",
                 Integer.class,
                 value
-        ) > 0;
+        ), "Account existence count query returned null") > 0;
     }
 
     public UUID insert(CreateAccount request, String username, String email, String hash, UUID role, UUID actor) {
