@@ -5,7 +5,7 @@
  * Created: 12/10/2026
  * Description: Gọi API thông tin cá nhân bằng phiên đăng nhập và mã CSRF.
  */
-import api from '../../../api/client';
+import api from '../../../../api/client';
 
 const path = '/account/profile';
 

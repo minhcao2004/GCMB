@@ -139,6 +139,20 @@ public class BranchAdministrationService {
         return get(id);
     }
 
+    @Transactional
+    public Map<String, Object> reactivate(UUID id) {
+        lock(id);
+        String current = (String) get(id).get("status");
+        if ("ACTIVE".equals(current)) return get(id);
+        if (!"SUSPENDED".equals(current)) {
+            throw failure(HttpStatus.CONFLICT, "Chỉ mở lại cơ sở đang tạm ngừng.");
+        }
+        db.update("""
+            UPDATE gcmb.branch SET status='ACTIVE',status_reason='',updated_at=CURRENT_TIMESTAMP WHERE id=?
+            """, id);
+        return get(id);
+    }
+
     public List<Map<String, Object>> managers() {
         return db.queryForList("""
             SELECT u.id AS "userId",u.username,u.email,COALESCE(e.full_name,u.username) AS "fullName",
@@ -254,7 +268,8 @@ public class BranchAdministrationService {
         get(id);
         return db.queryForList("""
             SELECT a.id,a.action,a.created_at AS "createdAt",COALESCE(e.full_name,u.username) AS actor,
-                COALESCE(a.reason,a.after_data->>'status_reason','') AS reason
+                COALESCE(a.reason,CASE WHEN a.action='DEACTIVATE_BRANCH'
+                    THEN a.after_data->>'status_reason' END,'') AS reason
             FROM gcmb.audit_event a LEFT JOIN gcmb.user_account u ON u.id=a.actor_id
             LEFT JOIN gcmb.employee e ON e.user_id=u.id
             WHERE a.entity_type='BRANCH' AND a.entity_id=? ORDER BY a.created_at DESC,a.id

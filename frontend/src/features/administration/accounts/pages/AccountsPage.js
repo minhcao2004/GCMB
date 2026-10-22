@@ -8,10 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { accountApi } from './accountApi';
-import { apiErrors } from '../../auth/services/authApi';
-import './accounts.css';
-import AccountAccessDialog from './AccountAccessDialog';
+import { accountApi } from '../services/accountApi';
+import { apiErrors } from '../../../auth/services/authApi';
+import '../styles/accounts.css';
+import AccountAccessDialog from '../components/AccountAccessDialog';
 
 const roles = { HEAD_OFFICE_MANAGER: ['HOM', 'Quản lý cấp cao'], BRANCH_MANAGER: ['BM', 'Quản lý cơ sở'], RECEPTIONIST: ['REC', 'Lễ tân'], ACCOUNTANT: ['ACC', 'Kế toán'] };
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };

@@ -28,6 +28,7 @@ export const branchAdministrationApi = {
   update: (id, data) => write('put', `/${id}`, data),
   assign: (id, userId) => write('put', `/${id}/manager`, { userId }),
   deactivate: (id, data) => write('post', `/${id}/deactivate`, data),
+  reactivate: (id) => write('post', `/${id}/reactivate`),
 };
 
 export function branchError(error) {
