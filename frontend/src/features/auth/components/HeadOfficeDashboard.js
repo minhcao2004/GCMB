@@ -14,8 +14,8 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
-import AccountsPage from '../../administration/accounts/AccountsPage';
-import AuditLogPage from '../../administration/accounts/AuditLogPage';
+import AccountsPage from '../../backoffice/accounts/AccountsPage';
+import AuditLogPage from '../../backoffice/accounts/AuditLogPage';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';

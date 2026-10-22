@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { branchAdministrationApi as api, branchError } from '../services/branchAdministrationApi';
-import { actionNames } from '../../administration/accounts/accountAccessApi';
+import { actionNames } from '../../backoffice/accounts/accountAccessApi';
 import './branch-administration.css';
 
 const statuses = { ACTIVE: 'Đang hoạt động', SUSPENDED: 'Tạm ngừng', CLOSED: 'Đã đóng' };

@@ -88,7 +88,7 @@ The agreed structure is shown below. Maven Wrapper support files, frontend manif
 GCMB/
 ├── backend/
 │   ├── src/main/java/com/GCMB/
-│   │   ├── administration/
+│   │   ├── backoffice/
 │   │   ├── booking/
 │   │   ├── inventory/
 │   │   ├── workforce/
@@ -109,7 +109,7 @@ GCMB/
 │   ├── public/
 │   ├── src/
 │   │   ├── features/
-│   │   │   ├── administration/
+│   │   │   ├── backoffice/
 │   │   │   ├── booking/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
