@@ -5,7 +5,7 @@
  * Created: 12/10/2026
  * Description: Gọi API phân quyền, thu hồi truy cập và tra cứu nhật ký hệ thống.
  */
-import api from '../../../api/client';
+import api from '../../../../api/client';
 
 async function post(path, body) {
   const { data: csrf } = await api.get('/auth/csrf');
@@ -55,6 +55,7 @@ export const actionNames = {
   CHANGE_BILL_PAYMENT_METHOD: 'Đổi phương thức thanh toán bill',
   RENEW_BILL_QR: 'Gia hạn mã QR bill', ISSUE_BILL: 'Lập bill', PLAN_BILL_PAYMENT: 'Ghi nhận thanh toán bill', CONFIRM_SEPAY_PAYMENT: 'SePay xác nhận thanh toán', CHECKOUT_BOOKING: 'Hoàn tất checkout',
   CREATE_BRANCH: 'Thêm cơ sở', UPDATE_BRANCH: 'Sửa cơ sở', DEACTIVATE_BRANCH: 'Ngừng hoạt động cơ sở',
+  REACTIVATE_BRANCH: 'Mở lại cơ sở',
   CREATE_ROOM_TYPE: 'Thêm hạng phòng', UPDATE_ROOM_TYPE: 'Sửa hạng phòng', DELETE_ROOM_TYPE: 'Xóa hạng phòng',
   DEACTIVATE_ROOM_TYPE: 'Ngừng sử dụng hạng phòng',
   CREATE_PRICE_RULE: 'Thêm giá / quy tắc giá', UPDATE_PRICE_RULE: 'Sửa giá / quy tắc giá', DELETE_PRICE_RULE: 'Xóa quy tắc giá',
@@ -63,6 +64,7 @@ export const actionNames = {
   BOOKING_CREATED: 'Tạo booking', BOOKING_UPDATED: 'Sửa booking', BOOKING_CANCELLED: 'Hủy booking',
   BOOKING_CHECKED_IN: 'Check-in', BOOKING_NO_SHOW: 'Đánh dấu không đến', BOOKING_ROOM_CHANGED: 'Đổi phòng',
   BOOKING_EXTENDED: 'Gia hạn', HOURLY_METER_STARTED: 'Bắt đầu tính giờ lẻ', HOURLY_METER_STOPPED: 'Chốt giờ lẻ',
+  ROOM_CLEANING_COMPLETED: 'Hoàn tất dọn phòng',
   UPDATE_ACCOUNT_INFORMATION: 'Cập nhật thông tin tài khoản',
   CREATE_USER_ACCOUNT: 'Tạo tài khoản',
   SET_ACCOUNT_ROLE: 'Thay đổi vai trò / phạm vi',

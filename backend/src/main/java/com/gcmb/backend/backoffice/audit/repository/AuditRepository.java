@@ -30,13 +30,17 @@ public class AuditRepository {
             LEFT JOIN gcmb.employee employee ON employee.user_id=actor.id
             LEFT JOIN gcmb.branch b ON b.id=a.branch_id
             LEFT JOIN gcmb.user_account target ON target.id=a.entity_id AND a.entity_type='USER_ACCOUNT'
+            LEFT JOIN gcmb.employee target_employee ON target_employee.user_id=target.id
+            LEFT JOIN gcmb.booking booking ON booking.id=a.entity_id AND a.entity_type='BOOKING'
             """;
     private static final String SELECT = """
             SELECT a.id,a.created_at,a.action,a.entity_type,a.entity_id,a.reason,
                 COALESCE(employee.full_name,actor.username,'Hệ thống') AS actor_name,
                 actor.username AS actor_username,
-                COALESCE(a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',
-                    a.before_data->>'code',a.before_data->>'name',target.username,CAST(a.entity_id AS text),'—') AS entity_name,
+                COALESCE(NULLIF(a.after_data->>'contact_name',''),NULLIF(a.before_data->>'contact_name',''),
+                    NULLIF(booking.contact_name,''),NULLIF(a.after_data->>'fullName',''),NULLIF(a.before_data->>'fullName',''),
+                    NULLIF(a.after_data->>'name',''),NULLIF(a.before_data->>'name',''),target_employee.full_name,
+                    a.after_data->>'username',a.before_data->>'username',target.username,'Không còn thông tin tên') AS entity_name,
                 COALESCE(b.name,'Toàn chuỗi') AS branch_name
             """;
 
@@ -69,7 +73,9 @@ public class AuditRepository {
             int size) {
         StringBuilder where = new StringBuilder("""
                 WHERE strpos(lower(concat_ws(' ',employee.full_name,actor.username,
-                    target.username,CAST(a.entity_id AS text),a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',a.before_data->>'code',a.before_data->>'name')),lower(?))>0
+                    target.username,target_employee.full_name,booking.contact_name,CAST(a.entity_id AS text),
+                    a.after_data->>'fullName',a.before_data->>'fullName',a.after_data->>'contact_name',a.before_data->>'contact_name',
+                    a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',a.before_data->>'code',a.before_data->>'name')),lower(?))>0
                 """);
         List<Object> args = new ArrayList<>();
         args.add(q);

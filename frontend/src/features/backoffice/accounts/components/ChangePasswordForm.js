@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { authApi, apiErrors } from '../../auth/services/authApi';
+import { authApi, apiErrors } from '../../../auth/services/authApi';
 
 export default function ChangePasswordForm({ busy, onBusyChange, onCancel }) {
   const [form, setForm] = useState({ currentPassword: '', password: '', confirmation: '' });

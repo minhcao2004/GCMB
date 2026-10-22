@@ -6,11 +6,9 @@
  * Description: Bảng đổi vai trò và hộp xác nhận thu hồi truy cập có lý do.
  */
 import { useEffect, useRef, useState } from 'react';
-import { apiErrors } from '../../auth/services/authApi';
-import { accountAccessApi, roleNames } from './accountAccessApi';
-import './accountAccess.css';
-
-const scopeNames = { CHAIN: 'Toàn chuỗi', BRANCH: 'Cơ sở', SELF: 'Cá nhân' };
+import { apiErrors } from '../../../auth/services/authApi';
+import { accountAccessApi, roleNames } from '../services/accountAccessApi';
+import '../styles/accountAccess.css';
 
 export default function AccountAccessDialog({ account, options, actorId, onClose, onSaved }) {
   const dialog = useRef(null);
@@ -20,9 +18,6 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
-  const [permissions, setPermissions] = useState([]);
-  const [permissionError, setPermissionError] = useState('');
-  const [permissionLoading, setPermissionLoading] = useState(true);
   const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(role);
   const immutable = account.id === actorId || account.status === 'REVOKED';
   const branchName = chain
@@ -41,23 +36,6 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
       previousFocus?.focus();
     };
   }, []);
-
-  useEffect(() => {
-    let active = true;
-    setPermissionLoading(true);
-    setPermissionError('');
-    accountAccessApi.permissions(role)
-      .then((data) => {
-        if (active) setPermissions(data);
-      })
-      .catch((error) => {
-        if (active) setPermissionError(Object.values(apiErrors(error)).join(' '));
-      })
-      .finally(() => {
-        if (active) setPermissionLoading(false);
-      });
-    return () => { active = false; };
-  }, [role]);
 
   async function submit(event) {
     event.preventDefault();
@@ -133,25 +111,6 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
                   </select>
                 )}
               </div>
-              <h3 className="access-permission-title">Chức năng theo vai trò · chỉ đọc</h3>
-              {permissionLoading ? <p role="status">Đang tải quyền…</p> : permissionError ? (
-                <p className="account-error" role="alert">{permissionError}</p>
-              ) : (
-                <table className="access-permission-table">
-                  <thead><tr><th>Chức năng</th><th>Phạm vi quyền</th></tr></thead>
-                  <tbody>
-                    {permissions.map((permission) => (
-                      <tr key={permission.code}>
-                        <td>{permission.name}</td>
-                        <td>{scopeNames[permission.scope] || permission.scope}</td>
-                      </tr>
-                    ))}
-                    {!permissions.length && (
-                      <tr><td colSpan="2">Chưa cấu hình quyền chi tiết cho vai trò này.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
               <div className="account-access-note access-preview">
                 <strong>Phạm vi sau khi lưu</strong>
                 <p>{roleNames[role]} · {branchName}</p>
