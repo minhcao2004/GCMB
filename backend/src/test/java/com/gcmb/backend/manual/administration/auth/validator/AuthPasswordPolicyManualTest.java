@@ -30,14 +30,7 @@ public final class AuthPasswordPolicyManualTest {
                 "acceptsPasswordAtSixtyFourCharacterUpperBoundary", 91, "Aa1!" + "b".repeat(60),
                 "Password and confirmation match at length 64", "Complete without exception"));
 
-        cases.add(new ManualTestCase("password-policy/mismatch",
-                ManualTestCase.identifier("UTC053", "UTC-PAM-CHANGE-PASSWORD-002"),
-                "AuthPasswordPolicyTest",
-                "rejectsPasswordWhenConfirmationDoesNotMatch",
-                "No setup required",
-                "password='Aa1!bcde', confirmation='Aa1!bcdf'",
-                "AuthFailure status=400; message='Mật khẩu xác nhận không khớp'",
-                () -> ManualTestSupport.observeVoid(() -> AuthValidation.password(VALID, "Aa1!bcdf"))));
+        // UTC053 covers the same real validator mismatch through AuthService.reset.
 
         Object[][] lengths = {
                 {"UTC078", "seven characters", "Aa1!bcd", 7, 92},
@@ -92,7 +85,7 @@ public final class AuthPasswordPolicyManualTest {
                 "AuthPasswordPolicyTest",
                 method,
                 preconditions,
-                "password=confirmation='" + password.replace(" ", "␠") + "'; length=" + password.length(),
+                "password=confirmation='" + password.replace(" ", "\\u0020") + "'; length=" + password.length(),
                 expected,
                 () -> ManualTestSupport.observeVoid(() -> AuthValidation.password(password, password)));
     }

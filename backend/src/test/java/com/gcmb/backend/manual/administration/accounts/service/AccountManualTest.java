@@ -341,7 +341,7 @@ public final class AccountManualTest {
                 }));
 
         cases.add(test("create-branch-manager",
-                null,
+                "UTC048",
                 "UTC-ACC-015",
                 "createSynchronizesBranchManagerAfterInsertBeforeFind",
                 "Employee, role and branch are valid; identity is unique",

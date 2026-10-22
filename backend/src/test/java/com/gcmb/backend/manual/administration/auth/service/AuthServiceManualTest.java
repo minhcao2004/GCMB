@@ -16,6 +16,7 @@ import com.gcmb.backend.administration.auth.security.AuthCrypto;
 import com.gcmb.backend.administration.auth.service.AuthService;
 import com.gcmb.backend.administration.auth.service.RecoveryMailer;
 import com.gcmb.backend.manual.ManualTestCase;
+import com.gcmb.backend.manual.ManualTestResult;
 import com.gcmb.backend.manual.ManualTestSuite;
 import com.gcmb.backend.manual.ManualTestSupport;
 import java.time.Instant;
@@ -338,8 +339,13 @@ public final class AuthServiceManualTest {
             int row = (Integer) data[3];
             cases.add(test("reset-code-" + label.replace(' ', '-'), id, null,
                     "resetRejectsInvalidCode[" + label + "]", row,
-                    "No dependency setup required", "code=" + printable(code),
-                    "AuthFailure status=400; no repository or mailer interaction", () -> {
+                    "No dependency setup required",
+                    "code=" + printable(code) + (id.equals("UTC060") ? "; V02: code='123\\n45'" : ""),
+                    "AuthFailure status=400; no repository or mailer interaction"
+                            + (id.equals("UTC060") ? "; both letter and newline variants are checked independently" : ""), () -> {
+                        if (id.equals("UTC060")) {
+                            return observeInvalidCodeVariants(code, "123\n45");
+                        }
                         Context context = context();
                         return ManualTestSupport.observeVoid(
                                 () -> context.service.reset(EMAIL, CHALLENGE, code, NEW_PASSWORD, NEW_PASSWORD),
@@ -416,6 +422,22 @@ public final class AuthServiceManualTest {
                             () -> context.service.reset(EMAIL, CHALLENGE, CODE, NEW_PASSWORD, NEW_PASSWORD),
                             context.repository, context.crypto, context.mailer);
                 }));
+    }
+
+    private static ManualTestResult observeInvalidCodeVariants(String... values) {
+        StringBuilder actual = new StringBuilder(), exceptions = new StringBuilder(), effects = new StringBuilder();
+        for (int index = 0; index < values.length; index++) {
+            Context context = context();
+            String code = values[index];
+            ManualTestResult observed = ManualTestSupport.observeVoid(
+                    () -> context.service.reset(EMAIL, CHALLENGE, code, NEW_PASSWORD, NEW_PASSWORD),
+                    context.repository, context.crypto, context.mailer);
+            String label = "V" + (index + 1) + " code=" + printable(code) + ": ";
+            actual.append(label).append(observed.actualResult()).append('\n');
+            exceptions.append(label).append(observed.exception()).append('\n');
+            effects.append(label).append(observed.sideEffects()).append('\n');
+        }
+        return new ManualTestResult(actual.toString(), exceptions.toString(), effects.toString());
     }
 
     private static void addAuthenticateCases(List<ManualTestCase> cases) {
