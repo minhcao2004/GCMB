@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Hiển thị và xử lý form đăng nhập, quên mật khẩu và đặt lại mật khẩu, gồm kiểm tra dữ liệu và gọi API.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import AuthShell from '../components/AuthShell';

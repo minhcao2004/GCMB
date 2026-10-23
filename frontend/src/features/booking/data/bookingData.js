@@ -49,6 +49,11 @@ export function formatVnd(value) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value) || 0)}đ`;
 }
 
+export function formatMoneyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 // Định dạng ngày cho giao diện.
 export function formatDate(value) {
   if (!value) return '—';

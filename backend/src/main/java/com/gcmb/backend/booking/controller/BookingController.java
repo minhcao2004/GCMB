@@ -1,16 +1,22 @@
 package com.gcmb.backend.booking.controller;
 
+import com.gcmb.backend.administration.audit.service.MutationAudit;
 import com.gcmb.backend.administration.auth.dto.response.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.service.DepositManagementService;
 import com.gcmb.backend.booking.service.BookingService;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -28,11 +34,12 @@ public class BookingController {
     private final DepositManagementService deposits;
 
     // Service chịu trách nhiệm quy tắc nghiệp vụ và phạm vi chi nhánh.
-    public BookingController(BookingService bookings, DepositManagementService deposits) {
+    private final MutationAudit audit;
+    public BookingController(BookingService bookings, DepositManagementService deposits, MutationAudit audit) {
         this.bookings = bookings;
         this.deposits = deposits;
+        this.audit = audit;
     }
-
     @GetMapping("/deposits")
     // GET: danh sách tiền cọc, tổng hợp và bộ lọc trong phạm vi chi nhánh lễ tân.
     public DepositDtos.DepositPage deposits(@AuthenticationPrincipal Identity identity,
@@ -58,17 +65,45 @@ public class BookingController {
         return deposits.detail(identity, bookingId);
     }
 
+    @GetMapping("/deposits/refund-requests/{requestId}/evidence")
+    // GET: lễ tân xem chứng từ của khoản hoàn đã thanh toán trong chi nhánh hiện tại.
+    public ResponseEntity<byte[]> depositRefundEvidence(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID requestId) {
+        DepositDtos.RefundEvidenceContent evidence = deposits.refundEvidence(identity, requestId);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(evidence.mimeType()))
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                .filename(evidence.originalName(), StandardCharsets.UTF_8).build().toString())
+            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .body(evidence.bytes());
+    }
+
     @PostMapping("/deposits/refund-requests")
     // POST: tạo yêu cầu chờ kế toán xử lý; lễ tân không ghi nhận đã hoàn tiền.
     public DepositDtos.RefundRequestResult createDepositRefundRequest(@AuthenticationPrincipal Identity identity,
             @RequestBody DepositDtos.CreateRefundRequest request) {
-        return deposits.createRefundRequest(identity, request);
+        return audit.record("REQUEST_DEPOSIT_REFUND", "BOOKING", request == null ? null : request.bookingId(),
+            () -> deposits.createRefundRequest(identity, request), null);
     }
 
     @GetMapping("/booking-options")
     // GET: trả lựa chọn hạng phòng và combo cho lễ tân.
     public BookingDtos.BookingOptions options(@AuthenticationPrincipal Identity identity) {
         return bookings.options(identity);
+    }
+
+    @GetMapping("/rooms")
+    public List<BookingDtos.RoomSummary> rooms(@AuthenticationPrincipal Identity identity) {
+        return bookings.rooms(identity);
+    }
+
+    @PostMapping("/rooms/{roomId}/finish-cleaning")
+    public void finishCleaning(@AuthenticationPrincipal Identity identity, @PathVariable UUID roomId) {
+        audit.record("ROOM_CLEANING_COMPLETED", "ROOM", roomId, () -> {
+            bookings.finishCleaning(identity, roomId);
+            return null;
+        }, null);
     }
 
     @GetMapping("/availability")
@@ -129,7 +164,7 @@ public class BookingController {
     // POST: ghi đổi phòng và trả booking đã cập nhật.
     public BookingDtos.RoomChangeResult changeRoom(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID bookingId, @RequestBody BookingDtos.RoomChangeRequest request) {
-        return bookings.changeRoom(identity, bookingId, request);
+        return audit.record("BOOKING_ROOM_CHANGED","BOOKING",bookingId,()->bookings.changeRoom(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/extension-quote")
@@ -143,52 +178,52 @@ public class BookingController {
     // POST: xác nhận gia hạn và khoản phí mới.
     public BookingDtos.ExtensionResult extendStay(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID bookingId, @RequestBody BookingDtos.ExtendStayRequest request) {
-        return bookings.extendStay(identity, bookingId, request);
+        return audit.record("BOOKING_EXTENDED","BOOKING",bookingId,()->bookings.extendStay(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/hourly-meter/start")
     // POST: bắt đầu phiên tính giờ lẻ trên máy chủ.
     public BookingDtos.BookingDetail startHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return bookings.startHourlyMeter(identity, bookingId);
+        return audit.record("HOURLY_METER_STARTED","BOOKING",bookingId,()->bookings.startHourlyMeter(identity, bookingId),null);
     }
 
     @PostMapping("/bookings/{bookingId}/hourly-meter/stop")
     // POST: chốt phiên giờ lẻ theo thời gian thực dùng.
     public BookingDtos.BookingDetail stopHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return bookings.stopHourlyMeter(identity, bookingId);
+        return audit.record("HOURLY_METER_STOPPED","BOOKING",bookingId,()->bookings.stopHourlyMeter(identity, bookingId),null);
     }
 
     @PostMapping("/bookings/{bookingId}/check-in")
     // POST: ghi nhận khách vào phòng.
     public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return bookings.checkIn(identity, bookingId);
+        return audit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookings.checkIn(identity, bookingId),null);
     }
 
     @PostMapping("/bookings")
     // POST: tạo booking và các khoản thu đã xác nhận.
     public BookingDtos.BookingDetail create(@AuthenticationPrincipal Identity identity,
             @RequestBody BookingDtos.CreateBookingRequest request) {
-        return bookings.create(identity, request);
+        return audit.record("BOOKING_CREATED","BOOKING",null,()->bookings.create(identity, request),result->result.booking().id());
     }
 
     @PatchMapping("/bookings/{bookingId}")
     // PATCH: sửa booking chưa bắt đầu.
     public BookingDtos.BookingDetail update(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody BookingDtos.UpdateBookingRequest request) {
-        return bookings.update(identity, bookingId, request);
+        return audit.record("BOOKING_UPDATED","BOOKING",bookingId,()->bookings.update(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/cancel")
     // POST: hủy booking và xử lý số dư cọc.
     public BookingDtos.CancellationResult cancel(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody(required = false) BookingDtos.CancelBookingRequest request) {
-        return bookings.cancel(identity, bookingId, request);
+        return audit.record("BOOKING_CANCELLED","BOOKING",bookingId,()->bookings.cancel(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/no-show")
     // POST: đánh dấu khách không đến nhận phòng.
     public BookingDtos.NoShowResult markNoShow(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody(required = false) BookingDtos.NoShowRequest request) {
-        return bookings.markNoShow(identity, bookingId, request);
+        return audit.record("BOOKING_NO_SHOW","BOOKING",bookingId,()->bookings.markNoShow(identity, bookingId, request),null);
     }
 }

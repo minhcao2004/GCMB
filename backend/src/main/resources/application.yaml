@@ -15,9 +15,16 @@ spring:
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 gcmb:
   auth:
     secure-cookie: ${AUTH_SECURE_COOKIE:true}
     frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
     mail-from: ${SMTP_FROM:}
+  attachments:
+    # Configure a persistent shared directory for deployed or multi-instance environments.
+    storage-dir: ${GCMB_ATTACHMENT_STORAGE_DIR:./data/attachments}

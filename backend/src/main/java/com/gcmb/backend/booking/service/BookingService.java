@@ -58,6 +58,25 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
+    public List<BookingDtos.RoomSummary> rooms(Identity identity) {
+        return repository.rooms(branch(identity).id()).stream()
+            .map(room -> new BookingDtos.RoomSummary(room.id(), room.code(), room.name(), room.capacity(),
+                room.roomTypeId(), room.roomTypeName(), room.operatingStatus())).toList();
+    }
+
+    @Transactional
+    public void finishCleaning(Identity identity, UUID roomId) {
+        UUID branchId = branch(identity).id();
+        String status = repository.lockRoomStatus(branchId, roomId);
+        if (status == null) throw new BookingFailure(404, "form", "Không tìm thấy phòng trong cơ sở của bạn");
+        if (!"CLEANING".equals(status) && !"AVAILABLE".equals(status))
+            throw new BookingFailure(409, "form", "Chỉ xác nhận dọn xong cho phòng đang dọn");
+        if (repository.roomHasOccupant(branchId, roomId))
+            throw new BookingFailure(409, "form", "Phòng vẫn có khách đang sử dụng; cần checkout trước");
+        if ("CLEANING".equals(status)) repository.completeRoomCleaning(branchId, roomId, identity.id());
+    }
+
+    @Transactional(readOnly = true)
     // Kiểm tra khoảng đặt trong tương lai, trả phòng còn trống và báo giá từ cấu hình.
     public BookingDtos.Availability availability(Identity identity, UUID roomTypeId, Instant start, Instant end,
             String pricingMode, UUID comboId) {
@@ -272,17 +291,19 @@ public class BookingService {
     }
 
     @Transactional
-    // Chốt đơn giá giờ lẻ và giữ phòng đến booking kế tiếp hoặc tối đa 24 giờ.
+    // Chỉ bật đồng hồ sau giờ trả đã hẹn; giữ phòng đến booking kế tiếp hoặc tối đa 24 giờ.
     public BookingDtos.BookingDetail startHourlyMeter(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);
         lockBooking(bookingId, branch.id());
         BookingRow booking = requireInHouseBooking(bookingId, branch.id());
         if (repository.meter(bookingId) != null)
             throw new BookingFailure(409, "form", "Booking đã có phiên tính giờ lẻ; vui lòng tải lại");
+        Instant now = Instant.now();
+        if (now.isBefore(booking.plannedEnd()))
+            throw new BookingFailure(409, "form", "Chỉ có thể bật đồng hồ giờ lẻ sau khi hết thời lượng đã đặt");
         AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
         validateActiveAllocation(allocation);
-        Instant now = Instant.now();
-        // Bật sớm vẫn giữ phòng, nhưng tiền giờ lẻ chỉ chạy từ giờ trả đã hẹn.
+        // Đồng hồ bắt đầu tính phí từ thời điểm lễ tân bật sau giờ trả đã hẹn.
         Instant billedFrom = later(now, booking.plannedEnd());
         Instant reservedUntil = billedFrom.plus(Duration.ofHours(24));
         Instant nextBooking = repository.nextRoomBookingStart(allocation.roomId(), allocation.endsAt(), bookingId);
@@ -367,7 +388,7 @@ public class BookingService {
         BookingDtos.PriceQuote quote = pricing.quote(room.roomTypeId(), branch.id(), branch.timezone(),
             request.plannedStart(), request.plannedEnd(), request.pricingMode(), request.comboId());
         String contactName = required(request.contactName(), "contactName", "Tên khách", 200);
-        String contactPhone = nullable(request.contactPhone(), "contactPhone", 30);
+        String contactPhone = contactPhone(request.contactPhone());
         String note = nullable(request.note(), "note", 2000);
         BigDecimal depositAmount = request.depositAmount() == null ? BigDecimal.ZERO : request.depositAmount();
         BigDecimal normalizedDepositAmount = depositAmount.stripTrailingZeros();
@@ -583,7 +604,7 @@ public class BookingService {
             if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict();
         }
         String contactName = request.contactName() == null ? booking.contactName() : required(request.contactName(), "contactName", "Tên khách", 200);
-        String contactPhone = request.contactPhone() == null ? booking.contactPhone() : nullable(request.contactPhone(), "contactPhone", 30);
+        String contactPhone = request.contactPhone() == null ? booking.contactPhone() : contactPhone(request.contactPhone());
         String note = request.note() == null ? booking.note() : nullable(request.note(), "note", 2000);
         repository.updateBooking(bookingId, contactName, contactPhone, start, end, note);
         UUID allocationId = allocationChanged ? insertAllocation(branch, bookingId, targetRoom.id(), start, end, actorId) : current.id();
@@ -802,23 +823,23 @@ public class BookingService {
                 if (savedDuration > 0) lineEnd = lineStart.plusSeconds(savedDuration * 60L);
             }
             Instant usedEnd = earlier(lineEnd, changedAt);
+            long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
+            long usedSeconds = Math.max(0, Duration.between(lineStart, usedEnd).getSeconds());
+            BigDecimal usedSegmentAmount = usedEnd.isAfter(lineStart)
+                ? proportional(charge.amount(), usedSeconds, fullSeconds) : BigDecimal.ZERO;
             if (usedEnd.isAfter(lineStart)) {
-                long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
-                long usedSeconds = Duration.between(lineStart, usedEnd).getSeconds();
-                BigDecimal amount = proportional(charge.amount(), usedSeconds, fullSeconds);
                 Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, lineStart, usedEnd, cause, "USED", charge.id());
                 usedLines.add(new BookingDtos.ChargeLine(charge.kind(), charge.description(),
-                    splitQuantity(charge.quantity(), usedSeconds, fullSeconds), charge.unitPrice(), amount,
+                    splitQuantity(charge.quantity(), usedSeconds, fullSeconds), charge.unitPrice(), usedSegmentAmount,
                     charge.priceRuleId(), charge.comboId(), snapshot));
-                usedAmount = usedAmount.add(amount);
+                usedAmount = usedAmount.add(usedSegmentAmount);
             }
 
             Instant nextStart = later(lineStart, changedAt);
             if (!lineEnd.isAfter(nextStart)) continue;
-            long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
             long nextSeconds = Duration.between(nextStart, lineEnd).getSeconds();
-            // Lấy phần dư từ tiền gốc để sai số làm tròn không làm thay đổi tổng phí đã chốt.
-            BigDecimal sourceRemaining = charge.amount().subtract(proportional(charge.amount(), fullSeconds - nextSeconds, fullSeconds));
+            // Lấy phần dư theo đúng số đã dùng để hai chặng cộng lại bằng chính xác phí gốc.
+            BigDecimal sourceRemaining = charge.amount().subtract(usedSegmentAmount);
             // Lỗi cơ sở: giữ giá phần chưa dùng, dù phòng thay thế thuộc hạng khác.
             if ("BRANCH_FAULT".equals(cause)) {
                 Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, nextStart, lineEnd, cause, "NEXT", charge.id());
@@ -1064,6 +1085,13 @@ public class BookingService {
         String trimmed = value.trim();
         if (trimmed.length() > max) throw new BookingFailure(400, field, label + " không được vượt quá " + max + " ký tự");
         return trimmed;
+    }
+
+    private static String contactPhone(String value) {
+        String phone = required(value, "contactPhone", "Số điện thoại", 15);
+        if (!phone.matches("0[0-9]{6,14}"))
+            throw new BookingFailure(400, "contactPhone", "Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.");
+        return phone;
     }
 
     // Dùng chính sách mặc định: chuỗi rỗng được xem như không có giá trị.

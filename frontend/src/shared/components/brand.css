@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Định dạng biểu trưng thương hiệu, kích thước logo và màu chuyển sắc của chữ GenZ.
+ */
+
 .brand-wordmark { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .brand-wordmark img { width: 100px; height: 100px; object-fit: cover; flex-shrink: 0; }
 .brand-wordmark .brand-gradient, .brand > .brand-gradient { background: linear-gradient(90deg, #70cddd 0%, #ed188d 100%); background-clip: text; -webkit-background-clip: text; color: transparent; }

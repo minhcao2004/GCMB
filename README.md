@@ -88,7 +88,7 @@ The agreed structure is shown below. Maven Wrapper support files, frontend manif
 GCMB/
 ├── backend/
 │   ├── src/main/java/com/GCMB/
-│   │   ├── administration/
+│   │   ├── backoffice/
 │   │   ├── booking/
 │   │   ├── inventory/
 │   │   ├── workforce/
@@ -109,7 +109,7 @@ GCMB/
 │   ├── public/
 │   ├── src/
 │   │   ├── features/
-│   │   │   ├── administration/
+│   │   │   ├── backoffice/
 │   │   │   ├── booking/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
@@ -136,7 +136,7 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `administration` | Accounts, access, branches, room configuration, pricing, packages, and audit history. |
+| `backoffice` | Accounts, access, branches, room configuration, pricing, packages, and audit history. |
 | `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
 | `inventory` | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
 | `workforce` | Staff, assignments, shifts, attendance, and payroll. |
@@ -145,6 +145,8 @@ GCMB/
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
 Within a backend feature, create `controller/`, `service/`, `repository/`, `entity/`, and `dto/` as needed. Within a frontend feature, use `pages/`, `components/`, `services/`, `hooks/`, and `styles/` as needed.
+
+Frontend account management lives in `frontend/src/features/backoffice/accounts/`: `pages/` contains `AccountsPage` and `AuditLogPage`; `components/` contains account dialogs and the password form; `services/` contains API clients; `styles/` contains CSS. `CreateAccountDrawer` remains inside `pages/AccountsPage.js`. The parent dashboard remains at `frontend/src/features/auth/components/HeadOfficeDashboard.js`.
 
 ## Getting Started
 
@@ -239,6 +241,8 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 
 ### Troubleshooting
 
+Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/main/java/com/gcmb/backend/BackendApplication.java`. Maven chỉ định lớp này trong `pom.xml`; cấu hình Run của IDE cũng cần dùng đúng tên package. Nếu IDE còn chọn `com.gcmb.BackendApplication`, xóa cấu hình Run cũ và chọn lại lớp hiện tại.
+
 | Problem | Check or action |
 | --- | --- |
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
@@ -246,6 +250,7 @@ Open **http://localhost:3000**. Create React App uses `npm start`. Restart the f
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
+| `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
 
 ## Configuration
 
@@ -283,14 +288,24 @@ Add a new migration for changes to an already-shared schema. Preserve applied mi
 
 ## Usage
 
-Once the relevant features and development accounts are available:
+Cơ sở tạm ngừng có thể mở lại bằng **Mở lại cơ sở** và xác nhận; hệ thống ghi nhật ký `REACTIVATE_BRANCH`, chuyển về ACTIVE và xóa lý do trạng thái hiện tại, giữ lịch sử tạm ngừng. API: `POST /api/v1/head-office/branches/{id}/reactivate` dành cho quản lý cấp cao, chỉ nhận cơ sở SUSPENDED (gọi lại với ACTIVE không đổi dữ liệu). Màn cơ sở không còn nút **Đóng cơ sở**; bản ghi CLOSED cũ vẫn được giữ để tra cứu. Lịch sử sửa thông tin không dùng lại lý do tạm ngừng; ghi chú vận hành và lý do trạng thái là hai thông tin riêng. Không cần migration.
 
-1. Sign in with a role-appropriate account and work within the permitted branch scope.
-2. Configure branches, room categories, prices, rooms, and staff access.
-3. Create a walk-in or advance booking after checking availability; record a deposit where applicable.
-4. Check the customer in and manage room changes, extensions, and F&B orders during the session.
-5. Review room and F&B charges at checkout, apply eligible adjustments, deduct the deposit, and record payment.
-6. Complete daily cash closing and reconciliation, attendance closing, payroll, and management reporting as authorized.
+### Checkout, bill và SePay (14/10/2026)
+
+Lễ tân chọn phòng đang sử dụng → **Checkout & lập bill**. Kiểm tra tiền phòng theo giá đã xác nhận, F&B đã SERVED (không tính lại món combo giá 0), phụ phí có lý do và xác nhận đã kiểm tra phòng. **Tiếp tục thanh toán** chốt bill và thời điểm ngừng tính sử dụng; sau đó phí/order/đổi phòng/gia hạn bị khóa. Khách trả sớm vẫn giữ các khoản booking đã xác nhận; không tự tính lại bằng bảng giá mới. Nếu đã quá giờ mà chưa có phiên giờ lẻ, cần xác nhận gia hạn trước; đồng hồ giờ lẻ đang chạy được dừng bằng service hiện hành khi chốt bill.
+
+Trong thanh toán chọn **Tiền mặt**, **SePay** hoặc **Kết hợp**. Phần tiền mặt nhập khi tạo QR được lưu thành phân bổ tạm trên bill, chưa tạo payment và không hiển thị là đã thu. **Đổi phương thức** hủy QR cũ, xóa toàn bộ phân bổ tạm và đưa form về tổng bill ban đầu. Bill 170.000đ nhập tạm 50.000đ tiền mặt + QR 120.000đ: sau đặt lại vẫn cần thanh toán 170.000đ, không giữ 50.000đ. Khi SePay đã xác nhận chuyển khoản hoặc có khoản thu thực tế, không cho đặt lại. Webhook của mã đã hủy được lưu EXCEPTION, không cộng vào bill; hủy QR không hủy giao dịch tại ngân hàng. Lễ tân bấm **Hoàn tất thanh toán** mới ghi tiền mặt, tiền khách đưa và tiền thừa trong cùng giao dịch kết thúc bill. Trường readyToComplete cho biết tổng khoản thu thực tế + tiền mặt dự kiến bằng đúng net_amount; tổng paid vẫn chỉ gồm payment thật. QR có hạn 30 phút, có thể gia hạn cùng mã sau hết hạn. Hoàn tất chuyển bill SETTLED, booking COMPLETED, allocation FINISHED và phòng CLEANING; gửi lặp không thu hai lần. Menu **Thanh toán** tra cứu 100 bill gần nhất của cơ sở; có in bill qua trình duyệt.
+
+
+Dữ liệu hoàn cọc local (15/10/2026), tài khoản test.rec.ha tại TEST_CS_B: phòng TEST_REFUND_01; BK-20261015-E6426634 cọc 100.000đ và BK-20261015-53FBBC28 cọc 150.000đ đã hủy sớm, có yêu cầu REQUESTED; BK-20261015-D79299DC cọc 80.000đ đã hủy đủ điều kiện, chưa gửi yêu cầu. Thông tin nhận hoàn dùng TEST BANK / 0000000000, hoàn toàn giả lập. Đây là dữ liệu thêm theo yêu cầu trên database local, không phải migration và chưa ghi nhận khoản hoàn thực tế.
+
+### Ghép tiền cọc vào checkout (15/10/2026)
+
+Đã ghép màn Tiền cọc của Thanh vào AppShell chung, giữ cả menu Tiền cọc và Thanh toán. Màn Tiền cọc chờ xác thực trước khi dựng AppShell; thanh tài khoản dùng chung xử lý trường hợp chưa có user và khóa thao tác tài khoản trong thời gian đó. AuthErrors xử lý cả ResponseStatusException và MethodArgumentTypeMismatchException. Các endpoint danh sách/chi tiết/yêu cầu hoàn cọc được giữ cùng MutationAudit của booking.
+
+Khi lập bill, GCMB khóa booking và ví cọc, kiểm tra yêu cầu hoàn đang REQUESTED/APPROVED/PROCESSING, rồi ghi deposit_entry.kind=APPLY cho số dư cọc đã nhận. Không ghi thêm payment cho cọc, không sửa sổ cọc gốc; gọi lặp không trừ lần hai. Tổng bill vẫn giữ nguyên; depositApplied là cọc đã trừ, paid là khoản thu thêm, remaining = amount - depositApplied - paid. Tiền mặt/QR chỉ thu phần remaining. Ví dụ bill 170.000đ, cọc 50.000đ: cần thu thêm 120.000đ. Đổi phương thức chỉ hủy phân bổ tiền mặt/QR tạm, không hủy cọc đã áp dụng. Hoàn tất khi depositApplied + paid + plannedCash bằng tổng bill. Nếu cọc bằng bill thì hoàn tất không cần thu thêm.
+
+API preview checkout trả depositBalance và hasPendingRefund; API bill trả depositApplied. Màn Tiền cọc có trạng thái APPLIED (Đã trừ vào bill) và lịch sử APPLY, không làm mất hồ sơ sau khi dùng hết cọc. Chưa triển khai hoàn cọc dư khi checkout: dữ liệu cọc âm/vượt tổng bill bị từ chối để kiểm tra; luồng yêu cầu hoàn của Thanh vẫn áp dụng cho booking đã hủy. Không có migration mới, dùng sổ cọc hiện hữu V1/V8/V9 và bill V12/V13.
 
 Customers scan the in-room QR code to view the F&B menu and submit an order for their active room session.
 
@@ -357,3 +372,6 @@ Technical setup references: [Create React App environment variables](https://cre
 ## License
 
 GCMB is developed as an FPT University capstone project. A software license has not been specified in the supplied project materials. The team should agree on usage and distribution terms and add a `LICENSE` file before granting reuse rights.
+
+
+Reception merge (15/10/2026): màn Phòng giữ bộ lọc ngày và lấy giờ hiện tại cộng 5 phút, không có ô chọn giờ riêng. AppShell dùng giao diện chung và ẩn ô tìm kiếm trên topbar khi màn Phòng đã có ô tìm kiếm. Giữ luồng đổi phòng/gia hạn và nối Checkout & lập bill tới các route thanh toán.

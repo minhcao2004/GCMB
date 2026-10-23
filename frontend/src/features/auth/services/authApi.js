@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Gọi API xác thực với mã CSRF và chuyển lỗi API thành thông báo cho form.
+ */
+
 import api from '../../../api/client';
 
 // Không đưa bí mật vào URL, bộ nhớ trình duyệt hoặc log; token phiên ở cookie HttpOnly.
@@ -15,6 +23,7 @@ export const authApi = {
   login: (body) => post('login', body),
   sendCode: (email) => post('forgot-password', { email }),
   reset: (body) => post('reset-password', body),
+  changePassword: (body) => post('change-password', body),
   logout: () => post('logout', {}),
 };
 // Đổi lỗi HTTP hoặc lỗi mạng thành thông báo trường biểu mẫu.

@@ -54,14 +54,24 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [targetRoomId, setTargetRoomId] = useState('');
+  const [cause, setCause] = useState('');
   const [reason, setReason] = useState('');
   const [roomQuote, setRoomQuote] = useState(null);
   const [pricingMode, setPricingMode] = useState('COMBO');
   const [comboId, setComboId] = useState('');
+  const [hourlyHours, setHourlyHours] = useState('1');
   const [extensionQuote, setExtensionQuote] = useState(null);
   const [meter, setMeter] = useState(detail?.meter || null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
+  const bookingSummary = detail?.booking?.id === booking.id ? detail.booking : booking;
+  const scheduledEnd = options?.plannedEnd || bookingSummary.plannedEnd;
+  const scheduledEndAt = scheduledEnd ? new Date(scheduledEnd).getTime() : NaN;
+  const reservationExpired = bookingSummary.status === 'IN_HOUSE'
+    && Number.isFinite(scheduledEndAt) && clockNow >= scheduledEndAt;
+  const meterVisible = Boolean(meter) || reservationExpired;
+  const meterAction = meter?.status === 'RUNNING' ? 'meterStop'
+    : !meter && reservationExpired ? 'meterStart' : null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
@@ -102,26 +112,30 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   }, [booking.id, bookingOptions, booking.plannedEnd, booking.roomTypeName, timezone, meter]);
 
   useEffect(() => {
-    if (meter || !targetRoomId || mode !== 'change') { setRoomQuote(null); return undefined; }
+    if (meter || !targetRoomId || !cause || mode !== 'change') { setRoomQuote(null); return undefined; }
     let active = true;
     setRoomQuote(null);
-    bookingApi.roomChangeQuote(booking.id, { targetRoomId, cause: 'CUSTOMER' })
+    bookingApi.roomChangeQuote(booking.id, { targetRoomId, cause })
       .then((result) => { if (active) { setRoomQuote(result); setError(''); } })
       .catch((requestErrorValue) => { if (active) setError(requestError(requestErrorValue)); });
     return () => { active = false; };
-  }, [booking.id, targetRoomId, mode, meter]);
+  }, [booking.id, targetRoomId, cause, mode, meter]);
 
-  const extensionRequest = useMemo(() => ({ pricingMode: 'COMBO', comboId: comboId || null, hours: null }), [comboId]);
+  const extensionRequest = useMemo(() => pricingMode === 'HOURLY'
+    ? { pricingMode: 'HOURLY', comboId: null, hours: Number(hourlyHours) }
+    : { pricingMode: 'COMBO', comboId: comboId || null, hours: null }, [pricingMode, comboId, hourlyHours]);
 
   useEffect(() => {
-    if (mode !== 'extend' || pricingMode !== 'COMBO' || !comboId || meter) { setExtensionQuote(null); return undefined; }
+    const requestReady = pricingMode === 'COMBO' ? Boolean(comboId)
+      : Number.isInteger(Number(hourlyHours)) && Number(hourlyHours) >= 1 && Number(hourlyHours) <= 12;
+    if (mode !== 'extend' || !requestReady || meter || reservationExpired) { setExtensionQuote(null); return undefined; }
     let active = true;
     setExtensionQuote(null);
     bookingApi.extensionQuote(booking.id, extensionRequest)
       .then((result) => { if (active) { setExtensionQuote(result); setError(''); } })
       .catch((requestErrorValue) => { if (active) setError(requestError(requestErrorValue)); });
     return () => { active = false; };
-  }, [booking.id, extensionRequest, mode, pricingMode, comboId, meter]);
+  }, [booking.id, extensionRequest, mode, pricingMode, comboId, hourlyHours, meter, reservationExpired]);
 
   // Gửi thao tác được chọn; tiền đồng hồ hiển thị chỉ là tạm tính.
   const submit = async (event) => {
@@ -131,9 +145,9 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
     try {
       let result;
       if (mode === 'change') {
-        result = await onSave('change', { targetRoomId, cause: 'CUSTOMER', reason: reason.trim() || null });
-      } else if (pricingMode === 'HOURLY') {
-        result = await onSave(meter ? 'meterStop' : 'meterStart');
+        result = await onSave('change', { targetRoomId, cause, reason: reason.trim() || null });
+      } else if (meterAction) {
+        result = await onSave(meterAction);
         if (result?.detail) {
           setMeter(result.detail.meter);
         }
@@ -160,7 +174,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
     ? Math.max(0, Math.floor((new Date(currentAllocation.endsAt) - new Date(currentAllocation.startsAt)) / 60000))
     : null;
   const currentDuration = options?.currentDurationMinutes ?? allocationDuration;
-  const currentBooking = currentDetail?.booking || booking;
+  const currentBooking = currentDetail?.booking || bookingSummary;
   const configuredRoomType = bookingOptions?.roomTypes?.find((type) =>
     (options?.currentRoomTypeId && type.id === options.currentRoomTypeId)
     || (options?.currentRoomTypeName && type.name === options.currentRoomTypeName)
@@ -189,6 +203,18 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
       </div>
       {loading ? <p className="booking-stay-loading" role="status">Đang tải thông tin phòng và giá…</p> : <>
         {mode === 'change' ? <>
+          <label className="booking-stay-field"><span>Lý do đổi phòng</span>
+            <select value={cause} onChange={(event) => setCause(event.target.value)} required>
+              <option value="">Chọn lý do đổi phòng</option>
+              <option value="BRANCH_FAULT">Lỗi phòng/thiết bị từ phía cơ sở</option>
+              <option value="CUSTOMER">Khách muốn đổi theo nhu cầu</option>
+            </select>
+            <small>{cause === 'BRANCH_FAULT'
+              ? 'Giữ giá đã chốt cho phần còn lại, không thu thêm do đổi sang hạng phòng cao hơn.'
+              : cause === 'CUSTOMER'
+                ? 'Giá phần còn lại áp dụng theo hạng phòng mới; chênh lệch (nếu có) được ghi vào bill thanh toán.'
+                : 'Chọn lỗi từ phía cơ sở hoặc yêu cầu đổi theo nhu cầu của khách.'}</small>
+          </label>
           <label className="booking-stay-field"><span>Chuyển sang phòng</span>
             <select value={targetRoomId} onChange={(event) => setTargetRoomId(event.target.value)} required>
               <option value="">Chọn phòng còn trống</option>
@@ -201,9 +227,12 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
           </label>
           {roomQuote && <section className="booking-stay-quote" aria-live="polite">
             <div><span>Đã dùng ở phòng hiện tại</span><strong>{formatVnd(roomQuote.usedSegmentAmount)}</strong></div>
-            <div><span>Phần còn lại ở {selectedRoom?.code || 'phòng mới'}</span><strong>{formatVnd(roomQuote.nextSegmentAmount)}</strong></div>
+            <div><span>{cause === 'BRANCH_FAULT' ? 'Phần còn lại theo giá đã chốt' : `Phần còn lại ở ${selectedRoom?.code || 'phòng mới'}`}</span><strong>{formatVnd(roomQuote.nextSegmentAmount)}</strong></div>
             <div><span>Điều chỉnh</span><strong>{Number(roomQuote.adjustmentAmount) > 0 ? '+' : ''}{formatVnd(roomQuote.adjustmentAmount)}</strong></div>
-            <small>Tổng tiền sau đổi phòng: {formatVnd(roomQuote.projectedAmount)} · giá phần còn lại theo hạng phòng mới.</small>
+            <small>{cause === 'BRANCH_FAULT'
+              ? 'Lỗi từ cơ sở: không tính chênh lệch giá phòng cho phần còn lại.'
+              : 'Khách yêu cầu đổi: chênh lệch giá phòng (nếu có) được ghi vào bill thanh toán.'}</small>
+            <div className="booking-stay-quote-total"><span>Tổng tiền sau đổi phòng</span><strong>{formatVnd(roomQuote.projectedAmount)}</strong></div>
           </section>}
         </> : <>
           <section className="booking-stay-current-summary" aria-label="Thông tin booking hiện tại">
@@ -215,39 +244,50 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
               <div><dt>Check-in thực tế</dt><dd>{dateTimeText(currentBooking.actualCheckin, timezone)}</dd></div>
               <div><dt>Giờ trả hiện tại</dt><dd>{dateTimeText(options?.plannedEnd || currentBooking.plannedEnd, timezone)}</dd></div>
             </dl>
-            <p>{pricingMode === 'HOURLY' ? 'Đồng hồ bắt đầu tính từ giờ trả hiện tại hoặc thời điểm bấm bắt đầu nếu đã quá giờ. Giờ hẹn ban đầu được giữ nguyên.' : 'Gia hạn được tính tiếp từ giờ trả hiện tại; giờ hẹn ban đầu được giữ nguyên.'}</p>
+            <p>{running
+              ? 'Đồng hồ giờ lẻ đang chạy; phụ thu sẽ được chốt khi dừng đồng hồ.'
+              : reservationExpired
+                ? 'Giờ trả đã qua; booking vẫn đang chờ check-out.'
+              : 'Giờ hẹn ban đầu được giữ nguyên. Đồng hồ giờ lẻ chỉ bật khi hết thời lượng đặt mà khách chưa check-out.'}</p>
           </section>
-          <fieldset className="booking-stay-cause"><legend>Chọn cách gia hạn</legend>
-            <label><input type="radio" name="extension-mode" value="COMBO" checked={pricingMode === 'COMBO'} disabled={Boolean(meter)} onChange={() => setPricingMode('COMBO')} />Mua thêm combo thời gian</label>
+          {!meter && !reservationExpired && <fieldset className="booking-stay-cause"><legend>Chọn cách gia hạn</legend>
+            <label><input type="radio" name="extension-mode" value="COMBO" checked={pricingMode === 'COMBO'} onChange={() => setPricingMode('COMBO')} />Mua thêm combo thời gian</label>
             <label><input type="radio" name="extension-mode" value="HOURLY" checked={pricingMode === 'HOURLY'} onChange={() => setPricingMode('HOURLY')} />Gia hạn giờ lẻ</label>
-          </fieldset>
-          {pricingMode === 'COMBO' && extensionCombos.length > 0 ? <label className="booking-stay-field"><span>Combo áp dụng cho {options?.currentRoomTypeName || booking.roomTypeName}</span>
+          </fieldset>}
+          {!meter && !reservationExpired && pricingMode === 'COMBO' && extensionCombos.length > 0 ? <label className="booking-stay-field"><span>Combo áp dụng cho {options?.currentRoomTypeName || booking.roomTypeName}</span>
             <select value={comboId} onChange={(event) => setComboId(event.target.value)} required>
               <option value="">Chọn combo</option>
               {extensionCombos.map((combo) => <option key={combo.id} value={combo.id}>{combo.name} · {combo.durationMinutes / 60} giờ · {formatVnd(combo.price)}</option>)}
             </select>
-          </label> : pricingMode === 'COMBO' ? <p className="booking-stay-empty-combos">Không có combo phù hợp với hạng phòng và giờ trả hiện tại. Chọn gia hạn giờ lẻ để tiếp tục.</p>
-            : <section className={`booking-stay-meter${running ? ' is-running' : ''}`} aria-live="polite">
+          </label> : !meter && !reservationExpired && pricingMode === 'COMBO' ? <p className="booking-stay-empty-combos">Không có combo phù hợp với hạng phòng và giờ trả hiện tại.</p>
+            : null}
+          {!meter && !reservationExpired && pricingMode === 'HOURLY' && <label className="booking-stay-field"><span>Số giờ lẻ muốn gia hạn</span>
+            <select value={hourlyHours} onChange={(event) => setHourlyHours(event.target.value)}>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((hours) => <option key={hours} value={hours}>{hours} giờ</option>)}
+            </select>
+            <small>Phụ thu tính theo số giờ đã chọn; giá cụ thể hiển thị ở phần báo giá.</small>
+          </label>}
+          {meterVisible && <section className={`booking-stay-meter${running ? ' is-running' : ''}`} aria-live="polite">
               <span className="booking-stay-meter-label">{running ? 'Đang tính giờ lẻ' : stopped ? 'Đồng hồ đã dừng' : 'Tính theo thời gian thực dùng'}</span>
               <strong className="booking-stay-meter-clock" role="timer">{clockText}</strong>
               {meter ? <><div><span>Giá mỗi giờ</span><strong>{formatVnd(meter.hourlyPrice)}</strong></div>
                 <div><span>{stopped ? `Đã chốt · ${meter.billedMinutes} phút` : `Đã tính tạm · ${chargedMinutes} phút`}</span><strong>{formatVnd(estimatedAmount)}</strong></div>
                 <div><span>Giữ phòng đến</span><strong>{dateTimeText(meter.reservedUntil, timezone)}</strong></div>
                 {running && clockNow > new Date(meter.reservedUntil).getTime() && <p className="booking-stay-meter-warning" role="alert">Đã quá hạn giữ phòng. Dừng đồng hồ và kiểm tra booking kế tiếp.</p>}
-                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking. Bạn có thể đóng cửa sổ này.' : 'Nhấn “Dừng tính giờ” khi khách kết thúc phần gia hạn. Máy chủ chốt số phút thực dùng; số tiền đang chạy trên màn hình chỉ là tạm tính.'}</small>
-              </> : <p>Nhấn “Bắt đầu tính giờ” để ghi nhận phiên giờ lẻ. Khi khách kết thúc phần gia hạn, nhấn dừng để chốt thời lượng và phụ thu. Ví dụ 30 phút được tính bằng nửa giá một giờ.</p>}
+                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking.' : 'Số tiền đang chạy là tạm tính; hệ thống chốt theo phút thực dùng khi bạn dừng.'}</small>
+              </> : <p>Đơn giá được chốt lúc bắt đầu. Phụ thu tính theo số phút thực dùng.</p>}
             </section>}
-          {pricingMode === 'COMBO' && extensionQuote && <section className="booking-stay-quote" aria-live="polite">
+          {!meter && !reservationExpired && extensionQuote && <section className="booking-stay-quote" aria-live="polite">
             <div><span>Phòng được giữ thêm đến</span><strong>{dateTimeText(extensionQuote.endsAt, timezone)}</strong></div>
-            <div><span>{selectedCombo?.name || 'Combo gia hạn'}</span><strong>{formatVnd(extensionQuote.quote.expectedAmount)}</strong></div>
-            <small>Áp dụng giá combo đã cấu hình. Phòng sẽ được kiểm tra trùng lịch khi lưu.</small>
+            <div><span>{pricingMode === 'HOURLY' ? `Gia hạn ${hourlyHours} giờ lẻ` : selectedCombo?.name || 'Combo gia hạn'}</span><strong>{formatVnd(extensionQuote.quote.expectedAmount)}</strong></div>
+            <small>{pricingMode === 'HOURLY' ? 'Áp dụng giá giờ theo thời điểm sử dụng; phòng sẽ được kiểm tra trùng lịch khi xác nhận.' : 'Áp dụng giá combo đã cấu hình. Phòng sẽ được kiểm tra trùng lịch khi lưu.'}</small>
           </section>}
         </>}
       </>}
       {error && <p className="booking-inline-error" role="alert">{error}</p>}
       <footer className="booking-stay-actions">
         <button type="button" className="booking-button booking-button-secondary" onClick={onClose} disabled={active}>Đóng</button>
-        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : pricingMode === 'COMBO' ? !extensionQuote : false)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : pricingMode === 'HOURLY' ? running ? 'Dừng tính giờ' : 'Bắt đầu tính giờ' : 'Xác nhận gia hạn'}</button>}
+        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : meterAction ? false : !extensionQuote)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : meterAction === 'meterStop' ? 'Dừng tính giờ' : meterAction === 'meterStart' ? 'Bắt đầu tính giờ' : 'Xác nhận gia hạn'}</button>}
       </footer>
     </form>
   </div>;

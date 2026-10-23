@@ -20,6 +20,11 @@
 .room-status-filters button.reserved { color: #b72875; background: #fce8f3; }
 .room-status-filters button.occupied { color: #167da2; background: #e5f5fb; }
 .room-status-filters b { margin-left: 3px; }
+.room-overdue-alert { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; border: 1px solid #efc477; border-radius: 12px; padding: 11px 13px; color: #6d4910; background: #fff8e9; }
+.room-overdue-indicator { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #c97218; animation: room-overdue-pulse 1.8s ease-in-out infinite; }
+.room-overdue-alert > div { min-width: 0; flex: 1 1 auto; }
+.room-overdue-alert strong { display: block; color: #69430c; font-size: 12px; }
+.room-overdue-alert p { margin: 3px 0 0; color: #76531d; font-size: 10px; line-height: 1.4; }
 .room-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
 .room-card { position: relative; min-width: 0; min-height: 133px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; border: 2px solid transparent; border-radius: 13px; padding: 13px 13px 12px; color: #252a3e; background: #fff; font: inherit; text-align: left; cursor: pointer; transition: border-color .18s ease, background .18s ease; }
 .room-card:hover { background: #fcfdff; border-color: #badce5; }
@@ -27,9 +32,18 @@
 .room-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 750; }
 .room-card small { overflow: hidden; color: #647185; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .room-card > span { display: block; margin-top: auto; border-radius: 6px; padding: 5px 8px; font-size: 10px; font-weight: 700; }
+.room-card .room-card-meter { width: max-content; max-width: 100%; border-radius: 6px; padding: 3px 7px; color: #a72069; background: #fff0f7; font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.room-card-meter::before { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #d72b8a; vertical-align: middle; content: ''; }
 .room-card-vacant > span { color: #168956; background: #e5f8ed; }
 .room-card-reserved > span { color: #b72875; background: #fce8f3; }
 .room-card-occupied > span { color: #167da2; background: #e5f5fb; }
+.room-card-overdue,.room-card-overdue:hover { border-color: #d79522; background: #fffaf0; }
+.room-card-overdue.is-selected { border-color: #bd7215; }
+.room-card-overdue > span { color: #89500c; background: #ffedc7; }
+.room-card-overdue > em { color: #825510; font-weight: 650; }
+.room-card-cleaning > span, .room-detail-status.cleaning, .room-status-filters button.cleaning { color: #966111; background: #fff4da; }
+.room-card-maintenance > span, .room-detail-status.maintenance, .room-status-filters button.maintenance { color: #b13b3b; background: #ffeded; }
+.room-card-inactive > span, .room-detail-status.inactive, .room-status-filters button.inactive { color: #647185; background: #edf0f4; }
 .room-card em { overflow: hidden; color: #647185; font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .room-empty { margin: 0; border-radius: 12px; padding: 22px; color: #526075; background: #fff; font-size: 12px; }
 .room-detail { position: sticky; top: 14px; min-width: 0; border-radius: 15px; padding: 20px; background: #fff; }
@@ -45,11 +59,44 @@
 .room-detail-facts div { display: flex; justify-content: space-between; gap: 12px; }
 .room-detail-facts dt { color: #697687; font-size: 11px; }
 .room-detail-facts dd { margin: 0; color: #262d40; font-size: 11px; font-weight: 700; text-align: right; }
+.room-reservation-facts { display: grid; gap: 14px; margin: 0 0 16px; }
+.room-reservation-facts > div:not(.room-detail-divider) { display: flex; flex-direction: column; gap: 5px; }
+.room-reservation-facts span { color: #697687; font-size: 11px; }
+.room-reservation-facts strong { color: #202638; font-size: 14px; line-height: 1.45; }
+.room-reservation-facts small { color: #c5257c; font-size: 11px; font-weight: 700; }
+.room-reservation-link { width: 100%; display: flex; flex-direction: column; gap: 6px; margin: 0 0 18px; border: 0; border-radius: 11px; padding: 14px; color: #9d246d; background: #fbeaf4; font: inherit; text-align: left; cursor: pointer; }
+.room-reservation-link:hover { background: #f8deed; }
+.room-reservation-link:focus-visible,.room-booking-actions button:focus-visible,.room-schedule-dialog button:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
+.room-reservation-link strong { font-size: 12px; }
+.room-reservation-link span { color: #687286; font-size: 10px; line-height: 1.5; }
+.room-detail .room-booking-primary { margin: 0 0 9px; cursor: pointer; }
+.room-booking-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.room-booking-actions button { min-height: 46px; border: 1px solid #d9dfe8; border-radius: 10px; padding: 7px; color: #586579; background: #fff; font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.room-booking-actions button:hover:not(:disabled) { border-color: #b7c5d2; background: #f8fafc; }
+.room-booking-actions button.is-available:disabled { border-color: #f1f3f7; color: #9aa2b1; background: #f1f3f7; cursor: not-allowed; }
+.room-schedule-dialog { width: min(520px, calc(100vw - 28px)); max-width: none; max-height: min(82dvh, 720px); overflow: auto; border: 0; border-radius: 16px; padding: 22px; color: #202638; background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
+.room-schedule-dialog::backdrop { background: rgb(26 38 56 / 42%); }
+.room-schedule-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.room-schedule-dialog h2 { margin: 0; font-size: 19px; }
+.room-schedule-dialog header p { margin: 5px 0 0; color: #697687; font-size: 11px; }
+.room-schedule-dialog header button { width: 34px; height: 34px; border: 0; border-radius: 8px; color: #586579; background: #f1f3f7; font: inherit; font-size: 22px; cursor: pointer; }
+.room-schedule-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.room-schedule-list li { border-radius: 11px; padding: 14px; background: #f5f7fa; }
+.room-schedule-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.room-schedule-row > strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.room-schedule-status { border-radius: 999px; padding: 4px 8px; color: #b72875; background: #fce8f3; font-size: 10px; font-weight: 700; }
+.room-schedule-status.status-in-house { color: #167da2; background: #e5f5fb; }
+.room-schedule-status.status-cancelled,.room-schedule-status.status-no-show { color: #697687; background: #e9edf2; }
+.room-schedule-list li p { margin: 9px 0; color: #586579; font-size: 11px; }
+.room-schedule-list li button { border: 0; padding: 0; color: #087f93; background: transparent; font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.room-schedule-empty { border-radius: 11px; padding: 18px; color: #586579; background: #f5f7fa; font-size: 12px; line-height: 1.5; }
+.room-schedule-close { width: 100%; min-height: 42px; margin-top: 16px; border: 1px solid #d9dfe8; border-radius: 9px; color: #586579; background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .room-usage { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #e5e8ed; padding-top: 15px; }
 .room-usage span { color: #697687; font-size: 11px; }
 .room-usage strong { color: #168eb8; font-size: 25px; font-variant-numeric: tabular-nums; }
 .room-usage small { color: #58667a; font-size: 11px; }
 .room-usage small.is-ended { color: #bd2966; font-weight: 600; }
+.room-usage small.is-overdue { color: #b23b32; font-weight: 750; }
 .room-detail-total { display: flex; flex-direction: column; gap: 3px; margin: 17px 0 22px; border-radius: 10px; padding: 15px; background: #f4f6f9; }
 .room-detail-total span { color: #697687; font-size: 11px; }
 .room-detail-total strong { color: #1a1a2e; font-size: 20px; }
@@ -66,3 +113,5 @@
 @media (max-width: 850px) { .room-layout { grid-template-columns: 1fr; } .room-detail { position: static; grid-row: 1; } .room-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 620px) { .room-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .room-toolbar { grid-template-columns: 1fr 1fr; } .room-board-heading { flex-direction: column; gap: 2px; } }
 @media (max-width: 420px) { .room-grid { grid-template-columns: 1fr; } }
+@keyframes room-overdue-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .42; } }
+@media (prefers-reduced-motion: reduce) { .room-overdue-indicator { animation: none; } }

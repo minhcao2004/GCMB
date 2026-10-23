@@ -1,3 +1,12 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Khởi động backend và frontend trong một terminal, kiểm tra cấu hình và cổng, đồng thời dừng các tiến trình của phiên.
+ */
+
+// One terminal owns both servers. No database/SMTP secrets are passed as arguments.
 // Một terminal quản lý cả hai server; không truyền mật khẩu database/SMTP qua đối số tiến trình.
 const fs = require('node:fs');
 const path = require('node:path');

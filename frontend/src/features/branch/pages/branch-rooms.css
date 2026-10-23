@@ -1,0 +1,104 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 13/10/2026
+ * Description: Giao diện CSS cho màn hình quản lý phòng theo cơ sở.
+ */
+
+.branch-manager-dashboard,
+.branch-manager-dashboard * { box-sizing: border-box; }
+.branch-manager-dashboard header { position: static !important; inset: auto !important; z-index: auto !important; padding: 0; color: inherit !important; transition: none !important; }
+.branch-manager-dashboard .manager-content.branch-manager-content { min-width: 0; margin-top: 6px; padding: 0; border-radius: 6px; background: #f4f7fb; }
+.branch-manager-dashboard .branch-rooms { width: 100%; min-width: 0; padding: 24px; }
+.branch-manager-dashboard .br-breadcrumb { margin: 0 0 18px; color: #7c879a; font-size: 13px; }
+.branch-manager-dashboard .br-breadcrumb span { padding: 0 6px; color: #a0a9b7; }
+.branch-manager-dashboard .br-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; padding: 0 !important; color: #202338 !important; }
+.branch-manager-dashboard .br-heading h1 { margin: 0; font-size: clamp(28px, 2.35vw, 38px); font-weight: 700; line-height: 1.2; letter-spacing: -.6px; }
+.branch-manager-dashboard .br-heading p { margin: 10px 0 0; color: #7d8798; font-size: 15px; }
+.branch-manager-dashboard .br-primary { min-height: 46px; border: 0; border-radius: 11px; padding: 0 22px; background: #ed168d; color: white; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.branch-manager-dashboard .br-primary:hover { background: #d90c7e; }
+.branch-manager-dashboard .br-primary:disabled { opacity: .65; cursor: wait; }
+.branch-manager-dashboard .br-filters { display: grid; grid-template-columns: minmax(220px, 1.55fr) minmax(125px, .72fr) minmax(175px, .9fr) minmax(220px, 1.4fr) auto auto; align-items: end; gap: 10px 14px; margin-bottom: 18px; padding: 18px 20px 15px; border-radius: 16px; background: #fff; }
+.branch-manager-dashboard .br-filters label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #727e92; font-size: 13px; font-weight: 700; }
+.branch-manager-dashboard .br-filters input,.branch-manager-dashboard .br-filters select { width: 100%; min-width: 0; height: 46px; border: 1px solid #dce3ec; border-radius: 10px; background: #fff; color: #455066; padding: 0 13px; font: inherit; font-size: 14px; }
+.branch-manager-dashboard .br-search { position: relative; display: flex !important; flex-direction: row !important; align-items: center; height: 46px; gap: 9px !important; border: 1px solid #dce3ec; border-radius: 10px; padding: 0 12px; color: #8994a6 !important; font-size: 22px !important; }
+.branch-manager-dashboard .br-search input { height: 42px; border: 0; padding: 0; outline: 0; }
+.branch-manager-dashboard .br-date { display: flex; align-items: center; height: 46px; color: #098b9e; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.branch-manager-dashboard .br-date-actions { display: flex; gap: 8px; }
+.branch-manager-dashboard .br-date-actions button { height: 46px; border: 1px solid #dce3ec; border-radius: 10px; padding: 0 15px; background: white; color: #68758a; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.branch-manager-dashboard .br-date-actions button.current { border-color: #e5f8fb; background: #e5f8fb; color: #07899d; font-weight: 700; }
+.branch-manager-dashboard .br-counts { grid-column: 1 / span 5; display: flex; min-width: 0; flex-wrap: wrap; gap: 9px; padding-top: 4px; }
+.branch-manager-dashboard .br-counts span,.branch-manager-dashboard .br-card em,.branch-manager-dashboard .br-detail-banner em { display: inline-flex; align-items: center; min-height: 30px; border-radius: 8px; padding: 0 13px; font-size: 13px; font-style: normal; font-weight: 700; }
+.branch-manager-dashboard .br-counts .all { background: #fceaf4; color: #d20d7d; }
+.branch-manager-dashboard .br-counts .available,.branch-manager-dashboard .br-card .available,.branch-manager-dashboard .br-detail-banner .available { background: #e6f7ee; color: #15a86b; }
+.branch-manager-dashboard .br-counts .in-use,.branch-manager-dashboard .br-detail-banner .in-use,.branch-manager-dashboard .br-card .in-use { background: #fdecf5; color: #ce0876; }
+.branch-manager-dashboard .br-counts .booked,.branch-manager-dashboard .br-detail-banner .booked,.branch-manager-dashboard .br-card .booked { background: #e8f8fb; color: #078ba0; }
+.branch-manager-dashboard .br-counts .cleaning,.branch-manager-dashboard .br-card .cleaning { background: #fff4e2; color: #cc8209; }
+.branch-manager-dashboard .br-counts .maintenance,.branch-manager-dashboard .br-counts .inactive,.branch-manager-dashboard .br-card .maintenance,.branch-manager-dashboard .br-card .inactive { background: #fdebed; color: #e4555b; }
+.branch-manager-dashboard .br-view-toggle { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 36px; padding: 3px; border-radius: 9px; background: #f3f6f9; }
+.branch-manager-dashboard .br-view-toggle button { width: 38px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: #8792a3; font-size: 16px; cursor: pointer; }
+.branch-manager-dashboard .br-view-toggle button.active { background: #fff; color: #e3168d; }
+.branch-manager-dashboard .br-filters > small { grid-column: 1 / span 5; color: #8c96a7; font-size: 11px; }
+.branch-manager-dashboard .br-main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(310px, .97fr); align-items: start; gap: 18px; }
+.branch-manager-dashboard .br-list,.branch-manager-dashboard .br-detail { min-width: 0; border-radius: 16px; background: white; padding: 18px 20px; }
+.branch-manager-dashboard .br-list { min-height: 650px; }
+.branch-manager-dashboard .br-list-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.branch-manager-dashboard .br-list-title>div { display: flex; width: 100%; align-items: center; justify-content: space-between; }
+.branch-manager-dashboard .br-list-title h2,.branch-manager-dashboard .br-detail-head h2 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.3; }
+.branch-manager-dashboard .br-list-title span { color: #8b96a8; font-size: 13px; }
+.branch-manager-dashboard .br-floor { margin-top: 7px; }
+.branch-manager-dashboard .br-floor h3 { margin: 0 0 8px; color: #66738a; font-size: 14px; font-weight: 700; }
+.branch-manager-dashboard .br-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.branch-manager-dashboard .br-card { display: flex; min-width: 0; min-height: 112px; flex-direction: column; align-items: stretch; gap: 5px; border: 1px solid #dce3ec; border-radius: 13px; padding: 12px 13px; background: #fbfcfe; color: #24283c; text-align: left; font: inherit; cursor: pointer; }
+.branch-manager-dashboard .br-card:hover { border-color: #ed168d; }
+.branch-manager-dashboard .br-card.selected { border: 1.5px solid #ed168d; background: #fffafd; box-shadow: inset 3px 0 #ed168d; }
+.branch-manager-dashboard .br-grid.list-mode { grid-template-columns: 1fr; }
+.branch-manager-dashboard .br-grid.list-mode .br-card { min-height: 82px; display: grid; grid-template-columns: minmax(140px,1fr) minmax(100px,.7fr) minmax(100px,.7fr) minmax(140px,1fr); align-items: center; gap: 10px; }
+.branch-manager-dashboard .br-card strong { overflow: hidden; color: #24283c; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.branch-manager-dashboard .br-card span { overflow: hidden; color: #96a0b0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.branch-manager-dashboard .br-card em { align-self: flex-start; min-width: 110px; min-height: 27px; margin-top: 3px; font-size: 11px; }
+.branch-manager-dashboard .br-card small { overflow: hidden; color: #778397; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.branch-manager-dashboard .br-detail { padding: 18px 20px; }
+.branch-manager-dashboard .br-detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.branch-manager-dashboard .br-detail-head button { border: 0; background: transparent; color: #9099a8; font-size: 20px; cursor: pointer; }
+.branch-manager-dashboard .br-detail-banner { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 14px; border-radius: 13px; padding: 16px; background: #fdf4f9; }
+.branch-manager-dashboard .br-detail-banner h2 { margin: 0; color: #25283d; font-size: 23px; }
+.branch-manager-dashboard .br-detail-banner>span { color: #778397; font-size: 14px; }
+.branch-manager-dashboard .br-detail-banner em { min-width: 105px; min-height: 28px; margin-top: 4px; font-size: 11px; }
+.branch-manager-dashboard .br-detail dl { display: grid; grid-template-columns: minmax(90px,.8fr) minmax(0,1.2fr); gap: 12px 8px; margin: 0 0 16px; padding: 3px 0 16px; border-bottom: 1px solid #e3e8ef; font-size: 13px; }
+.branch-manager-dashboard .br-detail dt { color: #98a1b0; }
+.branch-manager-dashboard .br-detail dd { min-width: 0; margin: 0; color: #59667d; overflow-wrap: anywhere; }
+.branch-manager-dashboard .br-wide { width: 100%; }
+.branch-manager-dashboard .br-maintenance-note { display: flex; flex-direction: column; gap: 3px; margin: 0 0 12px; border-radius: 10px; padding: 12px 14px; background: #fff4e2; color: #b7790b; font-size: 12px; line-height: 1.5; }
+.branch-manager-dashboard .br-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 9px; }
+.branch-manager-dashboard .br-actions button,.branch-manager-dashboard .br-page button { min-height: 40px; border: 1px solid #dce3ec; border-radius: 10px; background: white; color: #627087; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.branch-manager-dashboard .br-actions .br-danger { color: #d64d59; }
+.branch-manager-dashboard .br-empty { display: grid; min-height: 220px; place-items: center; color: #8b96a8; font-size: 13px; text-align: center; }
+.branch-manager-dashboard .br-page { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; border-top: 1px solid #e3e8ef; padding-top: 12px; color: #8c96a7; font-size: 12px; }
+.branch-manager-dashboard .br-page-controls { display: flex; gap: 6px; }
+.branch-manager-dashboard .br-page button { width: 36px; min-height: 34px; padding: 0; border: 0; }
+.branch-manager-dashboard .br-page button.active { background: #fceaf4; color: #d20d7d; }
+.branch-manager-dashboard .br-error { margin-bottom: 12px; border-radius: 9px; padding: 12px 16px; background: #fdebed; color: #a83d49; font-size: 13px; }
+.branch-manager-dashboard .br-error button { float: right; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.branch-manager-dashboard .br-overlay { position: fixed; z-index: 1000; inset: 0; display: flex; justify-content: flex-end; background: #20233855; }
+.branch-manager-dashboard .br-drawer,.branch-manager-dashboard .br-modal { display: flex; width: min(740px,92vw); max-height: 100svh; flex-direction: column; overflow: auto; background: white; box-shadow: -10px 0 35px #17213b20; }
+.branch-manager-dashboard .br-drawer>header,.branch-manager-dashboard .br-modal>header { position: relative !important; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #e2e7ee; padding: 23px 28px 18px !important; color: #24273c !important; }
+.branch-manager-dashboard .br-drawer>header h2,.branch-manager-dashboard .br-modal>header h2 { margin: 0; font-size: 25px; }
+.branch-manager-dashboard .br-drawer>header p,.branch-manager-dashboard .br-modal>header p { margin: 6px 0 0; color: #8993a5; font-size: 13px; }
+.branch-manager-dashboard .br-drawer>header button,.branch-manager-dashboard .br-modal>header button { border: 0; background: transparent; color: #778397; font-size: 22px; cursor: pointer; }
+.branch-manager-dashboard .br-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 20px; padding: 22px 28px; }
+.branch-manager-dashboard .br-form-grid label { display: flex; min-width: 0; flex-direction: column; gap: 8px; color: #6f7a8e; font-size: 13px; font-weight: 700; }
+.branch-manager-dashboard .br-form-grid input,.branch-manager-dashboard .br-form-grid select,.branch-manager-dashboard .br-form-grid textarea { width: 100%; min-height: 46px; border: 1px solid #dce3ec; border-radius: 10px; padding: 10px 13px; background: white; color: #3f485e; font: inherit; font-size: 14px; }
+.branch-manager-dashboard .br-form-grid textarea { resize: vertical; }
+.branch-manager-dashboard .br-form-grid input:disabled { background: #f4f6f9; }
+.branch-manager-dashboard .br-form-grid .full { grid-column: 1 / -1; }
+.branch-manager-dashboard .br-info,.branch-manager-dashboard .br-warning { margin: 0 28px 22px; border-radius: 10px; padding: 16px; background: #e7f8fb; color: #09899e; font-size: 13px; line-height: 1.6; }
+.branch-manager-dashboard .br-warning { background: #fff4e2; color: #b7790b; }
+.branch-manager-dashboard .br-drawer>footer,.branch-manager-dashboard .br-modal>footer { position: sticky !important; bottom: 0; display: flex; justify-content: flex-end; gap: 12px; margin-top: auto; border-top: 1px solid #e2e7ee; padding: 16px 28px !important; background: white; }
+.branch-manager-dashboard .br-drawer>footer button:not(.br-primary),.branch-manager-dashboard .br-modal>footer button:not(.br-primary) { min-height: 44px; border: 1px solid #dce3ec; border-radius: 10px; padding: 0 22px; background: white; color: #68758a; font: inherit; font-weight: 600; cursor: pointer; }
+.branch-manager-dashboard .br-toast { position: fixed; z-index: 1100; right: 24px; bottom: 24px; border-radius: 10px; padding: 14px 18px; background: #e5f8ee; color: #13865b; box-shadow: 0 8px 24px #25304d20; font-size: 14px; }
+.branch-manager-dashboard .br-placeholder { margin: 24px; border-radius: 14px; padding: 24px; background: white; }
+@media (max-width: 1280px) { .branch-manager-dashboard .br-filters { grid-template-columns: minmax(200px,1.4fr) minmax(120px,.7fr) minmax(165px,.9fr) minmax(200px,1.2fr); } .branch-manager-dashboard .br-date-actions { grid-column: 4; } .branch-manager-dashboard .br-counts { grid-column: 1 / -1; } .branch-manager-dashboard .br-filters > small { grid-column: 1 / -1; } .branch-manager-dashboard .br-view-toggle { grid-column: 4; grid-row: 3; } }
+@media (max-width: 1050px) { .branch-manager-dashboard .br-main { grid-template-columns: 1fr; } .branch-manager-dashboard .br-detail { position: static; } .branch-manager-dashboard .br-list { min-height: 0; } .branch-manager-dashboard .br-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .branch-manager-dashboard .branch-top-search { display: none; } }
+@media (max-width: 720px) { .branch-manager-dashboard.head-office-dashboard { flex-direction: column; } .branch-manager-dashboard .manager-workspace { padding: 0; } .branch-manager-dashboard .branch-topbar-tools { gap: 10px; } .branch-manager-dashboard .branch-top-tools-date { display: none; } .branch-manager-dashboard .branch-rooms { padding: 18px 14px; } .branch-manager-dashboard .br-heading { align-items: flex-start; flex-direction: column; } .branch-manager-dashboard .br-heading h1 { font-size: 26px; } .branch-manager-dashboard .br-filters { grid-template-columns: 1fr 1fr; padding: 14px; } .branch-manager-dashboard .br-search { grid-column: 1 / -1; } .branch-manager-dashboard .br-date-actions { grid-column: 1 / -1; } .branch-manager-dashboard .br-counts,.branch-manager-dashboard .br-filters > small { grid-column: 1 / -1; } .branch-manager-dashboard .br-view-toggle { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; } .branch-manager-dashboard .br-grid { grid-template-columns: 1fr; } .branch-manager-dashboard .br-list,.branch-manager-dashboard .br-detail { padding: 15px; } .branch-manager-dashboard .br-form-grid { grid-template-columns: 1fr; padding: 18px; } .branch-manager-dashboard .br-form-grid .full { grid-column: 1; } .branch-manager-dashboard .br-drawer>header,.branch-manager-dashboard .br-modal>header { padding: 19px !important; } .branch-manager-dashboard .br-info,.branch-manager-dashboard .br-warning { margin: 0 18px 18px; } .branch-manager-dashboard .br-drawer>footer,.branch-manager-dashboard .br-modal>footer { padding: 14px !important; } }

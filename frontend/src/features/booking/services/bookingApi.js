@@ -26,6 +26,8 @@ async function listAll(params = {}) {
 export const bookingApi = {
   // Dữ liệu đầu vào và danh sách booking của chi nhánh hiện tại.
   options: async () => (await api.get('/reception/booking-options')).data,
+  rooms: async () => (await api.get('/reception/rooms')).data,
+  finishCleaning: (id) => mutate('post', `/reception/rooms/${id}/finish-cleaning`, {}),
   list: async (params) => (await api.get('/reception/bookings', { params })).data,
   listAll,
   detail: async (id) => (await api.get(`/reception/bookings/${id}`)).data,

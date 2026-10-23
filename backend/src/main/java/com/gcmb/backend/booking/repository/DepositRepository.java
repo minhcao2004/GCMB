@@ -17,6 +17,7 @@ import org.springframework.stereotype.Repository;
 public class DepositRepository {
     public record RefundRequestRow(UUID id, UUID bookingId, UUID depositId, BigDecimal amount,
                                    String reason, String status) {}
+    public record RefundEvidenceRow(String objectKey, String originalName, String mimeType) {}
 
     private static final String DEPOSIT_VIEW = """
         WITH ledger AS (
@@ -58,7 +59,7 @@ public class DepositRepository {
             SELECT b.branch_id,b.id AS booking_id,b.code AS booking_code,b.contact_name AS customer_name,
                    b.contact_phone AS phone,lr.room_code,lr.room_name,
                    COALESCE(b.actual_checkin,b.planned_start) AS check_in_at,
-                   l.received_amount,l.balance,l.refunded_amount,l.forfeited_amount,l.refund_transactions,
+                   l.received_amount,l.applied_amount,l.balance,l.refunded_amount,l.forfeited_amount,l.refund_transactions,
                    COALESCE(rr.pending_amount,0) AS pending_amount,
                    COALESCE(rr.pending_count,0) AS pending_count,
                    rr.latest_request_status,
@@ -69,12 +70,14 @@ public class DepositRepository {
                         WHEN l.balance<=0 AND l.refunded_amount>0 THEN 'REFUNDED'
                         WHEN l.balance<=0 AND l.forfeited_amount>0 THEN 'FORFEITED'
                         WHEN l.balance>0 THEN 'HELD'
+                        WHEN l.applied_amount>0 THEN 'APPLIED'
                         WHEN l.refunded_amount>0 THEN 'REFUNDED'
                         WHEN l.forfeited_amount>0 THEN 'FORFEITED'
                         ELSE 'SETTLED' END AS status,
                    CASE WHEN COALESCE(rr.pending_amount,0)>0 THEN rr.pending_amount
                         WHEN l.balance>0 THEN GREATEST(l.balance-COALESCE(rr.pending_amount,0),0)
                         WHEN l.refunded_amount>0 THEN l.refunded_amount
+                        WHEN l.applied_amount>0 THEN l.applied_amount
                         ELSE l.forfeited_amount END AS amount,
                    (b.status='CANCELLED' AND l.balance>0 AND ec.booking_id IS NOT NULL
                     AND NOT EXISTS (
@@ -178,7 +181,8 @@ public class DepositRepository {
     public List<DepositDtos.RefundRequestItem> refundRequests(UUID branchId) {
         return db.query("""
             SELECT r.id,r.booking_id,b.code,b.contact_name,b.contact_phone,r.amount,r.reason,
-                   r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference
+                   r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference,
+                   r.evidence_id IS NOT NULL AS has_evidence
             FROM gcmb.refund_request r
             JOIN gcmb.booking b ON b.id=r.booking_id
             WHERE r.branch_id=? AND r.kind='DEPOSIT'
@@ -189,7 +193,41 @@ public class DepositRepository {
                 rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
                 rs.getString("reason"), rs.getString("beneficiary_name"), rs.getString("bank_name"),
                 rs.getString("bank_account"), rs.getString("status"), instant(rs, "created_at"),
-                instant(rs, "paid_at"), rs.getString("external_reference")), branchId);
+                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")), branchId);
+    }
+
+    public RefundEvidenceRow refundEvidence(UUID branchId, UUID requestId) {
+        List<RefundEvidenceRow> rows = db.query("""
+            SELECT a.object_key,a.original_name,a.mime_type
+            FROM gcmb.refund_request r
+            JOIN gcmb.attachment a ON a.id=r.evidence_id
+            WHERE r.branch_id=? AND r.id=? AND r.kind='DEPOSIT' AND r.status='PAID'
+            """, (rs, rowNum) -> new RefundEvidenceRow(
+                rs.getString("object_key"), rs.getString("original_name"), rs.getString("mime_type")),
+            branchId, requestId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public List<DepositDtos.RefundEvidenceItem> refundEvidenceForBooking(UUID branchId, UUID bookingId) {
+        return db.query("""
+            SELECT r.id,r.amount,r.paid_at,r.external_reference,a.original_name
+            FROM gcmb.refund_request r
+            JOIN gcmb.booking b ON b.id=r.booking_id
+            JOIN gcmb.attachment a ON a.id=r.evidence_id
+            WHERE b.branch_id=? AND b.id=? AND r.branch_id=b.branch_id
+              AND r.kind='DEPOSIT' AND r.status='PAID' AND r.evidence_id IS NOT NULL
+            ORDER BY r.paid_at DESC,r.id DESC
+            """, (rs, rowNum) -> new DepositDtos.RefundEvidenceItem(
+                rs.getObject("id", UUID.class), rs.getBigDecimal("amount"), instant(rs, "paid_at"),
+                rs.getString("external_reference"), rs.getString("original_name")), branchId, bookingId);
+    }
+
+    public void insertAttachment(UUID id, String objectKey, String originalName, String mimeType,
+                                 long byteSize, String sha256, UUID uploadedBy) {
+        db.update("""
+            INSERT INTO gcmb.attachment(id,object_key,original_name,mime_type,byte_size,sha256,uploaded_by)
+            VALUES(?,?,?,?,?,?,?)
+            """, id, objectKey, originalName, mimeType, byteSize, sha256, uploadedBy);
     }
 
     public RefundRequestRow refundRequest(UUID branchId, UUID requestId, boolean lock) {
@@ -205,13 +243,14 @@ public class DepositRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public boolean completeRefundRequest(UUID branchId, RefundRequestRow request, UUID actorId, String externalReference) {
+    public boolean completeRefundRequest(UUID branchId, RefundRequestRow request, UUID actorId,
+                                         String externalReference, UUID evidenceId) {
         int updated = db.update("""
             UPDATE gcmb.refund_request
-            SET status='PAID',processed_by=?,paid_at=CURRENT_TIMESTAMP,external_reference=?
+            SET status='PAID',processed_by=?,paid_at=CURRENT_TIMESTAMP,external_reference=?,evidence_id=?
             WHERE id=? AND branch_id=? AND kind='DEPOSIT'
               AND status IN ('REQUESTED','APPROVED','PROCESSING')
-            """, actorId, externalReference, request.id(), branchId);
+            """, actorId, externalReference, evidenceId, request.id(), branchId);
         if (updated != 1) return false;
 
         int inserted = db.update("""

@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: HuyDV
+ * Created: 10/10/2026
+ * Description: Kiểm tra dữ liệu form đăng nhập, email khôi phục, mật khẩu xác nhận và mã xác nhận.
+ */
+
 const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 // Kiểm tra email đã trim và giới hạn độ dài trước khi gọi API.
 export function emailError(value) {
