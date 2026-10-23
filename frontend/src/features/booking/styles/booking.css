@@ -40,6 +40,23 @@
 .booking-app { padding: 4px; background: #e4e9f1; }
 .reception-dashboard { font-family: 'Be Vietnam Pro', Arial, sans-serif; }
 .reception-dashboard .manager-sidebar { line-height: 1.65; }
+.reception-dashboard .booking-sidebar-toggle { width: 34px; height: 34px; align-self: flex-end; border: 1px solid var(--booking-line); border-radius: 8px; padding: 0; color: var(--booking-text); background: var(--booking-panel); font: inherit; font-size: 22px; cursor: pointer; }
+.reception-dashboard .booking-sidebar-toggle:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
+.reception-dashboard .sidebar-is-collapsed .manager-sidebar { width: 64px; }
+.reception-dashboard .sidebar-is-collapsed .manager-brand,
+.reception-dashboard .sidebar-is-collapsed .manager-role,
+.reception-dashboard .sidebar-is-collapsed .manager-sidebar-footer,
+.reception-dashboard .sidebar-is-collapsed .manager-navigation button span { display: none; }
+.reception-dashboard .sidebar-is-collapsed .manager-navigation button { justify-content: center; }
+.reception-dashboard .sidebar-is-collapsed .booking-sidebar-toggle { align-self: center; }
+@media (max-width: 850px) {
+  .booking-app--accountant .sidebar-is-collapsed .manager-sidebar { width: 100%; }
+  .booking-app--accountant .sidebar-is-collapsed .manager-navigation { display: none; }
+}
+@media (max-width: 720px) {
+  .reception-dashboard .sidebar-is-collapsed .manager-sidebar { width: 100%; }
+  .reception-dashboard .sidebar-is-collapsed .manager-navigation { display: none; }
+}
 .reception-dashboard .booking-main { margin-top: 6px; border-radius: 6px; padding: 24px; }
 .reception-dashboard .booking-global-search { display: flex; min-width: 0; width: clamp(180px, 23vw, 330px); height: 34px; margin-left: auto; }
 .reception-dashboard .booking-global-search svg { width: 18px; height: 18px; flex-shrink: 0; }

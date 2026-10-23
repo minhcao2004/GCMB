@@ -172,29 +172,6 @@ public class BookingRepository {
                 rs.getString("room_type_name")), branchId);
     }
 
-    public String lockRoomStatus(UUID branchId, UUID roomId) {
-        List<String> rows = db.queryForList("SELECT operating_status FROM gcmb.room WHERE id=? AND branch_id=? FOR UPDATE",
-            String.class, roomId, branchId);
-        return rows.isEmpty() ? null : rows.get(0);
-    }
-
-    public boolean roomHasOccupant(UUID branchId, UUID roomId) {
-        return Boolean.TRUE.equals(db.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
-                WHERE a.branch_id=? AND a.room_id=? AND a.actual_end IS NULL
-                AND (a.state='OCCUPIED' OR b.status='IN_HOUSE'))
-            """, Boolean.class, branchId, roomId));
-    }
-
-    public void completeRoomCleaning(UUID branchId, UUID roomId, UUID actorId) {
-        db.update("UPDATE gcmb.room SET operating_status='AVAILABLE',status_reason='Đã dọn xong phòng',expected_ready_at=NULL WHERE id=? AND branch_id=?",
-            roomId, branchId);
-        db.update("""
-            INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,changed_by)
-            VALUES (?,?,'CLEANING','AVAILABLE','Đã dọn xong phòng',?)
-            """, roomId, branchId, actorId);
-    }
-
     // Tìm phòng không trùng lịch trong khoảng yêu cầu.
     public List<RoomRow> availableRooms(UUID branchId, UUID roomTypeId, Instant start, Instant end) {
         return db.query("""

@@ -1,7 +1,7 @@
 package com.gcmb.backend.booking.controller;
 
-import com.gcmb.backend.administration.audit.service.MutationAudit;
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.audit.service.MutationAudit;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.service.DepositManagementService;
@@ -96,14 +96,6 @@ public class BookingController {
     @GetMapping("/rooms")
     public List<BookingDtos.RoomSummary> rooms(@AuthenticationPrincipal Identity identity) {
         return bookings.rooms(identity);
-    }
-
-    @PostMapping("/rooms/{roomId}/finish-cleaning")
-    public void finishCleaning(@AuthenticationPrincipal Identity identity, @PathVariable UUID roomId) {
-        audit.record("ROOM_CLEANING_COMPLETED", "ROOM", roomId, () -> {
-            bookings.finishCleaning(identity, roomId);
-            return null;
-        }, null);
     }
 
     @GetMapping("/availability")

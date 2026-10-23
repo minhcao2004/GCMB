@@ -2,7 +2,7 @@ package com.gcmb.backend.booking.service;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
@@ -62,18 +62,6 @@ public class BookingService {
         return repository.rooms(branch(identity).id()).stream()
             .map(room -> new BookingDtos.RoomSummary(room.id(), room.code(), room.name(), room.capacity(),
                 room.roomTypeId(), room.roomTypeName(), room.operatingStatus())).toList();
-    }
-
-    @Transactional
-    public void finishCleaning(Identity identity, UUID roomId) {
-        UUID branchId = branch(identity).id();
-        String status = repository.lockRoomStatus(branchId, roomId);
-        if (status == null) throw new BookingFailure(404, "form", "Không tìm thấy phòng trong cơ sở của bạn");
-        if (!"CLEANING".equals(status) && !"AVAILABLE".equals(status))
-            throw new BookingFailure(409, "form", "Chỉ xác nhận dọn xong cho phòng đang dọn");
-        if (repository.roomHasOccupant(branchId, roomId))
-            throw new BookingFailure(409, "form", "Phòng vẫn có khách đang sử dụng; cần checkout trước");
-        if ("CLEANING".equals(status)) repository.completeRoomCleaning(branchId, roomId, identity.id());
     }
 
     @Transactional(readOnly = true)
