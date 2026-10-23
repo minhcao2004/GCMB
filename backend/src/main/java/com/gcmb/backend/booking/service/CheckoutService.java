@@ -7,7 +7,7 @@
  */
 package com.gcmb.backend.booking.service;
 
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
@@ -245,10 +245,10 @@ public class CheckoutService {
         Timestamp checkout = (Timestamp) bill.get("checkoutAt");
         db.update("UPDATE gcmb.room_allocation SET state='FINISHED',actual_end=? WHERE id=?", checkout, allocation.id());
         db.update("UPDATE gcmb.booking SET status='COMPLETED',actual_checkout=? WHERE id=?", checkout, bookingId);
-        db.update("UPDATE gcmb.room SET operating_status='CLEANING',status_reason='Khách đã checkout',expected_ready_at=NULL WHERE id=?", allocation.roomId());
+        db.update("UPDATE gcmb.room SET operating_status='AVAILABLE',status_reason='Khách đã checkout',expected_ready_at=NULL WHERE id=?", allocation.roomId());
         db.update("""
             INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,changed_by)
-            VALUES (?, ?, ?, 'CLEANING','Khách đã checkout',?)
+            VALUES (?, ?, ?, 'AVAILABLE','Khách đã checkout',?)
             """, allocation.roomId(), branch(actor), allocation.operatingStatus(), actor.id());
         repository.event(bookingId, actor.id(), "BOOKING_CHECKED_OUT", null, Map.of("billId", id.toString()));
         audit(actor.id(), branch(actor), bookingId, "CHECKOUT_BOOKING", Map.of("billId", id, "amount", received, "depositAmount", decimal(bill, "depositApplied")));

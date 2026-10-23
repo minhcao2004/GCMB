@@ -127,6 +127,7 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isAccountant = audience === 'accountant';
 
   if (isAccountant) {
@@ -141,19 +142,21 @@ export function AppShell({
     return (
       <>
         <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
-          <div className="head-office-dashboard">
+          <div className={`head-office-dashboard${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
             <aside className="manager-sidebar" aria-label="Kế toán thu chi">
+              <button type="button" className="booking-sidebar-toggle" aria-label={sidebarCollapsed ? 'Mở menu điều hướng' : 'Thu gọn menu điều hướng'} aria-expanded={!sidebarCollapsed} aria-controls="booking-navigation" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? '›' : '‹'}</button>
               <div className="manager-brand"><BrandWordmark /></div>
               <p className="manager-role">KẾ TOÁN THU CHI</p>
-              <nav className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+              <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
                 {navItems.map(([label, icon, unavailable]) => (
                   <button
                     type="button"
                     key={label}
+                    aria-label={label}
                     aria-current={icon === activeTab ? 'page' : undefined}
                     aria-disabled={Boolean(unavailable)}
                     disabled={Boolean(unavailable)}
-                    title={unavailable ? 'Đang phát triển' : undefined}
+                    title={unavailable ? 'Đang phát triển' : label}
                     onClick={() => {
                       if (unavailable) return;
                       if (icon === 'overview') navigate('/ke-toan');
@@ -210,15 +213,18 @@ export function AppShell({
   return (
     <>
       <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''}`}>
-        <div className="head-office-dashboard">
+        <div className={`head-office-dashboard${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
           <aside className="manager-sidebar">
+            <button type="button" className="booking-sidebar-toggle" aria-label={sidebarCollapsed ? 'Mở menu điều hướng' : 'Thu gọn menu điều hướng'} aria-expanded={!sidebarCollapsed} aria-controls="booking-navigation" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? '›' : '‹'}</button>
             <div className="manager-brand"><BrandWordmark /></div>
             <p className="manager-role">LỄ TÂN</p>
-            <nav className="manager-navigation" aria-label="Điều hướng lễ tân">
+            <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
               {navigation.map(([label, icon]) => (
                 <button
                   type="button"
                   key={label}
+                  aria-label={label}
+                  title={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
                   aria-disabled={!['booking', 'rooms', 'payments', 'deposit'].includes(icon)}
                   onClick={() => selectTab(icon)}

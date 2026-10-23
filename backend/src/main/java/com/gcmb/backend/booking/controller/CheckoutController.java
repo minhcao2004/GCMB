@@ -6,7 +6,7 @@
  */
 package com.gcmb.backend.booking.controller;
 
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.service.CheckoutService;
 import java.util.Map;

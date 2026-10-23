@@ -211,6 +211,8 @@ BEGIN
     END IF;
 END $$;
 
+-- These six starter rooms are seed data, not a limit on a branch's room count.
+-- Existing rooms and their operating status are preserved on a code conflict.
 INSERT INTO gcmb.room (branch_id, room_type_id, code, name, capacity, operating_status)
 SELECT b.id, rt.id, r.room_code, r.room_name, rt.capacity, 'AVAILABLE'
 FROM genz_branch_seed s
@@ -242,12 +244,10 @@ BEGIN
         LEFT JOIN gcmb.room r ON r.branch_id = b.id
         LEFT JOIN gcmb.room_type rt ON rt.id = r.room_type_id
         GROUP BY b.id, s.service_mode
-        HAVING COUNT(r.id) <> 6
-            OR COUNT(DISTINCT rt.mode) <> 1
+        HAVING COUNT(DISTINCT rt.mode) <> 1
             OR MIN(rt.mode) <> s.service_mode
-            OR BOOL_OR(r.operating_status <> 'AVAILABLE')
     ) THEN
-        RAISE EXCEPTION 'Mỗi cơ sở phải có đúng 6 phòng trống thuộc một loại hình duy nhất';
+        RAISE EXCEPTION 'Loại hình phòng của cơ sở không khớp cấu hình seed';
     END IF;
 END $$;
 

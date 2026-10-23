@@ -1,6 +1,6 @@
 package com.gcmb.backend.booking.service;
 
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;

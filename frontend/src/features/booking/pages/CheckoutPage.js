@@ -258,7 +258,7 @@ export default function CheckoutPage() {
         <div className="co-grid">
           <section className="co-card">
             <h2>{settled ? 'Thanh toán hoàn tất' : 'Phương thức thanh toán'}</h2>
-            {settled ? <><div className="co-success">Đã hoàn tất hóa đơn. Phòng chuyển sang Đang dọn. Sau khi dọn xong, vào màn Phòng và bấm Dọn xong → Trống để nhận khách tiếp theo.</div><button onClick={() => window.print()}>In hóa đơn</button></> : paymentDue === 0 && !planned ? <><div className="co-success">Bill không còn khoản phải thu sau khi áp dụng cọc.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill</button></> : !planned ? <form onSubmit={pay}>
+            {settled ? <><div className="co-success">Đã hoàn tất hóa đơn. Phòng đã trở về Trống và sẵn sàng nhận khách tiếp theo.</div><button onClick={() => window.print()}>In hóa đơn</button></> : paymentDue === 0 && !planned ? <><div className="co-success">Bill không còn khoản phải thu sau khi áp dụng cọc.</div><button className="co-primary" disabled={busy} onClick={() => run(async () => setData(await api.complete(billId)))}>Hoàn tất bill</button></> : !planned ? <form onSubmit={pay}>
               <div className="co-methods">{[['CASH', 'Tiền mặt'], ['BANK_TRANSFER', 'SePay'], ['MIXED', 'Kết hợp']].map(([value, label]) => <button key={value} type="button" className={method === value ? 'selected' : ''} onClick={() => setMethod(value)}>{label}</button>)}</div>
               {method === 'CASH' && <p className="co-note">Tiền mặt cần thu: <strong>{formatVnd(paymentDue)}</strong> (đã trừ cọc và khoản đã thanh toán).</p>}
               {method !== 'BANK_TRANSFER' && <><label className="co-field">
