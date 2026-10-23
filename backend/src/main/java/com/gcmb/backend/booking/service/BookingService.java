@@ -291,17 +291,19 @@ public class BookingService {
     }
 
     @Transactional
-    // Chốt đơn giá giờ lẻ và giữ phòng đến booking kế tiếp hoặc tối đa 24 giờ.
+    // Chỉ bật đồng hồ sau giờ trả đã hẹn; giữ phòng đến booking kế tiếp hoặc tối đa 24 giờ.
     public BookingDtos.BookingDetail startHourlyMeter(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);
         lockBooking(bookingId, branch.id());
         BookingRow booking = requireInHouseBooking(bookingId, branch.id());
         if (repository.meter(bookingId) != null)
             throw new BookingFailure(409, "form", "Booking đã có phiên tính giờ lẻ; vui lòng tải lại");
+        Instant now = Instant.now();
+        if (now.isBefore(booking.plannedEnd()))
+            throw new BookingFailure(409, "form", "Chỉ có thể bật đồng hồ giờ lẻ sau khi hết thời lượng đã đặt");
         AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
         validateActiveAllocation(allocation);
-        Instant now = Instant.now();
-        // Bật sớm vẫn giữ phòng, nhưng tiền giờ lẻ chỉ chạy từ giờ trả đã hẹn.
+        // Đồng hồ bắt đầu tính phí từ thời điểm lễ tân bật sau giờ trả đã hẹn.
         Instant billedFrom = later(now, booking.plannedEnd());
         Instant reservedUntil = billedFrom.plus(Duration.ofHours(24));
         Instant nextBooking = repository.nextRoomBookingStart(allocation.roomId(), allocation.endsAt(), bookingId);
@@ -821,23 +823,23 @@ public class BookingService {
                 if (savedDuration > 0) lineEnd = lineStart.plusSeconds(savedDuration * 60L);
             }
             Instant usedEnd = earlier(lineEnd, changedAt);
+            long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
+            long usedSeconds = Math.max(0, Duration.between(lineStart, usedEnd).getSeconds());
+            BigDecimal usedSegmentAmount = usedEnd.isAfter(lineStart)
+                ? proportional(charge.amount(), usedSeconds, fullSeconds) : BigDecimal.ZERO;
             if (usedEnd.isAfter(lineStart)) {
-                long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
-                long usedSeconds = Duration.between(lineStart, usedEnd).getSeconds();
-                BigDecimal amount = proportional(charge.amount(), usedSeconds, fullSeconds);
                 Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, lineStart, usedEnd, cause, "USED", charge.id());
                 usedLines.add(new BookingDtos.ChargeLine(charge.kind(), charge.description(),
-                    splitQuantity(charge.quantity(), usedSeconds, fullSeconds), charge.unitPrice(), amount,
+                    splitQuantity(charge.quantity(), usedSeconds, fullSeconds), charge.unitPrice(), usedSegmentAmount,
                     charge.priceRuleId(), charge.comboId(), snapshot));
-                usedAmount = usedAmount.add(amount);
+                usedAmount = usedAmount.add(usedSegmentAmount);
             }
 
             Instant nextStart = later(lineStart, changedAt);
             if (!lineEnd.isAfter(nextStart)) continue;
-            long fullSeconds = Math.max(1, Duration.between(lineStart, lineEnd).getSeconds());
             long nextSeconds = Duration.between(nextStart, lineEnd).getSeconds();
-            // Lấy phần dư từ tiền gốc để sai số làm tròn không làm thay đổi tổng phí đã chốt.
-            BigDecimal sourceRemaining = charge.amount().subtract(proportional(charge.amount(), fullSeconds - nextSeconds, fullSeconds));
+            // Lấy phần dư theo đúng số đã dùng để hai chặng cộng lại bằng chính xác phí gốc.
+            BigDecimal sourceRemaining = charge.amount().subtract(usedSegmentAmount);
             // Lỗi cơ sở: giữ giá phần chưa dùng, dù phòng thay thế thuộc hạng khác.
             if ("BRANCH_FAULT".equals(cause)) {
                 Map<String, Object> snapshot = splitSnapshot(sourceSnapshot, nextStart, lineEnd, cause, "NEXT", charge.id());

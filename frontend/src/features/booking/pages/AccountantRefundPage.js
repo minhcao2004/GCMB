@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -38,10 +38,42 @@ function statusClass(status) {
 function RefundCompletionForm({ item, busy, error, onSubmit }) {
   const [externalReference, setExternalReference] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [image, setImage] = useState(null);
+  const [imageError, setImageError] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const imageInput = useRef(null);
+
+  useEffect(() => {
+    if (!image) {
+      setPreviewUrl('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(image);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
+
+  function selectImage(file) {
+    setImageError('');
+    if (!file) { setImage(null); return; }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setImage(null);
+      setImageError('Chỉ chọn ảnh JPG, PNG hoặc WebP.');
+      if (imageInput.current) imageInput.current.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImage(null);
+      setImageError('Ảnh chứng minh không được vượt quá 5 MB.');
+      if (imageInput.current) imageInput.current.value = '';
+      return;
+    }
+    setImage(file);
+  }
 
   return <form className="accounting-refund-action" onSubmit={(event) => {
     event.preventDefault();
-    onSubmit(externalReference.trim());
+    onSubmit(externalReference.trim(), image);
   }}>
     <div className="deposit-accounting-note">
       <strong>Chỉ ghi nhận sau khi đã chuyển khoản thành công.</strong>
@@ -51,15 +83,74 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
       <span>Mã giao dịch chuyển khoản <b>*</b></span>
       <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} required autoComplete="off" />
     </label>
+    <div className="deposit-form-field accounting-refund-evidence-field">
+      <span>Ảnh chứng minh chuyển khoản <b>*</b></span>
+      <label className="accounting-refund-upload">
+        <input ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" required
+          onChange={(event) => selectImage(event.target.files?.[0] || null)}
+          aria-describedby="accounting-refund-image-hint" />
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+        <span className="accounting-refund-upload-copy">
+          <strong>{image ? image.name : 'Chọn ảnh biên lai chuyển khoản'}</strong>
+          <small id="accounting-refund-image-hint">JPG, PNG hoặc WebP · tối đa 5 MB</small>
+        </span>
+        <span className="accounting-refund-upload-action">Chọn ảnh</span>
+      </label>
+      {previewUrl && <div className="accounting-refund-image-preview">
+        <img src={previewUrl} alt="Ảnh chứng minh chuyển khoản đã chọn" />
+        <button type="button" onClick={() => { setImage(null); setImageError(''); if (imageInput.current) imageInput.current.value = ''; }}>Xóa ảnh</button>
+      </div>}
+      {imageError && <p className="booking-inline-error" role="alert">{imageError}</p>}
+    </div>
     <label className="accounting-refund-confirm">
       <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required />
       <span>Tôi xác nhận đã hoàn {formatVnd(item.amount)} đến đúng tài khoản người nhận ở trên.</span>
     </label>
     {error && <p className="booking-inline-error" role="alert">{error}</p>}
-    <button className="booking-button booking-button-primary" type="submit" disabled={busy || !confirmed}>
+    <button className="booking-button booking-button-primary" type="submit" disabled={busy || !confirmed || !image}>
       {busy ? 'Đang ghi nhận…' : 'Ghi nhận đã hoàn cọc'}
     </button>
   </form>;
+}
+
+function RefundEvidence({ item }) {
+  const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = '';
+    setImageUrl('');
+    if (!item.hasEvidence) {
+      setError('');
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
+    setError('');
+    depositApi.refundEvidence(item.id).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      if (active) setImageUrl(objectUrl);
+      else URL.revokeObjectURL(objectUrl);
+    }).catch((requestError) => {
+      if (active) setError(errorText(requestError));
+    }).finally(() => { if (active) setLoading(false); });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.id, item.hasEvidence]);
+
+  if (!item.hasEvidence) return null;
+  return <section className="accounting-refund-evidence">
+    <h3>Chứng từ chuyển khoản</h3>
+    {loading && <p className="accounting-refund-evidence-message">Đang tải ảnh chứng từ…</p>}
+    {error && <p className="accounting-refund-evidence-message accounting-refund-evidence-message--error" role="alert">{error}</p>}
+    {imageUrl && <a href={imageUrl} target="_blank" rel="noreferrer" aria-label="Mở ảnh chứng từ trong tab mới">
+      <img src={imageUrl} alt="Ảnh chứng minh đã chuyển tiền" />
+    </a>}
+  </section>;
 }
 
 function RefundDetails({ item, busy, error, onComplete }) {
@@ -92,6 +183,7 @@ function RefundDetails({ item, busy, error, onComplete }) {
         <h3>Lý do hoàn cọc</h3>
         <p>{item.reason}</p>
       </section>
+      <RefundEvidence item={item} />
       {canComplete
         ? <RefundCompletionForm key={item.id} item={item} busy={busy} error={error} onSubmit={onComplete} />
         : <div className="deposit-accounting-note accounting-refund-completed">
@@ -175,14 +267,14 @@ export default function AccountantRefundPage() {
     navigate('/dang-nhap', { replace: true });
   }
 
-  async function completeRefund(item, externalReference) {
+  async function completeRefund(item, externalReference, image) {
     setBusy(true);
     setMutationError('');
     setNotice('');
     try {
-      const result = await depositApi.completeRefundRequest(item.id, { externalReference });
+      const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
       setFilter('all');
-      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode}.`);
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} và lưu ảnh chứng minh.`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error)); }
     finally { setBusy(false); }
@@ -247,7 +339,7 @@ export default function AccountantRefundPage() {
             <button type="button" className="accounting-refund-refresh" onClick={() => setReload((value) => value + 1)} disabled={loading}>Tải lại</button>
           </footer>
         </section>
-        <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference) => completeRefund(selected, reference)} />
+        <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)} />
       </div>
     </div>
   </AppShell>;

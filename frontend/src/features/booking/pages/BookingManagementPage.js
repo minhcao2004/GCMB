@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
@@ -127,7 +127,22 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(`gcmb:${audience}:sidebar-collapsed`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`gcmb:${audience}:sidebar-collapsed`, String(sidebarCollapsed));
+    } catch {
+      // Tùy chọn vẫn dùng được trong phiên hiện tại nếu trình duyệt chặn lưu trữ.
+    }
+  }, [audience, sidebarCollapsed]);
   const isAccountant = audience === 'accountant';
+  const toggleSidebar = () => setSidebarCollapsed((collapsed) => !collapsed);
 
   if (isAccountant) {
     const navItems = accountingNavigation;
@@ -141,8 +156,8 @@ export function AppShell({
     return (
       <>
         <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
-          <div className="head-office-dashboard">
-            <aside className="manager-sidebar" aria-label="Kế toán thu chi">
+          <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
+            <aside className="manager-sidebar" id="app-sidebar" aria-label="Kế toán thu chi">
               <div className="manager-brand"><BrandWordmark /></div>
               <p className="manager-role">KẾ TOÁN THU CHI</p>
               <nav className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
@@ -178,6 +193,8 @@ export function AppShell({
                 busy={busy}
                 onLogout={onLogout}
                 onProfile={() => setProfileOpen(true)}
+                onToggleSidebar={toggleSidebar}
+                sidebarExpanded={!sidebarCollapsed}
               >
                 <span className="booking-topbar-datetime">Tháng {currentMonth}</span>
               </DashboardTopbar>
@@ -210,8 +227,8 @@ export function AppShell({
   return (
     <>
       <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''}`}>
-        <div className="head-office-dashboard">
-          <aside className="manager-sidebar">
+        <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
+          <aside className="manager-sidebar" id="app-sidebar" aria-label="Lễ tân">
             <div className="manager-brand"><BrandWordmark /></div>
             <p className="manager-role">LỄ TÂN</p>
             <nav className="manager-navigation" aria-label="Điều hướng lễ tân">
@@ -241,6 +258,8 @@ export function AppShell({
               busy={busy}
               onLogout={onLogout}
               onProfile={() => setProfileOpen(true)}
+              onToggleSidebar={toggleSidebar}
+              sidebarExpanded={!sidebarCollapsed}
             >
               {!hideSearch && (
                 <label className="booking-global-search">
@@ -277,15 +296,43 @@ export function AppShell({
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 // Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
-function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow }) {
+function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, onEdit, onCancel, onNoShow }) {
   const navigate = useNavigate();
+  const panelRef = useRef(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, [booking?.id]);
-  if (!booking) return <aside className="booking-details booking-details-empty"><h2>Chi tiết</h2><p>Chọn một booking để xem thông tin khách, phòng và tiền cọc.</p></aside>;
-  const depositDetail = detail?.booking?.id === booking.id ? detail.deposit : null;
+  useEffect(() => {
+    const panel = panelRef.current;
+    panel?.querySelector('.booking-details-close')?.focus();
+    if (!modal || !panel) return undefined;
+    function trapFocus(event) {
+      if (event.key !== 'Tab') return;
+      const focusable = [...panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+        .filter((element) => element.offsetParent !== null);
+      if (!focusable.length) { event.preventDefault(); panel.focus(); return; }
+      if (event.shiftKey && document.activeElement === focusable[0]) {
+        event.preventDefault();
+        focusable[focusable.length - 1].focus();
+      } else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+        event.preventDefault();
+        focusable[0].focus();
+      }
+    }
+    panel.addEventListener('keydown', trapFocus);
+    return () => panel.removeEventListener('keydown', trapFocus);
+  }, [modal]);
+  const currentDetail = detail?.booking?.id === booking?.id ? detail : null;
+  const panelRole = modal ? 'dialog' : 'complementary';
+  if (!booking) return <aside ref={panelRef} className="booking-details" role={panelRole} aria-modal={modal || undefined} aria-label="Chi tiết booking" tabIndex={-1}>
+    <div className="booking-details-scroll">
+      <header className="booking-details-heading"><h2>Chi tiết booking</h2><button type="button" className="booking-details-close" onClick={onClose} aria-label="Đóng chi tiết booking">×</button></header>
+      <p className="booking-details-loading" role="status">Đang tải thông tin booking…</p>
+    </div>
+  </aside>;
+  const depositDetail = currentDetail?.deposit || null;
   const depositReceived = Number(depositDetail?.receivedAmount ?? booking.depositReceivedAmount ?? booking.depositBalance ?? 0);
   const depositBalance = Number(depositDetail?.balance ?? booking.depositBalance ?? 0);
   const depositForfeited = Number(depositDetail?.forfeitedAmount ?? 0);
@@ -294,14 +341,16 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, depositForfeited, booking.status);
   const canCheckIn = booking.status === 'CONFIRMED';
   const canEdit = canCheckIn && new Date(booking.plannedStart) > new Date();
-  const hasReservedRoom = detail?.booking?.id === booking.id && detail.allocations?.some((allocation) => allocation.state === 'RESERVED');
+  const hasReservedRoom = currentDetail?.allocations?.some((allocation) => allocation.state === 'RESERVED');
   const canMarkNoShow = canCheckIn && hasReservedRoom && new Date(booking.plannedStart).getTime() <= now.getTime();
   const room = [booking.roomCode, booking.roomName].filter(Boolean).join(' · ') || 'Chưa gán phòng';
-  return <aside className="booking-details">
+  return <aside ref={panelRef} className="booking-details" role={panelRole} aria-modal={modal || undefined} aria-label={`Chi tiết booking ${booking.code}`} tabIndex={-1}>
     <div className="booking-details-scroll">
-      <h2>Chi tiết</h2>
-      <strong className="booking-detail-code">{booking.code}</strong>
-      <span className={statusClass(statusId(booking.status))}>{statusLabel(booking.status)}</span>
+      <header className="booking-details-heading">
+        <div><h2>Chi tiết booking</h2><strong className="booking-detail-code">{booking.code}</strong></div>
+        <span className={statusClass(statusId(booking.status))}>{statusLabel(booking.status)}</span>
+        <button type="button" className="booking-details-close" onClick={onClose} aria-label="Đóng chi tiết booking">×</button>
+      </header>
       <div className="booking-detail-divider" />
       <section className={`booking-detail-deposit${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`} aria-label="Thông tin tiền cọc">
         <div><span>Tiền cọc đã nhận</span><strong>{formatVnd(depositReceived)}</strong></div>
@@ -317,7 +366,7 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
         <div><dt>Phòng</dt><dd>{room}</dd></div>
         <div><dt>Giá dự kiến</dt><dd>{formatVnd(booking.expectedAmount)}</dd></div>
       </dl>
-      {detail?.note && <p className="booking-detail-note">{detail.note}</p>}
+      {currentDetail?.note && <p className="booking-detail-note">{currentDetail.note}</p>}
       <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
     </div>
     <div className="booking-details-actions" role="group" aria-label="Thao tác booking">
@@ -583,7 +632,12 @@ export default function BookingManagementPage() {
   const [rows, setRows] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
+  const [hasLoadedRows, setHasLoadedRows] = useState(false);
   const [selectedId, setSelectedId] = useState(() => location.state?.bookingId || '');
+  const [detailsOpen, setDetailsOpen] = useState(() => Boolean(location.state?.bookingId));
+  const [modalDetails, setModalDetails] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 999px)').matches));
+  const rowFocusRef = useRef(null);
+  const pendingSelectionRef = useRef('');
   const [detail, setDetail] = useState(null);
   const [notice, setNotice] = useState('');
   const [noticeKind, setNoticeKind] = useState('success');
@@ -594,6 +648,16 @@ export default function BookingManagementPage() {
   const [noShowTarget, setNoShowTarget] = useState(null);
   const [noShowError, setNoShowError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const openBookingDetails = (id, row) => {
+    rowFocusRef.current = row?.querySelector('.booking-row-action') || row;
+    setSelectedId(id);
+    setDetailsOpen(true);
+  };
+  const closeBookingDetails = () => {
+    setDetailsOpen(false);
+    window.requestAnimationFrame(() => rowFocusRef.current?.focus());
+  };
 
   useEffect(() => { document.title = `${createMode ? 'Tạo booking' : editMode ? 'Sửa booking' : 'Booking'} | GenZ Cinema & Music Box`; }, [createMode, editMode]);
 
@@ -610,6 +674,15 @@ export default function BookingManagementPage() {
     });
     return () => { active = false; };
   }, [navigate, retry]);
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const query = window.matchMedia('(max-width: 999px)');
+    const update = () => setModalDetails(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -635,10 +708,26 @@ export default function BookingManagementPage() {
       .then((result) => {
         if (!active) return;
         const items = result.items || [];
+        const pendingId = pendingSelectionRef.current;
+        const pendingFound = pendingId && items.some((item) => item.id === pendingId);
+        if (pendingId) pendingSelectionRef.current = '';
         setRows(items);
+        setHasLoadedRows(true);
         setListError('');
-        setSelectedId((currentId) => currentId && items.some((item) => item.id === currentId) ? currentId : items[0]?.id || '');
-      }).catch((requestError) => { if (active) { const errors = apiErrors(requestError); setListError(errors.form || Object.values(errors)[0]); } })
+        if (pendingFound) {
+          setSelectedId(pendingId);
+          setDetailsOpen(true);
+        } else {
+          setSelectedId((currentId) => currentId && items.some((item) => item.id === currentId) ? currentId : '');
+          if (pendingId) setDetailsOpen(false);
+        }
+      }).catch((requestError) => { if (active) {
+        const pendingId = pendingSelectionRef.current;
+        pendingSelectionRef.current = '';
+        if (pendingId) setDetailsOpen(false);
+        const errors = apiErrors(requestError);
+        setListError(errors.form || Object.values(errors)[0]);
+      } })
       .finally(() => { if (active) setListLoading(false); });
     return () => { active = false; };
   }, [user, createMode, selectedDate, search, reload]);
@@ -672,6 +761,39 @@ export default function BookingManagementPage() {
     return true;
   }), [rows, activeFilter, roomTier]);
 
+  useEffect(() => {
+    if (!hasLoadedRows || listLoading) return;
+    if (!selectedId) {
+      if (detailsOpen) setDetailsOpen(false);
+      return;
+    }
+    if (selectedId === pendingSelectionRef.current) return;
+    if (!visibleRows.some((item) => item.id === selectedId)) {
+      setSelectedId('');
+      setDetailsOpen(false);
+      setDetail(null);
+    }
+  }, [hasLoadedRows, listLoading, visibleRows, selectedId, detailsOpen]);
+
+  useEffect(() => {
+    if (!detailsOpen) return undefined;
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') {
+        setDetailsOpen(false);
+        window.requestAnimationFrame(() => rowFocusRef.current?.focus());
+      }
+    }
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [detailsOpen]);
+
+  useEffect(() => {
+    if (!detailsOpen || !modalDetails) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [detailsOpen, modalDetails]);
+
   // Đăng xuất rồi chuyển về trang đăng nhập.
   const logout = async () => {
     setBusy(true);
@@ -688,7 +810,9 @@ export default function BookingManagementPage() {
       clearBookingDraft(user);
       const booking = result.booking;
       setSelectedDate(toLocalDateInput(new Date(booking.plannedStart)));
+      pendingSelectionRef.current = booking.id;
       setSelectedId(booking.id);
+      setDetailsOpen(true);
       setActiveFilter('all');
       setRoomTier('all');
       setSearch('');
@@ -796,10 +920,14 @@ export default function BookingManagementPage() {
   const openCheckIn = (booking) => {
     setCheckInError('');
     setSelectedId(booking.id);
+    setDetailsOpen(false);
     navigate(`/le-tan/bookings/${booking.id}/check-in`);
   };
   // Mở đường dẫn sửa booking tương ứng.
-  const openEdit = (booking) => navigate(`/le-tan/bookings/${booking.id}/edit`);
+  const openEdit = (booking) => {
+    setDetailsOpen(false);
+    navigate(`/le-tan/bookings/${booking.id}/edit`);
+  };
   // Quay về danh sách khi đóng bảng check-in.
   const closeCheckIn = () => navigate('/le-tan/bookings');
   const mainContent = createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
@@ -822,20 +950,20 @@ export default function BookingManagementPage() {
       {tabs.map(([id, label, count]) => <button type="button" key={id} className={`booking-filter-chip chip-${id}${activeFilter === id ? ' is-active' : ''}`} aria-pressed={activeFilter === id} onClick={() => setActiveFilter(id)}><span>{label}</span>{id === 'all' && <small>{count}</small>}</button>)}
       <span className="booking-result-count">Hiển thị {visibleRows.length}/{rows.length}</span>
     </section>
-    <div className="booking-content-grid">
+      <div className={`booking-content-grid${detailsOpen ? ' has-details' : ''}`}>
       <section className="booking-table-card" aria-label="Danh sách booking">
         <div className="booking-table-scroll"><table className="booking-table">
           <thead><tr><th>Mã booking</th><th>Giờ hẹn</th><th>Khách hàng / SĐT</th><th>Hạng / Phòng</th><th>Cọc đã nhận</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
           <tbody>{visibleRows.map((item) => {
             const selectedRow = item.id === selected?.id;
             const lateMinutes = item.status === 'CONFIRMED' ? Math.floor((Date.now() - new Date(item.plannedStart).getTime()) / 60000) : 0;
-            return <tr key={item.id} className={selectedRow ? 'is-selected' : ''} onClick={() => setSelectedId(item.id)}>
+            return <tr key={item.id} className={selectedRow ? 'is-selected' : ''} onClick={(event) => openBookingDetails(item.id, event.currentTarget)}>
               <td><strong>{item.code}</strong></td><td><b>{timeText(item.plannedStart, timezone)}</b></td>
               <td><strong>{item.contactName}</strong><small>{item.contactPhone || '—'}{Number(item.guestCount) > 0 ? ` · ${item.guestCount} khách` : ''}</small></td>
               <td><span>{item.roomTypeName || item.roomName || '—'}{item.roomCode ? ` · ${item.roomCode}` : ' · Chưa gán'}</span></td>
               <td>{Number(item.depositReceivedAmount ?? item.depositBalance) > 0 ? formatVnd(item.depositReceivedAmount ?? item.depositBalance) : '0đ'}</td>
               <td>{lateMinutes > 0 ? <span className="booking-status booking-status-late">Quá giờ {lateMinutes} phút</span> : <span className={statusClass(statusId(item.status))}>{statusLabel(item.status)}</span>}</td>
-              <td><button type="button" className="booking-row-action" aria-label={`Xem chi tiết booking ${item.code}`} onClick={(event) => { event.stopPropagation(); openCheckIn(item); }}>Xem</button></td>
+              <td><button type="button" className="booking-row-action" aria-label={`Xem chi tiết booking ${item.code}`} onClick={(event) => { event.stopPropagation(); openBookingDetails(item.id, event.currentTarget.closest('tr')); }}>Chi tiết</button></td>
             </tr>;
           })}</tbody>
         </table>
@@ -843,7 +971,12 @@ export default function BookingManagementPage() {
         {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
         </div>
       </section>
-      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
+      {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
+        <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}
+          onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit}
+          onCancel={(booking) => { setDetailsOpen(false); setCancelError(''); setCancelTarget(booking); }}
+          onNoShow={(booking) => { setDetailsOpen(false); setNoShowError(''); setNoShowTarget(booking); }} />
+      </div>}
     </div>
   </>;
 

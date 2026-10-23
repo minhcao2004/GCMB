@@ -6,12 +6,17 @@ import com.gcmb.backend.booking.dto.BookingDtos;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.service.DepositManagementService;
 import com.gcmb.backend.booking.service.BookingService;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -58,6 +63,20 @@ public class BookingController {
     // GET: chi tiết và lịch sử tiền cọc của một booking trong chi nhánh hiện tại.
     public DepositDtos.DepositDetail depositDetail(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
         return deposits.detail(identity, bookingId);
+    }
+
+    @GetMapping("/deposits/refund-requests/{requestId}/evidence")
+    // GET: lễ tân xem chứng từ của khoản hoàn đã thanh toán trong chi nhánh hiện tại.
+    public ResponseEntity<byte[]> depositRefundEvidence(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID requestId) {
+        DepositDtos.RefundEvidenceContent evidence = deposits.refundEvidence(identity, requestId);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(evidence.mimeType()))
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                .filename(evidence.originalName(), StandardCharsets.UTF_8).build().toString())
+            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .body(evidence.bytes());
     }
 
     @PostMapping("/deposits/refund-requests")
