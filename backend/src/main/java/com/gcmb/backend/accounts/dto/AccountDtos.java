@@ -34,8 +34,13 @@ public final class AccountDtos {
         String role,
         UUID branchId,
         String branchName,
-        String status
+        String status,
+        List<UUID> managedBranchIds
     ) {
+        public AccountView(UUID id, String employeeName, String employeeCode, String username,
+                String email, String role, UUID branchId, String branchName, String status) {
+            this(id, employeeName, employeeCode, username, email, role, branchId, branchName, status, List.of());
+        }
     }
 
     public record Option(String id, String name) {

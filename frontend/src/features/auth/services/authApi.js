@@ -19,6 +19,8 @@ async function post(path, body) {
 export const authApi = {
   // Trả danh tính từ cookie phiên hiện tại.
   me: async () => (await api.get('/auth/me')).data,
+  managedBranches: async () => (await api.get('/auth/branches')).data,
+  switchBranch: (branchId) => post('branch', { branchId }),
   // Các thao tác ghi đều lấy CSRF mới qua post.
   login: (body) => post('login', body),
   sendCode: (email) => post('forgot-password', { email }),

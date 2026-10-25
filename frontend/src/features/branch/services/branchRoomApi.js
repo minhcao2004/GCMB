@@ -9,12 +9,18 @@
 import api from '../../../api/client';
 
 const base='/branch-management/rooms';
-async function mutate(method,url,data){const {data:csrf}=await api.get('/auth/csrf');return (await api.request({method,url,data,headers:{[csrf.headerName]:csrf.token}})).data;}
+// Gắn cơ sở vào từng request để các tab đang xem cơ sở khác không ghi nhầm dữ liệu.
 export const branchRoomApi={
-  rooms:async()=> (await api.get(base)).data,
-  types:async()=> (await api.get(`${base}/types`)).data,
-  create:(body)=>mutate('post',base,body),
-  update:(id,body)=>mutate('put',`${base}/${id}`,body),
-  remove:(id)=>mutate('delete',`${base}/${id}`),
-  updateStatus:(id,body)=>mutate('put',`${base}/${id}/status`,body),
+  forBranch(branchId) {
+    const headers = { 'X-GCMB-Branch-Id': branchId };
+    async function mutate(method,url,data){const {data:csrf}=await api.get('/auth/csrf');return (await api.request({method,url,data,headers:{...headers,[csrf.headerName]:csrf.token}})).data;}
+    return {
+      rooms:async()=> (await api.get(base,{headers})).data,
+      types:async()=> (await api.get(`${base}/types`,{headers})).data,
+      create:(body)=>mutate('post',base,body),
+      update:(id,body)=>mutate('put',`${base}/${id}`,body),
+      remove:(id)=>mutate('delete',`${base}/${id}`),
+      updateStatus:(id,body)=>mutate('put',`${base}/${id}/status`,body),
+    };
+  },
 };

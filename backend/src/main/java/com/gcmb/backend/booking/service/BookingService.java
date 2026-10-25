@@ -381,6 +381,8 @@ public class BookingService {
         if (depositAmount.signum() < 0 || normalizedDepositAmount.scale() > 0
                 || normalizedDepositAmount.precision() - normalizedDepositAmount.scale() > 18)
             throw new BookingFailure(400, "depositAmount", "Số tiền cọc phải là số nguyên không âm, tối đa 18 chữ số");
+        if (depositAmount.signum() > 0 && depositAmount.compareTo(BookingPricingService.depositFor(quote.expectedAmount())) != 0)
+            throw new BookingFailure(400, "depositAmount", "Tiền cọc phải bằng 30% giá booking đã báo, làm tròn đến đồng");
         String paymentMethod = null;
         String paymentReference = null;
         if (depositAmount.signum() > 0) {
@@ -388,11 +390,9 @@ public class BookingService {
             if (!Set.of("BANK_TRANSFER", "CASH", "CARD", "QR").contains(paymentMethod))
                 throw new BookingFailure(400, "paymentMethod", "Vui lòng chọn phương thức thu cọc hợp lệ");
             paymentReference = nullable(request.paymentReference(), "paymentReference", 120);
-            if (!"CASH".equals(paymentMethod) && paymentReference == null)
+            if (!"CASH".equals(paymentMethod) && !"BANK_TRANSFER".equals(paymentMethod) && paymentReference == null)
                 throw new BookingFailure(400, "paymentReference", "Nhập mã giao dịch / ghi chú khi thu cọc bằng phương thức này");
         }
-        // Chuyển khoản do lễ tân xác nhận thủ công khác khoản được webhook ngân hàng đối soát.
-        String recordedPaymentMethod = "BANK_TRANSFER".equals(paymentMethod) ? "MANUAL_TRANSFER" : paymentMethod;
         String code = "BK-" + java.time.LocalDate.now(branch.timezone()).toString().replace("-", "") + "-" +
             UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         UUID bookingId = repository.insertBooking(branch.id(), code, contactName, contactPhone, guestCount, channel,
@@ -400,9 +400,9 @@ public class BookingService {
         UUID allocationId = insertAllocation(branch, bookingId, room.id(), request.plannedStart(), request.plannedEnd(), actorId);
         repository.createDepositAccount(bookingId);
         // Chỉ ghi sổ khi thực sự có tiền đã thu; yêu cầu cọc của combo không tự tạo khoản thu.
-        if (depositAmount.signum() > 0) {
+        if (depositAmount.signum() > 0 && !"BANK_TRANSFER".equals(paymentMethod)) {
             repository.receiveDeposit(branch.id(), bookingId, actorId, depositAmount,
-                recordedPaymentMethod, paymentReference);
+                paymentMethod, paymentReference);
             if (repository.depositBalance(bookingId).compareTo(depositAmount) != 0)
                 throw new IllegalStateException("Received booking deposit does not match its ledger balance");
         }
@@ -411,7 +411,8 @@ public class BookingService {
             "branchId", branch.id(), "roomId", room.id(), "startsAt", request.plannedStart(),
             "endsAt", request.plannedEnd(), "pricingMode", quote.pricingMode(),
             "expectedAmount", quote.expectedAmount(), "depositRequired", quote.depositRequired(), "guestCount", guestCount,
-            "depositReceived", depositAmount, "depositMethod", recordedPaymentMethod));
+            "depositReceived", "BANK_TRANSFER".equals(paymentMethod) ? BigDecimal.ZERO : depositAmount,
+            "depositRequested", depositAmount, "depositMethod", paymentMethod));
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 

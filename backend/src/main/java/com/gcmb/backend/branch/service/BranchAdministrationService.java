@@ -29,12 +29,17 @@ public class BranchAdministrationService {
         SELECT b.id AS "branchId", b.code, b.name AS "branchName", b.address, b.phone,
             b.notes, b.status, b.status_reason AS "statusReason",
             b.created_at AS "createdAt", b.updated_at AS "updatedAt",
-            u.id AS "managerId", u.username AS "managerUsername",
-            COALESCE(e.full_name,u.username) AS "managerName", e.code AS "managerCode"
+            managers.names AS "managerName", managers.usernames AS "managerUsername",
+            managers.codes AS "managerCode", managers.total AS "managerCount"
         FROM gcmb.branch b
-        LEFT JOIN gcmb.branch_manager_assignment a ON a.branch_id=b.id
-        LEFT JOIN gcmb.user_account u ON u.id=a.user_id
-        LEFT JOIN gcmb.employee e ON e.user_id=u.id
+        LEFT JOIN LATERAL (
+            SELECT string_agg(COALESCE(e.full_name,u.username), ', ' ORDER BY u.username) AS names,
+                string_agg(u.username, ', ' ORDER BY u.username) AS usernames,
+                string_agg(e.code, ', ' ORDER BY u.username) AS codes, count(*) AS total
+            FROM gcmb.branch_manager_assignment a
+            JOIN gcmb.user_account u ON u.id=a.user_id
+            LEFT JOIN gcmb.employee e ON e.user_id=u.id WHERE a.branch_id=b.id
+        ) managers ON TRUE
         """;
 
     public BranchAdministrationService(JdbcTemplate db) {
@@ -156,11 +161,13 @@ public class BranchAdministrationService {
     public List<Map<String, Object>> managers() {
         return db.queryForList("""
             SELECT u.id AS "userId",u.username,u.email,COALESCE(e.full_name,u.username) AS "fullName",
-                e.code AS "employeeCode",b.id AS "branchId",b.name AS "branchName"
+                e.code AS "employeeCode", managed.names AS "branchName"
             FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
             LEFT JOIN gcmb.employee e ON e.user_id=u.id
-            LEFT JOIN gcmb.branch_manager_assignment a ON a.user_id=u.id
-            LEFT JOIN gcmb.branch b ON b.id=a.branch_id
+            LEFT JOIN LATERAL (
+                SELECT string_agg(b.name, ', ' ORDER BY b.name,b.id) AS names
+                FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id WHERE a.user_id=u.id
+            ) managed ON TRUE
             WHERE u.status='ACTIVE' AND r.code='BRANCH_MANAGER'
                 AND (e.id IS NULL OR e.status='ACTIVE')
             ORDER BY COALESCE(e.full_name,u.username),u.id
@@ -191,36 +198,43 @@ public class BranchAdministrationService {
         if (!"ACTIVE".equals(get(branchId).get("status"))) {
             throw failure(HttpStatus.CONFLICT, "Chỉ gán quản lý cho cơ sở đang hoạt động.");
         }
-        if (userId.equals(get(branchId).get("managerId"))) {
-            db.update("UPDATE gcmb.user_account SET branch_id=? WHERE id=?", branchId, userId);
-            return get(branchId);
+        var current = db.queryForList("SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?", UUID.class, userId);
+        if (current.contains(branchId)) return get(branchId);
+        Integer count = db.queryForObject("SELECT count(*) FROM gcmb.branch_manager_assignment WHERE branch_id=?", Integer.class, branchId);
+        if (count != null && count >= 2) {
+            throw failure(HttpStatus.CONFLICT, "Cơ sở đã có đủ 2 quản lý. Hãy chuyển hoặc thu hồi phân công một quản lý trước.");
         }
-        // Chuyển quản lý phải ghi cả cơ sở được gán và cơ sở mất phân công trước đó.
-        db.update("""
-            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
-            SELECT ?,b.id,'ASSIGN_BRANCH_MANAGER','BRANCH',b.id,
-                jsonb_build_object('name',b.name,'managerId',a.user_id),
-                jsonb_build_object('name',b.name,'managerId',CASE WHEN b.id=? THEN CAST(? AS uuid) ELSE NULL END,
-                    'actorRole',CAST(? AS text))
-            FROM gcmb.branch b LEFT JOIN gcmb.branch_manager_assignment a ON a.branch_id=b.id
-            WHERE (b.id=? OR a.user_id=?) AND a.user_id IS DISTINCT FROM
-                CASE WHEN b.id=? THEN CAST(? AS uuid) ELSE NULL END
-            """, actorId, branchId, userId, actorRole, branchId, userId, branchId, userId);
-        // Xóa phạm vi dự phòng cũ để quản lý bị thay không còn quyền vào cơ sở cũ.
-        db.update("""
-            UPDATE gcmb.user_account SET branch_id=NULL WHERE id IN
-                (SELECT user_id FROM gcmb.branch_manager_assignment WHERE branch_id=? OR user_id=?)
-                OR (branch_id=? AND role_id=(SELECT id FROM gcmb.role WHERE code='BRANCH_MANAGER'))
-            """, branchId, userId, branchId);
-        db.update("""
-            UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id=? OR id IN
-                (SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?)
-            """, branchId, userId);
-        db.update("DELETE FROM gcmb.branch_manager_assignment WHERE branch_id=? OR user_id=?", branchId, userId);
+        // Thêm phân công, giữ nguyên các cơ sở người này đang quản lý.
+        db.update("UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id=?", branchId);
         db.update("INSERT INTO gcmb.branch_manager_assignment(branch_id,user_id,assigned_by) VALUES(?,?,?)",
             branchId, userId, actorId);
-        db.update("UPDATE gcmb.user_account SET branch_id=? WHERE id=?", branchId, userId);
+        db.update("UPDATE gcmb.user_account SET branch_id=COALESCE(branch_id,?) WHERE id=?", branchId, userId);
+        db.update("""
+            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
+            SELECT ?,b.id,'ASSIGN_BRANCH_MANAGER','BRANCH',b.id,
+                jsonb_build_object('name',b.name,'managerId',CAST(? AS uuid),'actorRole',CAST(? AS text))
+            FROM gcmb.branch b WHERE b.id=?
+            """, actorId, userId, actorRole, branchId);
         return get(branchId);
+    }
+
+    @Transactional
+    public void replaceAccountManagers(UUID userId, List<UUID> branchIds, UUID actorId) {
+        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        String actorRole = db.queryForObject("SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?", String.class, actorId);
+        for (UUID branchId : branchIds) assign(branchId, userId, actorId, actorRole);
+        var current = db.queryForList("SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?", UUID.class, userId);
+        for (UUID branchId : current) {
+            if (branchIds.contains(branchId)) continue;
+            db.update("""
+                INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
+                SELECT ?,id,'UNASSIGN_BRANCH_MANAGER','BRANCH',id,
+                    jsonb_build_object('name',name,'managerId',CAST(? AS uuid)),
+                    jsonb_build_object('name',name,'actorRole',CAST(? AS text)) FROM gcmb.branch WHERE id=?
+                """, actorId, userId, actorRole, branchId);
+            db.update("DELETE FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?", userId, branchId);
+            db.update("UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id=?", branchId);
+        }
     }
 
     // Hai màn tài khoản và cơ sở dùng chung một luồng phân công trong cùng giao dịch.

@@ -8,6 +8,7 @@ import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
+import BookingDepositQr from '../components/BookingDepositQr';
 import BookingEditDialog from './BookingEditDialog';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
@@ -283,8 +284,9 @@ export function AppShell({
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 // Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
-function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow }) {
+function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel, onNoShow, onDepositClose }) {
   const navigate = useNavigate();
+  const [qrBookingId, setQrBookingId] = useState(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -313,6 +315,8 @@ function BookingDetails({ booking, detail, timezone, onCheckIn, onEdit, onCancel
         <div><span>Tiền cọc đã nhận</span><strong>{formatVnd(depositReceived)}</strong></div>
         <div><span className="booking-deposit-status">{depositStatus}</span>{depositDisposition && <small>{depositDisposition}</small>}</div>
       </section>
+      {canCheckIn && depositReceived === 0 && <button type="button" className="booking-button booking-button-secondary" onClick={() => setQrBookingId(booking.id)}>QR cọc 30%</button>}
+      {qrBookingId === booking.id && <BookingDepositQr bookingId={booking.id} onBack={() => { setQrBookingId(null); onDepositClose(); }} />}
       <div className="booking-detail-divider" />
       <dl className="booking-detail-list">
         <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
@@ -691,7 +695,6 @@ export default function BookingManagementPage() {
     setBusy(true);
     try {
       const result = await bookingApi.create(payload);
-      clearBookingDraft(user);
       const booking = result.booking;
       setSelectedDate(toLocalDateInput(new Date(booking.plannedStart)));
       setSelectedId(booking.id);
@@ -700,6 +703,12 @@ export default function BookingManagementPage() {
       setSearch('');
       setReload((value) => value + 1);
       const requestedDeposit = Number(payload.depositAmount || 0);
+      if (requestedDeposit > 0 && payload.paymentMethod === 'BANK_TRANSFER') {
+        setNoticeKind('success');
+        setNotice(`Đã tạo booking ${booking.code}; đang chờ chuyển khoản cọc.`);
+        return { ok: true, booking };
+      }
+      clearBookingDraft(user);
       const recordedDeposit = Number(result.deposit?.balance ?? booking.depositBalance ?? 0);
       if (requestedDeposit > 0 && recordedDeposit < requestedDeposit) {
         setNoticeKind('warning');
@@ -849,7 +858,7 @@ export default function BookingManagementPage() {
         {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
         </div>
       </section>
-      <BookingDetails booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
+      <BookingDetails onDepositClose={() => setReload((value) => value + 1)} booking={selected} detail={detail} timezone={timezone} onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit} onCancel={(booking) => { setCancelError(''); setCancelTarget(booking); }} onNoShow={(booking) => { setNoShowError(''); setNoShowTarget(booking); }} />
     </div>
   </>;
 

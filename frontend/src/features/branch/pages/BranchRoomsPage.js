@@ -6,7 +6,7 @@
  * Description: Màn hình xem, thêm, sửa, xóa phòng và cập nhật trạng thái.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { branchRoomApi } from '../services/branchRoomApi';
 import './branch-rooms.css';
 
@@ -18,13 +18,14 @@ const displayError=(e)=>e.response?.data?.message||e.response?.data?.detail||e.m
 const formatReady=(v)=>v?new Date(v).toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short'}):'Chưa có';
 
 export default function BranchRoomsPage({user,search:sharedSearch,onSearchChange}){
+ const roomApi=useMemo(()=>branchRoomApi.forBranch(user.branchId),[user.branchId]);
  const [rooms,setRooms]=useState([]),[types,setTypes]=useState([]),[selected,setSelected]=useState(null),[localSearch,setLocalSearch]=useState(''),[floor,setFloor]=useState('all'),[type,setType]=useState('all'),[page,setPage]=useState(1),[calendarMode,setCalendarMode]=useState(false),[listMode,setListMode]=useState(false);
  const search=sharedSearch??localSearch;
  const setSearch=onSearchChange??setLocalSearch;
  const [drawer,setDrawer]=useState(false),[editing,setEditing]=useState(null),[form,setForm]=useState(blank),[statusOpen,setStatusOpen]=useState(false),[statusForm,setStatusForm]=useState({status:'AVAILABLE',reason:'',expectedReadyAt:''});
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null),[error,setError]=useState('');
- const reload=async()=>{const [r,t]=await Promise.all([branchRoomApi.rooms(),branchRoomApi.types()]);setRooms(r);setTypes(t);setSelected(cur=>cur?r.find(x=>x.id===cur.id)||null:r.find(x=>x.code==='P.402')||r[0]||null)};
- useEffect(()=>{reload().catch(e=>setError(displayError(e)))},[]);
+ const reload=useCallback(async()=>{const [r,t]=await Promise.all([roomApi.rooms(),roomApi.types()]);setRooms(r);setTypes(t);setSelected(cur=>cur?r.find(x=>x.id===cur.id)||null:r.find(x=>x.code==='P.402')||r[0]||null)},[roomApi]);
+ useEffect(()=>{reload().catch(e=>setError(displayError(e)))},[reload]);
  useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(null),3500);return()=>clearTimeout(timer)},[toast]);
  const floors=useMemo(()=>[...new Set(rooms.map(r=>r.floorNumber))].sort((a,b)=>a-b),[rooms]);
  const visible=rooms.filter(r=>(floor==='all'||String(r.floorNumber)===floor)&&(type==='all'||r.roomTypeId===type)&&`${r.code} ${r.name}`.toLowerCase().includes(search.toLowerCase()));
@@ -34,10 +35,10 @@ export default function BranchRoomsPage({user,search:sharedSearch,onSearchChange
  const counts=rooms.reduce((acc,r)=>{acc[r.operatingStatus]=(acc[r.operatingStatus]||0)+1;acc[r.bookingStatus]=(acc[r.bookingStatus]||0)+1;return acc;},{});
  const openCreate=()=>{setEditing(null);setForm({...blank,roomTypeId:types[0]?.roomTypeId||''});setDrawer(true)};
  const openEdit=()=>{if(!selected)return;setEditing(selected);setForm({code:selected.code,name:selected.name,floorNumber:selected.floorNumber,roomTypeId:selected.roomTypeId,capacity:selected.capacity,description:selected.description||''});setDrawer(true)};
- const save=async(e)=>{e.preventDefault();setBusy(true);setError('');try{const body={...form,floorNumber:Number(form.floorNumber),capacity:Number(form.capacity)};const saved=editing?await branchRoomApi.update(editing.id,body):await branchRoomApi.create(body);await reload();setSelected(saved);setDrawer(false);setToast(editing?'Cập nhật phòng thành công':'Thêm phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
- const remove=async()=>{if(!selected||!window.confirm(`Xóa phòng ${selected.code} · ${selected.name}?`))return;setBusy(true);try{await branchRoomApi.remove(selected.id);setSelected(null);await reload();setToast('Xóa phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
+ const save=async(e)=>{e.preventDefault();setBusy(true);setError('');try{const body={...form,floorNumber:Number(form.floorNumber),capacity:Number(form.capacity)};const saved=editing?await roomApi.update(editing.id,body):await roomApi.create(body);await reload();setSelected(saved);setDrawer(false);setToast(editing?'Cập nhật phòng thành công':'Thêm phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
+ const remove=async()=>{if(!selected||!window.confirm(`Xóa phòng ${selected.code} · ${selected.name}?`))return;setBusy(true);try{await roomApi.remove(selected.id);setSelected(null);await reload();setToast('Xóa phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
  const openStatus=()=>{setStatusForm({status:selected.operatingStatus,reason:'',expectedReadyAt:selected.expectedReadyAt?new Date(selected.expectedReadyAt).toISOString().slice(0,16):''});setStatusOpen(true)};
- const saveStatus=async(e)=>{e.preventDefault();setBusy(true);try{const updated=await branchRoomApi.updateStatus(selected.id,{...statusForm,expectedReadyAt:statusForm.expectedReadyAt?new Date(statusForm.expectedReadyAt).toISOString():null});setSelected(updated);await reload();setStatusOpen(false);setToast('Cập nhật trạng thái phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
+ const saveStatus=async(e)=>{e.preventDefault();setBusy(true);try{const updated=await roomApi.updateStatus(selected.id,{...statusForm,expectedReadyAt:statusForm.expectedReadyAt?new Date(statusForm.expectedReadyAt).toISOString():null});setSelected(updated);await reload();setStatusOpen(false);setToast('Cập nhật trạng thái phòng thành công')}catch(e){setError(displayError(e))}finally{setBusy(false)}};
  return <div className="branch-rooms">
   <div className="br-breadcrumb">Quản lý cơ sở <span>/</span> Phòng</div>
   <header className="br-heading"><div><h1>Phòng &amp; trạng thái</h1><p>Cơ sở {user.branchName||'được phân quyền'} · Quản lý phòng và tình trạng vận hành</p></div><button className="br-primary" onClick={openCreate}>＋ Thêm phòng</button></header>

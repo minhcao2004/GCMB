@@ -61,8 +61,10 @@ public class MutationAudit {
         // Table identifiers only come from TABLES; snapshot columns are an explicit allowlist.
         String table = TABLES.get(type);
         db.queryForList("SELECT id FROM gcmb." + table + " WHERE id=? FOR UPDATE", UUID.class, id);
-        String extra = "BRANCH".equals(type) ? " || jsonb_build_object('branch_id',t.id,'managerId',"
-            + "(SELECT user_id FROM gcmb.branch_manager_assignment WHERE branch_id=t.id))" : "";
+        String extra = "BRANCH".equals(type) ? " || jsonb_build_object('branch_id',t.id,'managerNames',"
+            + "(SELECT string_agg(COALESCE(e.full_name,u.username), ', ' ORDER BY u.username)"
+            + " FROM gcmb.branch_manager_assignment a JOIN gcmb.user_account u ON u.id=a.user_id"
+            + " LEFT JOIN gcmb.employee e ON e.user_id=u.id WHERE a.branch_id=t.id))" : "";
         if ("BOOKING".equals(type)) extra = " || jsonb_build_object('event',"
             + "(SELECT jsonb_build_object('type',event_type,'reason',reason,'details',details)"
             + " FROM gcmb.booking_event WHERE booking_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1))";

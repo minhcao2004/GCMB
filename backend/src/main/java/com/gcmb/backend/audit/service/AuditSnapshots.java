@@ -22,7 +22,7 @@ public final class AuditSnapshots {
         "minute_to","weekdays","day_kind","specific_date","hourly_price","overtime_hourly_price",
         "billing_step_minutes","priority","price","duration_minutes","deposit_required","day_group",
         "min_guests","included_description","contact_name","contact_phone","guest_count","planned_start",
-        "planned_end","actual_checkin","actual_checkout","note","channel","pricing_mode","managerId",
+        "planned_end","actual_checkin","actual_checkout","note","channel","pricing_mode","managerId","managerNames",
         "combos","priceRules","event","type","reason","details","previousRoomId","previousRoomCode","roomId","roomCode",
         "changeCause","changedAt","plannedEnd","previousAmount","updatedAmount","adjustmentAmount",
         "usedSegmentAmount","nextSegmentAmount","pricingMode","comboId","hours","startsAt","endsAt",

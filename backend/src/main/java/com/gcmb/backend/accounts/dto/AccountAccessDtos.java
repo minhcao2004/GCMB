@@ -8,12 +8,14 @@
 package com.gcmb.backend.accounts.dto;
 
 import java.util.UUID;
+import java.util.List;
 
 public final class AccountAccessDtos {
     private AccountAccessDtos() {
     }
 
-    public record SetRole(String role, UUID branchId) {
+    public record SetRole(String role, UUID branchId, List<UUID> branchIds) {
+        public SetRole(String role, UUID branchId) { this(role, branchId, null); }
     }
 
     public record Deactivate(String reason) {
