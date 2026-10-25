@@ -46,6 +46,62 @@ public class CheckoutService {
         this.json = json;
     }
 
+    @Transactional
+    public Map<String, Object> depositPayment(Identity actor, UUID bookingId, boolean create) {
+        UUID branchId = branch(actor);
+        lockBooking(bookingId, branchId);
+        var booking = repository.booking(bookingId, branchId);
+        BigDecimal received = repository.depositReceivedAmount(bookingId);
+        BigDecimal amount = BookingPricingService.depositFor(repository.activeChargeTotal(bookingId));
+        var result = new LinkedHashMap<String, Object>();
+        result.put("bookingId", bookingId);
+        result.put("bookingCode", booking.code());
+        result.put("amount", amount);
+        result.put("receivedAmount", received);
+        if (received.signum() > 0) {
+            result.put("status", "SETTLED");
+            return result;
+        }
+        if (!"CONFIRMED".equals(booking.status())) throw fail(409, "Chỉ tạo QR cọc cho booking đang xác nhận và chưa sử dụng.");
+        var requests = db.queryForList("""
+            SELECT * FROM gcmb.payment_request WHERE booking_id=? AND purpose='DEPOSIT'
+                AND status IN ('PENDING','EXPIRED') ORDER BY created_at DESC,id DESC LIMIT 1
+            """, bookingId);
+        var request = requests.isEmpty() ? null : requests.get(0);
+        boolean reusable = request != null && "PENDING".equals(request.get("status"))
+            && ((BigDecimal) request.get("expected_amount")).compareTo(amount) == 0
+            && ((Timestamp) request.get("expires_at")).toInstant().isAfter(Instant.now());
+        if (create && !reusable) {
+            if (!sepay.ready()) throw fail(503, "Chưa cấu hình ngân hàng và khóa webhook SePay trong backend/.env.");
+            if (amount.signum() <= 0) throw fail(400, "Giá booking phải lớn hơn 0 để tạo QR cọc.");
+            db.update("UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')", bookingId);
+            UUID account = bankAccount();
+            String reference = "GZ" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
+            request = db.queryForMap("""
+                INSERT INTO gcmb.payment_request(branch_id,booking_id,account_id,purpose,reference_code,expected_amount,expires_at,status)
+                VALUES (?,?,?,'DEPOSIT',?,?,CURRENT_TIMESTAMP+interval '30 minutes','PENDING') RETURNING *
+                """, branchId, bookingId, account, reference, amount);
+            audit(actor.id(), branchId, bookingId, "PLAN_DEPOSIT_PAYMENT", Map.of("amount", amount));
+        }
+        if (request == null) {
+            result.put("status", "NONE");
+            return result;
+        }
+        var account = db.queryForMap("SELECT bank_name,bank_account_number,account_holder FROM gcmb.financial_account WHERE id=?", request.get("account_id"));
+        boolean expired = !((Timestamp) request.get("expires_at")).toInstant().isAfter(Instant.now())
+            || ((BigDecimal) request.get("expected_amount")).compareTo(amount) != 0;
+        result.put("status", expired ? "EXPIRED" : request.get("status"));
+        result.put("amount", request.get("expected_amount"));
+        result.put("expiresAt", ((Timestamp) request.get("expires_at")).toInstant());
+        result.put("reference", request.get("reference_code"));
+        result.put("bank", account.get("bank_name"));
+        result.put("account", account.get("bank_account_number"));
+        result.put("holder", account.get("account_holder"));
+        if (!expired) result.put("qrUrl", "https://qr.sepay.vn/img?acc=" + encode(result.get("account"))
+            + "&bank=" + encode(result.get("bank")) + "&amount=" + result.get("amount") + "&des=" + encode(result.get("reference")));
+        return result;
+    }
+
     public Map<String, Object> preview(Identity actor, UUID bookingId) {
         UUID branch = branch(actor);
         var booking = repository.booking(bookingId, branch);
@@ -304,12 +360,12 @@ public class CheckoutService {
         String content = payload.content() == null ? "" : payload.content();
         var found = Pattern.compile("(?i)(?<![A-Z0-9])GZ[A-F0-9]{20}(?![A-Z0-9])").matcher(content);
         String reference = payload.code() != null && payload.code().matches("(?i)GZ[A-F0-9]{20}") ? payload.code().toUpperCase() : found.find() ? found.group().toUpperCase() : "";
-        var requests = db.queryForList("SELECT * FROM gcmb.payment_request WHERE reference_code=? AND purpose='BILL'", reference);
+        var requests = db.queryForList("SELECT * FROM gcmb.payment_request WHERE reference_code=? AND purpose IN ('BILL','DEPOSIT')", reference);
         if (!requests.isEmpty()) {
             var request = requests.get(0);
             // Cùng thứ tự khóa với thu tiền mặt/hoàn tất để tránh race và deadlock.
             lockBooking((UUID) request.get("booking_id"), (UUID) request.get("branch_id"));
-            db.queryForList("SELECT id FROM gcmb.bill WHERE id=? FOR UPDATE", request.get("bill_id"));
+            if ("BILL".equals(request.get("purpose"))) db.queryForList("SELECT id FROM gcmb.bill WHERE id=? FOR UPDATE", request.get("bill_id"));
         }
         Instant occurred;
         try { occurred = LocalDateTime.parse(payload.transactionDate(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(); }
@@ -328,17 +384,34 @@ public class CheckoutService {
             && payload.transferAmount().compareTo((BigDecimal) request.get("expected_amount")) == 0
             && !occurred.isBefore(((Timestamp) request.get("created_at")).toInstant().minusSeconds(2))
             && !occurred.isAfter(((Timestamp) request.get("expires_at")).toInstant());
+        boolean deposit = "DEPOSIT".equals(request.get("purpose"));
+        if (deposit) {
+            var booking = repository.booking((UUID) request.get("booking_id"), (UUID) request.get("branch_id"));
+            matches = matches && booking != null && "CONFIRMED".equals(booking.status())
+                && repository.depositReceivedAmount(booking.id()).signum() == 0
+                && BookingPricingService.depositFor(repository.activeChargeTotal(booking.id()))
+                    .compareTo((BigDecimal) request.get("expected_amount")) == 0;
+        }
         if (!matches) {
             db.update("UPDATE gcmb.bank_transaction SET match_status='EXCEPTION' WHERE id=?", transaction);
             return;
         }
+        UUID paymentId = UUID.randomUUID();
         db.update("""
-            INSERT INTO gcmb.payment(branch_id,booking_id,bill_id,purpose,method,amount,request_id,bank_transaction_id,received_at,idempotency_key)
-            VALUES (?,?,?,'BILL','BANK_TRANSFER',?,?,?, ?,?)
-            """, request.get("branch_id"), request.get("booking_id"), request.get("bill_id"), payload.transferAmount(), request.get("id"), transaction,
+            INSERT INTO gcmb.payment(id,branch_id,booking_id,bill_id,purpose,method,amount,request_id,bank_transaction_id,received_at,idempotency_key)
+            VALUES (?,?,?,?,?,'BANK_TRANSFER',?,?,?, ?,?)
+            """, paymentId, request.get("branch_id"), request.get("booking_id"), request.get("bill_id"), request.get("purpose"), payload.transferAmount(), request.get("id"), transaction,
             Timestamp.from(occurred), "SEPAY-" + payload.id());
-        audit(null, (UUID) request.get("branch_id"), (UUID) request.get("booking_id"), "CONFIRM_SEPAY_PAYMENT",
-            Map.of("billId", request.get("bill_id"), "amount", payload.transferAmount()));
+        if (deposit) {
+            repository.createDepositAccount((UUID) request.get("booking_id"));
+            db.update("""
+                INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,payment_id,reason,idempotency_key)
+                SELECT id,'RECEIVE',?,?,'SePay xác nhận tiền cọc',? FROM gcmb.deposit WHERE booking_id=?
+                """, payload.transferAmount(), paymentId, "SEPAY-DEPOSIT-" + payload.id(), request.get("booking_id"));
+        }
+        audit(null, (UUID) request.get("branch_id"), (UUID) request.get("booking_id"),
+            deposit ? "CONFIRM_SEPAY_DEPOSIT" : "CONFIRM_SEPAY_PAYMENT",
+            deposit ? Map.of("amount", payload.transferAmount()) : Map.of("billId", request.get("bill_id"), "amount", payload.transferAmount()));
     }
 
     private boolean hasPendingRefund(UUID bookingId) {

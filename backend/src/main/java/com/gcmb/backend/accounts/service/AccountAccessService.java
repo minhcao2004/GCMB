@@ -57,18 +57,31 @@ public class AccountAccessService {
             throw new AuthFailure(400, "role", "Vui lòng chọn vai trò hợp lệ");
         }
         boolean chain = List.of("HEAD_OFFICE_MANAGER", "ACCOUNTANT").contains(input.role());
+        if (input.branchIds() != null && !"BRANCH_MANAGER".equals(input.role())) {
+            throw new AuthFailure(400, "branchIds", "Chỉ quản lý cơ sở được phân công nhiều cơ sở");
+        }
+        List<UUID> managed = input.branchIds();
+        if (managed != null && (managed.isEmpty() || managed.stream().anyMatch(Objects::isNull)
+                || managed.stream().distinct().count() != managed.size())) {
+            throw new AuthFailure(400, "branchIds", "Chọn ít nhất một cơ sở, không chọn trùng");
+        }
+        UUID primaryBranch = managed == null ? input.branchId() : managed.get(0);
         if (chain && input.branchId() != null) {
             throw new AuthFailure(400, "branchId", "Vai trò này có phạm vi toàn chuỗi");
         }
-        if (!chain && (input.branchId() == null || !accounts.activeBranch(input.branchId()))) {
+        if (!chain && (primaryBranch == null || !accounts.activeBranch(primaryBranch))) {
             throw new AuthFailure(400, "branchId", "Vui lòng chọn cơ sở đang hoạt động");
+        }
+        if (managed != null) for (UUID branch : managed) {
+            if (!accounts.activeBranch(branch)) throw new AuthFailure(400, "branchIds", "Chỉ chọn các cơ sở đang hoạt động");
         }
         if (!"BRANCH_MANAGER".equals(input.role()) && before.role().equals(input.role())
                 && Objects.equals(before.branchId(), input.branchId())) {
             return before;
         }
-        access.setRole(id, roleId, input.branchId());
-        branches.syncAccountManager(id, actor);
+        access.setRole(id, roleId, primaryBranch);
+        if (managed == null) branches.syncAccountManager(id, actor);
+        else branches.replaceAccountManagers(id, managed, actor);
         // Buộc đăng nhập lại để phiên cũ không tiếp tục sử dụng phạm vi quyền trước đó.
         access.revokeTokens(id);
         AccountView after = accounts.find(id);

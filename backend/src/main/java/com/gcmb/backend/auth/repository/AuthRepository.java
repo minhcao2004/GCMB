@@ -38,13 +38,16 @@ public class AuthRepository {
 String sql = """
     SELECT u.id, u.username, u.email, u.password_hash, u.status,
            r.code AS role,
-           COALESCE(bma.branch_id, u.branch_id) AS branch_id,
+           CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END AS branch_id,
            b.name AS branch_name
     FROM gcmb.user_account u
     JOIN gcmb.role r ON r.id = u.role_id
-    LEFT JOIN gcmb.branch_manager_assignment bma
-           ON bma.user_id = u.id AND r.code = 'BRANCH_MANAGER'
-    LEFT JOIN gcmb.branch b ON b.id = COALESCE(bma.branch_id, u.branch_id)
+    LEFT JOIN LATERAL (
+        SELECT a.branch_id FROM gcmb.branch_manager_assignment a JOIN gcmb.branch mb ON mb.id=a.branch_id
+        WHERE a.user_id=u.id AND r.code='BRANCH_MANAGER' AND mb.status='ACTIVE'
+        ORDER BY (a.branch_id=u.branch_id) DESC NULLS LAST,mb.name,mb.id LIMIT 1
+    ) bma ON TRUE
+    LEFT JOIN gcmb.branch b ON b.id = CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END
     WHERE lower(u.%s) = lower(?)
     FOR UPDATE OF u
     """.formatted(column);
@@ -93,15 +96,44 @@ List<Account> result = db.query(sql, AuthMapper::account, value);
     // Đọc danh tính qua hash token nếu tài khoản và phiên còn hiệu lực.
     public Identity findSession(String tokenHash) {
         List<Identity> users = db.query("""
-            SELECT u.id, u.username, r.code, COALESCE(bma.branch_id, u.branch_id) AS branch_id, b.name AS branch_name FROM gcmb.auth_token t
+            SELECT u.id, u.username, r.code, CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END AS branch_id, b.name AS branch_name FROM gcmb.auth_token t
             JOIN gcmb.user_account u ON u.id=t.user_id JOIN gcmb.role r ON r.id=u.role_id
-            LEFT JOIN gcmb.branch_manager_assignment bma ON bma.user_id=u.id AND r.code='BRANCH_MANAGER'
-            LEFT JOIN gcmb.branch b ON b.id=COALESCE(bma.branch_id, u.branch_id)
+            LEFT JOIN LATERAL (
+                SELECT a.branch_id FROM gcmb.branch_manager_assignment a JOIN gcmb.branch mb ON mb.id=a.branch_id
+                WHERE a.user_id=u.id AND r.code='BRANCH_MANAGER' AND mb.status='ACTIVE'
+                ORDER BY (a.branch_id=t.selected_branch_id) DESC NULLS LAST,
+                    (a.branch_id=u.branch_id) DESC NULLS LAST,mb.name,mb.id LIMIT 1
+            ) bma ON TRUE
+            LEFT JOIN gcmb.branch b ON b.id=CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END
             WHERE t.token_hash=? AND t.kind='SESSION' AND t.revoked_at IS NULL AND t.expires_at>CURRENT_TIMESTAMP AND u.status='ACTIVE'
-              AND (r.code <> 'BRANCH_MANAGER' OR COALESCE(bma.branch_id, u.branch_id) IS NOT NULL)
+              AND (r.code <> 'BRANCH_MANAGER' OR bma.branch_id IS NOT NULL)
             """, AuthMapper::identity, tokenHash);
         return users.isEmpty() ? null : users.get(0);
     }
+    public List<java.util.Map<String, Object>> managedBranches(UUID userId) {
+        return db.queryForList("""
+            SELECT b.id,b.name FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id
+            WHERE a.user_id=? AND b.status='ACTIVE' ORDER BY b.name,b.id
+            """, userId);
+    }
+
+    public String managedBranchName(UUID userId, UUID branchId) {
+        var names = db.queryForList("""
+            SELECT b.name FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id
+            WHERE a.user_id=? AND a.branch_id=? AND b.status='ACTIVE'
+            """, String.class, userId, branchId);
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    public boolean selectBranch(UUID userId, String tokenHash, UUID branchId) {
+        return db.update("""
+            UPDATE gcmb.auth_token t SET selected_branch_id=? WHERE t.user_id=? AND t.token_hash=?
+                AND t.kind='SESSION' AND t.revoked_at IS NULL AND t.expires_at>CURRENT_TIMESTAMP
+                AND EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id
+                    WHERE a.user_id=t.user_id AND a.branch_id=? AND b.status='ACTIVE')
+            """, branchId, userId, tokenHash, branchId) == 1;
+    }
+
     // Thu hồi một phiên khi đăng xuất.
     public void revokeSession(String tokenHash) {
         db.update("UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=? AND kind='SESSION'", tokenHash);

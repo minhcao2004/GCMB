@@ -24,6 +24,9 @@ import com.gcmb.backend.auth.service.AuthValidation;
 import com.gcmb.backend.auth.exception.AuthFailure;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -126,6 +129,38 @@ public class AuthService {
     public Identity authenticate(String token) {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) return null;
         return repository.findSession(AuthCrypto.hash(token));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> managedBranches(Identity identity) {
+        requireManager(identity);
+        return repository.managedBranches(identity.id());
+    }
+
+    @Transactional
+    public Identity switchBranch(Identity identity, String token, UUID branchId) {
+        requireManager(identity);
+        if (branchId == null) throw new AuthFailure(400, "branchId", "Chọn cơ sở đang quản lý");
+        String tokenHash = AuthCrypto.hash(token);
+        if (!repository.selectBranch(identity.id(), tokenHash, branchId))
+            throw new AuthFailure(403, "branchId", "Bạn không được quản lý cơ sở này hoặc cơ sở đã ngừng hoạt động");
+        return repository.findSession(tokenHash);
+    }
+
+    @Transactional(readOnly = true)
+    public Identity forBranch(Identity identity, String branch) {
+        requireManager(identity);
+        UUID branchId;
+        try { branchId = UUID.fromString(branch); }
+        catch (IllegalArgumentException e) { throw new AuthFailure(400, "branchId", "Cơ sở không hợp lệ"); }
+        String name = repository.managedBranchName(identity.id(), branchId);
+        if (name == null) throw new AuthFailure(403, "branchId", "Bạn không còn quyền tại cơ sở đang chọn");
+        return new Identity(identity.id(), identity.username(), identity.role(), identity.destination(), branchId, name);
+    }
+
+    private static void requireManager(Identity identity) {
+        if (identity == null || !"BRANCH_MANAGER".equals(identity.role()))
+            throw new AuthFailure(403, "form", "Chỉ quản lý cơ sở được chọn cơ sở làm việc");
     }
     // Thu hồi phiên hiện tại nếu request có token.
     public void logout(String token) {

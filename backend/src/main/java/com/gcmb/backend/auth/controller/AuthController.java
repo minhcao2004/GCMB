@@ -66,6 +66,16 @@ public class AuthController {
 
     // Trả danh tính đã được bộ lọc phiên xác thực.
     @GetMapping("/me") public Identity me(@AuthenticationPrincipal Identity identity) { return identity; }
+    @GetMapping("/branches")
+    public java.util.List<Map<String, Object>> branches(@AuthenticationPrincipal Identity identity) {
+        return auth.managedBranches(identity);
+    }
+    public record SelectBranch(java.util.UUID branchId) {}
+    @PostMapping("/branch")
+    public Identity selectBranch(@AuthenticationPrincipal Identity identity,
+            @RequestBody SelectBranch body, HttpServletRequest request) {
+        return auth.switchBranch(identity, SessionFilter.token(request), body == null ? null : body.branchId());
+    }
     // Thu hồi token phía server và xóa cookie phía trình duyệt.
     @PostMapping("/logout") public Map<String, String> logout(HttpServletRequest request, HttpServletResponse response) {
         auth.logout(SessionFilter.token(request)); cookie(response, "", 0); return Map.of("message", "Đã đăng xuất");

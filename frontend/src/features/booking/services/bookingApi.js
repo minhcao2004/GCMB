@@ -39,6 +39,8 @@ export const bookingApi = {
   editOptions: async (id, params) => (await api.get(`/reception/bookings/${id}/edit-options`, { params })).data,
   // Mọi lệnh ghi đều đi qua mutate để gắn token CSRF mới.
   create: (body) => mutate('post', '/reception/bookings', body),
+  planDeposit: (id) => mutate('post', `/reception/bookings/${id}/deposit-payment`, {}),
+  depositPayment: async (id) => (await api.get(`/reception/bookings/${id}/deposit-payment`)).data,
   update: (id, body) => mutate('patch', `/reception/bookings/${id}`, body),
   checkIn: (id) => mutate('post', `/reception/bookings/${id}/check-in`, {}),
   changeRoom: (id, body) => mutate('post', `/reception/bookings/${id}/change-room`, body),

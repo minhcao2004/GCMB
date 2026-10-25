@@ -32,7 +32,10 @@ public class AccountRepository {
     private static final String BRANCH = "CASE WHEN r.code IN ('HEAD_OFFICE_MANAGER','ACCOUNTANT') THEN NULL ELSE b.id END";
     private static final String SELECT = "SELECT u.id, COALESCE(e.full_name,u.username) AS employee_name, e.code AS employee_code, "
             + "u.username,u.email,r.code AS role," + BRANCH + " AS branch_id, CASE WHEN r.code IN ('HEAD_OFFICE_MANAGER','ACCOUNTANT') THEN 'Toàn chuỗi' ELSE "
-            + "COALESCE(b.name,'Chưa phân công') END AS branch_name,u.status " + JOINS;
+            + "COALESCE(CASE WHEN r.code='BRANCH_MANAGER' THEN "
+            + "(SELECT string_agg(mb.name, ', ' ORDER BY mb.name,mb.id) FROM gcmb.branch_manager_assignment ma "
+            + "JOIN gcmb.branch mb ON mb.id=ma.branch_id WHERE ma.user_id=u.id) ELSE b.name END,'Chưa phân công') END AS branch_name,u.status, "
+            + "ARRAY(SELECT ma.branch_id FROM gcmb.branch_manager_assignment ma WHERE ma.user_id=u.id ORDER BY ma.branch_id) AS managed_branch_ids " + JOINS;
 
     private static AccountView row(java.sql.ResultSet rs, int index) throws java.sql.SQLException {
         return new AccountView(
@@ -44,7 +47,8 @@ public class AccountRepository {
             rs.getString("role"),
             rs.getObject("branch_id", UUID.class),
             rs.getString("branch_name"),
-            rs.getString("status")
+            rs.getString("status"),
+            java.util.Arrays.asList((UUID[]) rs.getArray("managed_branch_ids").getArray())
         );
     }
 
@@ -53,7 +57,8 @@ public class AccountRepository {
                 + "COALESCE(e.full_name,'')),lower(?))>0) AND (?='' OR r.code=?) AND (?='' OR u.status=?)";
         var args = new java.util.ArrayList<Object>(List.of(q, role, role, status, status));
         if (branch != null) {
-            where += " AND " + BRANCH + "=?";
+            where += " AND (CASE WHEN r.code='BRANCH_MANAGER' THEN EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment ma WHERE ma.user_id=u.id AND ma.branch_id=?) ELSE " + BRANCH + "=? END)";
+            args.add(branch);
             args.add(branch);
         }
         long total = Objects.requireNonNull(

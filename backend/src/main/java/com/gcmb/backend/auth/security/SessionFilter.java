@@ -11,6 +11,7 @@ package com.gcmb.backend.auth.security;
 import com.gcmb.backend.auth.dto.Identity;
 
 import com.gcmb.backend.auth.service.AuthService;
+import com.gcmb.backend.auth.exception.AuthFailure;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -36,7 +37,15 @@ public class SessionFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         try {
             Identity identity = auth.authenticate(token(request));
+            String branch = request.getHeader("X-GCMB-Branch-Id");
+            if (identity != null && "BRANCH_MANAGER".equals(identity.role()) && branch != null
+                    && request.getServletPath().startsWith("/api/v1/branch-management/")) {
+                identity = auth.forBranch(identity, branch);
+            }
             if (identity != null) SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(identity, null, List.of(new SimpleGrantedAuthority("ROLE_" + identity.role()))));
+        } catch (AuthFailure e) {
+            response.setStatus(e.status()); response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"message\":\"Cơ sở đang chọn không hợp lệ hoặc bạn không còn quyền quản lý. Vui lòng chọn lại cơ sở.\"}"); return;
         } catch (Exception e) {
             response.setStatus(503); response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"message\":\"Không thể kiểm tra phiên đăng nhập. Vui lòng thử lại\"}"); return;

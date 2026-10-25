@@ -27,6 +27,16 @@ public class CheckoutController {
         return service.list(actor);
     }
 
+    @PostMapping("/api/v1/reception/bookings/{id}/deposit-payment")
+    public Map<String, Object> planDeposit(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
+        return service.depositPayment(actor, id, true);
+    }
+
+    @GetMapping("/api/v1/reception/bookings/{id}/deposit-payment")
+    public Map<String, Object> depositPayment(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
+        return service.depositPayment(actor, id, false);
+    }
+
     @GetMapping("/api/v1/reception/bookings/{id}/checkout")
     public Map<String, Object> preview(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
         return service.preview(actor, id);
