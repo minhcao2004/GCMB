@@ -35,6 +35,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [inspected, setInspected] = useState(false);
+  const [overtimeConfirmed, setOvertimeConfirmed] = useState(false);
   const [inspectionNote, setInspectionNote] = useState('');
   const [fees, setFees] = useState([]);
   const [method, setMethod] = useState('CASH');
@@ -44,6 +45,7 @@ export default function CheckoutPage() {
     setData(null);
     setError('');
     setInspected(false);
+    setOvertimeConfirmed(false);
     setFees([]);
     setInspectionNote('');
     authApi.me().then(async identity => {
@@ -106,14 +108,25 @@ export default function CheckoutPage() {
       return;
     }
     run(async () => {
-      const result = await api.issue(bookingId, {
-        inspected,
-        inspectionNote,
-        surcharges: fees.map(fee => ({
-          reason: fee.reason,
-          amount: Number(fee.amount)
-        }))
-      });
+      let result;
+      try {
+        result = await api.issue(bookingId, {
+          inspected,
+          inspectionNote,
+          overtimeConfirmed,
+          overtimeAmount: data.overtimeAmount,
+          surcharges: fees.map(fee => ({
+            reason: fee.reason,
+            amount: Number(fee.amount)
+          }))
+        });
+      } catch (failure) {
+        if (failure.response?.status === 409) {
+          setOvertimeConfirmed(false);
+          try { setData(await api.preview(bookingId)); } catch { /* Giữ lỗi lập bill để lễ tân biết cần xử lý. */ }
+        }
+        throw failure;
+      }
       navigate(`/le-tan/bills/${result.id}`);
     });
   }
@@ -201,10 +214,25 @@ export default function CheckoutPage() {
             <h2>1 Tiền phòng</h2>
             <div className="co-time-grid">
               <Info label="Check-in" value={dateTime(data.checkin)} />
+              <Info label="Giờ trả dự kiến" value={dateTime(data.plannedEnd)} />
               <Info label="Chốt sử dụng" value="Khi xác nhận lập bill" />
               <Info label="Đã sử dụng" value={usedTime(data)} />
             </div>
             <Lines lines={data.lines.filter(line => line.category === 'ROOM')} />
+            {data.overtime?.length > 0 && <div className="co-warning">
+              <strong>Tiền quá giờ cần xác nhận</strong>
+              {data.overtime.map((line, index) => <p key={index}>
+                {dateTime(line.from)} → {dateTime(line.to)}: {line.minutes} phút × {formatVnd(line.hourlyPrice)}/giờ = <strong>{formatVnd(line.amount)}</strong>
+              </p>)}
+              <p>Làm tròn lên từng phút. Khoản này đã được cộng vào tổng hóa đơn; hệ thống kiểm tra lại khi lập bill.</p>
+              <label className="co-inspection"><input type="checkbox" required checked={overtimeConfirmed} onChange={e => setOvertimeConfirmed(e.target.checked)} />
+                Xác nhận tiền quá giờ {formatVnd(data.overtimeAmount)}
+              </label>
+            </div>}
+            <button type="button" disabled={busy} onClick={() => run(async () => {
+              setOvertimeConfirmed(false);
+              setData(await api.preview(bookingId));
+            })}>Cập nhật tiền phòng</button>
           </section>
           <section className="co-card">
             <h2>2 Order F&B</h2>
@@ -248,7 +276,7 @@ export default function CheckoutPage() {
           <h2>Tóm tắt thanh toán</h2>
           <Summary lines={data.lines} extra={extra} amount={amount} depositAmount={depositAmount} paymentDue={paymentDue} preview />
           <p className="co-note">Giữ giá booking đã xác nhận. Tiền sử dụng sẽ được chốt khi lập bill.</p>
-          <button className="co-primary" disabled={busy || !inspected || data.hasPendingRefund || depositAmount > amount || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : 'Tiếp tục thanh toán'}</button>
+          <button className="co-primary" disabled={busy || !inspected || (data.overtime?.length > 0 && !overtimeConfirmed) || data.hasPendingRefund || depositAmount > amount || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : data.overtime?.length > 0 ? 'Xác nhận tiền quá giờ & lập bill' : 'Tiếp tục thanh toán'}</button>
         </aside>
       </form> : <>
         <div className="co-amount-banner">

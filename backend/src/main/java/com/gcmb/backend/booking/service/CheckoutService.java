@@ -115,11 +115,19 @@ public class CheckoutService {
         result.put("customer", booking.contactName());
         result.put("checkin", booking.actualCheckin());
         result.put("plannedEnd", booking.plannedEnd());
-        result.put("checkoutAt", Instant.now());
+        Instant checkoutAt = Instant.now();
+        result.put("checkoutAt", checkoutAt);
         var allocation = repository.currentAllocation(bookingId);
         result.put("room", allocation == null ? "—" : allocation.roomCode() + " · " + allocation.roomName());
-        result.put("lines", sourceLines(bookingId));
-        result.put("amount", total(sourceLines(bookingId)));
+        var overtime = bookings.checkoutOvertime(actor, bookingId, checkoutAt);
+        var lines = new java.util.ArrayList<>(sourceLines(bookingId));
+        for (var line : overtime) lines.add(Map.of("description", "Quá giờ khi checkout · " + line.minutes() + " phút",
+            "quantity", BigDecimal.valueOf(line.minutes()).divide(BigDecimal.valueOf(60), 3, java.math.RoundingMode.HALF_UP),
+            "unitPrice", line.hourlyPrice(), "amount", line.amount(), "category", "ROOM"));
+        result.put("overtime", overtime);
+        result.put("overtimeAmount", overtime.stream().map(Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add));
+        result.put("lines", lines);
+        result.put("amount", total(lines));
         result.put("pendingOrders", pendingOrders(bookingId));
         result.put("depositBalance", repository.depositBalance(bookingId));
         result.put("hasPendingRefund", hasPendingRefund(bookingId));
@@ -148,11 +156,7 @@ public class CheckoutService {
         UUID deposit = repository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(409, "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.");
         if (!pendingOrders(bookingId).isEmpty()) throw fail(409, "Còn order chưa phục vụ. Hoàn tất hoặc hủy order trước khi chốt bill.");
-        var meter = repository.meter(bookingId);
-        if (meter != null && "RUNNING".equals(meter.status())) bookings.stopHourlyMeter(actor, bookingId);
-        else if (meter == null && Instant.now().isAfter(booking.plannedEnd())) {
-            throw fail(409, "Booking đã quá giờ. Cần xác nhận gia hạn/giờ lẻ trước khi chốt tiền phòng.");
-        }
+        bookings.settleCheckoutOvertime(actor, bookingId, input.overtimeConfirmed(), input.overtimeAmount());
         if (input.surcharges() != null) {
             if (input.surcharges().size() > 20) throw fail(400, "Tối đa 20 phụ phí.");
             for (var fee : input.surcharges()) {
