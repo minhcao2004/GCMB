@@ -443,7 +443,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   </div>;
 }
 
-// Nạp số dư cọc mới nhất rồi xác định nhánh hoàn hoặc giữ cọc khi hủy.
+// BR-14, BR-15: xác định điều kiện hoàn cọc theo thời điểm hủy và hiển thị MSG-16/MSG-66.
 function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const [reasonOption, setReasonOption] = useState(cancellationReasons[0]);
   const [otherReason, setOtherReason] = useState('');
@@ -486,12 +486,6 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const millisecondsUntilStart = new Date(currentBooking.plannedStart).getTime() - now.getTime();
   const refundEligible = hasDeposit && millisecondsUntilStart >= cutoffMinutes * 60000;
   const cancellationAllowed = millisecondsUntilStart > 0 && ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
-  const remainingMinutes = Math.max(0, Math.floor(millisecondsUntilStart / 60000));
-  let remainingLabel;
-  if (millisecondsUntilStart <= 0) remainingLabel = 'Đã đến giờ nhận phòng';
-  else if (remainingMinutes >= 60) {
-    remainingLabel = `Còn ${String(Math.floor(remainingMinutes / 60)).padStart(2, '0')} giờ ${String(remainingMinutes % 60).padStart(2, '0')} phút trước check-in`;
-  } else remainingLabel = `Còn ${remainingMinutes} phút trước check-in`;
   const cancelAt = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
   const cancelError = error || detailError;
   const missingRefundDetails = refundEligible && (!beneficiaryName.trim() || !bankAccount.trim() || !bankName.trim());
@@ -512,10 +506,10 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in hoặc no-show.';
   } else if (refundEligible) {
     outcomeTitle = '✓ Đủ điều kiện hoàn cọc';
-    outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
+    outcomeDescription = 'Booking đủ điều kiện hoàn cọc. Vui lòng bổ sung ngân hàng, tên chủ tài khoản và số tài khoản nhận hoàn.';
   } else if (hasDeposit) {
     outcomeTitle = '! Không đủ điều kiện hoàn cọc';
-    outcomeDescription = `${remainingLabel} · hủy dưới mốc ${cutoffMinutes} phút`;
+    outcomeDescription = `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
   } else {
     outcomeTitle = 'Không có tiền cọc';
     outcomeDescription = 'Booking sẽ được hủy và phòng được giải phóng.';
@@ -556,7 +550,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   </div>;
 }
 
-// Nạp booking mới nhất để xác nhận no-show và số cọc sẽ bị giữ.
+// BR-16: yêu cầu xác nhận no-show và thông báo tiền cọc sẽ không được hoàn.
 function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const [bookingDetail, setBookingDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
@@ -609,7 +603,7 @@ function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
       <div className="booking-cancel-booking-info"><div><span>Khách hàng</span><strong>{currentBooking.contactName}</strong></div><div><span>Số điện thoại</span><strong>{currentBooking.contactPhone || '—'}</strong></div><div><span>Giờ bắt đầu</span><strong>{timeText(currentBooking.plannedStart, timezone)} · {dateText(currentBooking.plannedStart, timezone)}</strong></div><div><span>Phòng</span><strong>{currentBooking.roomCode ? `${currentBooking.roomCode} · ${currentBooking.roomName || ''}` : 'Chưa gán'}</strong></div></div>
       <div className={`booking-cancel-outcome ${outcomeClass}`} role="status"><strong>{outcomeTitle}</strong><p>{outcomeDescription}</p><small>Thời điểm ghi nhận dự kiến: {markedAt}</small></div>
       <label className="booking-form-field booking-cancel-reason"><span>Ghi chú</span><textarea rows="2" maxLength="1000" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Khách không đến nhận phòng" /></label>
-      <p className="booking-no-show-warning">Xác nhận sẽ đổi trạng thái booking thành NO_SHOW, giải phóng phòng đang giữ và tịch thu số dư cọc (nếu có). Không thể check-in booking sau thao tác này.</p>
+      <p className="booking-no-show-warning">Hủy booking {currentBooking.code} với lý do khách không đến sẽ không hoàn lại tiền cọc. Bạn có muốn tiếp tục?</p>
       {detailLoading && <p role="status">Đang tải số dư cọc…</p>}
       {detailMessage && <p className="booking-inline-error" role="alert">{detailMessage}</p>}
       {error && <p className="booking-inline-error" role="alert">{error}</p>}

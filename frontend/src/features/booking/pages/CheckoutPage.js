@@ -132,8 +132,17 @@ export default function CheckoutPage() {
   }
   function pay(event) {
     event.preventDefault();
-    if (method !== 'BANK_TRANSFER' && (!Number.isSafeInteger(Number(cashTendered)) || Number(cashTendered) < 0 || (method === 'CASH' && Number(cashTendered) < paymentDue))) {
-      setError('Nhập số tiền mặt hợp lệ; nếu trả toàn bộ bằng tiền mặt thì tiền khách đưa phải đủ số cần thu.');
+    const tenderedAmount = Number(cashTendered);
+    if (method !== 'BANK_TRANSFER' && !Number.isSafeInteger(tenderedAmount)) {
+      setError('Số tiền mặt phải là số tiền nguyên đồng, không có phần thập phân.');
+      return;
+    }
+    if (method !== 'BANK_TRANSFER' && tenderedAmount < 0) {
+      setError('Số tiền mặt phải lớn hơn hoặc bằng 0.');
+      return;
+    }
+    if (method === 'CASH' && tenderedAmount < paymentDue) {
+      setError(`Tiền khách đưa chưa đủ. Cần thu ít nhất ${formatVnd(paymentDue)} đ.`);
       return;
     }
     run(async () => {

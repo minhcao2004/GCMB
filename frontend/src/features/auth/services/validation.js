@@ -7,15 +7,15 @@
  */
 
 const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
-// Kiểm tra email đã trim và giới hạn độ dài trước khi gọi API.
+// BR-111, BR-113: kiểm tra email bắt buộc, định dạng và giới hạn độ dài.
 export function emailError(value) {
   const email = value.trim();
-  if (!email) return 'Vui lòng nhập email';
-  if (email.length > 254) return 'Email không được vượt quá 254 ký tự';
-  if (!emailPattern.test(email) || email.indexOf('@') > 64 || email.startsWith('.') || email.includes('..') || email.includes('.@')) return 'Email không đúng định dạng';
+  if (!email) return 'Vui lòng bổ sung email.';
+  if (email.length > 254) return 'Email chỉ được chứa tối đa 254 ký tự.';
+  if (!emailPattern.test(email) || email.indexOf('@') > 64 || email.startsWith('.') || email.includes('..') || email.includes('.@')) return 'Nhập địa chỉ email theo dạng ten@tenmien.com.';
   return '';
 }
-// Kiểm tra trường bắt buộc theo từng bước đăng nhập hoặc khôi phục.
+// BR-111, BR-120: đồng bộ kiểm tra trường bắt buộc và xác nhận mật khẩu với MSG-02/MSG-06.
 export function validate(mode, values) {
   const errors = {};
   if (mode === 'forgot') {
@@ -23,14 +23,14 @@ export function validate(mode, values) {
     if (error) errors.email = error;
   } else {
     if (mode === 'login') {
-      if (!values.username.trim()) errors.username = 'Vui lòng nhập tên đăng nhập';
-      else if (values.username.trim().length > 100) errors.username = 'Tên đăng nhập không được vượt quá 100 ký tự';
+      if (!values.username.trim()) errors.username = 'Vui lòng bổ sung tên đăng nhập.';
+      else if (values.username.trim().length > 100) errors.username = 'Tên đăng nhập chỉ được chứa tối đa 100 ký tự.';
     }
-    if (!values.password.trim()) errors.password = mode === 'login' ? 'Vui lòng nhập mật khẩu' : 'Vui lòng nhập mật khẩu mới';
+    if (!values.password.trim()) errors.password = mode === 'login' ? 'Vui lòng bổ sung mật khẩu.' : 'Vui lòng bổ sung mật khẩu mới.';
     if (mode === 'reset') {
-      if (!values.confirmation.trim()) errors.confirmation = 'Vui lòng nhập xác nhận mật khẩu';
-      else if (values.confirmation !== values.password) errors.confirmation = 'Mật khẩu xác nhận không khớp';
-      if (!values.code) errors.code = 'Vui lòng nhập mã xác nhận';
+      if (!values.confirmation.trim()) errors.confirmation = 'Vui lòng bổ sung xác nhận mật khẩu.';
+      else if (values.confirmation !== values.password) errors.confirmation = 'Mật khẩu xác nhận không khớp với mật khẩu mới.';
+      if (!values.code) errors.code = 'Vui lòng bổ sung mã xác minh.';
       else if (!/^[0-9]{6}$/.test(values.code)) errors.code = 'Mã xác nhận phải gồm đúng 6 chữ số từ 0–9';
     }
   }

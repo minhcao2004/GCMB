@@ -51,6 +51,7 @@ public class RoomCatalogService {
     }
 
     @Transactional
+    // BR-174: kiểm tra mã hạng phòng duy nhất trên toàn hệ thống trước khi tạo.
     public RoomTypeView createRoomType(RoomTypeCommand command) {
         validateRoomType(command);
         String code = command.code().trim().toUpperCase(java.util.Locale.ROOT);
@@ -58,7 +59,7 @@ public class RoomCatalogService {
             "SELECT COUNT(*) FROM gcmb.room_type WHERE upper(code)=?", Long.class, code);
         if (duplicate != null && duplicate > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Mã hạng phòng đã tồn tại. Vui lòng nhập mã khác.");
+                "Mã hạng phòng “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         UUID id = UUID.randomUUID();
         try {
@@ -69,12 +70,13 @@ public class RoomCatalogService {
                 command.description() == null ? "" : command.description().trim());
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Mã hạng phòng đã tồn tại hoặc dữ liệu không hợp lệ.");
+                "Mã hạng phòng “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         return roomType(id);
     }
 
     @Transactional
+    // BR-174: không cho đổi mã hạng phòng sang một mã đã được dùng.
     public RoomTypeView updateRoomType(UUID id, RoomTypeCommand command) {
         validateRoomType(command);
         // Mã định danh giữ nguyên khi sửa; không thay đổi giá đã xác nhận của booking.
@@ -103,6 +105,7 @@ public class RoomCatalogService {
     }
 
     @Transactional
+    // BR-118: không xóa hạng phòng đang được lịch sử booking, giá hoặc combo tham chiếu.
     public void deleteRoomType(UUID id) {
         // Khóa bản ghi trước khi kiểm tra; FK RESTRICT bảo vệ cả trường hợp ghi đồng thời.
         List<UUID> found = db.queryForList(
@@ -117,13 +120,13 @@ public class RoomCatalogService {
             """, Boolean.class, id, id, id);
         if (Boolean.TRUE.equals(used)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Không thể xóa hạng phòng đã có phòng, giá hoặc combo liên quan (kể cả đã ngừng). Hãy chọn Ngừng sử dụng để giữ lịch sử.");
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
         try {
             db.update("DELETE FROM gcmb.room_type WHERE id=?", id);
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Không thể xóa hạng phòng đang được dữ liệu khác sử dụng. Các dữ liệu liên quan vẫn được giữ nguyên.");
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
     }
 
@@ -252,8 +255,10 @@ public class RoomCatalogService {
               """,id,roomTypeId,name,c.price(),c.price());
             return price(id,"HOURLY");
         }
+        // BR-176: mã combo chỉ được dùng một lần trong các combo đang hoạt động.
         Integer active=db.queryForObject("SELECT COUNT(*) FROM gcmb.combo WHERE code=? AND active=true",Integer.class,c.code());
-        if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã combo đã tồn tại và đang áp dụng.");
+        if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,
+            "Mã combo “" + c.code().trim().toUpperCase(java.util.Locale.ROOT) + "” đã tồn tại trong toàn hệ thống. Vui lòng nhập mã khác.");
         Long version=db.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.combo WHERE code=?",Long.class,c.code());
         UUID id=UUID.randomUUID();
         db.update("""
@@ -288,7 +293,8 @@ public class RoomCatalogService {
             int deleted=db.update("DELETE FROM gcmb.combo WHERE id=? AND branch_id IS NULL",id);
             if(deleted==0) throw missing("Không tìm thấy combo.");
         } catch(DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể xóa combo vì đã được dùng trong hóa đơn hoặc có thành phần gắn với combo.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
     }
 
@@ -314,21 +320,34 @@ public class RoomCatalogService {
     private static PriceCatalogItem priceItem(UUID id,String kind,String code,UUID roomId,String roomName,String name,String description,Integer duration,Integer from,Integer to,BigDecimal price,boolean active) {
         return new PriceCatalogItem(id,kind,code,roomId,roomName,name,description,duration,from,to,price,active);
     }
+    // BR-135, BR-138, BR-179: kiểm tra định dạng mã, sức chứa nguyên dương và độ dài tên.
     private static void validateRoomType(RoomTypeCommand command) {
-        if (command == null || command.code() == null
-                || !ROOM_CODE.matcher(command.code().trim().toUpperCase(java.util.Locale.ROOT)).matches()
-                || command.name() == null || command.name().isBlank()
-                || command.name().trim().length() > 200
-                || command.capacity() == null || command.capacity() < 1
-                || command.serviceType() == null
-                || !List.of("CINEMA", "MUSIC_BOX").contains(command.serviceType())) {
-            throw bad("Vui lòng nhập mã, tên (tối đa 200 ký tự), loại dịch vụ và sức chứa hợp lệ.");
-        }
+        if (command == null) throw bad("Vui lòng bổ sung thông tin hạng phòng.");
+        if (command.code() == null || command.code().isBlank()) throw bad("Vui lòng bổ sung mã hạng phòng.");
+        if (!ROOM_CODE.matcher(command.code().trim().toUpperCase(java.util.Locale.ROOT)).matches())
+            throw bad("Mã hạng phòng phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
+        if (command.name() == null || command.name().isBlank()) throw bad("Vui lòng bổ sung tên hạng phòng.");
+        if (command.name().trim().length() > 200) throw bad("Tên hạng phòng chỉ được chứa tối đa 200 ký tự.");
+        if (command.capacity() == null || command.capacity() < 1)
+            throw bad("Sức chứa phải là số nguyên lớn hơn 0.");
+        if (command.serviceType() == null || !List.of("CINEMA", "MUSIC_BOX").contains(command.serviceType()))
+            throw bad("Loại dịch vụ không hợp lệ.");
     }
 
+    // BR-135, BR-140, BR-143, BR-179: kiểm tra giá không âm, mã combo, tên và thời lượng dương.
     private static void validatePrice(String kind,PriceCommand c) {
-        if(!List.of("HOURLY","COMBO").contains(kind)||c==null||c.price()==null||c.price().signum()<0) throw bad("Mức giá không hợp lệ.");
-        if("COMBO".equals(kind)&&(c.code()==null||!COMBO_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.durationMinutes()==null||c.durationMinutes()<1||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo()))) throw bad("Mã combo chỉ gồm chữ in hoa, số, dấu gạch ngang hoặc gạch dưới (2–60 ký tự); tên, thời lượng và khung giờ phải hợp lệ.");
+        if(!List.of("HOURLY","COMBO").contains(kind)||c==null||c.price()==null) throw bad("Mức giá không hợp lệ.");
+        if(c.price().signum()<0) throw bad("Mức giá phải lớn hơn hoặc bằng 0.");
+        if("COMBO".equals(kind)) {
+            if(c.code()==null||c.code().isBlank()) throw bad("Vui lòng bổ sung mã combo.");
+            if(!COMBO_CODE.matcher(c.code().trim().toUpperCase()).matches())
+                throw bad("Mã combo phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
+            if(c.name()==null||c.name().isBlank()) throw bad("Vui lòng bổ sung tên combo.");
+            if(c.name().trim().length()>200) throw bad("Tên combo chỉ được chứa tối đa 200 ký tự.");
+            if(c.durationMinutes()==null||c.durationMinutes()<1) throw bad("Thời lượng phải lớn hơn 0.");
+            if(c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo()))
+                throw bad("Khung giờ áp dụng combo không hợp lệ.");
+        }
     }
     private static ResponseStatusException bad(String message){return new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
     private static ResponseStatusException missing(String message){return new ResponseStatusException(HttpStatus.NOT_FOUND,message);}

@@ -66,7 +66,7 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    // Kiểm tra khoảng đặt trong tương lai, trả phòng còn trống và báo giá từ cấu hình.
+    // BR-01, BR-02, BR-04: kiểm tra phạm vi chi nhánh, khoảng đặt hợp lệ và chỉ trả phòng không trùng lịch.
     public BookingDtos.Availability availability(Identity identity, UUID roomTypeId, Instant start, Instant end,
             String pricingMode, UUID comboId) {
         BranchScope branch = branch(identity);
@@ -165,7 +165,7 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    // Báo trước phần phí đã dùng và phần còn lại khi đổi phòng, chưa ghi dữ liệu.
+    // BR-01, BR-07, BR-08: báo giá đổi phòng chỉ sau khi kiểm tra phòng thay thế cho toàn bộ thời gian còn lại.
     public BookingDtos.RoomChangeQuote roomChangeQuote(Identity identity, UUID bookingId, UUID targetRoomId, String cause) {
         BranchScope branch = branch(identity);
         BookingRow booking = requireInHouseBooking(bookingId, branch.id());
@@ -179,7 +179,7 @@ public class BookingService {
         if (target.id().equals(current.roomId())) throw new BookingFailure(400, "targetRoomId", "Vui lòng chọn phòng khác phòng hiện tại");
         if (!now.isBefore(booking.plannedEnd()) || !now.isAfter(current.startsAt()))
             throw new BookingFailure(409, "form", "Chỉ đổi phòng trong thời gian booking đang được sử dụng");
-        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict();
+        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict(target.code());
         RoomChangePlan plan = roomChangePlan(branch, booking, current, target, now, normalizedCause);
         BigDecimal previous = repository.activeChargeTotal(bookingId);
         BigDecimal updated = previous.subtract(plan.originalAmount()).add(plan.usedAmount()).add(plan.nextAmount());
@@ -187,7 +187,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Đổi chặng phòng trong một giao dịch và thay các dòng phí bằng phần đã dùng, phần tiếp theo.
+    // BR-01, BR-07, BR-08, BR-10, BR-156, BR-166: đổi phòng trong thời gian lưu trú, kiểm tra phòng mới và tính lại phần phí còn lại.
     public BookingDtos.RoomChangeResult changeRoom(Identity identity, UUID bookingId, BookingDtos.RoomChangeRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Dữ liệu đổi phòng không hợp lệ");
         BranchScope branch = branch(identity);
@@ -205,7 +205,7 @@ public class BookingService {
         if (target.id().equals(current.roomId())) throw new BookingFailure(400, "targetRoomId", "Vui lòng chọn phòng khác phòng hiện tại");
         if (!now.isBefore(booking.plannedEnd()) || !now.isAfter(current.startsAt()))
             throw new BookingFailure(409, "form", "Chỉ đổi phòng trong thời gian booking đang được sử dụng");
-        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict();
+        if (repository.hasRoomOverlap(target.id(), now, booking.plannedEnd(), bookingId)) throw roomConflict(target.code());
 
         RoomChangePlan plan = roomChangePlan(branch, booking, current, target, now, cause);
         BigDecimal previous = repository.activeChargeTotal(bookingId);
@@ -245,7 +245,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Kiểm tra xung đột rồi gia hạn lịch phòng, phí và lịch sử trong cùng giao dịch.
+    // BR-01, BR-11, BR-156: chỉ gia hạn booking đang ở trong phòng và không chồng lấn booking kế tiếp.
     public BookingDtos.ExtensionResult extendStay(Identity identity, UUID bookingId, BookingDtos.ExtendStayRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Chọn combo hoặc số giờ gia hạn");
         BranchScope branch = branch(identity);
@@ -257,7 +257,7 @@ public class BookingService {
         validateActiveAllocation(current);
         BookingDtos.ExtensionQuote extension = extensionQuote(branch, booking, current, request);
         if (repository.hasRoomOverlap(current.roomId(), extension.startsAt(), extension.endsAt(), bookingId))
-            throw new BookingFailure(409, "hours", "Phòng đã có booking khác trong khoảng thời gian gia hạn");
+            throw new BookingFailure(409, "hours", "Không thể gia hạn vì không còn thời gian trống trước booking tiếp theo của phòng " + current.roomCode() + ".");
         if (repository.updateInHouseBookingEnd(bookingId, booking.plannedEnd(), extension.endsAt()) != 1
             || repository.updateOccupiedAllocationEnd(current.id(), current.endsAt(), extension.endsAt()) != 1)
             throw new BookingFailure(409, "form", "Booking vừa được gia hạn ở một phiên khác; vui lòng tải lại");
@@ -404,7 +404,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Tạo booking, chặng phòng, phí chốt và khoản thu cọc đã xác nhận trong một giao dịch.
+    // BR-01, BR-02, BR-03, BR-127: tạo booking trong phạm vi chi nhánh, chỉ cho khoảng hợp lệ và phòng không bị giữ trùng.
     public BookingDtos.BookingDetail create(Identity identity, BookingDtos.CreateBookingRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Dữ liệu booking không hợp lệ");
         BranchScope branch = branch(identity);
@@ -416,16 +416,18 @@ public class BookingService {
             if (request.plannedStart().isBefore(now.minusSeconds(30)))
                 throw new BookingFailure(400, "plannedStart", "Thời gian nhận phòng vãng lai không được ở quá khứ");
         } else if (!request.plannedStart().isAfter(now)) {
-            throw new BookingFailure(400, "plannedStart", "Thời gian đặt trước phải ở tương lai");
+            throw new BookingFailure(400, "plannedStart", "Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.");
         }
 
         RoomRow room = repository.lockAvailableRoom(request.roomId(), branch.id());
         if (room == null) throw new BookingFailure(409, "roomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
         if (repository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null))
-            throw roomConflict();
+            throw roomConflict(room.code());
         int guestCount = request.guestCount() == null ? 1 : request.guestCount();
-        if (guestCount < 1 || guestCount > room.capacity())
-            throw new BookingFailure(400, "guestCount", "Số khách phải từ 1 đến " + room.capacity() + " người theo sức chứa phòng");
+        if (guestCount < 1)
+            throw new BookingFailure(400, "guestCount", "Số khách phải là số nguyên lớn hơn 0.");
+        if (guestCount > room.capacity())
+            throw new BookingFailure(400, "guestCount", "Phòng " + room.code() + " chỉ phù hợp tối đa " + room.capacity() + " khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.");
         if (request.pricingMode() == null || "HOURLY".equalsIgnoreCase(request.pricingMode().trim()))
             validateHourlyRental(request.plannedStart(), request.plannedEnd());
         BookingDtos.PriceQuote quote = pricing.quote(room.roomTypeId(), branch.id(), branch.timezone(),
@@ -474,7 +476,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Ghi giờ nhận phòng thực tế; nhận sớm sẽ dịch giờ trả để giữ đủ thời lượng đã đặt.
+    // BR-01, BR-05, BR-155: chỉ check-in booking còn hợp lệ và phòng sẵn sàng sử dụng.
     public BookingDtos.BookingDetail checkIn(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);
         UUID actorId = identity.id();
@@ -490,7 +492,7 @@ public class BookingService {
         if (allocation == null || !"RESERVED".equals(allocation.state()))
             throw new BookingFailure(409, "roomId", "Booking không còn phòng được giữ để check-in");
         if (!"AVAILABLE".equals(allocation.operatingStatus()))
-            throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng nhận khách; hãy đổi phòng trước khi check-in");
+            throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
 
         // Giữ plannedStart làm giờ hẹn gốc; chỉ dời allocation và plannedEnd khi khách đến sớm.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
@@ -608,7 +610,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Chỉ sửa booking chưa bắt đầu; đổi phòng hoặc giờ sẽ tạo chặng giữ phòng mới.
+    // BR-01, BR-02, BR-03, BR-07, BR-127: khi sửa thời gian/phòng, kiểm tra lại lịch trống trước khi lưu.
     public BookingDtos.BookingDetail update(Identity identity, UUID bookingId, BookingDtos.UpdateBookingRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Dữ liệu cập nhật không hợp lệ");
         BranchScope branch = branch(identity);
@@ -626,7 +628,7 @@ public class BookingService {
         Instant start = request.plannedStart() == null ? booking.plannedStart() : request.plannedStart();
         Instant end = request.plannedEnd() == null ? booking.plannedEnd() : request.plannedEnd();
         validatePeriod(start, end);
-        if (!start.isAfter(now)) throw new BookingFailure(400, "plannedStart", "Thời gian đặt phòng phải ở tương lai");
+        if (!start.isAfter(now)) throw new BookingFailure(400, "plannedStart", "Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.");
         boolean allocationChanged = !roomId.equals(current.roomId()) || !start.equals(current.startsAt()) || !end.equals(current.endsAt());
         BookingDtos.PriceQuote quote = editQuote(branch, booking, current, start, end, request.pricingMode(), request.comboId());
         List<ChargeRow> previousCharges = repository.activeChargesForAllocation(current.id());
@@ -645,7 +647,7 @@ public class BookingService {
             if ("COMBO".equals(quote.pricingMode()) && !targetRoom.roomTypeId().equals(current.roomTypeId()))
                 throw new BookingFailure(400, "roomId", "Booking combo chỉ được đổi sang phòng cùng hạng");
             repository.releaseAllocation(current.id(), "Thay đổi lịch đặt");
-            if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict();
+            if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict(targetRoom.code());
         }
         String contactName = request.contactName() == null ? booking.contactName() : required(request.contactName(), "contactName", "Tên khách", 200);
         String contactPhone = request.contactPhone() == null ? booking.contactPhone() : contactPhone(request.contactPhone());
@@ -667,7 +669,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Hủy trước giờ nhận; tạo yêu cầu hoàn cọc hoặc ghi cọc bị giữ theo mốc cắt.
+    // BR-01, BR-12, BR-14, BR-15, BR-183, BR-186, BR-187: hủy booking, giải phóng phòng và áp dụng mốc/chi tiết hoàn cọc.
     public BookingDtos.CancellationResult cancel(Identity identity, UUID bookingId, BookingDtos.CancelBookingRequest request) {
         BranchScope branch = branch(identity);
         UUID actorId = identity.id();
@@ -712,7 +714,7 @@ public class BookingService {
     }
 
     @Transactional
-    // Xử lý khách vắng mặt sau giờ hẹn, giải phóng phòng và ghi cọc bị giữ.
+    // BR-01, BR-12, BR-16: no-show giải phóng phòng và không hoàn lại tiền cọc.
     public BookingDtos.NoShowResult markNoShow(Identity identity, UUID bookingId, BookingDtos.NoShowRequest request) {
         BranchScope branch = branch(identity);
         UUID actorId = identity.id();
@@ -1123,11 +1125,11 @@ public class BookingService {
         return value;
     }
 
-    // Kiểm tra trường bắt buộc, cắt khoảng trắng và giới hạn độ dài.
+    // BR-111: kiểm tra trường bắt buộc; dùng MSG-02 và MSG-03 cho lỗi đầu vào.
     private static String required(String value, String field, String label, int max) {
-        if (value == null || value.trim().isEmpty()) throw new BookingFailure(400, field, "Vui lòng nhập " + label.toLowerCase(Locale.ROOT));
+        if (value == null || value.trim().isEmpty()) throw new BookingFailure(400, field, "Vui lòng bổ sung " + label.toLowerCase(Locale.ROOT) + ".");
         String trimmed = value.trim();
-        if (trimmed.length() > max) throw new BookingFailure(400, field, label + " không được vượt quá " + max + " ký tự");
+        if (trimmed.length() > max) throw new BookingFailure(400, field, label + " chỉ được chứa tối đa " + max + " ký tự.");
         return trimmed;
     }
 
@@ -1149,10 +1151,10 @@ public class BookingService {
         return trimmed;
     }
 
-    // Bắt buộc giờ kết thúc lớn hơn giờ bắt đầu.
+    // BR-02: booking phải kết thúc sau thời điểm bắt đầu.
     private static void validatePeriod(Instant start, Instant end) {
-        if (start == null) throw new BookingFailure(400, "plannedStart", "Vui lòng nhập thời gian bắt đầu");
-        if (end == null || !end.isAfter(start)) throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu");
+        if (start == null) throw new BookingFailure(400, "plannedStart", "Vui lòng bổ sung thời gian bắt đầu.");
+        if (end == null || !end.isAfter(start)) throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu.");
     }
 
     private static void validateHourlyRental(Instant start, Instant end) {
@@ -1167,10 +1169,15 @@ public class BookingService {
             throw new BookingFailure(400, "plannedEnd", "Thời lượng sửa booking phải từ 1 phút đến 24 giờ và chính xác đến phút");
     }
 
-    // Tạo lỗi xung đột lịch phòng dùng chung cho các thao tác.
-    private static BookingFailure roomConflict() {
-        return new BookingFailure(409, "roomId", "Phòng đã có booking khác trong khoảng thời gian này");
+    // BR-03, BR-04: chặn booking trùng phòng và dùng MSG-15 khi có mã phòng.
+    private static BookingFailure roomConflict(String roomCode) {
+        String message = roomCode == null || roomCode.isBlank()
+            ? "Phòng đã có booking trùng với thời gian sử dụng đã chọn. Vui lòng chọn phòng hoặc thời gian khác."
+            : "Phòng " + roomCode + " đã có booking trùng với thời gian sử dụng đã chọn. Vui lòng chọn phòng hoặc thời gian khác.";
+        return new BookingFailure(409, "roomId", message);
     }
+
+    private static BookingFailure roomConflict() { return roomConflict(null); }
 
     // Ẩn booking ngoài phạm vi chi nhánh dưới phản hồi không tìm thấy.
     private static BookingFailure notFound() { return new BookingFailure(404, "form", "Không tìm thấy booking trong phạm vi chi nhánh của bạn"); }

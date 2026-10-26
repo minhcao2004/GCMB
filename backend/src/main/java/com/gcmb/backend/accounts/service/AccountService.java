@@ -46,6 +46,7 @@ public class AccountService {
     }
 
     @Transactional
+    // BR-112, BR-129, BR-132–134: kiểm tra định dạng/duy nhất tài khoản, nhân viên và cơ sở.
     public AccountView create(CreateAccount input, UUID actor) {
         String username = AuthValidation.required(
             input.username(),
@@ -55,7 +56,7 @@ public class AccountService {
             true
         );
         if (!username.matches("[A-Za-z0-9._-]{3,100}")) {
-            throw new AuthFailure(400, "username", "Tên đăng nhập gồm 3–100 chữ, số hoặc dấu . _ -");
+            throw new AuthFailure(400, "username", "Tên đăng nhập phải có từ 3 đến 100 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu chấm (.), dấu gạch dưới (_) hoặc dấu gạch nối (-).");
         }
         String email = AuthValidation.email(input.email());
         AuthValidation.required(input.password(), "password", "mật khẩu", 128, false);
@@ -63,7 +64,7 @@ public class AccountService {
             throw new AuthFailure(400, "employeeId", "Vui lòng chọn hồ sơ nhân viên");
         }
         if (!repository.lockAvailableEmployee(input.employeeId())) {
-            throw new AuthFailure(409, "employeeId", "Nhân viên không còn hoạt động hoặc đã có tài khoản");
+            throw new AuthFailure(409, "employeeId", "Chỉ có thể tạo tài khoản cho nhân viên đang hoạt động và chưa có tài khoản. Vui lòng chọn nhân viên khác.");
         }
         UUID role = input.role() == null ? null : repository.roleId(input.role());
         if (role == null) {
@@ -78,7 +79,9 @@ public class AccountService {
         }
         for (String field : List.of("username", "email")) {
             if (repository.exists(field, field.equals("username") ? username : email)) {
-                throw new AuthFailure(409, field, field.equals("username") ? "Tên đăng nhập đã tồn tại" : "Email đã tồn tại");
+                throw new AuthFailure(409, field, field.equals("username")
+                    ? "Tên đăng nhập này đã được sử dụng. Vui lòng chọn tên khác."
+                    : "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
             }
         }
         try {

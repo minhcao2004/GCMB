@@ -41,25 +41,26 @@ public class AuthService {
         this.repository = repository; this.crypto = crypto; this.mailer = mailer;
         this.dummyHash = crypto.encode(crypto.token());
     }
-    // Chặn tài khoản đã khóa hoặc ngừng hoạt động trước mọi thao tác xác thực.
+    // BR-131: tài khoản đã ngừng hoạt động không được đăng nhập.
+    // Tài khoản bị khóa vẫn có thông báo riêng để phân biệt trạng thái quản trị.
     private void active(Account account) {
         if ("LOCKED".equals(account.status())) throw new AuthFailure(403, "form", "Tài khoản đã bị khóa. Vui lòng liên hệ quản lý");
-        if (!"ACTIVE".equals(account.status())) throw new AuthFailure(403, "form", "Tài khoản đã ngừng hoạt động. Vui lòng liên hệ quản lý");
+        if (!"ACTIVE".equals(account.status())) throw new AuthFailure(403, "form", "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
     }
     @Transactional(noRollbackFor = AuthFailure.class)
-    // Xác thực username và mật khẩu, tạo phiên lưu bằng hash token.
+    // BR-131: chỉ tạo phiên sau khi thông tin đăng nhập hợp lệ và tài khoản còn hoạt động.
     public LoginResult login(String username, String password, boolean remember) {
         username = AuthValidation.required(username, "username", "tên đăng nhập", 100, true);
         AuthValidation.required(password, "password", "mật khẩu", Integer.MAX_VALUE, false);
         Account account = repository.findByUsername(username);
-        if (account == null) { crypto.matches(password, dummyHash); throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng"); }
+        if (account == null) { crypto.matches(password, dummyHash); throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại."); }
         active(account);
         if ("BRANCH_MANAGER".equals(account.role()) && account.branchId() == null) {
             throw new AuthFailure(403, "form", "Tài khoản quản lý cơ sở chưa được gán cơ sở. Vui lòng liên hệ quản lý cấp cao");
         }
         Instant now = Instant.now();
         if (!crypto.matches(password, account.hash())) {
-            throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng");
+            throw new AuthFailure(401, "form", "Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.");
         }
         String target = AuthMapper.destination(account.role());
         repository.recordLogin(account.id(), now);
@@ -96,29 +97,30 @@ public class AuthService {
         AuthValidation.code(code);
         if (challenge == null || !challenge.matches("[A-Za-z0-9_-]{43}")) throw new AuthFailure(400, "code", "Yêu cầu khôi phục không hợp lệ. Vui lòng gửi lại mã");
         Account account = repository.findByEmail(email);
-        if (account == null) throw new AuthFailure(400, "code", "Mã xác nhận không đúng");
+        if (account == null) throw new AuthFailure(400, "code", "Mã xác minh không đúng. Vui lòng kiểm tra mã được gửi đến email của bạn.");
         active(account);
         Reset reset = repository.findReset(account.id(), AuthCrypto.hash(challenge));
-        if (reset == null) throw new AuthFailure(400, "code", "Mã xác nhận không đúng");
-        if (reset.usedAt() != null) throw new AuthFailure(400, "code", "Mã xác nhận đã được sử dụng");
-        if (reset.revokedAt() != null) throw new AuthFailure(400, "code", "Mã xác nhận đã hết hiệu lực. Vui lòng dùng mã mới nhất");
+        if (reset == null) throw new AuthFailure(400, "code", "Mã xác minh không đúng. Vui lòng kiểm tra mã được gửi đến email của bạn.");
+        if (reset.usedAt() != null || reset.revokedAt() != null)
+            throw new AuthFailure(400, "code", "Mã xác minh đã hết hiệu lực. Vui lòng yêu cầu mã mới để tiếp tục.");
         Instant now = Instant.now();
         if (!crypto.matches(email + ":" + code, reset.hash())) {
-            throw new AuthFailure(400, "code", "Mã xác nhận không đúng");
+            throw new AuthFailure(400, "code", "Mã xác minh không đúng. Vui lòng kiểm tra mã được gửi đến email của bạn.");
         }
         repository.changePassword(account.id(), crypto.encode(password), now);
         repository.consumeReset(reset.id(), now);
         repository.revokeTokens(account.id(), now);
     }
     @Transactional
+    // BR-121, BR-130: xác thực mật khẩu hiện tại và yêu cầu mật khẩu mới khác mật khẩu cũ.
     public void changePassword(Identity identity, String currentPassword, String password, String confirmation) {
         String current = AuthValidation.required(currentPassword, "currentPassword", "mật khẩu hiện tại", Integer.MAX_VALUE, false);
         AuthValidation.password(password, confirmation);
         Account account = repository.findByUsername(identity.username());
         if (account == null || !account.id().equals(identity.id())) throw new AuthFailure(401, "form", "Vui lòng đăng nhập lại");
         active(account);
-        if (!crypto.matches(current, account.hash())) throw new AuthFailure(400, "currentPassword", "Mật khẩu hiện tại không đúng");
-        if (crypto.matches(password, account.hash())) throw new AuthFailure(400, "password", "Mật khẩu mới phải khác mật khẩu hiện tại");
+        if (!crypto.matches(current, account.hash())) throw new AuthFailure(400, "currentPassword", "Mật khẩu hiện tại không đúng. Vui lòng nhập lại.");
+        if (crypto.matches(password, account.hash())) throw new AuthFailure(400, "password", "Mật khẩu mới phải khác mật khẩu hiện tại.");
         Instant now = Instant.now();
         repository.changePassword(account.id(), crypto.encode(password), now);
         repository.revokePendingResets(account.id(), now);

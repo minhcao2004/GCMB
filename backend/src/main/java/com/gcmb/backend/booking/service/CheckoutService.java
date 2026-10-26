@@ -144,6 +144,7 @@ public class CheckoutService {
     }
 
     @Transactional
+    // BR-20, BR-21, BR-23, BR-24, BR-27–30, BR-141, BR-142, BR-158, BR-160, BR-185: lập bill, áp dụng cọc và xác thực phụ phí.
     public Map<String, Object> issue(Identity actor, UUID bookingId, Issue input) {
         UUID branch = branch(actor);
         lockBooking(bookingId, branch);
@@ -151,7 +152,7 @@ public class CheckoutService {
         if (!existing.isEmpty()) return bill(actor, (UUID) existing.get(0).get("id"));
         var booking = repository.booking(bookingId, branch);
         requireInHouse(booking.status());
-        if (input == null || !input.inspected()) throw fail(400, "Xác nhận đã kiểm tra phòng trước khi lập bill.");
+        if (input == null || !input.inspected()) throw fail(400, "Vui lòng xác nhận đã kiểm tra phòng trước khi lập bill thanh toán.");
         if (input.inspectionNote() != null && input.inspectionNote().length() > 2000) throw fail(400, "Ghi chú kiểm tra tối đa 2000 ký tự.");
         UUID deposit = repository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(409, "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.");
@@ -160,11 +161,10 @@ public class CheckoutService {
         if (input.surcharges() != null) {
             if (input.surcharges().size() > 20) throw fail(400, "Tối đa 20 phụ phí.");
             for (var fee : input.surcharges()) {
-                if (fee == null || fee.reason() == null || fee.reason().isBlank() || fee.reason().length() > 180) {
-                    throw fail(400, "Mỗi phụ phí cần lý do tối đa 180 ký tự.");
-                }
+                if (fee == null || fee.reason() == null || fee.reason().isBlank()) throw fail(400, "Vui lòng bổ sung lý do phụ phí.");
+                if (fee.reason().length() > 180) throw fail(400, "Lý do phụ phí chỉ được chứa tối đa 180 ký tự.");
                 money(fee.amount());
-                if (fee.amount().signum() <= 0) throw fail(400, "Phụ phí phải lớn hơn 0.");
+                if (fee.amount().signum() <= 0) throw fail(400, "Số tiền phụ phí phải lớn hơn 0 đ.");
                 db.update("""
                     INSERT INTO gcmb.booking_charge(booking_id,kind,description,quantity,unit_price,amount,pricing_snapshot,status)
                     VALUES (?,'SURCHARGE',?,1,?,?,jsonb_build_object('source','CHECKOUT','reason',CAST(? AS text)),'ACTIVE')
@@ -247,6 +247,7 @@ public class CheckoutService {
     }
 
     @Transactional
+    // BR-23, BR-25, BR-26, BR-144, BR-160–162, BR-167: phân bổ số còn thiếu và tạo yêu cầu chuyển khoản có hạn.
     public Map<String, Object> plan(Identity actor, UUID id, PaymentPlan input) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
@@ -258,7 +259,8 @@ public class CheckoutService {
         BigDecimal amount = decimal(bill, "remaining");
         BigDecimal cash = "CASH".equals(input.method()) ? amount : "MIXED".equals(input.method()) ? input.cashAmount() : BigDecimal.ZERO;
         money(cash);
-        if (cash.compareTo(amount) > 0 || ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0))) throw fail(400, "Phần tiền mặt kết hợp phải lớn hơn 0 và nhỏ hơn tổng bill.");
+        if (cash.compareTo(amount) > 0 || ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0)))
+            throw fail(400, "Phần thanh toán bằng tiền mặt phải lớn hơn 0 đ và nhỏ hơn " + amountText(amount) + " đ. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt.");
         BigDecimal bank = amount.subtract(cash);
         if (bank.signum() > 0 && !sepay.ready()) throw fail(503, "Chưa cấu hình ngân hàng và khóa webhook SePay trong backend/.env.");
         UUID booking = (UUID) bill.get("bookingId");
@@ -266,7 +268,7 @@ public class CheckoutService {
         BigDecimal tendered = BigDecimal.ZERO;
         if (cash.signum() > 0) {
             money(input.cashTendered());
-            if (input.cashTendered().compareTo(cash) < 0) throw fail(400, "Tiền khách đưa chưa đủ phần tiền mặt.");
+            if (input.cashTendered().compareTo(cash) < 0) throw fail(400, "Tiền khách đưa chưa đủ. Cần thu ít nhất " + amountText(cash) + " đ.");
             tendered = input.cashTendered();
         }
         db.update("UPDATE gcmb.bill SET planned_cash=?,planned_cash_tendered=? WHERE id=?", cash, tendered, id);
@@ -283,6 +285,7 @@ public class CheckoutService {
     }
 
     @Transactional
+    // BR-144, BR-145, BR-164: chỉ chốt khoản thu đủ và trả bill hiện có khi yêu cầu hoàn tất được gửi lặp.
     public Map<String, Object> complete(Identity actor, UUID id) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
@@ -353,6 +356,7 @@ public class CheckoutService {
     }
 
     @Transactional
+    // BR-25, BR-164: chỉ ghi nhận chuyển khoản khi mã tham chiếu, số tiền và trạng thái yêu cầu khớp; bỏ qua giao dịch lặp.
     public void webhook(String authorization, Webhook payload) {
         if (!sepay.authorized(authorization)) throw fail(401, "Chứng thực webhook không hợp lệ.");
         if (payload == null || payload.id() == null || payload.id() <= 0) throw fail(400, "Thiếu mã giao dịch SePay.");
@@ -482,6 +486,7 @@ public class CheckoutService {
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String key) { return (BigDecimal) row.get(key); }
+    private static String amountText(BigDecimal amount) { return amount.stripTrailingZeros().toPlainString(); }
     private static String encode(Object value) { return URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8); }
     private static void requireInHouse(String status) { if (!"IN_HOUSE".equals(status)) throw fail(409, "Chỉ checkout booking đã check-in."); }
     private static void money(BigDecimal value) {

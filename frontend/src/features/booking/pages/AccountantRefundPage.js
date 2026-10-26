@@ -18,6 +18,12 @@ const statusLabels = {
   FAILED: 'Thất bại',
 };
 const filterLabels = { open: 'Chờ xử lý', paid: 'Đã hoàn', all: 'Tất cả' };
+// BR-115, BR-116: giao diện chỉ lọc định dạng/dung lượng; backend kiểm tra chữ ký nội dung.
+const MAX_EVIDENCE_BYTES = 20_000_000;
+const evidenceMimeTypes = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf',
+]);
+const evidenceExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf']);
 
 function errorText(error) {
   const errors = apiErrors(error);
@@ -56,15 +62,17 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
   function selectImage(file) {
     setImageError('');
     if (!file) { setImage(null); return; }
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    const mimeType = (file.type || '').split(';', 2)[0].trim().toLowerCase();
+    const extension = file.name?.split('.').pop()?.toLowerCase() || '';
+    if (!evidenceMimeTypes.has(mimeType) && !evidenceExtensions.has(extension)) {
       setImage(null);
-      setImageError('Chỉ chọn ảnh JPG, PNG hoặc WebP.');
+      setImageError('Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác.');
       if (imageInput.current) imageInput.current.value = '';
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size === 0 || file.size > MAX_EVIDENCE_BYTES) {
       setImage(null);
-      setImageError('Ảnh chứng minh không được vượt quá 5 MB.');
+      setImageError('Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB.');
       if (imageInput.current) imageInput.current.value = '';
       return;
     }
@@ -84,21 +92,23 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
       <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} required autoComplete="off" />
     </label>
     <div className="deposit-form-field accounting-refund-evidence-field">
-      <span>Ảnh chứng minh chuyển khoản <b>*</b></span>
+      <span>Tệp minh chứng chuyển khoản <b>*</b></span>
       <label className="accounting-refund-upload">
-        <input ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" required
+        <input ref={imageInput} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf" required
           onChange={(event) => selectImage(event.target.files?.[0] || null)}
           aria-describedby="accounting-refund-image-hint" />
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
         <span className="accounting-refund-upload-copy">
-          <strong>{image ? image.name : 'Chọn ảnh biên lai chuyển khoản'}</strong>
-          <small id="accounting-refund-image-hint">JPG, PNG hoặc WebP · tối đa 5 MB</small>
+          <strong>{image ? image.name : 'Chọn tệp minh chứng chuyển khoản'}</strong>
+          <small id="accounting-refund-image-hint">JPEG, PNG, WebP, HEIC, HEIF hoặc PDF · tối đa 20 MB</small>
         </span>
-        <span className="accounting-refund-upload-action">Chọn ảnh</span>
+        <span className="accounting-refund-upload-action">Chọn tệp</span>
       </label>
       {previewUrl && <div className="accounting-refund-image-preview">
-        <img src={previewUrl} alt="Ảnh chứng minh chuyển khoản đã chọn" />
-        <button type="button" onClick={() => { setImage(null); setImageError(''); if (imageInput.current) imageInput.current.value = ''; }}>Xóa ảnh</button>
+        {['image/jpeg', 'image/png', 'image/webp'].includes(image.type)
+          ? <img src={previewUrl} alt="Ảnh chứng minh chuyển khoản đã chọn" />
+          : <a href={previewUrl} target="_blank" rel="noreferrer">Mở tệp minh chứng đã chọn</a>}
+        <button type="button" onClick={() => { setImage(null); setImageError(''); if (imageInput.current) imageInput.current.value = ''; }}>Xóa tệp</button>
       </div>}
       {imageError && <p className="booking-inline-error" role="alert">{imageError}</p>}
     </div>
@@ -274,7 +284,7 @@ export default function AccountantRefundPage() {
     try {
       const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
       setFilter('all');
-      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} và lưu ảnh chứng minh.`);
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} và lưu tệp minh chứng.`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error)); }
     finally { setBusy(false); }
