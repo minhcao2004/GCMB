@@ -31,6 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class CheckoutService {
+    private final byte[] quoteKey = new java.security.SecureRandom().generateSeed(32);
     private final JdbcTemplate db;
     private final BookingRepository repository;
     private final BookingService bookings;
@@ -120,15 +121,15 @@ public class CheckoutService {
         var allocation = repository.currentAllocation(bookingId);
         result.put("room", allocation == null ? "—" : allocation.roomCode() + " · " + allocation.roomName());
         var overtime = bookings.checkoutOvertime(actor, bookingId, checkoutAt);
-        var lines = new java.util.ArrayList<>(sourceLines(bookingId));
-        for (var line : overtime) lines.add(Map.of("description", "Quá giờ khi checkout · " + line.minutes() + " phút",
-            "quantity", BigDecimal.valueOf(line.minutes()).divide(BigDecimal.valueOf(60), 3, java.math.RoundingMode.HALF_UP),
-            "unitPrice", line.hourlyPrice(), "amount", line.amount(), "category", "ROOM"));
+        var lines = checkoutLines(actor, bookingId, checkoutAt, overtime);
         result.put("overtime", overtime);
         result.put("overtimeAmount", overtime.stream().map(Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add));
         result.put("lines", lines);
         result.put("amount", total(lines));
-        result.put("pendingOrders", pendingOrders(bookingId));
+        result.put("quoteToken", quoteToken(actor,bookingId,checkoutAt,total(lines)));
+        var unserved = pendingOrders(bookingId);
+        result.put("pendingOrders", unserved);
+        result.put("unservedItemCount", unservedCount(unserved));
         result.put("depositBalance", repository.depositBalance(bookingId));
         result.put("hasPendingRefund", hasPendingRefund(bookingId));
         result.put("sepayReady", sepay.ready());
@@ -143,6 +144,7 @@ public class CheckoutService {
             """, branch(actor));
     }
 
+    // BR-01/13/20/21/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-22/125 tạm hoãn theo yêu cầu).
     @Transactional
     public Map<String, Object> issue(Identity actor, UUID bookingId, Issue input) {
         UUID branch = branch(actor);
@@ -151,12 +153,28 @@ public class CheckoutService {
         if (!existing.isEmpty()) return bill(actor, (UUID) existing.get(0).get("id"));
         var booking = repository.booking(bookingId, branch);
         requireInHouse(booking.status());
-        if (input == null || !input.inspected()) throw fail(400, "Xác nhận đã kiểm tra phòng trước khi lập bill.");
+        if (input == null || !input.inspected()) throw fail(400, "Vui lòng xác nhận đã kiểm tra phòng trước khi lập bill thanh toán.");
         if (input.inspectionNote() != null && input.inspectionNote().length() > 2000) throw fail(400, "Ghi chú kiểm tra tối đa 2000 ký tự.");
         UUID deposit = repository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(409, "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.");
-        if (!pendingOrders(bookingId).isEmpty()) throw fail(409, "Còn order chưa phục vụ. Hoàn tất hoặc hủy order trước khi chốt bill.");
-        bookings.settleCheckoutOvertime(actor, bookingId, input.overtimeConfirmed(), input.overtimeAmount());
+        // BR-159; MSG71: cảnh báo và tiếp tục sau xác nhận, không bắt buộc phục vụ/hủy order.
+        var unserved = pendingOrders(bookingId);
+        if (!unserved.isEmpty() && !input.unservedConfirmed())
+            throw fail(409, "Booking còn " + unservedCount(unserved).toPlainString() + " món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Bạn có muốn tiếp tục?");
+        // BR-164/170/215: chốt theo báo giá server đã ký, tối đa 5 phút để lễ tân đọc và xác nhận.
+        // Không so với tiền chạy từng giây lúc POST vì sẽ khiến mọi báo giá vừa xem đều bị lệch.
+        Instant at = input.quotedAt();
+        Instant now = Instant.now();
+        if (at == null || at.isAfter(now) || at.isBefore(now.minusSeconds(300))
+                || at.isBefore(booking.actualCheckin())) throw fail(409,"Báo giá đã hết hiệu lực. Vui lòng cập nhật tiền phòng và xác nhận lại.");
+        var overtime = bookings.checkoutOvertime(actor,bookingId,at);
+        BigDecimal overtimeAmount = overtime.stream().map(Overtime::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
+        if (!overtime.isEmpty() && (!input.overtimeConfirmed() || input.overtimeAmount() == null || overtimeAmount.compareTo(input.overtimeAmount()) != 0))
+            throw fail(409,"Vui lòng xác nhận tiền quá giờ theo báo giá mới nhất.");
+        String signed = quoteToken(actor,bookingId,at,total(checkoutLines(actor,bookingId,at,overtime)));
+        if (input.quoteToken() == null || !java.security.MessageDigest.isEqual(signed.getBytes(StandardCharsets.UTF_8),input.quoteToken().getBytes(StandardCharsets.UTF_8)))
+            throw fail(409,"Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
+        bookings.settleCheckoutCharges(actor,bookingId,at,overtime);
         if (input.surcharges() != null) {
             if (input.surcharges().size() > 20) throw fail(400, "Tối đa 20 phụ phí.");
             for (var fee : input.surcharges()) {
@@ -183,9 +201,9 @@ public class CheckoutService {
         db.update("""
             INSERT INTO gcmb.bill(id,booking_id,branch_id,number,status,gross_amount,discount_amount,net_amount,
                 issued_at,checkout_at,inspection_note,issued_by)
-            VALUES (?,?,?,?,'ISSUED',?,0,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?)
+            VALUES (?,?,?,?,'ISSUED',?,0,?,CURRENT_TIMESTAMP,?,?,?)
             """, id, bookingId, branch, number, amount, amount,
-            input.inspectionNote() == null ? "" : input.inspectionNote().trim(), actor.id());
+            Timestamp.from(at), input.inspectionNote() == null ? "" : input.inspectionNote().trim(), actor.id());
         for (var line : lines) {
             db.update("""
                 INSERT INTO gcmb.bill_line(bill_id,booking_charge_id,order_line_id,description,quantity,unit_price,amount)
@@ -200,7 +218,8 @@ public class CheckoutService {
                 VALUES (?,'APPLY',?,?,?,'Trừ cọc đã thu vào bill checkout',?)
                 """, deposit, heldDeposit, id, actor.id(), "CHECKOUT-DEPOSIT-" + id);
         }
-        audit(actor.id(), branch, bookingId, "ISSUE_BILL", Map.of("billId", id, "amount", amount, "depositAmount", heldDeposit));
+        audit(actor.id(), branch, bookingId, "ISSUE_BILL", Map.of("billId", id, "amount", amount, "depositAmount", heldDeposit,
+            "unservedConfirmed", input.unservedConfirmed(), "unservedItemCount", unservedCount(unserved)));
         return bill(actor, id);
     }
 
@@ -246,6 +265,7 @@ public class CheckoutService {
         return result;
     }
 
+    // BR-25/26/144/145/160/161/162/167: tiền mặt đủ phần cần thu, QR đúng phần chuyển khoản và hạn 30 phút.
     @Transactional
     public Map<String, Object> plan(Identity actor, UUID id, PaymentPlan input) {
         var bill = lockBill(actor, id);
@@ -258,7 +278,7 @@ public class CheckoutService {
         BigDecimal amount = decimal(bill, "remaining");
         BigDecimal cash = "CASH".equals(input.method()) ? amount : "MIXED".equals(input.method()) ? input.cashAmount() : BigDecimal.ZERO;
         money(cash);
-        if (cash.compareTo(amount) > 0 || ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0))) throw fail(400, "Phần tiền mặt kết hợp phải lớn hơn 0 và nhỏ hơn tổng bill.");
+        if (cash.compareTo(amount) > 0 || ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0))) throw fail(400, "Phần thanh toán bằng tiền mặt phải lớn hơn 0 đ và nhỏ hơn số tiền còn phải thanh toán. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt.");
         BigDecimal bank = amount.subtract(cash);
         if (bank.signum() > 0 && !sepay.ready()) throw fail(503, "Chưa cấu hình ngân hàng và khóa webhook SePay trong backend/.env.");
         UUID booking = (UUID) bill.get("bookingId");
@@ -266,7 +286,7 @@ public class CheckoutService {
         BigDecimal tendered = BigDecimal.ZERO;
         if (cash.signum() > 0) {
             money(input.cashTendered());
-            if (input.cashTendered().compareTo(cash) < 0) throw fail(400, "Tiền khách đưa chưa đủ phần tiền mặt.");
+            if (input.cashTendered().compareTo(cash) < 0) throw fail(400, "Tiền khách đưa chưa đủ. Cần thu ít nhất " + cash.toPlainString() + " đ.");
             tendered = input.cashTendered();
         }
         db.update("UPDATE gcmb.bill SET planned_cash=?,planned_cash_tendered=? WHERE id=?", cash, tendered, id);
@@ -434,20 +454,58 @@ public class CheckoutService {
         return db.queryForObject("SELECT id FROM gcmb.financial_account WHERE code=? AND active=true", UUID.class, code);
     }
 
+    // BR-13/21/28/29/30/172/215/216/218: preview chỉ đọc, không ghi phí; món đã xác nhận vẫn được tính dù chưa phục vụ.
+    private List<Map<String,Object>> checkoutLines(Identity actor, UUID bookingId, Instant at, List<Overtime> overtime) {
+        var hourly = bookings.checkoutHourlyCharges(actor,bookingId,at);
+        var result = new java.util.ArrayList<Map<String,Object>>();
+        for (var original : sourceLines(bookingId)) {
+            if ("OVERTIME".equals(original.get("chargeKind"))) continue;
+            var adjusted = hourly.get(original.get("chargeId"));
+            if (adjusted != null && adjusted.quantity().signum() == 0) continue;
+            var line = new LinkedHashMap<>(original);
+            if (adjusted != null) {
+                line.put("quantity",adjusted.quantity()); line.put("amount",adjusted.amount());
+            }
+            result.add(line);
+        }
+        for (var line : overtime) result.add(Map.of("description","Quá giờ · " + line.seconds() + " giây",
+            "quantity",BigDecimal.valueOf(line.seconds()).divide(BigDecimal.valueOf(3600),3,java.math.RoundingMode.UP),
+            "unitPrice",line.hourlyPrice(),"amount",line.amount(),"category","ROOM"));
+        return result;
+    }
+
+    private String quoteToken(Identity actor, UUID bookingId, Instant at, BigDecimal amount) {
+        try {
+            var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(quoteKey,"HmacSHA256"));
+            String value = actor.id() + ":" + bookingId + ":" + at + ":" + amount.stripTrailingZeros().toPlainString();
+            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.GeneralSecurityException e) { throw new IllegalStateException("Cannot sign checkout quote",e); }
+    }
+
     private List<Map<String, Object>> sourceLines(UUID booking) {
         return db.queryForList("""
             SELECT c.id AS "chargeId",NULL::uuid AS "orderId",c.description,c.quantity,c.unit_price AS "unitPrice",c.amount,
-                CASE WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category
+                CASE WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category,c.kind AS "chargeKind"
             FROM gcmb.booking_charge c WHERE c.booking_id=? AND c.status='ACTIVE'
             UNION ALL
-            SELECT NULL::uuid,l.id,l.name_snapshot,l.quantity,l.unit_price,round(l.quantity*l.unit_price),'FNB'
+            SELECT NULL::uuid,l.id,l.name_snapshot,l.quantity,l.unit_price,round(l.quantity*l.unit_price),'FNB','FNB'
             FROM gcmb.order_line l JOIN gcmb.fb_order o ON o.id=l.order_id
-            WHERE l.booking_id=? AND o.status='SERVED' AND l.unit_price>0
+            WHERE l.booking_id=? AND o.status IN ('ACCEPTED','SERVED') AND l.unit_price>0
             """, booking, booking);
     }
 
     private List<Map<String, Object>> pendingOrders(UUID booking) {
-        return db.queryForList("SELECT id,status FROM gcmb.fb_order WHERE booking_id=? AND status IN ('PENDING','ACCEPTED')", booking);
+        return db.queryForList("""
+            SELECT o.id,o.status,COALESCE(sum(l.quantity),0) AS "itemCount" FROM gcmb.fb_order o
+            LEFT JOIN gcmb.order_line l ON l.order_id=o.id
+            WHERE o.booking_id=? AND o.status IN ('PENDING','ACCEPTED') GROUP BY o.id,o.status
+            """, booking);
+    }
+
+    private static BigDecimal unservedCount(List<Map<String,Object>> orders) {
+        return orders.stream().map(o -> new BigDecimal(String.valueOf(o.getOrDefault("itemCount",0))))
+            .reduce(BigDecimal.ZERO,BigDecimal::add).stripTrailingZeros();
     }
 
     private Map<String, Object> lockBill(Identity actor, UUID id) {
@@ -458,6 +516,7 @@ public class CheckoutService {
     }
 
     private void lockBooking(UUID id, UUID branch) {
+        repository.requireActiveBranch(branch); // BR-177
         if (db.queryForList("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE", UUID.class, id, branch).isEmpty()) throw fail(404, "Không tìm thấy booking.");
     }
 

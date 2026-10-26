@@ -42,6 +42,15 @@ public class SessionFilter extends OncePerRequestFilter {
                     && request.getServletPath().startsWith("/api/v1/branch-management/")) {
                 identity = auth.forBranch(identity, branch);
             }
+            // BR-177; MSG43: cho đọc và đổi cơ sở/đăng xuất, chặn mọi ghi nghiệp vụ tại cơ sở tạm ngừng.
+            boolean writing = !List.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
+            if (identity != null && identity.readOnly() && writing
+                    && !request.getServletPath().startsWith("/api/v1/auth/")
+                    && !request.getServletPath().equals("/api/v1/account/profile")) {
+                response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"message\":\"Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.\"}");
+                return;
+            }
             if (identity != null) SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(identity, null, List.of(new SimpleGrantedAuthority("ROLE_" + identity.role()))));
         } catch (AuthFailure e) {
             response.setStatus(e.status()); response.setContentType("application/json;charset=UTF-8");

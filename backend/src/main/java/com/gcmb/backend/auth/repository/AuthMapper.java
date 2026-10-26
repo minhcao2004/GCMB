@@ -35,7 +35,8 @@ public final class AuthMapper {
     // Ánh xạ danh tính phiên sang dữ liệu dùng bởi Spring Security.
     public static Identity identity(ResultSet rs, int row) throws SQLException {
         String role=rs.getString("code");
-        return new Identity(rs.getObject("id", UUID.class), rs.getString("username"), role, destination(role), rs.getObject("branch_id",UUID.class), rs.getString("branch_name"));
+        // BR-177: dữ liệu cơ sở tạm ngừng vẫn được đọc, nhưng không được sửa.
+        return new Identity(rs.getObject("id", UUID.class), rs.getString("username"), role, destination(role), rs.getObject("branch_id",UUID.class), rs.getString("branch_name"), java.util.List.of("BRANCH_MANAGER","RECEPTIONIST").contains(role) && "SUSPENDED".equals(rs.getString("branch_status")));
     }
     // Đọc timestamp có thể rỗng từ ResultSet.
     private static Instant instant(ResultSet rs, String column) throws SQLException {

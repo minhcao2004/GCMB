@@ -200,7 +200,7 @@ export function AppShell({
               >
                 <span className="booking-topbar-datetime">Tháng {currentMonth}</span>
               </DashboardTopbar>
-              <main className="booking-main" id="main">{children}</main>
+              <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
             </div>
           </div>
         </div>
@@ -283,7 +283,7 @@ export function AppShell({
                 </label>
               )}
             </DashboardTopbar>
-            <main className="booking-main" id="main">{children}</main>
+            <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@
  * Description: Hiển thị danh sách tài khoản, bộ lọc, phân trang và form tạo tài khoản liên kết hồ sơ nhân viên.
  */
 
+import { passwordError } from '../../../auth/services/validation';
 import { useEffect, useRef, useState } from 'react';
 import { accountApi } from '../services/accountApi';
 import { apiErrors } from '../../../auth/services/authApi';
@@ -17,7 +18,7 @@ const roles = { HEAD_OFFICE_MANAGER: ['HOM', 'Quản lý cấp cao'], BRANCH_MAN
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
 const emptyFilters = { q: '', role: '', branchId: '', status: '', page: 0 };
 
-export default function AccountsPage({ actorId, onAudit }) {
+export default function AccountsPage({ actorId, onAudit, branchScope, readOnly = false }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [data, setData] = useState({ items: [], total: 0 });
   const [options, setOptions] = useState({ employees: [], roles: [], branches: [] });
@@ -33,22 +34,22 @@ export default function AccountsPage({ actorId, onAudit }) {
     let active = true;
     setLoading(true); setError('');
     const timer = setTimeout(() => {
-      Promise.all([accountApi.list({ ...filters, branchId: filters.branchId || undefined, size: 10 }), accountApi.options()])
+      Promise.all([accountApi.list({ ...filters, branchId: filters.branchId || undefined, size: 10 }, branchScope), accountApi.options(branchScope)])
         .then(([page, choices]) => { if (active) { setData(page); setOptions(choices); } })
         .catch((e) => { if (active) setError(Object.values(apiErrors(e)).join(' ')); })
         .finally(() => { if (active) setLoading(false); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [filters, revision]);
+  }, [filters, revision, branchScope]);
   const filter = (key, value) => setFilters((old) => ({ ...old, [key]: value, page: 0 }));
   const close = () => { setDrawer(false); createButton.current?.focus(); };
   const viewCreated = (account) => { setHighlight(account.id); setFilters({ ...emptyFilters, q: account.username }); close(); };
   return <section className="accounts-page" aria-labelledby="accounts-title">
-    <div className="accounts-heading"><div><h1 id="accounts-title">Tài khoản</h1><p>Quản lý vai trò và phạm vi truy cập của nhân viên</p></div><button className="account-primary" ref={createButton} onClick={() => setDrawer(true)} disabled={loading || !!error}>Tạo tài khoản</button></div>
+    <div className="accounts-heading"><div><h1 id="accounts-title">Tài khoản</h1><p>Quản lý vai trò và phạm vi truy cập của nhân viên</p></div><button className="account-primary" ref={createButton} onClick={() => setDrawer(true)} disabled={readOnly || loading || !!error}>Tạo tài khoản</button></div>
     {notice && <p className="account-success-message" role="status">{notice}</p>}
     <div className="accounts-filters">
       <div className="account-search"><span aria-hidden="true">⌕</span><input aria-label="Tìm tài khoản" placeholder="Tìm tên, tài khoản hoặc email" maxLength={200} value={filters.q} onChange={(e) => filter('q', e.target.value)} /></div>
-      <select aria-label="Lọc vai trò" value={filters.role} onChange={(e) => filter('role', e.target.value)}><option value="">Vai trò: Tất cả</option>{Object.entries(roles).map(([id, names]) => <option key={id} value={id}>{names[1]}</option>)}</select>
+      <select aria-label="Lọc vai trò" value={filters.role} onChange={(e) => filter('role', e.target.value)}><option value="">Vai trò: Tất cả</option>{Object.entries(roles).filter(([id]) => !branchScope || id === 'RECEPTIONIST').map(([id, names]) => <option key={id} value={id}>{names[1]}</option>)}</select>
       <select aria-label="Lọc cơ sở" value={filters.branchId} onChange={(e) => filter('branchId', e.target.value)}><option value="">Cơ sở: Tất cả</option>{options.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
       <select aria-label="Lọc truy cập" value={filters.status} onChange={(e) => filter('status', e.target.value)}><option value="">Truy cập: Tất cả</option>{Object.entries(statuses).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
     </div>
@@ -57,22 +58,24 @@ export default function AccountsPage({ actorId, onAudit }) {
         <div className="accounts-table-scroll"><table><thead><tr><th>Nhân viên / tài khoản</th><th>Email</th><th>Vai trò</th><th>Phạm vi</th><th>Truy cập</th><th>Thao tác</th></tr></thead><tbody>
           {data.items.map((account) => <tr key={account.id} className={highlight === account.id ? 'account-highlight' : ''}><td><strong>{account.employeeName}</strong><small>{account.username}</small></td><td>{account.email}</td><td><abbr title={roles[account.role]?.[1]}>{roles[account.role]?.[0] || account.role}</abbr></td><td>{account.branchName}</td><td><span className={`account-status ${account.status.toLowerCase()}`}>{statuses[account.status] || account.status}</span></td>
             <td>
-              <button className="account-link" onClick={() => setSelectedAccount(account)}>Phân quyền</button>
+              <button className="account-link" onClick={() => setSelectedAccount(account)}>{branchScope ? 'Trạng thái' : 'Quyền & trạng thái'}</button>
             </td>
           </tr>)}
         </tbody></table></div>
-        {!data.items.length && <div className="accounts-empty"><p>{data.total ? 'Trang này không còn tài khoản.' : 'Không tìm thấy tài khoản phù hợp.'}</p><button onClick={() => setFilters(emptyFilters)}>Đặt lại bộ lọc</button></div>}
+        {!data.items.length && <div className="accounts-empty"><p>{data.total ? 'Trang này không còn tài khoản.' : 'Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.'}</p><button onClick={() => setFilters(emptyFilters)}>Đặt lại bộ lọc</button></div>}
         <div className="accounts-pagination"><span>Hiển thị {data.items.length ? filters.page * 10 + 1 : 0}–{data.items.length ? filters.page * 10 + data.items.length : 0} / {data.total}</span><span>10 dòng / trang</span><nav aria-label="Phân trang tài khoản"><button aria-label="Trang trước" disabled={filters.page === 0} onClick={() => setFilters((old) => ({ ...old, page: old.page - 1 }))}>‹</button><span aria-current="page">{filters.page + 1}</span><button aria-label="Trang sau" disabled={(filters.page + 1) * 10 >= data.total} onClick={() => setFilters((old) => ({ ...old, page: old.page + 1 }))}>›</button></nav></div>
       </>}
     </div>
-    <div className="accounts-bottom-actions">
+    {onAudit && <div className="accounts-bottom-actions">
       <button onClick={onAudit}>Xem nhật ký hệ thống</button>
-    </div>
+    </div>}
     {selectedAccount && (
       <AccountAccessDialog
         account={selectedAccount}
         options={options}
         actorId={actorId}
+        branchScope={branchScope}
+        readOnly={readOnly}
         onClose={() => setSelectedAccount(null)}
         onSaved={(message) => {
           setSelectedAccount(null);
@@ -81,13 +84,13 @@ export default function AccountsPage({ actorId, onAudit }) {
         }}
       />
     )}
-    {drawer && <CreateAccountDrawer options={options} onClose={close} onCreated={() => setRevision((n) => n + 1)} onView={viewCreated} />}
+    {drawer && <CreateAccountDrawer branchScope={branchScope} options={options} onClose={close} onCreated={() => setRevision((n) => n + 1)} onView={viewCreated} />}
   </section>;
 }
 
-function CreateAccountDrawer({ options, onClose, onCreated, onView }) {
+function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView }) {
   const dialog = useRef(null);
-  const [form, setForm] = useState({ employeeId: '', branchId: '', username: '', password: '', email: '', role: 'RECEPTIONIST' });
+  const [form, setForm] = useState({ employeeId: '', branchId: branchScope || '', username: '', password: '', email: '', role: 'RECEPTIONIST' });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -98,9 +101,11 @@ function CreateAccountDrawer({ options, onClose, onCreated, onView }) {
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return;
+    const policyError = passwordError(form.password);
+    if (policyError) { setErrors({ password: policyError }); return; }
     setBusy(true); setErrors({});
     try {
-      const account = await accountApi.create({ ...form, branchId: chain ? null : form.branchId || null });
+      const account = await accountApi.create({ ...form, branchId: chain ? null : form.branchId || null }, branchScope);
       setForm((old) => ({ ...old, password: '' })); setCreated(account); onCreated();
     } catch (e) { setErrors(apiErrors(e)); }
     finally { setBusy(false); }
@@ -109,13 +114,13 @@ function CreateAccountDrawer({ options, onClose, onCreated, onView }) {
   const attrs = (name) => ({ id: `account-${name}`, value: form[name], onChange: (e) => change(name, e.target.value), required: true, 'aria-invalid': !!errors[name], 'aria-describedby': errors[name] ? `error-${name}` : undefined });
   return <dialog ref={dialog} className="account-drawer" aria-labelledby="create-account-title" onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }}>
     <div className="account-drawer-heading"><div><h2 id="create-account-title">Tạo tài khoản nhân viên</h2><p>Liên kết với hồ sơ nhân sự đã có</p></div><button aria-label="Đóng bảng tạo tài khoản" disabled={busy} onClick={onClose}>×</button></div>
-    {created ? <><div className="account-success" role="status"><div className="account-check" aria-hidden="true">✓</div><h2>Tài khoản đã được tạo</h2><dl><dt>Nhân viên</dt><dd>{created.employeeName} · {created.employeeCode}</dd><dt>Tên đăng nhập</dt><dd>{created.username}</dd><dt>Vai trò / cơ sở</dt><dd>{roles[created.role]?.[1]} · {created.branchName}</dd></dl></div><div className="account-drawer-footer"><button onClick={onClose}>Đóng</button><button className="account-primary" onClick={() => onView(created)}>Xem tài khoản</button></div></> :
+    {created ? <><div className="account-success" role="status"><div className="account-check" aria-hidden="true">✓</div><h2>Đã tạo tài khoản.</h2><dl><dt>Nhân viên</dt><dd>{created.employeeName} · {created.employeeCode}</dd><dt>Tên đăng nhập</dt><dd>{created.username}</dd><dt>Vai trò / cơ sở</dt><dd>{roles[created.role]?.[1]} · {created.branchName}</dd></dl></div><div className="account-drawer-footer"><button onClick={onClose}>Đóng</button><button className="account-primary" onClick={() => onView(created)}>Xem tài khoản</button></div></> :
       <form onSubmit={submit} className="account-create-form"><fieldset disabled={busy} className="account-form-body">
         {errors.form && <p className="account-error" role="alert">{errors.form}</p>}
         {field('employeeId', 'Hồ sơ nhân viên', <select {...attrs('employeeId')}><option value="">Chọn hồ sơ nhân viên</option>{(options.employees || []).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.code}</option>)}</select>)}
         {!options.employees?.length && <p className="account-note">Không có nhân viên đang hoạt động chưa được cấp tài khoản.</p>}
         {field('username', 'Tên đăng nhập', <input {...attrs('username')} autoComplete="off" minLength={3} maxLength={100} pattern="[A-Za-z0-9._\-]{3,100}" title="3–100 chữ, số hoặc dấu . _ -" />)}
-        {field('password', 'Mật khẩu', <div className="account-password"><input {...attrs('password')} type={visible ? 'text' : 'password'} autoComplete="new-password" maxLength={128} /><button type="button" aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={visible} onClick={() => setVisible((old) => !old)}>{visible ? 'Ẩn' : 'Hiện'}</button></div>)}
+        {field('password', 'Mật khẩu', <div className="account-password"><input {...attrs('password')} type={visible ? 'text' : 'password'} autoComplete="new-password" /><button type="button" aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={visible} onClick={() => setVisible((old) => !old)}>{visible ? 'Ẩn' : 'Hiện'}</button></div>)}
         {field('email', 'Email', <input {...attrs('email')} type="email" maxLength={254} autoComplete="off" />)}
         {field('role', 'Vai trò ban đầu', <select {...attrs('role')}>{options.roles.map((item) => <option key={item.id} value={item.id}>{roles[item.id]?.[1] || item.name} ({roles[item.id]?.[0] || item.id})</option>)}</select>)}
         {field('branchId', 'Phạm vi cơ sở', chain ? <input id="account-branchId" readOnly value="Toàn chuỗi" /> : <select {...attrs('branchId')}><option value="">Chọn cơ sở</option>{options.branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>)}

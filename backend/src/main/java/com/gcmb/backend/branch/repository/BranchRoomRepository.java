@@ -24,6 +24,11 @@ import org.springframework.stereotype.Repository;
 public class BranchRoomRepository {
     private final JdbcTemplate db;
     public BranchRoomRepository(JdbcTemplate db) { this.db = db; }
+    // BR-177: chỉ ghi tại cơ sở ACTIVE, giữ khóa đến cuối transaction.
+    public void requireActive(UUID branch) {
+        if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE", UUID.class, branch).isEmpty())
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
+    }
     private RoomView map(ResultSet r, int n) throws SQLException {
         Timestamp ready = r.getTimestamp("expected_ready_at");
         return new RoomView(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"),

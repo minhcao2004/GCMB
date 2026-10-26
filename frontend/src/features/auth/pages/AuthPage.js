@@ -63,7 +63,7 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
       } else {
         await authApi.reset({ email: recovery.email, challenge: recovery.challenge, code: values.code, password: values.password, confirmation: values.confirmation });
         onRecovery(null);
-        navigate('/dang-nhap', { replace: true, state: { message: 'Đặt lại mật khẩu thành công' } });
+        navigate('/dang-nhap', { replace: true, state: { message: 'Đã cập nhật mật khẩu.' } });
       }
     } catch (error) { setErrors(apiErrors(error)); }
     finally { submitting.current = false; setBusy(''); }
@@ -75,7 +75,7 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
     try {
       const result = await authApi.sendCode(recovery.email);
       onRecovery(result); setValues((old) => ({ ...old, code: '' }));
-      setNotice('Đã gửi mã mới. Mã trước đó không còn hiệu lực.');
+      setNotice(`Đã gửi mã xác minh đến ${recovery.email}. Mã có hiệu lực trong 10 phút kể từ khi được gửi.`);
     } catch (error) { setErrors(apiErrors(error)); }
     finally { submitting.current = false; setBusy(''); }
   };

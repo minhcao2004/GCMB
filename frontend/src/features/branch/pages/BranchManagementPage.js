@@ -39,8 +39,8 @@ export default function BranchManagementPage({ onAccounts }) {
   const selected = branches.find((branch) => branch.branchId === selectedId);
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
   const isStatus = modal === 'SUSPENDED' || modal === 'ACTIVE';
-  const phoneError = form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
-    ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
+  const phoneError = form.phone.trim() && !/^\+?[0-9]+$/.test(form.phone.trim())
+    ? 'Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu.' : '';
 
   async function refresh() {
     setLoading(true);

@@ -10,6 +10,7 @@ import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useState } from 'react';
 import { authApi, apiErrors } from '../../auth/services/authApi';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import BranchRoomsPage from '../pages/BranchRoomsPage';
 import '../pages/branch-rooms.css';
 
@@ -36,6 +37,8 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     return () => { active = false; window.removeEventListener('focus', load); };
   }, [user.id, user.branchId]);
 
+  const readOnly = user.readOnly || branches.some(b => b.id === user.branchId && b.status === 'SUSPENDED');
+
   const selectBranch = async (event) => {
     const branchId = event.target.value;
     if (branchId === user.branchId || switching) return;
@@ -54,8 +57,8 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
       <div className="manager-brand"><BrandWordmark /></div>
       <p className="manager-role">QUẢN LÝ CƠ SỞ</p>
       <nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
-        {nav.map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => setActive(label)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
+        {[...nav, 'Tài khoản'].map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => setActive(label)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i] || icons[5]} /></svg>{label}
         </button>)}
       </nav>
       <div className="manager-sidebar-footer">
@@ -74,8 +77,9 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
           </select>
         </label>} />
       <section className="manager-content branch-manager-content">
+        {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
-        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={user} search={search} onSearchChange={setSearch} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>
   </div>;

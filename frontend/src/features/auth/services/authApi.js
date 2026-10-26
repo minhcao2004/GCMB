@@ -30,6 +30,6 @@ export const authApi = {
 };
 // Đổi lỗi HTTP hoặc lỗi mạng thành thông báo trường biểu mẫu.
 export function apiErrors(error) {
-  if (!error.response) return { form: 'Không thể kết nối máy chủ hoặc yêu cầu đã quá thời gian chờ. Vui lòng kiểm tra mạng và thử lại.' };
-  return error.response.data?.errors || { form: error.response.data?.message || 'Máy chủ chưa thể hoàn tất thao tác. Vui lòng thử lại.' };
+  if (!error.response) return { form: 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.' };
+  return error.response.data?.errors || { form: error.response.data?.message || 'Chưa thể xác nhận kết quả thao tác. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.' };
 }

@@ -87,6 +87,21 @@ public class BookingPricingService {
 
     // Chia khoảng sử dụng theo ranh giới price rule và cộng giá của từng đoạn.
     private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
+        return hourlyQuote(roomTypeId, branchId, timezone, start, end, false);
+    }
+
+    // BR-169/170: miễn phí <=5 phút trên TOÀN khoảng quá giờ; vượt ngưỡng tính đủ số giây.
+    public List<BookingDtos.ChargeLine> overstay(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
+        if (!end.isAfter(start) || Duration.between(start, end).compareTo(Duration.ofMinutes(5)) <= 0) return List.of();
+        return hourlyQuote(roomTypeId, branchId, timezone, start, end, true).charges();
+    }
+
+    // BR-170/215: không làm tròn thời gian; làm tròn tiền lên đồng trên từng khung giá.
+    public static BigDecimal actualAmount(BigDecimal rate, long seconds) {
+        return rate.multiply(BigDecimal.valueOf(Math.max(0, seconds))).divide(BigDecimal.valueOf(3600), 0, RoundingMode.CEILING);
+    }
+
+    private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end, boolean actual) {
         LocalDate firstDate = start.atZone(timezone).toLocalDate();
         LocalDate lastDate = end.minusNanos(1).atZone(timezone).toLocalDate();
         List<PricingRule> rules = repository.pricingRules(roomTypeId, branchId, firstDate, lastDate);
@@ -124,12 +139,17 @@ public class BookingPricingService {
             BigDecimal quantity = BigDecimal.valueOf(billedMinutes).divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP);
             BigDecimal amount = segment.rule().hourlyPrice().multiply(BigDecimal.valueOf(billedMinutes))
                 .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
+            if (actual) {
+                quantity = BigDecimal.valueOf(seconds).divide(BigDecimal.valueOf(3600), 3, RoundingMode.UP);
+                amount = actualAmount(segment.rule().hourlyPrice(), seconds);
+            }
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("pricingMode", "HOURLY"); snapshot.put("ruleName", segment.rule().name());
             snapshot.put("ruleId", segment.rule().id().toString()); snapshot.put("from", segment.start().toString());
             snapshot.put("to", segment.end().toString()); snapshot.put("actualMinutes", actualMinutes);
             snapshot.put("billedMinutes", billedMinutes); snapshot.put("billingStepMinutes", step);
             snapshot.put("hourlyPrice", segment.rule().hourlyPrice());
+            if (actual) { snapshot.put("billedSeconds", seconds); snapshot.put("billing", "ACTUAL_SECONDS_BR170"); }
             charges.add(new BookingDtos.ChargeLine("ROOM", segment.rule().name(), quantity,
                 segment.rule().hourlyPrice(), amount, segment.rule().id(), null, snapshot));
             total = total.add(amount);

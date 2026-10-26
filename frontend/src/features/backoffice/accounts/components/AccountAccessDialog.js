@@ -10,7 +10,7 @@ import { apiErrors } from '../../../auth/services/authApi';
 import { accountAccessApi, roleNames } from '../services/accountAccessApi';
 import '../styles/accountAccess.css';
 
-export default function AccountAccessDialog({ account, options, actorId, onClose, onSaved }) {
+export default function AccountAccessDialog({ account, options, actorId, branchScope, readOnly = false, onClose, onSaved }) {
   const dialog = useRef(null);
   const [role, setRole] = useState(account.role);
   const [branchId, setBranchId] = useState(account.branchId || '');
@@ -18,12 +18,12 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
     const assigned = account.managedBranchIds?.length ? account.managedBranchIds : account.branchId ? [account.branchId] : [];
     return assigned.filter((id) => options.branches.some((branch) => branch.id === id));
   });
-  const [mode, setMode] = useState('role');
+  const [mode, setMode] = useState(account.status !== 'ACTIVE' ? 'reactivate' : branchScope ? 'deactivate' : 'role');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(role);
-  const immutable = account.id === actorId || account.status === 'REVOKED';
+  const immutable = account.id === actorId || readOnly;
   const branchName = chain
     ? 'Toàn chuỗi'
     : role === 'BRANCH_MANAGER' ? options.branches.filter((branch) => branchIds.includes(branch.id)).map((branch) => branch.name).join(', ') || 'Chưa chọn cơ sở'
@@ -53,7 +53,9 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
     setErrors({});
     try {
       if (mode === 'deactivate') {
-        await accountAccessApi.deactivate(account.id, reason);
+        await accountAccessApi.deactivate(account.id, reason, branchScope);
+      } else if (mode === 'reactivate') {
+        await accountAccessApi.reactivate(account.id, branchScope);
       } else {
         await accountAccessApi.setRole(account.id, {
           role,
@@ -61,7 +63,7 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
           ...(role === 'BRANCH_MANAGER' ? { branchIds } : {}),
         });
       }
-      onSaved(mode === 'deactivate' ? 'Đã thu hồi quyền truy cập.' : 'Đã lưu vai trò và phạm vi truy cập.');
+      onSaved(mode === 'deactivate' ? 'Đã chuyển trạng thái của tài khoản thành “Vô hiệu hóa”.' : mode === 'reactivate' ? 'Đã chuyển trạng thái của tài khoản thành “Hoạt động”.' : 'Đã cập nhật vai trò và phạm vi truy cập.');
     } catch (error) {
       setErrors(apiErrors(error));
     } finally {
@@ -82,7 +84,7 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
       <div className="account-drawer-heading">
         <div>
           <h2 id="account-access-title">
-            {mode === 'deactivate' ? 'Thu hồi quyền truy cập' : 'Vai trò & phạm vi truy cập'}
+            {mode === 'deactivate' ? 'Vô hiệu hóa tài khoản' : mode === 'reactivate' ? 'Kích hoạt tài khoản' : 'Vai trò & phạm vi truy cập'}
           </h2>
           <p>{account.employeeName} · {account.username}</p>
         </div>
@@ -143,6 +145,8 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
                 Thu hồi quyền truy cập ›
               </button>
             </>
+          ) : mode === 'reactivate' ? (
+            <p>Kích hoạt lại tài khoản {account.username}? Tài khoản cần đăng nhập lại; hệ thống kiểm tra trạng thái nhân viên và phân công cơ sở trước khi kích hoạt.</p>
           ) : (
             <>
               <div className="access-warning">
@@ -173,7 +177,7 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
             disabled={busy || immutable}
             type="submit"
           >
-            {busy ? 'Đang lưu…' : mode === 'deactivate' ? 'Thu hồi truy cập' : 'Lưu phân quyền'}
+            {busy ? 'Đang lưu…' : mode === 'deactivate' ? 'Xác nhận vô hiệu hóa' : mode === 'reactivate' ? 'Xác nhận kích hoạt' : 'Lưu phân quyền'}
           </button>
         </div>
       </form>

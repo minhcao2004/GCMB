@@ -110,6 +110,44 @@ public class AccountRepository {
         );
     }
 
+    // UC-04/05/07, BR-132, BR-177: xác minh cơ sở từ phân công server, không tin bộ lọc client.
+    public boolean manages(UUID actor, UUID branch, boolean writing) {
+        if (writing) db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return !db.queryForList("""
+            SELECT u.id FROM gcmb.user_account u
+            JOIN gcmb.role r ON r.id=u.role_id AND r.code='BRANCH_MANAGER'
+            JOIN gcmb.branch_manager_assignment ma ON ma.user_id=u.id
+            JOIN gcmb.branch b ON b.id=ma.branch_id
+            WHERE u.id=? AND u.status='ACTIVE' AND b.id=?
+              AND (b.status='ACTIVE' OR (?=false AND b.status='SUSPENDED'))
+            """ + (writing ? " FOR SHARE OF u,b,ma" : ""), UUID.class, actor, branch, writing).isEmpty();
+    }
+
+    public boolean employeeInBranch(UUID employee, UUID branch) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=? AND a.branch_id=?
+                AND a.valid_from<=CURRENT_TIMESTAMP AND (a.valid_to IS NULL OR a.valid_to>CURRENT_TIMESTAMP))
+            """, Boolean.class, employee, branch));
+    }
+
+    public Options branchOptions(UUID branch) {
+        return new Options(db.query("""
+            SELECT e.id,e.full_name,e.code FROM gcmb.employee e WHERE e.status='ACTIVE' AND e.user_id IS NULL
+              AND EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=e.id AND a.branch_id=?
+                AND a.valid_from<=CURRENT_TIMESTAMP AND (a.valid_to IS NULL OR a.valid_to>CURRENT_TIMESTAMP))
+            ORDER BY e.full_name,e.id
+            """, (rs,n) -> new EmployeeOption(rs.getObject("id",UUID.class),rs.getString("full_name"),rs.getString("code")), branch),
+            List.of(new Option("RECEPTIONIST", "Lễ tân")),
+            db.query("SELECT id,name FROM gcmb.branch WHERE id=?", (rs,n) -> new Option(rs.getString(1),rs.getString(2)), branch));
+    }
+
+    // BR-131, UC-07: không mở lại tài khoản của nhân viên đã ngừng hoạt động.
+    public boolean canReactivate(UUID id) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.employee WHERE user_id=? AND status='ACTIVE')
+            """, Boolean.class, id));
+    }
+
     public boolean lockAvailableEmployee(UUID id) {
         db.execute("SELECT pg_advisory_xact_lock(1300261013)");
         return !db.query(

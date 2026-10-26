@@ -55,6 +55,11 @@ public class AccountAccessRepository {
         db.update("UPDATE gcmb.user_account SET status='REVOKED' WHERE id=?", id);
     }
 
+    // UC-07, BR-131: mở lại có chủ đích, không khôi phục token đã thu hồi.
+    public void reactivate(UUID id) {
+        db.update("UPDATE gcmb.user_account SET status='ACTIVE',failed_login_count=0,locked_until=NULL WHERE id=?", id);
+    }
+
     public void revokeTokens(UUID id) {
         db.update("""
                 UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP

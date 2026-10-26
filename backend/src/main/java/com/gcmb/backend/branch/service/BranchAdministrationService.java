@@ -64,7 +64,7 @@ public class BranchAdministrationService {
         if (Boolean.TRUE.equals(db.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE upper(code)=?)", Boolean.class,
                 input.code().trim().toUpperCase(Locale.ROOT)))) {
-            throw failure(HttpStatus.CONFLICT, "Mã cơ sở đã tồn tại.");
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + input.code().trim() + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         UUID id = UUID.randomUUID();
         try {
@@ -86,7 +86,7 @@ public class BranchAdministrationService {
         String code = input.code().trim().toUpperCase(Locale.ROOT);
         if (Boolean.TRUE.equals(db.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE upper(code)=? AND id<>?)", Boolean.class, code, id))) {
-            throw failure(HttpStatus.CONFLICT, "Mã cơ sở đã tồn tại.");
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + input.code().trim() + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         try {
             db.update("""
@@ -116,6 +116,7 @@ public class BranchAdministrationService {
             """, id, id, id);
     }
 
+    // BR-111/149/177/184: lưu lý do và giữ lịch sử khi tạm ngừng.
     @Transactional
     public Map<String, Object> deactivate(UUID id, StatusCommand input) {
         if (input == null || input.status() == null
@@ -133,9 +134,10 @@ public class BranchAdministrationService {
         if (current.equals("CLOSED")) {
             throw failure(HttpStatus.CONFLICT, "Cơ sở đã đóng, không thể chuyển trạng thái này.");
         }
+        // BR-149; MSG42: kiểm tra lại trong transaction trước khi đổi trạng thái.
         if (!blockers(id).isEmpty()) {
             throw failure(HttpStatus.CONFLICT,
-                "Còn booking, phiên sử dụng hoặc hóa đơn chưa xử lý. Chọn Kiểm tra cơ sở trước khi ngừng hoạt động.");
+                "Chưa thể ngừng hoạt động cơ sở " + get(id).get("branchName") + " vì còn booking chờ nhận phòng, khách đang sử dụng phòng hoặc bill chưa thanh toán. Vui lòng xử lý các mục còn tồn tại.");
         }
         db.update("""
             UPDATE gcmb.branch SET status=?,status_reason=?,updated_at=CURRENT_TIMESTAMP,
@@ -192,7 +194,7 @@ public class BranchAdministrationService {
             FOR UPDATE OF u
             """, UUID.class, userId);
         if (users.isEmpty()) {
-            throw failure(HttpStatus.CONFLICT, "Quản lý phải có tài khoản đang hoạt động và vai trò Quản lý cơ sở.");
+            throw failure(HttpStatus.CONFLICT, "Tài khoản được chọn không đủ điều kiện làm Quản lý cơ sở. Vui lòng chọn tài khoản Quản lý cơ sở khả dụng.");
         }
         lock(branchId);
         if (!"ACTIVE".equals(get(branchId).get("status"))) {
@@ -296,9 +298,10 @@ public class BranchAdministrationService {
         }
     }
 
+    // BR-111/119/135/136/179/180/181; MSG02/03/04/37/38.
     private static void validate(BranchCommand input) {
         if (input == null || !clean(input.code()).toUpperCase(Locale.ROOT).matches("[A-Z0-9_-]{2,60}")) {
-            throw failure(HttpStatus.BAD_REQUEST, "Mã cơ sở gồm 2–60 chữ cái, số, gạch ngang/gạch dưới; không có khoảng trắng.");
+            throw failure(HttpStatus.BAD_REQUEST, "Mã cơ sở phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
         }
         if (clean(input.name()).isEmpty() || clean(input.name()).length() > 200) {
             throw failure(HttpStatus.BAD_REQUEST, "Nhập tên cơ sở (tối đa 200 ký tự).");
@@ -306,9 +309,8 @@ public class BranchAdministrationService {
         if (clean(input.address()).isEmpty() || clean(input.address()).length() > 2000) {
             throw failure(HttpStatus.BAD_REQUEST, "Nhập địa chỉ cơ sở (tối đa 2000 ký tự).");
         }
-        if (!clean(input.phone()).isEmpty() && !clean(input.phone()).matches("0[0-9]{6,14}")) {
-            throw failure(HttpStatus.BAD_REQUEST, "Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.");
-        }
+        // BR-119; MSG04, dùng cùng định dạng với hồ sơ cá nhân.
+        com.gcmb.backend.auth.service.AuthValidation.phone(input.phone());
         if (clean(input.notes()).length() > 4000) {
             throw failure(HttpStatus.BAD_REQUEST, "Ghi chú tối đa 4000 ký tự.");
         }

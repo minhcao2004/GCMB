@@ -36,8 +36,9 @@ public class AuditService {
         if (page < 0 || size < 1 || size > 100 || q.length() > 200 || action.length() > 60) {
             throw new AuthFailure(400, "form", "Bộ lọc hoặc phân trang không hợp lệ");
         }
+        // BR-163; MSG106.
         if (from != null && to != null && from.isAfter(to)) {
-            throw new AuthFailure(400, "form", "Ngày bắt đầu không được sau ngày kết thúc");
+            throw new AuthFailure(400, "form", "Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.");
         }
         if (to != null && to.getYear() > 9999) {
             throw new AuthFailure(400, "form", "Ngày kết thúc không hợp lệ");

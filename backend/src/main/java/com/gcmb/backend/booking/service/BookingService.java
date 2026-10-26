@@ -292,12 +292,12 @@ public class BookingService {
             throw new BookingFailure(409, "form", "Chỉ có thể bật đồng hồ giờ lẻ sau khi hết thời lượng đã đặt");
         AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
         validateActiveAllocation(allocation);
-        // Đồng hồ bắt đầu tính phí từ thời điểm lễ tân bật sau giờ trả đã hẹn.
-        Instant billedFrom = later(now, booking.plannedEnd());
-        Instant reservedUntil = billedFrom.plus(Duration.ofHours(24));
+        // BR-169/170: bật muộn vẫn tính từ giờ trả dự kiến, miễn phí nếu tổng quá hạn <=5 phút.
+        Instant billedFrom = booking.plannedEnd();
+        Instant reservedUntil = now.plus(Duration.ofHours(24));
         Instant nextBooking = repository.nextRoomBookingStart(allocation.roomId(), allocation.endsAt(), bookingId);
         if (nextBooking != null && nextBooking.isBefore(reservedUntil)) reservedUntil = nextBooking;
-        if (!reservedUntil.isAfter(billedFrom))
+        if (!reservedUntil.isAfter(now))
             throw new BookingFailure(409, "form", "Phòng đã có booking kế tiếp; không còn thời gian trống để bật đồng hồ giờ lẻ");
         if (repository.hasRoomOverlap(allocation.roomId(), allocation.endsAt(), reservedUntil, bookingId))
             throw new BookingFailure(409, "form", "Phòng đã có booking khác trong khoảng tính giờ lẻ");
@@ -312,95 +312,109 @@ public class BookingService {
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 
-    // Báo phần quá giờ chưa ghi phí; tách đoạn trước đồng hồ để không tính trùng.
+    // BR-169/170/218: toàn thời gian quá hạn, không phụ thuộc lúc bật đồng hồ; tách khung giá.
     public List<CheckoutDtos.Overtime> checkoutOvertime(Identity actor, UUID bookingId, Instant at) {
         BranchScope scope = branch(actor);
         BookingRow booking = requireInHouseBooking(bookingId, scope.id());
-        if (!at.isAfter(booking.plannedEnd())) return List.of();
         AllocationRow allocation = repository.currentAllocation(bookingId);
         validateActiveAllocation(allocation);
         MeterRow meter = repository.meter(bookingId);
-        List<CheckoutDtos.Overtime> result = new ArrayList<>();
-        Instant gapEnd = meter == null ? at : meter.billedFrom();
-        if (gapEnd.isAfter(booking.plannedEnd())) {
-            PricingRule rate = pricing.meteredRate(allocation.roomTypeId(), scope.id(), scope.timezone(), booking.plannedEnd());
-            result.add(overtime(booking.plannedEnd(), gapEnd, rate.hourlyPrice(), rate.id()));
+        Instant end = meter != null && "STOPPED".equals(meter.status()) ? meter.stoppedAt() : at;
+        // BR-13: phiên giờ lẻ đã chốt bằng quy tắc mới giữ nguyên snapshot giá.
+        var saved = repository.charges(bookingId).stream().filter(c -> "ACTIVE".equals(c.status()) && "OVERTIME".equals(c.kind())).toList();
+        if (meter != null && "STOPPED".equals(meter.status()) && !saved.isEmpty()
+                && saved.stream().allMatch(c -> "ACTUAL_SECONDS_BR170".equals(readSnapshot(c.snapshot()).get("billing")))) {
+            return saved.stream().map(c -> {
+                var snapshot = readSnapshot(c.snapshot());
+                Instant from = snapshotInstant(snapshot, booking.plannedEnd(), "from");
+                Instant to = snapshotInstant(snapshot, end, "to");
+                return new CheckoutDtos.Overtime(from, to, Duration.between(from,to).getSeconds(), c.unitPrice(), c.amount(), c.priceRuleId());
+            }).toList();
         }
-        if (meter != null && "RUNNING".equals(meter.status())) {
-            if (!allocation.id().equals(meter.allocationId()))
-                throw new BookingFailure(409, "form", "Phòng hiện tại không khớp phiên tính giờ; vui lòng tải lại");
-            result.add(overtime(meter.billedFrom(), at, meter.hourlyPrice(), meter.priceRuleId()));
+        return pricing.overstay(allocation.roomTypeId(), scope.id(), scope.timezone(), booking.plannedEnd(), end).stream()
+            .map(c -> {
+                Instant from = snapshotInstant(c.pricingSnapshot(), booking.plannedEnd(), "from");
+                Instant to = snapshotInstant(c.pricingSnapshot(), end, "to");
+                return new CheckoutDtos.Overtime(from, to, Duration.between(from,to).getSeconds(), c.unitPrice(), c.amount(), c.priceRuleId());
+            }).toList();
+    }
+
+    // BR-13/215/216/218: chỉ tính lại dòng thuê giờ theo thời gian thực tế và ĐƠN GIÁ SNAPSHOT.
+    // Combo và phụ phí giữ nguyên; giới hạn từng chặng tránh thu trùng phần đã đổi phòng.
+    public Map<UUID, BookingDtos.ChargeLine> checkoutHourlyCharges(Identity actor, UUID bookingId, Instant at) {
+        BranchScope scope = branch(actor);
+        BookingRow booking = requireInHouseBooking(bookingId, scope.id());
+        List<ChargeRow> charges = repository.charges(bookingId);
+        var allocations = repository.allocations(bookingId);
+        Map<UUID, BookingDtos.ChargeLine> result = new LinkedHashMap<>();
+        for (var charge : charges) {
+            var snapshot = readSnapshot(charge.snapshot());
+            if (!"ACTIVE".equals(charge.status()) || !"ROOM".equals(charge.kind())
+                    || charge.comboId() != null || !"HOURLY".equals(snapshot.get("pricingMode"))) continue;
+            var allocation = allocations.stream().filter(x -> x.id().equals(charge.allocationId())).findFirst()
+                .orElseThrow(() -> new BookingFailure(409,"form","Không tìm thấy chặng phòng cho khoản phí theo giờ."));
+            Instant from = snapshotInstant(snapshot, allocation.startsAt(), "extensionStartsAt", "from");
+            Instant to = snapshotInstant(snapshot, allocation.endsAt(), "extensionEndsAt", "to");
+            if (!snapshot.containsKey("extensionStartsAt") && !snapshot.containsKey("chargeSegment")) {
+                Instant savedStart = charges.stream().filter(c -> charge.allocationId().equals(c.allocationId()) && "ACTIVE".equals(c.status()))
+                    .map(c -> readSnapshot(c.snapshot())).filter(x -> !x.containsKey("extensionStartsAt"))
+                    .map(x -> snapshotInstant(x,null,"from")).filter(x -> x != null).min(Instant::compareTo).orElse(allocation.startsAt());
+                Duration shift = Duration.between(savedStart, allocation.startsAt());
+                from = from.plus(shift); to = to.plus(shift);
+            }
+            from = later(from, allocation.startsAt());
+            to = earlier(earlier(earlier(to, allocation.endsAt()), booking.plannedEnd()), at);
+            long seconds = Math.max(0, Duration.between(from,to).getSeconds());
+            Map<String,Object> updated = new LinkedHashMap<>(snapshot);
+            updated.put("from",from.toString()); updated.put("to",to.toString());
+            updated.put("billedSeconds",seconds); updated.put("billing","ACTUAL_SECONDS_BR215");
+            result.put(charge.id(), new BookingDtos.ChargeLine(charge.kind(), charge.description(),
+                BigDecimal.valueOf(seconds).divide(BigDecimal.valueOf(3600),3,RoundingMode.UP),
+                charge.unitPrice(), BookingPricingService.actualAmount(charge.unitPrice(),seconds), charge.priceRuleId(),null,updated));
         }
         return result;
     }
 
-    private static CheckoutDtos.Overtime overtime(Instant from, Instant to, BigDecimal hourlyPrice, UUID ruleId) {
-        long millis = Math.max(0, Duration.between(from, to).toMillis());
-        int minutes = Math.toIntExact((millis + 59_999) / 60_000);
-        BigDecimal amount = hourlyPrice.multiply(BigDecimal.valueOf(minutes)).divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
-        return new CheckoutDtos.Overtime(from, to, minutes, hourlyPrice, amount, ruleId);
-    }
-
-    @Transactional
-    // Chạy trong giao dịch lập bill; khóa booking và đối chiếu khoản lễ tân vừa xác nhận.
-    public void settleCheckoutOvertime(Identity actor, UUID bookingId, boolean confirmed, BigDecimal expectedAmount) {
-        BranchScope scope = branch(actor);
-        lockBooking(bookingId, scope.id());
-        Instant at = Instant.now();
-        List<CheckoutDtos.Overtime> lines = checkoutOvertime(actor, bookingId, at);
-        BigDecimal total = lines.stream().map(CheckoutDtos.Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (!lines.isEmpty() && (!confirmed || expectedAmount == null || total.compareTo(expectedAmount) != 0))
-            throw new BookingFailure(409, "form", "Cần xác nhận tiền quá giờ theo báo giá mới nhất. Vui lòng kiểm tra lại trước khi lập bill.");
-        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
-        MeterRow meter = repository.meter(bookingId);
-        for (var line : lines) {
-            repository.insertCharge(bookingId, allocation.id(), new BookingDtos.ChargeLine("OVERTIME",
-                "Quá giờ khi checkout · " + line.minutes() + " phút", BigDecimal.valueOf(line.minutes()).divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP),
-                line.hourlyPrice(), line.amount(), line.priceRuleId(), null,
-                detailsMap("source", "CHECKOUT_OVERTIME", "from", line.from(), "to", line.to(),
-                    "billedMinutes", line.minutes(), "hourlyPrice", line.hourlyPrice(), "billing", "ACTUAL_MINUTES")));
-            if (meter != null && "RUNNING".equals(meter.status()) && line.from().equals(meter.billedFrom()))
-                repository.stopMeter(meter.id(), at, line.minutes(), line.amount(), actor.id());
+    // BR-164/170/215: chỉ gọi trong giao dịch lập bill đã khóa booking; bản gốc giữ SUPERSEDED.
+    public void settleCheckoutCharges(Identity actor, UUID bookingId, Instant at, List<CheckoutDtos.Overtime> overtime) {
+        var savedCharges = repository.charges(bookingId);
+        for (var entry : checkoutHourlyCharges(actor,bookingId,at).entrySet()) {
+            var source = savedCharges.stream().filter(c -> c.id().equals(entry.getKey())).findFirst().orElseThrow();
+            repository.supersedeCharge(source.id());
+            if (entry.getValue().quantity().signum() > 0) repository.insertCharge(bookingId,source.allocationId(),entry.getValue());
         }
-        if (!lines.isEmpty()) repository.event(bookingId, actor.id(), "CHECKOUT_OVERTIME_CONFIRMED", null,
-            detailsMap("checkoutAt", at, "amount", total, "segments", lines));
+        recordOvertime(actor,bookingId,at,overtime);
     }
 
-    @Transactional
-    // Dừng đồng hồ, làm tròn phút thực dùng và chỉ ghi phụ thu một lần.
-    public BookingDtos.BookingDetail stopHourlyMeter(Identity identity, UUID bookingId) {
-        BranchScope branch = branch(identity);
-        lockBooking(bookingId, branch.id());
-        BookingRow booking = requireInHouseBooking(bookingId, branch.id());
-        MeterRow meter = repository.meter(bookingId);
-        if (meter == null || !Set.of("RUNNING", "STOPPED").contains(meter.status()))
-            throw new BookingFailure(409, "form", "Booking không có phiên tính giờ lẻ để dừng");
-        // Gửi lặp thao tác dừng chỉ trả trạng thái đã chốt, không tạo thêm dòng phí.
-        if ("STOPPED".equals(meter.status())) return detail(branch.id(), booking);
-        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
+    private void recordOvertime(Identity actor, UUID bookingId, Instant at, List<CheckoutDtos.Overtime> lines) {
+        var allocation = repository.currentAllocationForUpdate(bookingId);
         validateActiveAllocation(allocation);
-        if (!allocation.id().equals(meter.allocationId()))
-            throw new BookingFailure(409, "form", "Phòng hiện tại không khớp phiên tính giờ; vui lòng tải lại");
-        Instant stoppedAt = Instant.now();
-        long elapsedMillis = Math.max(0, Duration.between(meter.billedFrom(), stoppedAt).toMillis());
-        // Làm tròn số phút thực dùng lên trước, rồi chia giá giờ theo tỷ lệ phút/60.
-        int minutes = Math.toIntExact((elapsedMillis + 59_999) / 60_000);
-        BigDecimal amount = meter.hourlyPrice().multiply(BigDecimal.valueOf(minutes))
-            .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
-        if (minutes > 0) {
-            Map<String, Object> snapshot = detailsMap("useCase", "UC40_METER", "from", meter.billedFrom(),
-                "to", stoppedAt, "billedMinutes", minutes, "hourlyPrice", meter.hourlyPrice(),
-                "billing", "ACTUAL_MINUTES", "meterId", meter.id());
-            repository.insertCharge(bookingId, allocation.id(), new BookingDtos.ChargeLine("OVERTIME",
-                "Gia hạn giờ lẻ · " + minutes + " phút", BigDecimal.valueOf(minutes)
-                    .divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP),
-                meter.hourlyPrice(), amount, meter.priceRuleId(), null, snapshot));
+        for (var c : repository.charges(bookingId)) {
+            if ("ACTIVE".equals(c.status()) && "OVERTIME".equals(c.kind())) repository.supersedeCharge(c.id());
         }
-        repository.stopMeter(meter.id(), stoppedAt, minutes, amount, identity.id());
-        repository.event(bookingId, identity.id(), "HOURLY_METER_STOPPED", null, detailsMap(
-            "stoppedAt", stoppedAt, "billedMinutes", minutes, "amount", amount,
-            "pastReservationLimit", stoppedAt.isAfter(meter.reservedUntil())));
-        return detail(branch.id(), repository.booking(bookingId, branch.id()));
+        for (var line : lines) repository.insertCharge(bookingId,allocation.id(),new BookingDtos.ChargeLine("OVERTIME",
+            "Quá giờ · " + line.seconds() + " giây", BigDecimal.valueOf(line.seconds()).divide(BigDecimal.valueOf(3600),3,RoundingMode.UP),
+            line.hourlyPrice(),line.amount(),line.priceRuleId(),null,
+            detailsMap("from",line.from().toString(),"to",line.to().toString(),"billedSeconds",line.seconds(),"billing","ACTUAL_SECONDS_BR170")));
+        var meter = repository.meter(bookingId);
+        BigDecimal total = lines.stream().map(CheckoutDtos.Overtime::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
+        if (meter != null && "RUNNING".equals(meter.status())) repository.stopMeter(meter.id(),at,
+            Math.toIntExact(lines.stream().mapToLong(CheckoutDtos.Overtime::seconds).sum()/60),total,actor.id());
+        repository.event(bookingId,actor.id(),"CHECKOUT_OVERTIME_CONFIRMED",null,detailsMap("checkoutAt",at,"amount",total,"segments",lines));
+    }
+
+    @Transactional
+    // BR-169/170/164: dừng đồng hồ dùng cùng phép tính với checkout, gửi lại không ghi trùng.
+    public BookingDtos.BookingDetail stopHourlyMeter(Identity identity, UUID bookingId) {
+        BranchScope scope = branch(identity);
+        lockBooking(bookingId,scope.id());
+        BookingRow booking = requireInHouseBooking(bookingId,scope.id());
+        MeterRow meter = repository.meter(bookingId);
+        if (meter == null) throw new BookingFailure(409,"form","Booking không có phiên tính giờ lẻ để dừng.");
+        if ("STOPPED".equals(meter.status())) return detail(scope.id(),booking);
+        Instant at = Instant.now();
+        recordOvertime(identity,bookingId,at,checkoutOvertime(identity,bookingId,at));
+        return detail(scope.id(),booking);
     }
 
     @Transactional
@@ -408,6 +422,7 @@ public class BookingService {
     public BookingDtos.BookingDetail create(Identity identity, BookingDtos.CreateBookingRequest request) {
         if (request == null) throw new BookingFailure(400, "form", "Dữ liệu booking không hợp lệ");
         BranchScope branch = branch(identity);
+        repository.requireActiveBranch(branch.id()); // BR-177: tránh tạo booking khi cơ sở đồng thời tạm ngừng.
         UUID actorId = identity.id();
         validatePeriod(request.plannedStart(), request.plannedEnd());
         String channel = normalizeChannel(request.channel());

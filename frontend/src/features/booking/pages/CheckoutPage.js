@@ -36,6 +36,7 @@ export default function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [inspected, setInspected] = useState(false);
   const [overtimeConfirmed, setOvertimeConfirmed] = useState(false);
+  const [unservedConfirmed, setUnservedConfirmed] = useState(false);
   const [inspectionNote, setInspectionNote] = useState('');
   const [fees, setFees] = useState([]);
   const [method, setMethod] = useState('CASH');
@@ -46,6 +47,7 @@ export default function CheckoutPage() {
     setError('');
     setInspected(false);
     setOvertimeConfirmed(false);
+    setUnservedConfirmed(false);
     setFees([]);
     setInspectionNote('');
     authApi.me().then(async identity => {
@@ -115,6 +117,9 @@ export default function CheckoutPage() {
           inspectionNote,
           overtimeConfirmed,
           overtimeAmount: data.overtimeAmount,
+          unservedConfirmed,
+          quotedAt: data.checkoutAt,
+          quoteToken: data.quoteToken,
           surcharges: fees.map(fee => ({
             reason: fee.reason,
             amount: Number(fee.amount)
@@ -123,6 +128,7 @@ export default function CheckoutPage() {
       } catch (failure) {
         if (failure.response?.status === 409) {
           setOvertimeConfirmed(false);
+          setUnservedConfirmed(false);
           try { setData(await api.preview(bookingId)); } catch { /* Giữ lỗi lập bill để lễ tân biết cần xử lý. */ }
         }
         throw failure;
@@ -215,29 +221,34 @@ export default function CheckoutPage() {
             <div className="co-time-grid">
               <Info label="Check-in" value={dateTime(data.checkin)} />
               <Info label="Giờ trả dự kiến" value={dateTime(data.plannedEnd)} />
-              <Info label="Chốt sử dụng" value="Khi xác nhận lập bill" />
+              <Info label="Chốt sử dụng" value={dateTime(data.checkoutAt)} />
               <Info label="Đã sử dụng" value={usedTime(data)} />
             </div>
             <Lines lines={data.lines.filter(line => line.category === 'ROOM')} />
             {data.overtime?.length > 0 && <div className="co-warning">
               <strong>Tiền quá giờ cần xác nhận</strong>
               {data.overtime.map((line, index) => <p key={index}>
-                {dateTime(line.from)} → {dateTime(line.to)}: {line.minutes} phút × {formatVnd(line.hourlyPrice)}/giờ = <strong>{formatVnd(line.amount)}</strong>
+                {dateTime(line.from)} → {dateTime(line.to)}: {line.seconds} giây × {formatVnd(line.hourlyPrice)}/giờ = <strong>{formatVnd(line.amount)}</strong>
               </p>)}
-              <p>Làm tròn lên từng phút. Khoản này đã được cộng vào tổng hóa đơn; hệ thống kiểm tra lại khi lập bill.</p>
+              <p>Quá giờ không quá 5 phút được miễn phí. Vượt ngưỡng tính đủ số giây theo từng khung giá, làm tròn tiền lên đồng. Khoản này đã được cộng vào tổng hóa đơn.</p>
               <label className="co-inspection"><input type="checkbox" required checked={overtimeConfirmed} onChange={e => setOvertimeConfirmed(e.target.checked)} />
                 Xác nhận tiền quá giờ {formatVnd(data.overtimeAmount)}
               </label>
             </div>}
             <button type="button" disabled={busy} onClick={() => run(async () => {
               setOvertimeConfirmed(false);
+              setUnservedConfirmed(false);
               setData(await api.preview(bookingId));
             })}>Cập nhật tiền phòng</button>
           </section>
           <section className="co-card">
             <h2>2 Order F&B</h2>
             <Lines lines={data.lines.filter(line => line.category === 'FNB')} />
-            {data.pendingOrders?.length > 0 && <div className="co-warning">Còn {data.pendingOrders.length} order chưa phục vụ. Cần xử lý trước khi chốt bill.</div>}
+            {data.pendingOrders?.length > 0 && <div className="co-warning">
+              <p>Booking còn {data.unservedItemCount} món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng.</p>
+              <button type="button" disabled={busy} onClick={() => setUnservedConfirmed(window.confirm(`Booking còn ${data.unservedItemCount} món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Bạn có muốn tiếp tục?`))}>Xác nhận tiếp tục trả phòng</button>
+              {unservedConfirmed && <p role="status">Đã xác nhận tiếp tục với các món chưa phục vụ.</p>}
+            </div>}
           </section>
           <section className="co-card">
             <div className="co-section-title">
@@ -275,8 +286,8 @@ export default function CheckoutPage() {
         <aside className="co-card co-summary">
           <h2>Tóm tắt thanh toán</h2>
           <Summary lines={data.lines} extra={extra} amount={amount} depositAmount={depositAmount} paymentDue={paymentDue} preview />
-          <p className="co-note">Giữ giá booking đã xác nhận. Tiền sử dụng sẽ được chốt khi lập bill.</p>
-          <button className="co-primary" disabled={busy || !inspected || (data.overtime?.length > 0 && !overtimeConfirmed) || data.hasPendingRefund || depositAmount > amount || !!data.pendingOrders?.length}>{busy ? 'Đang chốt bill…' : data.overtime?.length > 0 ? 'Xác nhận tiền quá giờ & lập bill' : 'Tiếp tục thanh toán'}</button>
+          <p className="co-note">Giữ đơn giá đã xác nhận. Lập bill chốt sử dụng đến thời điểm báo giá hiển thị, có hiệu lực 5 phút. Bấm Cập nhật tiền phòng nếu khách vẫn tiếp tục sử dụng.</p>
+          <button className="co-primary" disabled={user.readOnly || busy || !inspected || (data.overtime?.length > 0 && !overtimeConfirmed) || data.hasPendingRefund || depositAmount > amount || (!!data.pendingOrders?.length && !unservedConfirmed)}>{busy ? 'Đang chốt bill…' : data.overtime?.length > 0 ? 'Xác nhận tiền quá giờ & lập bill' : 'Tiếp tục thanh toán'}</button>
         </aside>
       </form> : <>
         <div className="co-amount-banner">
@@ -312,7 +323,7 @@ export default function CheckoutPage() {
               </div>}
               {data.payments?.map((payment, index) => <div className="co-success" key={index}>Đã nhận {formatVnd(payment.amount)} · {payment.method === 'CASH' ? 'Tiền mặt' : 'SePay'}{payment.method === 'CASH' && <p>Tiền thừa: {formatVnd(payment.cashChange)}</p>}</div>)}
               {data.request && <><div className="co-transfer">
-                  {data.request.expired && data.request.status !== 'SETTLED' ? <div className="co-warning">QR hết hạn</div> : <img src={data.request.qrUrl} alt="QR chuyển khoản thanh toán bill" referrerPolicy="no-referrer" />}
+                  {data.request.expired && data.request.status !== 'SETTLED' ? <div className="co-warning">Yêu cầu thanh toán này đã hết hạn hiển thị. Vui lòng kiểm tra trạng thái thanh toán trước khi tạo yêu cầu mới.</div> : <img src={data.request.qrUrl} alt="QR chuyển khoản thanh toán bill" referrerPolicy="no-referrer" />}
                   <dl>
                     <Info label="Ngân hàng" value={data.request.bank} />
                     <Info label="Tài khoản nhận" value={data.request.account} />

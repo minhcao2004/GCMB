@@ -7,10 +7,10 @@
  */
 import api from '../../../../api/client';
 
-async function post(path, body) {
+async function post(path, body, scope) {
   const { data: csrf } = await api.get('/auth/csrf');
   const { data } = await api.post(path, body, {
-    headers: { [csrf.headerName]: csrf.token },
+    headers: { ...(scope ? { 'X-GCMB-Branch-Id': scope } : {}), [csrf.headerName]: csrf.token },
   });
   return data;
 }
@@ -19,8 +19,11 @@ export const accountAccessApi = {
   setRole(id, body) {
     return post(`/head-office/accounts/${id}/role`, body);
   },
-  deactivate(id, reason) {
-    return post(`/head-office/accounts/${id}/deactivate`, { reason });
+  deactivate(id, reason, scope) {
+    return post(`${scope ? "/branch-management" : "/head-office"}/accounts/${id}/deactivate`, { reason }, scope);
+  },
+  reactivate(id, scope) {
+    return post(`${scope ? "/branch-management" : "/head-office"}/accounts/${id}/reactivate`, {}, scope);
   },
   async permissions(role) {
     const { data } = await api.get('/head-office/accounts/permissions', {
@@ -68,5 +71,5 @@ export const actionNames = {
   UPDATE_ACCOUNT_INFORMATION: 'Cập nhật thông tin tài khoản',
   CREATE_USER_ACCOUNT: 'Tạo tài khoản',
   SET_ACCOUNT_ROLE: 'Thay đổi vai trò / phạm vi',
-  DEACTIVATE_USER_ACCOUNT: 'Thu hồi truy cập',
+  DEACTIVATE_USER_ACCOUNT: 'Vô hiệu hóa tài khoản', REACTIVATE_USER_ACCOUNT: 'Kích hoạt tài khoản',
 };
