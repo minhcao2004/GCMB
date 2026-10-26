@@ -14,6 +14,10 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
   const dialog = useRef(null);
   const [role, setRole] = useState(account.role);
   const [branchId, setBranchId] = useState(account.branchId || '');
+  const [branchIds, setBranchIds] = useState(() => {
+    const assigned = account.managedBranchIds?.length ? account.managedBranchIds : account.branchId ? [account.branchId] : [];
+    return assigned.filter((id) => options.branches.some((branch) => branch.id === id));
+  });
   const [mode, setMode] = useState('role');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,6 +26,7 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
   const immutable = account.id === actorId || account.status === 'REVOKED';
   const branchName = chain
     ? 'Toàn chuỗi'
+    : role === 'BRANCH_MANAGER' ? options.branches.filter((branch) => branchIds.includes(branch.id)).map((branch) => branch.name).join(', ') || 'Chưa chọn cơ sở'
     : options.branches.find((branch) => branch.id === branchId)?.name || 'Chưa chọn cơ sở';
 
   useEffect(() => {
@@ -40,6 +45,10 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
   async function submit(event) {
     event.preventDefault();
     if (busy || immutable) return;
+    if (mode === 'role' && role === 'BRANCH_MANAGER' && !branchIds.length) {
+      setErrors({ branchIds: 'Chọn ít nhất một cơ sở quản lý.' });
+      return;
+    }
     setBusy(true);
     setErrors({});
     try {
@@ -48,7 +57,8 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
       } else {
         await accountAccessApi.setRole(account.id, {
           role,
-          branchId: chain ? null : branchId,
+          branchId: chain ? null : role === 'BRANCH_MANAGER' ? branchIds[0] : branchId,
+          ...(role === 'BRANCH_MANAGER' ? { branchIds } : {}),
         });
       }
       onSaved(mode === 'deactivate' ? 'Đã thu hồi quyền truy cập.' : 'Đã lưu vai trò và phạm vi truy cập.');
@@ -102,7 +112,16 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
               </div>
               <div className="account-field">
                 <label htmlFor="access-branch">Phạm vi cơ sở</label>
-                {chain ? <input id="access-branch" readOnly value="Toàn chuỗi" /> : (
+                {chain ? <input id="access-branch" readOnly value="Toàn chuỗi" /> : role === 'BRANCH_MANAGER' ? (
+                  <div className="account-managed-branches" role="group" aria-label="Các cơ sở quản lý">
+                    {options.branches.map((branch) => <label key={branch.id}>
+                      <input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => {
+                        setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id));
+                      }} />
+                      <span>{branch.name}</span>
+                    </label>)}
+                  </div>
+                ) : (
                   <select id="access-branch" required value={branchId} onChange={(event) => setBranchId(event.target.value)}>
                     <option value="">Chọn cơ sở</option>
                     {options.branches.map((branch) => (
@@ -114,7 +133,7 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
               <div className="account-access-note access-preview">
                 <strong>Phạm vi sau khi lưu</strong>
                 <p>{roleNames[role]} · {branchName}</p>
-                <p>Tài khoản cần đăng nhập lại sau khi thay đổi quyền.</p>
+                {role === 'BRANCH_MANAGER' && <p>Một quản lý có thể phụ trách nhiều cơ sở, mỗi cơ sở tối đa 2 quản lý. Chọn các cơ sở được phép quản lý; bỏ chọn để thu hồi phân công tại cơ sở đó.</p>}<p>Tài khoản cần đăng nhập lại sau khi thay đổi quyền.</p>
               </div>
               <button
                 type="button"

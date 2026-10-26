@@ -2,8 +2,9 @@ package com.gcmb.backend.booking.service;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
+import com.gcmb.backend.booking.dto.CheckoutDtos;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.AllocationRow;
@@ -62,18 +63,6 @@ public class BookingService {
         return repository.rooms(branch(identity).id()).stream()
             .map(room -> new BookingDtos.RoomSummary(room.id(), room.code(), room.name(), room.capacity(),
                 room.roomTypeId(), room.roomTypeName(), room.operatingStatus())).toList();
-    }
-
-    @Transactional
-    public void finishCleaning(Identity identity, UUID roomId) {
-        UUID branchId = branch(identity).id();
-        String status = repository.lockRoomStatus(branchId, roomId);
-        if (status == null) throw new BookingFailure(404, "form", "Không tìm thấy phòng trong cơ sở của bạn");
-        if (!"CLEANING".equals(status) && !"AVAILABLE".equals(status))
-            throw new BookingFailure(409, "form", "Chỉ xác nhận dọn xong cho phòng đang dọn");
-        if (repository.roomHasOccupant(branchId, roomId))
-            throw new BookingFailure(409, "form", "Phòng vẫn có khách đang sử dụng; cần checkout trước");
-        if ("CLEANING".equals(status)) repository.completeRoomCleaning(branchId, roomId, identity.id());
     }
 
     @Transactional(readOnly = true)
@@ -323,6 +312,60 @@ public class BookingService {
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 
+    // Báo phần quá giờ chưa ghi phí; tách đoạn trước đồng hồ để không tính trùng.
+    public List<CheckoutDtos.Overtime> checkoutOvertime(Identity actor, UUID bookingId, Instant at) {
+        BranchScope scope = branch(actor);
+        BookingRow booking = requireInHouseBooking(bookingId, scope.id());
+        if (!at.isAfter(booking.plannedEnd())) return List.of();
+        AllocationRow allocation = repository.currentAllocation(bookingId);
+        validateActiveAllocation(allocation);
+        MeterRow meter = repository.meter(bookingId);
+        List<CheckoutDtos.Overtime> result = new ArrayList<>();
+        Instant gapEnd = meter == null ? at : meter.billedFrom();
+        if (gapEnd.isAfter(booking.plannedEnd())) {
+            PricingRule rate = pricing.meteredRate(allocation.roomTypeId(), scope.id(), scope.timezone(), booking.plannedEnd());
+            result.add(overtime(booking.plannedEnd(), gapEnd, rate.hourlyPrice(), rate.id()));
+        }
+        if (meter != null && "RUNNING".equals(meter.status())) {
+            if (!allocation.id().equals(meter.allocationId()))
+                throw new BookingFailure(409, "form", "Phòng hiện tại không khớp phiên tính giờ; vui lòng tải lại");
+            result.add(overtime(meter.billedFrom(), at, meter.hourlyPrice(), meter.priceRuleId()));
+        }
+        return result;
+    }
+
+    private static CheckoutDtos.Overtime overtime(Instant from, Instant to, BigDecimal hourlyPrice, UUID ruleId) {
+        long millis = Math.max(0, Duration.between(from, to).toMillis());
+        int minutes = Math.toIntExact((millis + 59_999) / 60_000);
+        BigDecimal amount = hourlyPrice.multiply(BigDecimal.valueOf(minutes)).divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
+        return new CheckoutDtos.Overtime(from, to, minutes, hourlyPrice, amount, ruleId);
+    }
+
+    @Transactional
+    // Chạy trong giao dịch lập bill; khóa booking và đối chiếu khoản lễ tân vừa xác nhận.
+    public void settleCheckoutOvertime(Identity actor, UUID bookingId, boolean confirmed, BigDecimal expectedAmount) {
+        BranchScope scope = branch(actor);
+        lockBooking(bookingId, scope.id());
+        Instant at = Instant.now();
+        List<CheckoutDtos.Overtime> lines = checkoutOvertime(actor, bookingId, at);
+        BigDecimal total = lines.stream().map(CheckoutDtos.Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (!lines.isEmpty() && (!confirmed || expectedAmount == null || total.compareTo(expectedAmount) != 0))
+            throw new BookingFailure(409, "form", "Cần xác nhận tiền quá giờ theo báo giá mới nhất. Vui lòng kiểm tra lại trước khi lập bill.");
+        AllocationRow allocation = repository.currentAllocationForUpdate(bookingId);
+        MeterRow meter = repository.meter(bookingId);
+        for (var line : lines) {
+            repository.insertCharge(bookingId, allocation.id(), new BookingDtos.ChargeLine("OVERTIME",
+                "Quá giờ khi checkout · " + line.minutes() + " phút", BigDecimal.valueOf(line.minutes()).divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP),
+                line.hourlyPrice(), line.amount(), line.priceRuleId(), null,
+                detailsMap("source", "CHECKOUT_OVERTIME", "from", line.from(), "to", line.to(),
+                    "billedMinutes", line.minutes(), "hourlyPrice", line.hourlyPrice(), "billing", "ACTUAL_MINUTES")));
+            if (meter != null && "RUNNING".equals(meter.status()) && line.from().equals(meter.billedFrom()))
+                repository.stopMeter(meter.id(), at, line.minutes(), line.amount(), actor.id());
+        }
+        if (!lines.isEmpty()) repository.event(bookingId, actor.id(), "CHECKOUT_OVERTIME_CONFIRMED", null,
+            detailsMap("checkoutAt", at, "amount", total, "segments", lines));
+    }
+
     @Transactional
     // Dừng đồng hồ, làm tròn phút thực dùng và chỉ ghi phụ thu một lần.
     public BookingDtos.BookingDetail stopHourlyMeter(Identity identity, UUID bookingId) {
@@ -395,6 +438,8 @@ public class BookingService {
         if (depositAmount.signum() < 0 || normalizedDepositAmount.scale() > 0
                 || normalizedDepositAmount.precision() - normalizedDepositAmount.scale() > 18)
             throw new BookingFailure(400, "depositAmount", "Số tiền cọc phải là số nguyên không âm, tối đa 18 chữ số");
+        if (depositAmount.signum() > 0 && depositAmount.compareTo(BookingPricingService.depositFor(quote.expectedAmount())) != 0)
+            throw new BookingFailure(400, "depositAmount", "Tiền cọc phải bằng 30% giá booking đã báo, làm tròn đến đồng");
         String paymentMethod = null;
         String paymentReference = null;
         if (depositAmount.signum() > 0) {
@@ -402,11 +447,9 @@ public class BookingService {
             if (!Set.of("BANK_TRANSFER", "CASH", "CARD", "QR").contains(paymentMethod))
                 throw new BookingFailure(400, "paymentMethod", "Vui lòng chọn phương thức thu cọc hợp lệ");
             paymentReference = nullable(request.paymentReference(), "paymentReference", 120);
-            if (!"CASH".equals(paymentMethod) && paymentReference == null)
+            if (!"CASH".equals(paymentMethod) && !"BANK_TRANSFER".equals(paymentMethod) && paymentReference == null)
                 throw new BookingFailure(400, "paymentReference", "Nhập mã giao dịch / ghi chú khi thu cọc bằng phương thức này");
         }
-        // Chuyển khoản do lễ tân xác nhận thủ công khác khoản được webhook ngân hàng đối soát.
-        String recordedPaymentMethod = "BANK_TRANSFER".equals(paymentMethod) ? "MANUAL_TRANSFER" : paymentMethod;
         String code = "BK-" + java.time.LocalDate.now(branch.timezone()).toString().replace("-", "") + "-" +
             UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         UUID bookingId = repository.insertBooking(branch.id(), code, contactName, contactPhone, guestCount, channel,
@@ -414,9 +457,9 @@ public class BookingService {
         UUID allocationId = insertAllocation(branch, bookingId, room.id(), request.plannedStart(), request.plannedEnd(), actorId);
         repository.createDepositAccount(bookingId);
         // Chỉ ghi sổ khi thực sự có tiền đã thu; yêu cầu cọc của combo không tự tạo khoản thu.
-        if (depositAmount.signum() > 0) {
+        if (depositAmount.signum() > 0 && !"BANK_TRANSFER".equals(paymentMethod)) {
             repository.receiveDeposit(branch.id(), bookingId, actorId, depositAmount,
-                recordedPaymentMethod, paymentReference);
+                paymentMethod, paymentReference);
             if (repository.depositBalance(bookingId).compareTo(depositAmount) != 0)
                 throw new IllegalStateException("Received booking deposit does not match its ledger balance");
         }
@@ -425,7 +468,8 @@ public class BookingService {
             "branchId", branch.id(), "roomId", room.id(), "startsAt", request.plannedStart(),
             "endsAt", request.plannedEnd(), "pricingMode", quote.pricingMode(),
             "expectedAmount", quote.expectedAmount(), "depositRequired", quote.depositRequired(), "guestCount", guestCount,
-            "depositReceived", depositAmount, "depositMethod", recordedPaymentMethod));
+            "depositReceived", "BANK_TRANSFER".equals(paymentMethod) ? BigDecimal.ZERO : depositAmount,
+            "depositRequested", depositAmount, "depositMethod", paymentMethod));
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 

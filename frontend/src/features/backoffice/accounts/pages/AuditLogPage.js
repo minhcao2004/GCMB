@@ -24,7 +24,7 @@ const statusNames = {
 };
 const entityNames = { USER_ACCOUNT: 'Tài khoản', ROOM: 'Phòng', ROOM_TYPE: 'Hạng phòng', PRICE_RULE: 'Quy tắc giá', COMBO: 'Combo', BOOKING: 'Đặt phòng', BRANCH: 'Cơ sở' };
 const fieldNames = {
-  cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', closed_on: 'Ngày đóng',
+  managerNames: 'Các quản lý phụ trách', depositRequested: 'Cọc yêu cầu', cashAmount: 'Tiền mặt', bankAmount: 'Chuyển khoản', address: 'Địa chỉ', notes: 'Ghi chú vận hành', closed_on: 'Ngày đóng',
   username: 'Tên đăng nhập', role: 'Vai trò', branchName: 'Cơ sở', status: 'Trạng thái', fullName: 'Họ tên', email: 'Email', phone: 'Số điện thoại',
   name: 'Tên', mode: 'Loại dịch vụ', capacity: 'Sức chứa',
   description: 'Mô tả', floor_number: 'Tầng', operating_status: 'Trạng thái phòng', status_reason: 'Lý do trạng thái', expected_ready_at: 'Dự kiến sẵn sàng',

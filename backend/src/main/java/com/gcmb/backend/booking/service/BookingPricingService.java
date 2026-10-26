@@ -35,10 +35,18 @@ public class BookingPricingService {
         if (start == null || end == null || !end.isAfter(start))
             throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu");
         String normalizedMode = mode == null || mode.isBlank() ? "HOURLY" : mode.trim().toUpperCase();
-        if ("COMBO".equals(normalizedMode)) return comboQuote(roomTypeId, start, end, comboId);
+        if ("COMBO".equals(normalizedMode)) {
+            var result = comboQuote(roomTypeId, start, end, comboId);
+            return new BookingDtos.PriceQuote(result.pricingMode(), result.expectedAmount(), depositFor(result.expectedAmount()), result.charges());
+        }
         if (!"HOURLY".equals(normalizedMode)) throw new BookingFailure(400, "pricingMode", "Hình thức tính giá không hợp lệ");
         if (comboId != null) throw new BookingFailure(400, "comboId", "Không chọn combo khi tính giá theo giờ");
-        return hourlyQuote(roomTypeId, branchId, timezone, start, end);
+        var result = hourlyQuote(roomTypeId, branchId, timezone, start, end);
+        return new BookingDtos.PriceQuote(result.pricingMode(), result.expectedAmount(), depositFor(result.expectedAmount()), result.charges());
+    }
+
+    public static BigDecimal depositFor(BigDecimal amount) {
+        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.HALF_UP);
     }
 
     // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.
@@ -70,7 +78,7 @@ public class BookingPricingService {
         snapshot.put("version", combo.version()); snapshot.put("name", combo.name());
         snapshot.put("durationMinutes", combo.durationMinutes());
         snapshot.put("from", start.toString()); snapshot.put("to", end.toString());
-        snapshot.put("depositRequired", combo.depositRequired());
+        snapshot.put("depositRequired", depositFor(combo.price()));
         snapshot.put("overtimeHourlyPrice", combo.overtimeHourlyPrice());
         BookingDtos.ChargeLine line = new BookingDtos.ChargeLine("COMBO", combo.name(), BigDecimal.ONE,
             combo.price(), combo.price(), null, combo.id(), snapshot);

@@ -1,4 +1,4 @@
-export default function DashboardTopbar({ role, page, user, busy, onProfile, onLogout, onToggleSidebar, sidebarExpanded, children }) {
+export default function DashboardTopbar({ role, page, user, busy, onProfile, onLogout, onToggleSidebar, sidebarExpanded, children, accountHeader }) {
   return <div className="manager-topbar">
     {onToggleSidebar && <button
       className="manager-sidebar-toggle"
@@ -17,7 +17,8 @@ export default function DashboardTopbar({ role, page, user, busy, onProfile, onL
     </button>}
     <p>{role} <span>/ {page}</span></p>
     {children}
-    <div className="manager-account">
+    <div className={`manager-account${accountHeader ? ' has-branch-selector' : ''}`}>
+      {accountHeader}
       <span>{user?.username || 'Đang tải…'}</span>
       <button type="button" disabled={!user} onClick={onProfile}>Thông tin tài khoản</button>
       <button type="button" disabled={!user || busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
