@@ -23,7 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class MutationAudit {
     private static final Map<String, String> TABLES = Map.of(
         "ROOM", "room", "ROOM_TYPE", "room_type", "PRICE_RULE", "price_rule",
-        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch");
+        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch", "MENU_ITEM", "menu_item");
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;
 
@@ -79,7 +79,8 @@ public class MutationAudit {
                     'hourly_price','overtime_hourly_price','billing_step_minutes','priority','price',
                     'duration_minutes','deposit_required','day_group','min_guests','included_description',
                     'status','contact_name','contact_phone','guest_count','planned_start','planned_end',
-                    'actual_checkin','actual_checkout','note','channel','pricing_mode')),'{}'::jsonb)
+                    'actual_checkin','actual_checkout','note','channel','pricing_mode','category','kind',
+                    'inventory_item_id','sale_price','deleted_at','deleted_by')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
         return snapshots.isEmpty() ? null : snapshots.get(0);
     }
