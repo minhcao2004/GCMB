@@ -12,6 +12,7 @@ import { authApi, apiErrors } from '../../auth/services/authApi';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import BranchRoomsPage from '../pages/BranchRoomsPage';
+import StaffPage from '../../workforce/pages/StaffPage';
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
@@ -19,6 +20,7 @@ const icons = ['M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z', 'M4 21V4
 
 export default function BranchManagerDashboard({ user, busy, onLogout, onProfile, onBranchChange }) {
   const [active, setActive] = useState('Phòng');
+  const [accountSearch, setAccountSearch] = useState('');
   const [search, setSearch] = useState('');
   const [branches, setBranches] = useState([]);
   const [loadingBranches, setLoadingBranches] = useState(true);
@@ -79,7 +81,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
       <section className="manager-content branch-manager-content">
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
-        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Nhân sự' ? <StaffPage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); setActive('Tài khoản'); }} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>
   </div>;

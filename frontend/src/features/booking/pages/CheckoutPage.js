@@ -190,6 +190,7 @@ export default function CheckoutPage() {
         </div>
         <button onClick={() => navigate('/le-tan/phong')}>‹ Về phòng</button>
       </header>
+      {data?.bookingId && <section className="co-card"><h2>Yêu cầu hóa đơn thuế</h2><p>Nếu khách yêu cầu hóa đơn, ghi nhận thông tin và gửi kế toán xử lý bên ngoài.</p><button type="button" onClick={() => navigate(`/le-tan/hoa-don-thue?booking=${data.bookingId}`)}>Ghi nhận / theo dõi yêu cầu hóa đơn</button></section>}
       {error && <div className="co-error" role="alert">{error}</div>}
       {!bookingId && !billId ? <div className="co-card co-list">
         <h2>Bill của cơ sở</h2>

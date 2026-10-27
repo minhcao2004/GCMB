@@ -46,7 +46,10 @@ public final class AccountDtos {
     public record Option(String id, String name) {
     }
 
-    public record EmployeeOption(UUID id, String name, String code) {
+    public record EmployeeOption(UUID id, String name, String code, String role, String email, UUID branchId, String branchName) {
+        public EmployeeOption(UUID id, String name, String code) {
+            this(id, name, code, null, null, null, null);
+        }
     }
 
     public record Options(List<EmployeeOption> employees, List<Option> roles, List<Option> branches) {

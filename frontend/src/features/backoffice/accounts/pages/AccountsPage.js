@@ -18,8 +18,8 @@ const roles = { HEAD_OFFICE_MANAGER: ['HOM', 'Quản lý cấp cao'], BRANCH_MAN
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };
 const emptyFilters = { q: '', role: '', branchId: '', status: '', page: 0 };
 
-export default function AccountsPage({ actorId, onAudit, branchScope, readOnly = false }) {
-  const [filters, setFilters] = useState(emptyFilters);
+export default function AccountsPage({ actorId, onAudit, branchScope, readOnly = false, initialSearch = '' }) {
+  const [filters, setFilters] = useState(() => ({ ...emptyFilters, q: initialSearch }));
   const [data, setData] = useState({ items: [], total: 0 });
   const [options, setOptions] = useState({ employees: [], roles: [], branches: [] });
   const [loading, setLoading] = useState(true);
@@ -90,12 +90,14 @@ export default function AccountsPage({ actorId, onAudit, branchScope, readOnly =
 
 function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView }) {
   const dialog = useRef(null);
-  const [form, setForm] = useState({ employeeId: '', branchId: branchScope || '', username: '', password: '', email: '', role: 'RECEPTIONIST' });
+  const [form, setForm] = useState({ employeeId: '', username: '', password: '' });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
   const [created, setCreated] = useState(null);
-  const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(form.role);
+  const employee = options.employees.find(item => item.id === form.employeeId);
+  const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(employee?.role);
+  const ready = employee && roles[employee.role] && employee.email && (chain || employee.branchId);
   useEffect(() => { dialog.current.showModal(); const previous = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = previous; }; }, []);
   const change = (key, value) => { setForm((old) => ({ ...old, [key]: value })); setErrors((old) => ({ ...old, [key]: '', form: '' })); };
   const submit = async (event) => {
@@ -105,7 +107,7 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
     if (policyError) { setErrors({ password: policyError }); return; }
     setBusy(true); setErrors({});
     try {
-      const account = await accountApi.create({ ...form, branchId: chain ? null : form.branchId || null }, branchScope);
+      const account = await accountApi.create({ employeeId: form.employeeId, username: form.username, password: form.password }, branchScope);
       setForm((old) => ({ ...old, password: '' })); setCreated(account); onCreated();
     } catch (e) { setErrors(apiErrors(e)); }
     finally { setBusy(false); }
@@ -121,10 +123,10 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
         {!options.employees?.length && <p className="account-note">Không có nhân viên đang hoạt động chưa được cấp tài khoản.</p>}
         {field('username', 'Tên đăng nhập', <input {...attrs('username')} autoComplete="off" minLength={3} maxLength={100} pattern="[A-Za-z0-9._\-]{3,100}" title="3–100 chữ, số hoặc dấu . _ -" />)}
         {field('password', 'Mật khẩu', <div className="account-password"><input {...attrs('password')} type={visible ? 'text' : 'password'} autoComplete="new-password" /><button type="button" aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={visible} onClick={() => setVisible((old) => !old)}>{visible ? 'Ẩn' : 'Hiện'}</button></div>)}
-        {field('email', 'Email', <input {...attrs('email')} type="email" maxLength={254} autoComplete="off" />)}
-        {field('role', 'Vai trò ban đầu', <select {...attrs('role')}>{options.roles.map((item) => <option key={item.id} value={item.id}>{roles[item.id]?.[1] || item.name} ({roles[item.id]?.[0] || item.id})</option>)}</select>)}
-        {field('branchId', 'Phạm vi cơ sở', chain ? <input id="account-branchId" readOnly value="Toàn chuỗi" /> : <select {...attrs('branchId')}><option value="">Chọn cơ sở</option>{options.branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>)}
-        <div className="account-access-note"><strong>Thông tin truy cập</strong><p>Nhập mật khẩu của bạn. Phạm vi truy cập theo vai trò và cơ sở đã chọn.</p></div>
-      </fieldset><div className="account-drawer-footer"><button type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="account-primary" disabled={busy} type="submit">{busy ? 'Đang tạo…' : 'Tạo tài khoản'}</button></div></form>}
+        {field('email', 'Email từ hồ sơ', <input id="account-email" readOnly value={employee?.email || ''} placeholder="Chưa có email trong hồ sơ" />)}
+        {field('role', 'Vai trò từ hồ sơ', <input id="account-role" readOnly value={roles[employee?.role]?.[1] || 'Chưa có vai trò cấp tài khoản'} />)}
+        {field('branchId', 'Phạm vi từ hồ sơ', <input id="account-branchId" readOnly value={chain ? 'Toàn chuỗi' : employee?.branchName || 'Chưa gán cơ sở'} />)}
+        <div className="account-access-note"><strong>Thông tin truy cập</strong><p>Vai trò, cơ sở và email lấy từ hồ sơ nhân viên. Nếu thiếu thông tin, hãy cập nhật hồ sơ trước. Sau khi tạo, thay đổi quyền tại chức năng phân quyền.</p></div>
+      </fieldset><div className="account-drawer-footer"><button type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="account-primary" disabled={busy || !ready} type="submit">{busy ? 'Đang tạo…' : 'Tạo tài khoản'}</button></div></form>}
   </dialog>;
 }

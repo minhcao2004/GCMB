@@ -144,7 +144,7 @@ public class CheckoutService {
             """, branch(actor));
     }
 
-    // BR-01/13/20/21/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-22/125 tạm hoãn theo yêu cầu).
+    // BR-01/13/20/21/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-22 tạm hoãn; BR-125 được theo dõi độc lập trong TaxInvoiceService).
     @Transactional
     public Map<String, Object> issue(Identity actor, UUID bookingId, Issue input) {
         UUID branch = branch(actor);

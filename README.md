@@ -54,6 +54,48 @@ Customer interaction is limited to in-room F&B ordering. Room reservations recei
 
 The current scope excludes a customer booking portal, hardware barcode-scanner integration, statutory tax report generation, recipe/BOM-based ingredient management, content licensing management, and regulatory or safety compliance enforcement.
 
+### Staff records (UC-77–82)
+
+The staff module implements create, view/search, update, deactivate/reactivate, initial home-branch assignment and transfer. The UI uses the supplied staff mockups; attachments are excluded from this implementation.
+
+- APIs: `/api/v1/head-office/staff` and `/api/v1/branch-management/staff`; list, `/options`, `/{id}`, `/{id}/status`, `/{id}/branch`, and `/{id}/transfers`. Updates require the current record `version`; stale writes return HTTP 409.
+- BR-52/177: branch managers access staff in their managed branch; suspended branches remain readable and reject changes. Initial assignment and transfers are head-office-only. A branch-manager-created record is assigned to the current branch as part of creation.
+- BR-171: deactivating an employee revokes the linked login and tokens in the same transaction. Reactivating a record does not automatically restore login access. Transfers retain assignment history; linked receptionist access follows the new branch and existing sessions are revoked. Manager responsibilities remain separately managed.
+- BR-111/119/199 and corresponding MSG references are recorded in the service and UI validation. Previous record values are retained in audit entries. Phone validation follows BR-119 (digits with an optional leading `+`, maximum 30 characters from the schema), not a ten-digit-only rule.
+- Flyway migration `V21__staff_records.sql` adds position, contact email, notes, optimistic version and the account-lock trigger. Restart the backend to apply migrations before using the staff screens. No attachment storage or endpoints are introduced.
+
+### Account creation from staff profiles
+
+Staff contact uniqueness (user-requested extension to UC-77/79 and BR-134): create/update checks contact email against all other employee profiles and login accounts, including inactive records. Email comparison ignores case and surrounding spaces. Staff phone numbers are also unique across employee profiles after trimming; BR-119 syntax remains unchanged, and no conversion between local/international prefixes is performed. Optional blank contact fields remain allowed. A record and its own linked account may share the same email; retaining one's own contact values is allowed when no other record conflicts.
+
+The same checks apply when changing account-profile contact information and creating accounts from older staff records. All these write paths use the existing transaction advisory lock so simultaneous application writes cannot reserve the same email/phone. Duplicate errors are returned against `contactEmail`/`phone` in staff forms and `email`/`phone` in account forms. Existing duplicates are not automatically changed or deleted; the responsible manager must correct the conflicting profile before account creation. No migration or new test source file is introduced. The team should document staff phone uniqueness and the expanded email uniqueness rule; BR-119 alone only defines phone syntax.
+
+Contact validation was checked against PostgreSQL in an always-rolled-back transaction, including create/update conflicts, case-insensitive email, trimmed contacts, inactive records, own linked account, optional blanks, existing conflicting account data, and the shared lock. Existing `AccountProfileServiceTest` reports 25/29 passing: four cases still require the former 7–15-digit, leading-zero, no-plus phone policy, which differs from the current BR-119. The test source and existing phone-format validation were kept unchanged.
+
+UC-04 now takes the selected employee's position, current home branch and contact email from the database, ignoring client overrides. The create screen displays those values read-only; only employee, username and password are submitted. Missing email, unsupported position or missing branch for REC/BM must be resolved in the employee profile first. HOM/ACC retain chain-wide access. Later role changes use the existing permission workflow; editing the staff position does not silently change an existing login role. This replaces manual role/branch/email selection at account creation at the user's request.
+
+### Tax invoice request tracking (UC-127)
+
+User-approved revision to UC-127 / BR-125: the receptionist records and sends a booking's tax invoice request from checkout at `/le-tan/hoa-don-thue`, then has read-only access to progress and delivery results. The accountant reviews/confirms progress updates at `/ke-toan/hoa-don-thue`. Requests retain buyer details, notes, delivery results and an audit history. Issuance and delivery take place outside GCMB; this feature never changes booking charges or payments. BR-177 still allows reading but blocks writes at a suspended branch.
+
+The optional customer note is labeled “Yêu cầu bổ sung của khách” when creating a request. The accountant progress form has no processing-note field. The confirmation summary and compact action buttons occupy separate rows.
+
+The detail screen separates saved information from progress edits and explains delivery-result requirements. Switching to the request list offers a return button to the last booking and preserves unsaved fields per booking in component memory, including a new request not yet present in the list. Drafts are cleared after saving or leaving the screen; a draft is restored only if the server version is unchanged. The tax-invoice navigation item includes a receipt icon for both receptionist and accountant menus.
+
+The requested addition beyond Report 3 is an accountant inbox at `/ke-toan/hoa-don-thue`, with a persistent per-account read receipt and an unread notification refreshed every 30 seconds. Accountants view requests, mark notifications read and update progress and delivery results. Receptionists create requests and view updates; they cannot change handling progress. There are no external email sends, invoice issuance integrations or attachments. Implementation statuses are `REQUESTED`, `PREPARING`, `ISSUED`, `DELIVERED`, and `DELIVERY_FAILED`; delivery outcomes require a predefined result selection. Updates require a current version to prevent overwriting another user's change.
+
+Migration `V22__tax_invoice_requests.sql` adds request/read-receipt storage. APIs use `/api/v1/reception/tax-invoices` and `/api/v1/accounting/tax-invoices`; each request is identified by its booking UUID. Restart the backend to apply migrations.
+
+The single “Trạng thái xử lý” dropdown has two groups with detailed choices: “Đã giao thành công” (email, direct handover, Zalo/contact channel) and “Chưa giao thành công” (invalid contact, unreachable customer, sending failure). Pending/preparing/externally-issued stages are not selectable. Selecting a detailed outcome maps to the matching existing status/result fields. The saved summary and list display that same detailed outcome only after the confirmed API update succeeds. Requests without a result display “Chưa giao thành công”; the dropdown requires an explicit outcome before saving. Earlier values remain readable. The read button stays at the bottom; processing notes remain removed. No database migration is needed.
+
+The update endpoint is `PUT /api/v1/accounting/tax-invoices/{bookingId}`. Receptionists cannot update progress through either the UI or service/API; accountants cannot create requests on behalf of receptionists. Customer notes submitted at creation remain available in the creation audit snapshot when processing notes are updated. No new database migration is needed for this role change.
+
+Team handoff: Report 3 UC-127 currently names Receptionist as its primary actor, and BR-125 assigns progress updates to Receptionist. Update both to Accountant and revise the permission matrix: REC creates/reads requests; ACC reads/updates progress and delivery. This user-approved workflow supersedes those passages; the original Word specification has not been edited.
+
+The staff review covers BR-52/111/119/171/177/199, email validation reused from BR-113, and MSG01–05/10–12/14/24/26/27/40/43/88. UC-81/82 history and confirmation requirements are checked directly against the use-case text. Technical conflicts and duplicate employee identifiers use explicit messages because Report 3 does not assign a staff-specific message to those cases.
+
+Validation note (27/10/2026): the database rollback checks pass for profile-derived account creation and invoice request lifecycle, read receipts, branch authorization, stale versions and suspended-branch access. Existing `AccountServiceTest` has not been edited per instruction: 14/30 cases pass; 16 fail/error because its fixtures and assertions still target manually supplied role/branch/email and do not provide the new employee-profile lookup. The team must update those tests to the revised UC-04 contract before requiring a green full test suite.
+
 ## Tech Stack
 
 | Area | Technology |

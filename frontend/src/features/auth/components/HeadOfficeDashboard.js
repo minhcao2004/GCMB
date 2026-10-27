@@ -16,6 +16,7 @@ import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+import StaffPage from '../../workforce/pages/StaffPage';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
@@ -35,6 +36,7 @@ const icons = [
 // Trang tổng quan cho vai trò quản lý cấp cao.
 export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile }) {
   const [activeTab, setActiveTab] = useState('Tổng quan');
+  const [accountSearch, setAccountSearch] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
@@ -72,7 +74,9 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
           <RoomCatalogPage />
         </section>
       ) : activeTab === 'Tài khoản & phân quyền' ? (
-        <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
+        <AccountsPage actorId={user.id} initialSearch={accountSearch} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
+      ) : activeTab === 'Nhân sự' ? (
+        <StaffPage user={user} onAccounts={(username) => { setAccountSearch(username); setActiveTab('Tài khoản & phân quyền'); }} onBranches={() => setActiveTab('Cơ sở')} />
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}

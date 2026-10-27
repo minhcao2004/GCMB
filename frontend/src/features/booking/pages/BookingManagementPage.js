@@ -14,10 +14,12 @@ import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingDa
 import '../styles/booking.css';
 
 const navigation = [
+  ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
   ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Kho hàng', 'inventory'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
+  ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'],
   ['Thu & cấp quỹ', 'payments', true],
   ['Chi & hoàn ứng', 'plus', true],
@@ -37,6 +39,7 @@ const cancellationReasons = [
 ];
 
 const iconPaths = {
+  tax: <><path d="M6 3h9l4 4v14l-3-2-3 2-3-2-4 2V3Z"/><path d="M14 3v5h5M9 11h7M9 15h5"/></>,
   overview: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
   rooms: <><path d="M3 20V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14M3 13h18M6 13V9a2 2 0 0 1 2-2h3v6m2 0V7h3a2 2 0 0 1 2 2v4M2 20h20"/></>,
   booking: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3m-3 3h7"/></>,
@@ -173,6 +176,7 @@ export function AppShell({
                     title={unavailable ? 'Đang phát triển' : label}
                     onClick={() => {
                       if (unavailable) return;
+                      if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
                       if (icon === 'overview') navigate('/ke-toan');
                       if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
                     }}
@@ -215,6 +219,7 @@ export function AppShell({
   }
 
   function selectTab(icon) {
+    if (icon === 'tax') navigate('/le-tan/hoa-don-thue');
     if (icon === 'booking') {
       navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
     } else if (icon === 'rooms') {
@@ -241,7 +246,7 @@ export function AppShell({
                   aria-label={label}
                   title={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms', 'payments', 'deposit'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'payments', 'deposit', 'tax'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>

@@ -53,6 +53,10 @@ export const roleNames = {
 };
 
 export const actionNames = {
+  CREATE_TAX_INVOICE_REQUEST: 'Ghi nhận yêu cầu hóa đơn thuế', UPDATE_TAX_INVOICE_REQUEST: 'Cập nhật tiến độ hóa đơn thuế',
+  CREATE_STAFF: 'Tạo hồ sơ nhân viên', UPDATE_STAFF: 'Sửa hồ sơ nhân viên',
+  DEACTIVATE_STAFF: 'Ngừng hồ sơ nhân viên', REACTIVATE_STAFF: 'Kích hoạt hồ sơ nhân viên',
+  SET_EMPLOYEE_BRANCH: 'Gán cơ sở nhân viên', TRANSFER_EMPLOYEE: 'Điều chuyển nhân viên',
   CHANGE_PASSWORD: 'Đổi mật khẩu',
   CREATE_ROOM: 'Thêm phòng', UPDATE_ROOM: 'Sửa phòng', DELETE_ROOM: 'Xóa phòng', UPDATE_ROOM_STATUS: 'Đổi trạng thái phòng',
   CHANGE_BILL_PAYMENT_METHOD: 'Đổi phương thức thanh toán bill',

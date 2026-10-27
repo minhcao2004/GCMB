@@ -1,3 +1,9 @@
+/**
+ * Author: HuyDV
+ * Updated: 27/10/2026
+ * Description: Thanh tài khoản và thông báo yêu cầu hóa đơn cho kế toán.
+ */
+import TaxInvoiceNotice from '../../features/booking/components/TaxInvoiceNotice';
 export default function DashboardTopbar({ role, page, user, busy, onProfile, onLogout, onToggleSidebar, sidebarExpanded, children, accountHeader }) {
   return <div className="manager-topbar">
     {onToggleSidebar && <button
@@ -18,6 +24,7 @@ export default function DashboardTopbar({ role, page, user, busy, onProfile, onL
     <p>{role} <span>/ {page}</span></p>
     {children}
     <div className={`manager-account${accountHeader ? ' has-branch-selector' : ''}`}>
+      {user?.role === 'ACCOUNTANT' && <TaxInvoiceNotice />}
       {accountHeader}
       <span>{user?.username || 'Đang tải…'}</span>
       <button type="button" disabled={!user} onClick={onProfile}>Thông tin tài khoản</button>

@@ -86,12 +86,8 @@ public class AccountRepository {
     public Options options() {
         return new Options(
             db.query(
-                "SELECT id,full_name,code FROM gcmb.employee WHERE status='ACTIVE' AND user_id IS NULL ORDER BY full_name,id",
-                (rs, n) -> new EmployeeOption(
-                    rs.getObject("id", UUID.class),
-                    rs.getString("full_name"),
-                    rs.getString("code")
-                )
+                EMPLOYEE_OPTIONS + " WHERE e.status='ACTIVE' AND e.user_id IS NULL ORDER BY e.full_name,e.id",
+                AccountRepository::employeeOption
             ),
             db.query(
                 "SELECT code,name FROM gcmb.role ORDER BY name",
@@ -131,12 +127,8 @@ public class AccountRepository {
     }
 
     public Options branchOptions(UUID branch) {
-        return new Options(db.query("""
-            SELECT e.id,e.full_name,e.code FROM gcmb.employee e WHERE e.status='ACTIVE' AND e.user_id IS NULL
-              AND EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=e.id AND a.branch_id=?
-                AND a.valid_from<=CURRENT_TIMESTAMP AND (a.valid_to IS NULL OR a.valid_to>CURRENT_TIMESTAMP))
-            ORDER BY e.full_name,e.id
-            """, (rs,n) -> new EmployeeOption(rs.getObject("id",UUID.class),rs.getString("full_name"),rs.getString("code")), branch),
+        return new Options(db.query(EMPLOYEE_OPTIONS + " WHERE e.status='ACTIVE' AND e.user_id IS NULL AND e.position='RECEPTIONIST' AND b.id=? ORDER BY e.full_name,e.id",
+            AccountRepository::employeeOption, branch),
             List.of(new Option("RECEPTIONIST", "Lễ tân")),
             db.query("SELECT id,name FROM gcmb.branch WHERE id=?", (rs,n) -> new Option(rs.getString(1),rs.getString(2)), branch));
     }
@@ -155,6 +147,25 @@ public class AccountRepository {
                 (rs, n) -> rs.getObject("id", UUID.class),
                 id
         ).isEmpty();
+    }
+
+    // UC-04: dữ liệu cấp tài khoản luôn lấy từ hồ sơ, không tin role/email/branch gửi từ client.
+    private static final String EMPLOYEE_OPTIONS = """
+        SELECT e.id,e.full_name,e.code,e.position,e.contact_email,b.id AS branch_id,b.name AS branch_name
+        FROM gcmb.employee e LEFT JOIN LATERAL (
+          SELECT branch_id FROM gcmb.employee_assignment WHERE employee_id=e.id
+            AND valid_from<=clock_timestamp() AND (valid_to IS NULL OR valid_to>clock_timestamp())
+          ORDER BY valid_from DESC LIMIT 1
+        ) a ON true LEFT JOIN gcmb.branch b ON b.id=a.branch_id
+        """;
+
+    private static EmployeeOption employeeOption(java.sql.ResultSet rs,int n) throws java.sql.SQLException {
+        return new EmployeeOption(rs.getObject("id",UUID.class),rs.getString("full_name"),rs.getString("code"),
+            rs.getString("position"),rs.getString("contact_email"),rs.getObject("branch_id",UUID.class),rs.getString("branch_name"));
+    }
+
+    public EmployeeOption employeeProfile(UUID id) {
+        return db.queryForObject(EMPLOYEE_OPTIONS + " WHERE e.id=?",AccountRepository::employeeOption,id);
     }
 
     public UUID roleId(String code) {
@@ -180,6 +191,27 @@ public class AccountRepository {
                 Integer.class,
                 value
         ), "Account existence count query returned null") > 0;
+    }
+
+    // UC-77/79, mở rộng BR-134 theo yêu cầu: email được giữ cho cả hồ sơ và tài khoản liên kết.
+    public boolean emailReserved(String email, UUID employee, UUID user) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.employee e
+              WHERE lower(btrim(e.contact_email))=lower(?) AND e.id IS DISTINCT FROM CAST(? AS uuid)
+                AND (e.user_id IS NULL OR e.user_id IS DISTINCT FROM CAST(? AS uuid)))
+            OR EXISTS(SELECT 1 FROM gcmb.user_account u
+              WHERE lower(btrim(u.email))=lower(?) AND u.id IS DISTINCT FROM CAST(? AS uuid)
+                AND NOT EXISTS(SELECT 1 FROM gcmb.employee own WHERE own.id=? AND own.user_id=u.id))
+            """,Boolean.class,email,employee,user,email,user,employee));
+    }
+
+    // SĐT nhân viên nằm tại employee, không so với SĐT khách booking hoặc SĐT cơ sở.
+    public boolean staffPhoneTaken(String phone, UUID employee, UUID user) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.employee e WHERE btrim(e.phone)=?
+              AND e.id IS DISTINCT FROM CAST(? AS uuid)
+              AND (e.user_id IS NULL OR e.user_id IS DISTINCT FROM CAST(? AS uuid)))
+            """,Boolean.class,phone,employee,user));
     }
 
     public UUID insert(CreateAccount request, String username, String email, String hash, UUID role, UUID actor) {

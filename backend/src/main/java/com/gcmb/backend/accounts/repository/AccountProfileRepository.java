@@ -33,6 +33,8 @@ public class AccountProfileRepository {
     }
 
     public String lockActiveAccount(UUID id) {
+        // Cùng khóa với tạo/sửa hồ sơ và cấp tài khoản để không nhận trùng email/SĐT đồng thời.
+        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
         var hashes = db.queryForList("""
                 SELECT password_hash FROM gcmb.user_account
                 WHERE id=? AND status='ACTIVE' FOR UPDATE
@@ -42,9 +44,11 @@ public class AccountProfileRepository {
     }
 
     public boolean emailTaken(UUID id, String email) {
-        return Boolean.TRUE.equals(db.queryForObject("""
-                SELECT EXISTS(SELECT 1 FROM gcmb.user_account WHERE id<>? AND lower(email)=lower(?))
-                """, Boolean.class, id, email));
+        return accounts.emailReserved(email,null,id);
+    }
+
+    public boolean phoneTaken(UUID id, String phone) {
+        return accounts.staffPhoneTaken(phone,null,id);
     }
 
     public void update(UUID id, String fullName, String phone, String email, boolean emailChanged) {
