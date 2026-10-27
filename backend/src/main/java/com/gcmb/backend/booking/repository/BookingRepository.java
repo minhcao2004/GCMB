@@ -172,29 +172,6 @@ public class BookingRepository {
                 rs.getString("room_type_name")), branchId);
     }
 
-    public String lockRoomStatus(UUID branchId, UUID roomId) {
-        List<String> rows = db.queryForList("SELECT operating_status FROM gcmb.room WHERE id=? AND branch_id=? FOR UPDATE",
-            String.class, roomId, branchId);
-        return rows.isEmpty() ? null : rows.get(0);
-    }
-
-    public boolean roomHasOccupant(UUID branchId, UUID roomId) {
-        return Boolean.TRUE.equals(db.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
-                WHERE a.branch_id=? AND a.room_id=? AND a.actual_end IS NULL
-                AND (a.state='OCCUPIED' OR b.status='IN_HOUSE'))
-            """, Boolean.class, branchId, roomId));
-    }
-
-    public void completeRoomCleaning(UUID branchId, UUID roomId, UUID actorId) {
-        db.update("UPDATE gcmb.room SET operating_status='AVAILABLE',status_reason='Đã dọn xong phòng',expected_ready_at=NULL WHERE id=? AND branch_id=?",
-            roomId, branchId);
-        db.update("""
-            INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,changed_by)
-            VALUES (?,?,'CLEANING','AVAILABLE','Đã dọn xong phòng',?)
-            """, roomId, branchId, actorId);
-    }
-
     // Tìm phòng không trùng lịch trong khoảng yêu cầu.
     public List<RoomRow> availableRooms(UUID branchId, UUID roomTypeId, Instant start, Instant end) {
         return db.query("""
@@ -723,7 +700,7 @@ public class BookingRepository {
                 ) AS amount
             ) received ON true
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY " + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return db.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),

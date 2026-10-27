@@ -14,7 +14,7 @@ import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
-import AccountProfileDialog from '../../administration/accounts/AccountProfileDialog';
+import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân' };
 // Kiểm tra phiên/đúng vai trò trước khi hiển thị trang sau đăng nhập.
@@ -53,7 +53,7 @@ export default function RoleHomePage({ role }) {
   };
   return <main className={`dashboard-page${user && ['HEAD_OFFICE_MANAGER','BRANCH_MANAGER'].includes(role) ? ' dashboard-page-manager' : ''}`}>
     {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : user ? <>
-      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : <>
+      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} onBranchChange={setUser} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : <>
       <header className="dashboard-header">
         <h1>Dashboard — {names[role]}</h1>
         <button onClick={() => setProfileOpen(true)}>Thông tin tài khoản</button>

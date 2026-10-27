@@ -49,7 +49,20 @@ function floorOf(code) {
 }
 
 function statusText(status) {
-  return ({ occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống', cleaning: 'Đang dọn', maintenance: 'Bảo trì', inactive: 'Ngừng hoạt động' })[status];
+  return ({ occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống', maintenance: 'Bảo trì', inactive: 'Ngừng hoạt động' })[status];
+}
+
+function isOverdueRoom(room, now) {
+  const plannedEnd = room?.booking?.plannedEnd ? new Date(room.booking.plannedEnd).getTime() : NaN;
+  return room?.status === 'occupied' && room.booking?.status === 'IN_HOUSE'
+    && Number.isFinite(plannedEnd) && now >= plannedEnd;
+}
+
+function elapsedClockText(startAt, now) {
+  const startMs = startAt ? new Date(startAt).getTime() : NaN;
+  const seconds = Number.isFinite(startMs) ? Math.max(0, Math.floor((now - startMs) / 1000)) : 0;
+  return [Math.floor(seconds / 3600), Math.floor(seconds % 3600 / 60), seconds % 60]
+    .map((part) => String(part).padStart(2, '0')).join(':');
 }
 
 async function bookingsForDate(date) {
@@ -77,8 +90,11 @@ export default function RoomOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState(() => location.state?.roomId || '');
+  const [detailOpen, setDetailOpen] = useState(true);
   const [preferredRoomId, setPreferredRoomId] = useState('');
   const [detail, setDetail] = useState(null);
+  const [hourlyMetersByBookingId, setHourlyMetersByBookingId] = useState({});
+  const meterDetailsRequestedRef = useRef(new Set());
   const [stayMode, setStayMode] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleDialogRef = useRef(null);
@@ -134,7 +150,7 @@ export default function RoomOverviewPage() {
 
   const rooms = useMemo(() => {
     const byRoom = new Map();
-    inventory.forEach((room) => byRoom.set(room.id, { ...room, status: ({ AVAILABLE: 'vacant', CLEANING: 'cleaning', UNDER_MAINTENANCE: 'maintenance', INACTIVE: 'inactive' })[room.operatingStatus] || 'inactive' }));
+    inventory.forEach((room) => byRoom.set(room.id, { ...room, status: ({ AVAILABLE: 'vacant', UNDER_MAINTENANCE: 'maintenance', INACTIVE: 'inactive' })[room.operatingStatus] || 'inactive' }));
     bookings.forEach((booking) => {
       if (!booking.roomId || !['IN_HOUSE', 'CONFIRMED'].includes(booking.status)) return;
       const overlaps = new Date(booking.plannedStart) <= slot && new Date(booking.plannedEnd) > slot;
@@ -172,11 +188,27 @@ export default function RoomOverviewPage() {
   useEffect(() => {
     if (!selectedBooking) { setDetail(null); return undefined; }
     let active = true;
+    meterDetailsRequestedRef.current.add(selectedBooking.id);
     setDetail(null);
-    bookingApi.detail(selectedBooking.id).then((value) => { if (active) setDetail(value); })
+    bookingApi.detail(selectedBooking.id).then((value) => {
+      if (!active) return;
+      setDetail(value);
+      setHourlyMetersByBookingId((previous) => ({ ...previous, [selectedBooking.id]: value.meter || null }));
+    })
       .catch((error) => { if (active) setLoadError(errorText(error)); });
     return () => { active = false; };
   }, [selectedBooking, reload]);
+
+  useEffect(() => {
+    bookings.filter((booking) => booking.status === 'IN_HOUSE' && booking.id !== selectedBooking?.id)
+      .forEach((booking) => {
+        if (meterDetailsRequestedRef.current.has(booking.id)) return;
+        meterDetailsRequestedRef.current.add(booking.id);
+        bookingApi.detail(booking.id).then((value) => {
+          setHourlyMetersByBookingId((previous) => ({ ...previous, [booking.id]: value.meter || null }));
+        }).catch(() => { meterDetailsRequestedRef.current.delete(booking.id); });
+      });
+  }, [bookings, selectedBooking]);
 
   useEffect(() => {
     const dialog = scheduleDialogRef.current;
@@ -193,10 +225,18 @@ export default function RoomOverviewPage() {
       && (tier === 'all' || room.roomTypeName === tier)
       && (!keyword || [room.code, room.name, room.booking?.contactName, room.booking?.code].some((part) => String(part || '').toLocaleLowerCase('vi-VN').includes(keyword)));
   });
-  const counts = Object.fromEntries(['vacant', 'reserved', 'occupied', 'cleaning', 'maintenance', 'inactive'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
+  const counts = Object.fromEntries(['vacant', 'reserved', 'occupied', 'maintenance', 'inactive'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
   const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
   const currentBooking = selectedDetail?.booking || selectedBooking || null;
+  const meterForBooking = (bookingId) => selectedDetail && selectedDetail.booking?.id === bookingId
+    ? selectedDetail.meter : hourlyMetersByBookingId[bookingId];
+  const selectedMeter = currentBooking ? meterForBooking(currentBooking.id) : null;
+  const selectedMeterRunning = selectedMeter?.status === 'RUNNING';
+  const roomIsOverdue = (room) => isOverdueRoom(room, now)
+    && meterForBooking(room?.booking?.id)?.status !== 'RUNNING';
+  const overdueCount = rooms.filter(roomIsOverdue).length;
+  const selectedOverdue = roomIsOverdue(selected);
   const detailReady = !selectedBooking || Boolean(selectedDetail);
   const roomBookingStart = currentBooking?.plannedStart ? new Date(currentBooking.plannedStart).getTime() : NaN;
   const roomBookingEnd = currentBooking?.plannedEnd ? new Date(currentBooking.plannedEnd).getTime() : NaN;
@@ -209,7 +249,7 @@ export default function RoomOverviewPage() {
   const activeCombo = selectedDetail?.charges?.find((charge) => charge.status === 'ACTIVE' && (charge.comboId || charge.kind === 'COMBO'))?.description;
   const checkinMs = currentBooking?.actualCheckin ? new Date(currentBooking.actualCheckin).getTime() : NaN;
   const plannedEndMs = currentBooking?.plannedEnd ? new Date(currentBooking.plannedEnd).getTime() : NaN;
-  const usageStopped = Number.isFinite(plannedEndMs) && now >= plannedEndMs;
+  const usageStopped = Number.isFinite(plannedEndMs) && now >= plannedEndMs && !selectedMeterRunning;
   const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
   const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
@@ -218,18 +258,6 @@ export default function RoomOverviewPage() {
     setBusy(true);
     try { await authApi.logout(); clearBookingDraft(user); navigate('/dang-nhap', { replace: true }); }
     catch (error) { setLoadError(errorText(error)); }
-    finally { setBusy(false); }
-  };
-
-  const finishCleaning = async () => {
-    if (busy || selected?.status !== 'cleaning') return;
-    setBusy(true);
-    setLoadError('');
-    try {
-      await bookingApi.finishCleaning(selected.id);
-      setNotice(`Đã xác nhận dọn xong phòng ${selected.code}.`);
-      setReload((value) => value + 1);
-    } catch (error) { setLoadError(errorText(error)); }
     finally { setBusy(false); }
   };
 
@@ -258,10 +286,15 @@ export default function RoomOverviewPage() {
             : await bookingApi.stopHourlyMeter(currentBooking.id);
       if (action === 'change') setPreferredRoomId(result.booking.booking.roomId);
       if (action === 'change' || action === 'extend') setStayMode(null);
-      setNotice(action === 'change' ? `Đã đổi sang phòng ${result.booking.booking.roomCode}. Điều chỉnh ${formatVnd(result.adjustmentAmount)}.`
-        : action === 'extend' ? `Đã gia hạn đến ${dateTimeText(result.endsAt, timezone)}. Phụ thu ${formatVnd(result.quote.expectedAmount)}.`
-          : action === 'meterStart' ? 'Đã bật đồng hồ giờ lẻ.' : `Đã dừng đồng hồ; chốt ${result.meter.billedMinutes} phút và ${formatVnd(result.meter.amount)}.`);
-      setReload((value) => value + 1);
+      if (action === 'meterStart' || action === 'meterStop') {
+        setDetail(result);
+        setHourlyMetersByBookingId((previous) => ({ ...previous, [currentBooking.id]: result.meter || null }));
+      }
+      setNotice(action === 'change' ? `Đã đổi phòng. Điều chỉnh: ${formatVnd(result.adjustmentAmount)}.`
+        : action === 'extend' ? `Đã gia hạn. Phụ thu: ${formatVnd(result.quote.expectedAmount)}.`
+          : action === 'meterStart' ? `Đơn giá giờ lẻ đã chốt: ${formatVnd(result.meter.hourlyPrice)}/giờ.`
+            : `Phụ thu giờ lẻ đã chốt: ${formatVnd(result.meter.amount)}.`);
+      if (action !== 'meterStart' && action !== 'meterStop') setReload((value) => value + 1);
       return { ok: true, detail: ['meterStart', 'meterStop'].includes(action) ? result : undefined };
     } catch (error) { return { error: errorText(error) }; }
     finally { setBusy(false); }
@@ -273,7 +306,11 @@ export default function RoomOverviewPage() {
     <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1><p>Theo dõi trạng thái và thao tác nhanh tại quầy</p></div></div>
     {notice && <div className="booking-live-notice" role="status"><span>✓</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
     {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
-    <div className="room-layout">
+    {overdueCount > 0 && <section className="room-overdue-alert" role="alert">
+      <span className="room-overdue-indicator" aria-hidden="true" />
+      <div><strong>{overdueCount} phòng đã quá giờ trả</strong><p>Khách vẫn đang sử dụng. Vui lòng kiểm tra booking và hoàn tất checkout.</p></div>
+    </section>}
+    <div className={`room-layout${detailOpen ? '' : ' room-layout--compact'}`}>
       <section className="room-board" aria-label="Sơ đồ phòng">
         <div className="room-toolbar">
           <label className="room-search"><span className="sr-only">Tìm phòng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phòng, booking, khách…" /></label>
@@ -283,11 +320,25 @@ export default function RoomOverviewPage() {
         <p className="room-view-note">Hiển thị danh sách phòng của cơ sở. Lịch đặt theo ngày đã chọn; trạng thái vận hành và khách đang sử dụng lấy từ hiện tại.</p>
         <div className="room-board-heading"><h2>Sơ đồ phòng</h2><span>Hiển thị {visible.length}/{rooms.length} phòng</span></div>
         <div className="room-floors" role="group" aria-label="Lọc tầng"><button type="button" className={floor === 'all' ? 'is-active' : ''} onClick={() => setFloor('all')}>Tất cả</button>{floors.map((value) => <button type="button" key={value} className={floor === value ? 'is-active' : ''} onClick={() => setFloor(value)}>Tầng {value}</button>)}</div>
-        <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied', 'cleaning', 'maintenance', 'inactive'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
-        {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">{loadError ? 'Chưa tải được danh sách phòng. Vui lòng thử lại.' : 'Không có phòng phù hợp với bộ lọc này.'}</p> : <div className="room-grid">{visible.map((room) => <button type="button" key={room.id} className={`room-card room-card-${room.status}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}><strong>{room.code} {room.name}</strong><small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small><span>{statusText(room.status)}</span><em>{room.status === 'occupied' ? `${dateTimeText(room.booking?.actualCheckin || room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'reserved' ? `${dateTimeText(room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'vacant' ? 'Sẵn sàng' : statusText(room.status)}</em></button>)}</div>}
+        <div className="room-status-filters" role="group" aria-label="Lọc trạng thái"><button type="button" className={status === 'all' ? 'is-active' : ''} onClick={() => setStatus('all')}>Tất cả <b>{rooms.length}</b></button>{['vacant', 'reserved', 'occupied', 'maintenance', 'inactive'].map((key) => <button type="button" key={key} className={`${key}${status === key ? ' is-active' : ''}`} onClick={() => setStatus(key)}>{statusText(key)} <b>{counts[key]}</b></button>)}</div>
+        {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">{loadError ? 'Chưa tải được danh sách phòng. Vui lòng thử lại.' : 'Không có phòng phù hợp với bộ lọc này.'}</p> : <div className="room-grid">{visible.map((room) => {
+          const roomOverdue = roomIsOverdue(room);
+          const roomMeter = meterForBooking(room.booking?.id);
+          return <button type="button" key={room.id} className={`room-card room-card-${room.status}${roomOverdue ? ' room-card-overdue' : ''}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}>
+            <strong>{room.code} {room.name}</strong>
+            <small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small>
+            <span>{statusText(room.status)}</span>
+            {roomMeter?.status === 'RUNNING' && <small className="room-card-meter" role="timer">Giờ lẻ · {elapsedClockText(roomMeter.billedFrom, now)}</small>}
+            <em>{room.status === 'occupied' ? `${dateTimeText(room.booking?.actualCheckin || room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'reserved' ? `${dateTimeText(room.booking?.plannedStart, timezone)} · ${room.booking?.contactName || room.booking?.code}` : room.status === 'vacant' ? 'Sẵn sàng' : statusText(room.status)}</em>
+          </button>;
+        })}</div>}
       </section>
-      <aside className="room-detail" aria-label="Phòng đang chọn">
-        <span className="room-detail-label">Phòng đang chọn</span>
+      <aside className={`room-detail${detailOpen ? '' : ' room-detail--compact'}`} aria-label="Phòng đang chọn">
+        <div className="room-detail-header">
+          {detailOpen && <span className="room-detail-label">Phòng đang chọn</span>}
+          <button type="button" className="room-panel-toggle" aria-label={detailOpen ? 'Thu gọn chi tiết phòng' : 'Mở chi tiết phòng'} aria-expanded={detailOpen} aria-controls="room-detail-content" onClick={() => setDetailOpen((open) => !open)}>{detailOpen ? '›' : '‹'}</button>
+        </div>
+        <div id="room-detail-content" hidden={!detailOpen}>
         {selected ? <><h2>{selected.code} · {selected.name}</h2><span className={`room-detail-status ${selected.status}`}>{statusText(selected.status)}</span><p>{selected.roomTypeName || 'Phòng'}{selected.capacity ? ` · tối đa ${selected.capacity} người` : ''}</p>
           {currentBooking && selected.status === 'reserved' && <>
             <div className="room-detail-divider" />
@@ -308,13 +359,13 @@ export default function RoomOverviewPage() {
             </div>
             {!canCheckIn && currentBooking.status === 'CONFIRMED' && now < roomBookingStart && <small className="room-checkout-note">Có thể nhận phòng từ {timeText(currentBooking.plannedStart, timezone)}.</small>}
           </>}
-          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className="is-ended">Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
+          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
           {selected.status !== 'reserved' && <>
-            {selected.status === 'cleaning' && <><button type="button" className="room-checkout" disabled={busy || loading} onClick={finishCleaning}>{busy ? 'Đang xác nhận…' : 'Dọn xong → Trống'}</button><p>Chỉ xác nhận khi phòng đã dọn xong và sẵn sàng nhận khách.</p></>}
             <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
           </>}
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
+        </div>
       </aside>
     </div>
     <dialog ref={scheduleDialogRef} className="room-schedule-dialog" aria-labelledby="room-schedule-title" onClose={() => setScheduleOpen(false)}>

@@ -38,7 +38,14 @@
 .manager-sidebar-footer strong { display: block; border-top: 1px solid #edf0f5; padding-top: 18px; }
 .manager-sidebar-footer p { margin-top: 6px; color: #788397; font-size: 10px; }
 .manager-workspace { min-width: 0; flex: 1; display: flex; flex-direction: column; padding-left: 6px; }
+.booking-app .head-office-dashboard--sidebar-collapsed .manager-sidebar { display: none; }
+.booking-app .head-office-dashboard--sidebar-collapsed .manager-workspace { margin-top: 0; padding-left: 0; }
 .manager-topbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 20px; background: #fff; border-radius: 6px; color: #637089; font-size: 11px; }
+.manager-sidebar-toggle { flex: 0 0 auto; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid transparent; border-radius: 8px; color: #fff; background: var(--booking-cyan, #087f93); font: inherit; font-size: 12px; font-weight: 600; line-height: 1.2; white-space: nowrap; cursor: pointer; transition: background-color 140ms ease; }
+.manager-sidebar-toggle svg { width: 19px; height: 19px; }
+.manager-sidebar-toggle:hover { background: #066c7d; }
+.manager-sidebar-toggle:active { background: #055968; }
+.manager-sidebar-toggle:focus-visible { outline: 2px solid #08758a; outline-offset: 2px; }
 .manager-topbar p { margin: 0; }
 .manager-topbar p span { color: #8b93a4; }
 .manager-account { display: flex; align-items: center; gap: 16px; }

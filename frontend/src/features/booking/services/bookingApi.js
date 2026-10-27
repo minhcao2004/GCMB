@@ -27,7 +27,6 @@ export const bookingApi = {
   // Dữ liệu đầu vào và danh sách booking của chi nhánh hiện tại.
   options: async () => (await api.get('/reception/booking-options')).data,
   rooms: async () => (await api.get('/reception/rooms')).data,
-  finishCleaning: (id) => mutate('post', `/reception/rooms/${id}/finish-cleaning`, {}),
   list: async (params) => (await api.get('/reception/bookings', { params })).data,
   listAll,
   detail: async (id) => (await api.get(`/reception/bookings/${id}`)).data,
@@ -40,6 +39,8 @@ export const bookingApi = {
   editOptions: async (id, params) => (await api.get(`/reception/bookings/${id}/edit-options`, { params })).data,
   // Mọi lệnh ghi đều đi qua mutate để gắn token CSRF mới.
   create: (body) => mutate('post', '/reception/bookings', body),
+  planDeposit: (id) => mutate('post', `/reception/bookings/${id}/deposit-payment`, {}),
+  depositPayment: async (id) => (await api.get(`/reception/bookings/${id}/deposit-payment`)).data,
   update: (id, body) => mutate('patch', `/reception/bookings/${id}`, body),
   checkIn: (id) => mutate('post', `/reception/bookings/${id}/check-in`, {}),
   changeRoom: (id, body) => mutate('post', `/reception/bookings/${id}/change-room`, body),

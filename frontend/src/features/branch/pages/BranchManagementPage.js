@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { branchAdministrationApi as api, branchError } from '../services/branchAdministrationApi';
-import { actionNames } from '../../administration/accounts/accountAccessApi';
+import { actionNames } from '../../backoffice/accounts/services/accountAccessApi';
 import './branch-administration.css';
 
 const statuses = { ACTIVE: 'Đang hoạt động', SUSPENDED: 'Tạm ngừng', CLOSED: 'Đã đóng' };
@@ -38,7 +38,7 @@ export default function BranchManagementPage({ onAccounts }) {
   const [showChecks, setShowChecks] = useState(false);
   const selected = branches.find((branch) => branch.branchId === selectedId);
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
-  const isStatus = modal === 'SUSPENDED' || modal === 'CLOSED';
+  const isStatus = modal === 'SUSPENDED' || modal === 'ACTIVE';
   const phoneError = form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
     ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
 
@@ -73,7 +73,7 @@ export default function BranchManagementPage({ onAccounts }) {
   useEffect(() => {
     let active = true;
     const request = modal === 'manager' ? api.managers()
-      : isStatus && selectedId ? api.blockers(selectedId) : null;
+      : modal === 'SUSPENDED' && selectedId ? api.blockers(selectedId) : null;
     if (!request) return undefined;
     request.then((data) => {
       if (!active) return;
@@ -88,7 +88,7 @@ export default function BranchManagementPage({ onAccounts }) {
     setNotice('');
     setManagers(null);
     setManagerQuery('');
-    setManagerId(selected?.managerId || '');
+    setManagerId('');
     setBlockers(null);
     setShowChecks(false);
     setReason('');
@@ -117,15 +117,16 @@ export default function BranchManagementPage({ onAccounts }) {
       if (modal === 'create') result = await api.create(form);
       else if (modal === 'edit') result = await api.update(selectedId, form);
       else if (modal === 'manager') result = await api.assign(selectedId, managerId);
+      else if (modal === 'ACTIVE') result = await api.reactivate(selectedId);
       else result = await api.deactivate(selectedId, { status: modal, reason });
       setSelectedId(result.branchId);
       setModal(null);
-      setNotice(isStatus ? 'Đã ngừng hoạt động cơ sở. Lịch sử được giữ nguyên.' : 'Đã lưu thông tin cơ sở.');
+      setNotice(modal === 'ACTIVE' ? 'Đã mở lại cơ sở.' : isStatus ? 'Đã tạm ngừng cơ sở. Lịch sử được giữ nguyên.' : 'Đã lưu thông tin cơ sở.');
       await refresh();
     } catch (e) {
       setModalError(branchError(e));
       // Backend kiểm tra lại tại thời điểm xác nhận, vì có thể vừa phát sinh booking mới.
-      if (isStatus) {
+      if (modal === 'SUSPENDED') {
         try { setBlockers(await api.blockers(selectedId)); }
         catch { setBlockers(null); }
       }
@@ -198,9 +199,9 @@ export default function BranchManagementPage({ onAccounts }) {
               </dl>
             </section>
             <section className="ba-card ba-manager-card">
-              <h2>Quản lý phụ trách</h2>
+              <h2>Quản lý phụ trách ({selected.managerCount || 0}/2)</h2>
               <div className="ba-manager-identity"><span className="ba-avatar">{(selected.managerName || '?').slice(0, 1)}</span><div><strong>{selected.managerName || 'Chưa gán quản lý'}</strong><small>{selected.managerCode || selected.managerUsername || 'Chọn quản lý sau khi tạo cơ sở'}</small></div></div>
-              <button className="ba-primary" disabled={selected.status !== 'ACTIVE'} onClick={() => open('manager')}>Gán / thay quản lý</button>
+              <button className="ba-primary" disabled={selected.status !== 'ACTIVE'} onClick={() => open('manager')}>Thêm quản lý</button>
               {selected.status !== 'ACTIVE' && <p>Chỉ gán quản lý khi cơ sở đang hoạt động.</p>}
             </section>
           </div>
@@ -208,11 +209,12 @@ export default function BranchManagementPage({ onAccounts }) {
             <h2>Thao tác quản lý</h2>
             <div className="ba-actions">
               <button onClick={() => open('edit')}>Sửa thông tin</button>
-              <button disabled={selected.status !== 'ACTIVE'} onClick={() => open('SUSPENDED')}>Tạm ngừng cơ sở</button>
-              <button disabled={selected.status === 'CLOSED'} onClick={() => open('CLOSED')}>Đóng cơ sở</button>
+              {selected.status === 'SUSPENDED'
+                ? <button onClick={() => open('ACTIVE')}>Mở lại cơ sở</button>
+                : <button disabled={selected.status !== 'ACTIVE'} onClick={() => open('SUSPENDED')}>Tạm ngừng cơ sở</button>}
               <button onClick={() => setTab('Lịch sử thay đổi')}>Xem lịch sử</button>
             </div>
-            <aside className="ba-info"><strong>Thông tin lịch sử được giữ lại</strong><span>Khi tạm ngừng hoặc đóng cơ sở, dữ liệu đã phát sinh vẫn được lưu để tra cứu.</span></aside>
+            <aside className="ba-info"><strong>Thông tin lịch sử được giữ lại</strong><span>Khi tạm ngừng cơ sở, dữ liệu đã phát sinh vẫn được lưu để tra cứu. Có thể mở lại khi cơ sở sẵn sàng hoạt động.</span></aside>
           </section>
         </> : <section className="ba-card ba-table-scroll">
           <h2>{tab}</h2>
@@ -223,7 +225,7 @@ export default function BranchManagementPage({ onAccounts }) {
         </section>}
       </>}
 
-      {modal && <Dialog drawer={!isStatus} busy={busy} onClose={() => setModal(null)} title={modal === 'create' ? 'Thêm cơ sở' : modal === 'edit' ? 'Sửa thông tin cơ sở' : modal === 'manager' ? 'Gán / thay quản lý' : modal === 'CLOSED' ? 'Đóng cơ sở' : 'Tạm ngừng cơ sở'}>
+      {modal && <Dialog drawer={!isStatus} busy={busy} onClose={() => setModal(null)} title={modal === 'create' ? 'Thêm cơ sở' : modal === 'edit' ? 'Sửa thông tin cơ sở' : modal === 'manager' ? 'Thêm quản lý' : modal === 'ACTIVE' ? 'Mở lại cơ sở' : 'Tạm ngừng cơ sở'}>
         <form onSubmit={save}>
           <div className="ba-modal-body">
             <p className="ba-subtitle">{selected && modal !== 'create' ? `${selected.code} · ${selected.branchName}` : 'Thông tin cơ sở được quản lý tập trung'}</p>
@@ -237,16 +239,17 @@ export default function BranchManagementPage({ onAccounts }) {
               <aside className="ba-info"><strong>Quản lý phụ trách</strong><span>Có thể gán quản lý tại trang chi tiết sau khi lưu cơ sở.</span></aside>
             </div>}
             {modal === 'manager' && <>
-              <aside className="ba-info"><strong>Hiện tại: {selected?.managerName || 'Chưa gán quản lý'}</strong><span>{selected?.managerCode || selected?.managerUsername}</span></aside>
+              <aside className="ba-info"><strong>Hiện tại ({selected?.managerCount || 0}/2): {selected?.managerName || 'Chưa gán quản lý'}</strong><span>{selected?.managerCode || selected?.managerUsername}</span></aside>
               <label className="ba-search-label">Tìm quản lý<input placeholder="Tên, mã nhân viên hoặc tài khoản" value={managerQuery} onChange={(e) => setManagerQuery(e.target.value)} /></label>
               {managers === null ? <p>Đang tải quản lý…</p> : !managerOptions.length ? <p>Không có quản lý phù hợp.</p> : managerOptions.map((manager) => <label key={manager.userId} className={`ba-manager-option ${managerId === manager.userId ? 'selected' : ''}`}>
                 <input type="radio" name="manager" required value={manager.userId} checked={managerId === manager.userId} onChange={() => setManagerId(manager.userId)} />
                 <div><span className="ba-badge ACTIVE">Tài khoản đang hoạt động</span><strong>{manager.fullName} · {manager.employeeCode || manager.username}</strong><small>Đang phụ trách: {manager.branchName || 'Chưa có cơ sở'}</small></div>
               </label>)}
-              {selectedManager && <aside className="ba-success"><strong>Sau khi lưu: {selectedManager.fullName}</strong><p>Quản lý được giao phụ trách {selected.branchName}.</p>{selectedManager.branchId && selectedManager.branchId !== selectedId && <p>Cơ sở {selectedManager.branchName} sẽ không còn quản lý này. Người quản lý cũ tại cơ sở đích sẽ được thay thế.</p>}</aside>}
+              {selectedManager && <aside className="ba-success"><strong>Sau khi lưu: {selectedManager.fullName}</strong><p>Thêm quyền quản lý tại {selected.branchName}, giữ nguyên quyền tại các cơ sở khác. Mỗi cơ sở có tối đa 2 quản lý.</p></aside>}
               {onAccounts && <button className="ba-link" type="button" onClick={onAccounts}>Không có tài khoản? Mở quản lý tài khoản ›</button>}
             </>}
-            {isStatus && <>
+            {modal === 'ACTIVE' && <aside className="ba-info"><strong>Xác nhận mở lại cơ sở</strong><span>Cơ sở sẽ hoạt động trở lại và có thể tiếp nhận đặt phòng, giao dịch mới. Lịch sử tạm ngừng vẫn được giữ nguyên.</span></aside>}
+            {modal === 'SUSPENDED' && <>
               <div className="ba-status-transition"><Status value={selected.status} /><strong>→ {statuses[modal]}</strong></div>
               <label className="ba-search-label">Lý do<textarea required maxLength="2000" rows="3" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
               <aside className="ba-warning"><strong>{blockers?.length ? 'Còn nghiệp vụ cần kiểm tra' : 'Dữ liệu lịch sử vẫn được giữ'}</strong><span>{blockers === null ? 'Đang kiểm tra điều kiện ngừng hoạt động…' : blockers.length ? 'Có booking, phiên sử dụng hoặc hóa đơn chưa xử lý. Vui lòng kiểm tra trước khi đổi trạng thái.' : 'Cơ sở sẽ ngừng phát sinh đặt phòng và giao dịch vận hành mới.'}</span></aside>
@@ -256,7 +259,7 @@ export default function BranchManagementPage({ onAccounts }) {
           </div>
           <footer className="ba-modal-footer">
             <button type="button" disabled={busy} onClick={() => setModal(null)}>Hủy</button>
-            {isStatus && !!blockers?.length ? <button className="ba-primary" type="button" onClick={() => setShowChecks(true)}>Kiểm tra cơ sở</button> : <button className={modal === 'CLOSED' ? 'ba-danger' : 'ba-primary'} disabled={busy || (isStatus && blockers === null) || (modal === 'manager' && !selectedManager)}>{busy ? 'Đang lưu…' : modal === 'manager' ? 'Xác nhận gán quản lý' : modal === 'CLOSED' ? 'Xác nhận đóng' : modal === 'SUSPENDED' ? 'Xác nhận tạm ngừng' : 'Lưu cơ sở'}</button>}
+            {modal === 'SUSPENDED' && !!blockers?.length ? <button className="ba-primary" type="button" disabled={busy} onClick={() => setShowChecks(true)}>Kiểm tra cơ sở</button> : <button className="ba-primary" disabled={busy || (modal === 'SUSPENDED' && blockers === null) || (modal === 'manager' && !selectedManager)}>{busy ? 'Đang lưu…' : modal === 'manager' ? 'Xác nhận gán quản lý' : modal === 'ACTIVE' ? 'Xác nhận mở lại' : modal === 'SUSPENDED' ? 'Xác nhận tạm ngừng' : 'Lưu cơ sở'}</button>}
           </footer>
         </form>
       </Dialog>}

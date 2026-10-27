@@ -5,6 +5,8 @@ frontend/node-compile-cache/
 
 # Backend
 backend/target/
+backend/data/attachments/
+data/attachments/
 
 # Environment variables
 .env

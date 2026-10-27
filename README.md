@@ -73,28 +73,28 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. Business code is grouped into five modules, each owning its controllers, services, repositories, entities, and DTOs. Frontend features follow the same business boundaries.
+The backend is deployed as one application. The current backend contains six peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, and `booking`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
 - Expose explicit service operations when modules need to collaborate.
-- Keep business-specific code within its owning module; use `shared/` for reusable technical code.
+- Keep business-specific code and supporting technical classes within their owning feature. The current backend does not introduce `shared/` or `infrastructure/` packages.
 
 ## Project Structure
 
-The agreed structure is shown below. Maven Wrapper support files, frontend manifests, and the Spring Boot entry point must also be present in the working repository.
+The current backend structure is shown below; the frontend portion remains a structural overview. Inventory, workforce, and finance describe planned scope and are not empty backend packages.
 
 ```text
 GCMB/
 ├── backend/
-│   ├── src/main/java/com/GCMB/
-│   │   ├── administration/
+│   ├── src/main/java/com/gcmb/backend/
+│   │   ├── auth/
+│   │   ├── accounts/
+│   │   ├── audit/
+│   │   ├── branch/
+│   │   ├── pricing/
 │   │   ├── booking/
-│   │   ├── inventory/
-│   │   ├── workforce/
-│   │   ├── finance/
-│   │   ├── shared/
-│   │   └── config/
+│   │   └── BackendApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yml
 │   │   ├── application-dev.yml
@@ -109,7 +109,7 @@ GCMB/
 │   ├── public/
 │   ├── src/
 │   │   ├── features/
-│   │   │   ├── administration/
+│   │   │   ├── backoffice/
 │   │   │   ├── booking/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
@@ -136,15 +136,25 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `administration` | Accounts, access, branches, room configuration, pricing, packages, and audit history. |
+| `auth` | Login/logout, sessions, password recovery/change, security configuration, and recovery email. |
+| `accounts` | User accounts, personal profiles, roles, and access management. |
+| `audit` | Mutation audit recording and audit-history lookup. |
+| `branch` | Branches, manager assignments, rooms, and room operating status. |
+| `pricing` | Room types, room prices, pricing rules, and combo packages. |
 | `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
-| `inventory` | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
-| `workforce` | Staff, assignments, shifts, attendance, and payroll. |
-| `finance` | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
+| `inventory` (planned) | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
+| `workforce` (planned) | Staff, assignments, shifts, attendance, and payroll. |
+| `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
 Within a backend feature, create `controller/`, `service/`, `repository/`, `entity/`, and `dto/` as needed. Within a frontend feature, use `pages/`, `components/`, `services/`, `hooks/`, and `styles/` as needed.
+
+Backend package reorganization (24/10/2026): the former `backoffice/` directory and `com.gcmb.backend.administration.*` declarations are replaced by the six peer packages above. All existing classes are retained. `branch`, `pricing`, and `booking` keep their existing responsibilities; this change does not extract a `rooms` module or change API routes, database schema, or business behavior. Tests follow the same package hierarchy.
+
+`auth` has six direct subpackages: `controller`, `dto`, `repository`, `service`, `security`, and `exception`. Request/response records and `LoginResult` live in `dto`; internal JDBC models `Account` and `Reset` live in `repository/model`; `AuthMapper` lives in `repository`; `AuthValidation` lives in `service`; `AuthSecurity` and `AuthSettings` live in `security`. Internal models and `LoginResult` are not automatically exposed as HTTP responses by their package location.
+
+Frontend account management lives in `frontend/src/features/backoffice/accounts/`: `pages/` contains `AccountsPage` and `AuditLogPage`; `components/` contains account dialogs and the password form; `services/` contains API clients; `styles/` contains CSS. `CreateAccountDrawer` remains inside `pages/AccountsPage.js`. The parent dashboard remains at `frontend/src/features/auth/components/HeadOfficeDashboard.js`.
 
 ## Getting Started
 
@@ -286,11 +296,13 @@ Add a new migration for changes to an already-shared schema. Preserve applied mi
 
 ## Usage
 
+Cơ sở tạm ngừng có thể mở lại bằng **Mở lại cơ sở** và xác nhận; hệ thống ghi nhật ký `REACTIVATE_BRANCH`, chuyển về ACTIVE và xóa lý do trạng thái hiện tại, giữ lịch sử tạm ngừng. API: `POST /api/v1/head-office/branches/{id}/reactivate` dành cho quản lý cấp cao, chỉ nhận cơ sở SUSPENDED (gọi lại với ACTIVE không đổi dữ liệu). Màn cơ sở không còn nút **Đóng cơ sở**; bản ghi CLOSED cũ vẫn được giữ để tra cứu. Lịch sử sửa thông tin không dùng lại lý do tạm ngừng; ghi chú vận hành và lý do trạng thái là hai thông tin riêng. Không cần migration.
+
 ### Checkout, bill và SePay (14/10/2026)
 
 Lễ tân chọn phòng đang sử dụng → **Checkout & lập bill**. Kiểm tra tiền phòng theo giá đã xác nhận, F&B đã SERVED (không tính lại món combo giá 0), phụ phí có lý do và xác nhận đã kiểm tra phòng. **Tiếp tục thanh toán** chốt bill và thời điểm ngừng tính sử dụng; sau đó phí/order/đổi phòng/gia hạn bị khóa. Khách trả sớm vẫn giữ các khoản booking đã xác nhận; không tự tính lại bằng bảng giá mới. Nếu đã quá giờ mà chưa có phiên giờ lẻ, cần xác nhận gia hạn trước; đồng hồ giờ lẻ đang chạy được dừng bằng service hiện hành khi chốt bill.
 
-Trong thanh toán chọn **Tiền mặt**, **SePay** hoặc **Kết hợp**. Phần tiền mặt nhập khi tạo QR được lưu thành phân bổ tạm trên bill, chưa tạo payment và không hiển thị là đã thu. **Đổi phương thức** hủy QR cũ, xóa toàn bộ phân bổ tạm và đưa form về tổng bill ban đầu. Bill 170.000đ nhập tạm 50.000đ tiền mặt + QR 120.000đ: sau đặt lại vẫn cần thanh toán 170.000đ, không giữ 50.000đ. Khi SePay đã xác nhận chuyển khoản hoặc có khoản thu thực tế, không cho đặt lại. Webhook của mã đã hủy được lưu EXCEPTION, không cộng vào bill; hủy QR không hủy giao dịch tại ngân hàng. Lễ tân bấm **Hoàn tất thanh toán** mới ghi tiền mặt, tiền khách đưa và tiền thừa trong cùng giao dịch kết thúc bill. Trường readyToComplete cho biết tổng khoản thu thực tế + tiền mặt dự kiến bằng đúng net_amount; tổng paid vẫn chỉ gồm payment thật. QR có hạn 30 phút, có thể gia hạn cùng mã sau hết hạn. Hoàn tất chuyển bill SETTLED, booking COMPLETED, allocation FINISHED và phòng CLEANING; gửi lặp không thu hai lần. Menu **Thanh toán** tra cứu 100 bill gần nhất của cơ sở; có in bill qua trình duyệt.
+Trong thanh toán chọn **Tiền mặt**, **SePay** hoặc **Kết hợp**. Phần tiền mặt nhập khi tạo QR được lưu thành phân bổ tạm trên bill, chưa tạo payment và không hiển thị là đã thu. **Đổi phương thức** hủy QR cũ, xóa toàn bộ phân bổ tạm và đưa form về tổng bill ban đầu. Bill 170.000đ nhập tạm 50.000đ tiền mặt + QR 120.000đ: sau đặt lại vẫn cần thanh toán 170.000đ, không giữ 50.000đ. Khi SePay đã xác nhận chuyển khoản hoặc có khoản thu thực tế, không cho đặt lại. Webhook của mã đã hủy được lưu EXCEPTION, không cộng vào bill; hủy QR không hủy giao dịch tại ngân hàng. Lễ tân bấm **Hoàn tất thanh toán** mới ghi tiền mặt, tiền khách đưa và tiền thừa trong cùng giao dịch kết thúc bill. Trường readyToComplete cho biết tổng khoản thu thực tế + tiền mặt dự kiến bằng đúng net_amount; tổng paid vẫn chỉ gồm payment thật. QR có hạn 30 phút, có thể gia hạn cùng mã sau hết hạn. Hoàn tất chuyển bill SETTLED, booking COMPLETED, allocation FINISHED và phòng AVAILABLE (Trống); gửi lặp không thu hai lần. Menu **Thanh toán** tra cứu 100 bill gần nhất của cơ sở; có in bill qua trình duyệt.
 
 
 Dữ liệu hoàn cọc local (15/10/2026), tài khoản test.rec.ha tại TEST_CS_B: phòng TEST_REFUND_01; BK-20261015-E6426634 cọc 100.000đ và BK-20261015-53FBBC28 cọc 150.000đ đã hủy sớm, có yêu cầu REQUESTED; BK-20261015-D79299DC cọc 80.000đ đã hủy đủ điều kiện, chưa gửi yêu cầu. Thông tin nhận hoàn dùng TEST BANK / 0000000000, hoàn toàn giả lập. Đây là dữ liệu thêm theo yêu cầu trên database local, không phải migration và chưa ghi nhận khoản hoàn thực tế.
@@ -306,6 +318,8 @@ API preview checkout trả depositBalance và hasPendingRefund; API bill trả d
 Customers scan the in-room QR code to view the F&B menu and submit an order for their active room session.
 
 Obtain development accounts through the team's agreed seed or account-provisioning process. No demo credentials are specified here.
+
+V14 seed correction (24/10/2026): the six starter rooms per seeded branch are initial data, not a business limit. Branches can retain existing rooms and add more through room management. V14 no longer requires exactly six rooms or all existing rooms to be AVAILABLE; it retains the service-mode consistency check. Room inserts still use `ON CONFLICT (branch_id, code) DO NOTHING`, preserving existing room details and status. This correction targets databases where V14 has not succeeded. If V14 has already been applied on another environment, coordinate migration history before distributing the edited script; do not reset that database or rewrite its Flyway checksum automatically.
 
 ## Testing
 
@@ -369,3 +383,43 @@ GCMB is developed as an FPT University capstone project. A software license has 
 
 
 Reception merge (15/10/2026): màn Phòng giữ bộ lọc ngày và lấy giờ hiện tại cộng 5 phút, không có ô chọn giờ riêng. AppShell dùng giao diện chung và ẩn ô tìm kiếm trên topbar khi màn Phòng đã có ô tìm kiếm. Giữ luồng đổi phòng/gia hạn và nối Checkout & lập bill tới các route thanh toán.
+
+Checkout và thu gọn giao diện (24/10/2026): hoàn tất thanh toán/bill trả phòng trực tiếp về AVAILABLE (Trống), không còn bước Đang dọn hoặc nút Dọn xong. Bỏ API POST /api/v1/reception/rooms/{roomId}/finish-cleaning và không cho chọn CLEANING tại API/giao diện quản lý phòng. V16__retire_room_cleaning_status.sql chuyển phòng CLEANING cũ về AVAILABLE, xóa giờ dự kiến sẵn sàng và thêm ràng buộc không tạo trạng thái CLEANING mới; giữ nguyên booking, allocation và lịch sử trạng thái cũ. Lịch đặt tiếp theo và các kiểm tra trùng phòng vẫn áp dụng. Menu bên trái ở khung lễ tân/kế toán và bảng Phòng đang chọn bên phải có nút thu gọn/mở lại, dùng được bằng bàn phím; thu gọn không mất lựa chọn phòng hay bộ lọc. Trên màn hình nhỏ, menu thu gọn được ẩn thay vì chiếm một cột.
+
+Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_allocations.sql đồng bộ ràng buộc `no_room_overlap` với kiểm tra phòng trống/tạo booking: chỉ allocation RESERVED hoặc OCCUPIED giữ lịch phòng; FINISHED và RELEASED không chặn booking mới. Sau checkout đã hoàn tất, có thể đặt lại phòng dù giờ trả dự kiến của lượt trước chưa đến. Giữ nguyên toàn bộ mốc giờ và lịch sử booking/allocation; không thay đổi ràng buộc `no_booking_parallel_rooms`. Booking còn CONFIRMED/IN_HOUSE vẫn phải vượt qua kiểm tra trùng lịch hiện hành.
+
+### Cọc QR 30% và nhiều quản lý cơ sở (25/10/2026)
+
+- Khi bật thu cọc, số tiền bằng 30% giá booking do backend báo (combo hoặc tính giờ), làm tròn HALF_UP đến đồng. Đây là quy tắc mới thay cho mức cọc cấu hình riêng của combo trong luồng tạo booking. Không sửa các khoản cọc lịch sử. Tiền mặt chỉ ghi nhận khi lễ tân đã nhận tiền; chuyển khoản không còn ghi nhận thu thủ công lúc tạo booking.
+- Chọn Chuyển khoản rồi bấm **Tạo booking & lấy QR cọc**: tạo booking giữ phòng, sau đó hiển thị QR có số tiền và mã tham chiếu riêng. Lưu mã booking trong bản nháp phiên để tải lại trang không tạo booking lần hai. Rời QR vẫn giữ booking; có thể mở **QR cọc 30%** trong chi tiết booking CONFIRMED chưa nhận cọc.
+- API mới: `POST /api/v1/reception/bookings/{id}/deposit-payment` tạo/dùng lại yêu cầu cọc; `GET` cùng đường dẫn đọc trạng thái. Giới hạn booking thuộc cơ sở của lễ tân. Phản hồi gồm `status`, `bookingId`, `bookingCode`, `amount`, `receivedAmount`; yêu cầu chưa thu còn có `reference`, `expiresAt`, `bank`, `account`, `holder`, `qrUrl` khi còn hiệu lực. QR có hạn 30 phút; lấy lại QR sẽ hủy yêu cầu cũ đã hết hạn hoặc lệch giá. Không nhận cọc lần hai.
+- Dùng cấu hình SePay hiện có: `SEPAY_BANK`, `SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_HOLDER`, `SEPAY_WEBHOOK_KEY` trong `backend/.env`. Webhook `/api/v1/payments/sepay/webhook` xác thực và đối chiếu mã, tài khoản, số tiền, thời gian; chỉ sau đó tạo payment DEPOSIT và bút toán RECEIVE. Gửi lại cùng giao dịch không ghi trùng. Giao dịch sai số tiền, QR cũ, booking đã hủy/check-in hoặc giá đã đổi được lưu EXCEPTION để đối chiếu, không tự ghi nhận cọc. Không nhập khóa webhook trên frontend. Nhật ký mới: PLAN_DEPOSIT_PAYMENT, CONFIRM_SEPAY_DEPOSIT.
+- Mỗi cơ sở có tối đa **2 quản lý**, một quản lý có thể phụ trách nhiều cơ sở. Gán thêm giữ nguyên cả các quản lý hiện tại lẫn những cơ sở người đó đang phụ trách. Áp dụng chung cho màn Cơ sở và phân quyền/tạo tài khoản. API cơ sở trả các tên/mã/tài khoản quản lý nối bằng dấu phẩy và `managerCount`, thay trường `managerId` đơn. Thu hồi/chuyển quản lý qua phân quyền tài khoản như trước.
+- Migration mới `V18__allow_three_branch_managers.sql` đổi khóa chính phân công thành `(branch_id,user_id)`, giữ UNIQUE user_id và thêm trigger giới hạn 3. Không thay V1–V17 đã chạy; Flyway áp dụng V18 khi backend khởi động. Không tạo thêm file test.
+
+### Quản lý nhiều cơ sở và chọn cơ sở trên dashboard (25/10/2026)
+
+- Đây là cập nhật yêu cầu sau Report 2/3: quan hệ quản lý–cơ sở là nhiều–nhiều; mỗi cơ sở tối đa 2 quản lý. V19__managers_with_multiple_branches.sql bỏ UNIQUE user_id của phân công và bổ sung auth_token.selected_branch_id. Giữ nguyên V18 đã áp dụng và các phân công hiện hữu. Backend cần khởi động lại để Flyway chạy V19 trước khi dùng code mới.
+- Màn Tài khoản → Vai trò & phạm vi truy cập: Quản lý cơ sở có thể tích nhiều cơ sở; danh sách gửi trong branchIds của API đổi quyền. Danh sách này thay thế toàn bộ phân công của tài khoản trong một transaction; bỏ chọn là thu hồi quyền tại cơ sở đó. Nếu phân công mới khiến một cơ sở vượt 2 quản lý, từ chối toàn bộ thay đổi. Người dùng cần đăng nhập lại sau khi đổi quyền như trước. branchId vẫn là cơ sở mặc định để tương thích dữ liệu/tài khoản cũ. AccountView bổ sung managedBranchIds và hiển thị tên tất cả cơ sở; lọc tài khoản theo cơ sở xét mọi phân công quản lý.
+- Màn Cơ sở → Thêm quản lý chỉ thêm phân công, không chuyển người khỏi cơ sở khác; gọi lại phân công đã tồn tại không tạo trùng. Danh sách ứng viên không bị lặp khi người đó có nhiều cơ sở.
+- Dashboard quản lý: dropdown **Cơ sở đang quản lý** cùng hàng với Thông tin tài khoản chỉ liệt kê các cơ sở ACTIVE được phân công. Đổi lựa chọn cập nhật phiên, tiêu đề cơ sở và tải lại dữ liệu, xóa bộ lọc/biểu mẫu phòng cũ. Các menu chưa triển khai vẫn là màn chờ theo phạm vi cơ sở đang chọn.
+- API mới cho BRANCH_MANAGER: GET /api/v1/auth/branches trả [{id,name}], POST /api/v1/auth/branch với {branchId} trả Identity của cơ sở đã chọn. Có CSRF và kiểm tra phân công/cơ sở ACTIVE tại server; không thể chọn cơ sở ngoài quyền bằng cách sửa request. Lựa chọn được nhớ theo phiên đăng nhập. Nếu cơ sở bị thu hồi hoặc tạm ngừng, danh tính chọn lại một cơ sở còn hợp lệ; không còn cơ sở nào thì không tiếp tục sử dụng phiên quản lý.
+- API phòng quản lý gửi X-GCMB-Branch-Id theo màn hình đang mở. SessionFilter xác minh lại phân công trước khi đặt phạm vi Identity, giúp các tab đang xem cơ sở khác nhau không ghi nhầm dữ liệu khi phiên đổi lựa chọn. Khách API không gửi header dùng cơ sở đang chọn của phiên. Header không tự cấp thêm quyền.
+- File ảnh hưởng: branch/BranchAdministrationService, auth/{AuthRepository,AuthService,AuthController,SessionFilter,AuthSecurity}, accounts/{DTO,AccountRepository,AccountAccessService}; frontend BranchManagerDashboard, DashboardTopbar, RoleHomePage, AccountAccessDialog, BranchManagementPage, BranchRoomsPage và các API/styles liên quan. Không thêm file test.
+
+### Giới hạn hai quản lý và bố trí dropdown (25/10/2026)
+
+- Yêu cầu hiện hành: mỗi cơ sở tối đa 2 quản lý; một quản lý vẫn có thể quản lý nhiều cơ sở. BranchAdministrationService chặn người thứ ba, kể cả khi gán từ màn tài khoản; giao diện phân quyền và bộ đếm cơ sở hiển thị giới hạn 2.
+- Dropdown cơ sở nằm cùng hàng với tên đăng nhập, Thông tin tài khoản và Đăng xuất trên desktop; màn hình nhỏ được xuống hàng để không tràn. Thay đổi CSS tại frontend/src/features/branch/pages/branch-rooms.css.
+- V20__limit_two_branch_managers.sql thay hàm trigger giới hạn 3 thành 2, không sửa V18/V19 đã phát hành. Migration kiểm tra phân công hiện hữu và báo cơ sở có quá 2 người để quản lý chủ động chọn người cần thu hồi; không tự xóa phân công. Khởi động lại backend để Flyway áp dụng các migration còn thiếu.
+- Theo lựa chọn trực tiếp của người dùng, đã bỏ phân công qlcs.nguyenluongbang tại HN_HOA_BANG trên database local, ghi UNASSIGN_BRANCH_MANAGER. Giữ nguyên tài khoản và phân công tại cơ sở khác. Các môi trường khác cần tự kiểm tra dữ liệu trước khi chạy V20. Không thêm file test.
+
+Hợp nhất giao diện (25/10/2026): `BookingManagementPage` giữ khung chi tiết booking có nút đóng và chế độ hộp thoại trên màn hình nhỏ, đồng thời hỗ trợ QR cọc 30%; rời QR tải lại danh sách và chi tiết để cập nhật tiền cọc. `DashboardTopbar` nhận đồng thời các thuộc tính thu gọn menu (`onToggleSidebar`, `sidebarExpanded`) và vùng chọn cơ sở (`accountHeader`).
+
+### Checkout booking quá giờ (25/10/2026)
+
+- Checkout tự báo phần quá giờ chưa thu từ `plannedEnd` hiện hành (đã gồm thời lượng gia hạn) đến lúc chốt bill, không yêu cầu bật đồng hồ trước. Đơn giá lấy từ cấu hình giá giờ của hạng phòng/cơ sở tại giờ bắt đầu quá hạn; làm tròn thời lượng lên từng phút và làm tròn tiền HALF_UP đến đồng.
+- Nếu bật đồng hồ muộn, bổ sung đoạn từ `plannedEnd` đến `billedFrom` theo giá tại `plannedEnd`. Đoạn đồng hồ RUNNING dùng đơn giá đã lưu và tự dừng khi lập bill. Đồng hồ STOPPED giữ nguyên khoản đã ghi và thời điểm dừng; checkout chỉ bổ sung đoạn trước đồng hồ nếu thiếu, không thu lại thời gian đã chốt. Các đoạn được làm tròn phút riêng.
+- API preview checkout bổ sung `overtime: [{from,to,minutes,hourlyPrice,amount,priceRuleId}]` và `overtimeAmount`; `lines` và `amount` đã bao gồm các khoản này. Preview chỉ đọc, chưa ghi phí. Request lập bill bổ sung `overtimeConfirmed` và `overtimeAmount`. Backend tính lại bằng giờ máy chủ trong giao dịch có khóa booking; thiếu xác nhận hoặc số tiền thay đổi trả 409, không ghi phí/bill. Gửi lại booking đã có bill trả bill hiện hữu, không thu trùng.
+- Màn Checkout hiển thị từng khoảng giờ, đơn giá, tiền phát sinh và ô xác nhận bắt buộc; có nút **Cập nhật tiền phòng**. Khi lập bill gặp 409, tải lại preview và bỏ chọn xác nhận để lễ tân kiểm tra lại. Cần triển khai frontend/backend cùng nhau. Không thêm migration; không tính lại hóa đơn đã lập.
+- File ảnh hưởng: `CheckoutDtos.java`, `BookingService.java`, `CheckoutService.java`, `CheckoutPage.js`. Các file test tạo trong đợt sửa này đã được xóa theo yêu cầu; giữ nguyên các test có sẵn.

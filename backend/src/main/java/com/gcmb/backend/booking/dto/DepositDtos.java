@@ -24,9 +24,13 @@ public final class DepositDtos {
                               String status, String refundRequestStatus, Instant activityAt,
                               boolean canRequestRefund) {}
 
-    public record DepositDetail(DepositItem deposit, List<DepositEvent> history) {}
+    public record DepositDetail(DepositItem deposit, List<DepositEvent> history,
+                                List<RefundEvidenceItem> refundEvidence) {}
 
     public record DepositEvent(Instant happenedAt, String type, String label, String details) {}
+
+    public record RefundEvidenceItem(UUID requestId, BigDecimal amount, Instant paidAt,
+                                    String externalReference, String originalName) {}
 
     public record RefundableBooking(UUID bookingId, String bookingCode, String customerName, String phone,
                                     Instant cancelledAt, BigDecimal amount) {}
@@ -41,9 +45,9 @@ public final class DepositDtos {
     public record RefundRequestItem(UUID id, UUID bookingId, String bookingCode, String customerName, String phone,
                                     BigDecimal amount, String reason, String beneficiaryName, String bankName,
                                     String bankAccount, String status, Instant requestedAt, Instant paidAt,
-                                    String externalReference) {}
+                                    String externalReference, boolean hasEvidence) {}
 
-    public record CompleteRefundRequest(String externalReference) {}
+    public record RefundEvidenceContent(String originalName, String mimeType, byte[] bytes) {}
 
     public record RefundCompletionResult(UUID id, UUID bookingId, BigDecimal amount, String status) {}
 }

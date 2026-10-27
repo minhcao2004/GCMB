@@ -1,17 +1,22 @@
 package com.gcmb.backend.booking.controller;
 
-import com.gcmb.backend.administration.audit.service.MutationAudit;
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.audit.service.MutationAudit;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.BookingDtos;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.service.DepositManagementService;
 import com.gcmb.backend.booking.service.BookingService;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -60,6 +65,20 @@ public class BookingController {
         return deposits.detail(identity, bookingId);
     }
 
+    @GetMapping("/deposits/refund-requests/{requestId}/evidence")
+    // GET: lễ tân xem chứng từ của khoản hoàn đã thanh toán trong chi nhánh hiện tại.
+    public ResponseEntity<byte[]> depositRefundEvidence(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID requestId) {
+        DepositDtos.RefundEvidenceContent evidence = deposits.refundEvidence(identity, requestId);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(evidence.mimeType()))
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                .filename(evidence.originalName(), StandardCharsets.UTF_8).build().toString())
+            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .body(evidence.bytes());
+    }
+
     @PostMapping("/deposits/refund-requests")
     // POST: tạo yêu cầu chờ kế toán xử lý; lễ tân không ghi nhận đã hoàn tiền.
     public DepositDtos.RefundRequestResult createDepositRefundRequest(@AuthenticationPrincipal Identity identity,
@@ -77,14 +96,6 @@ public class BookingController {
     @GetMapping("/rooms")
     public List<BookingDtos.RoomSummary> rooms(@AuthenticationPrincipal Identity identity) {
         return bookings.rooms(identity);
-    }
-
-    @PostMapping("/rooms/{roomId}/finish-cleaning")
-    public void finishCleaning(@AuthenticationPrincipal Identity identity, @PathVariable UUID roomId) {
-        audit.record("ROOM_CLEANING_COMPLETED", "ROOM", roomId, () -> {
-            bookings.finishCleaning(identity, roomId);
-            return null;
-        }, null);
     }
 
     @GetMapping("/availability")

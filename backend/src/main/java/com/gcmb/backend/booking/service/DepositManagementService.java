@@ -1,13 +1,15 @@
 package com.gcmb.backend.booking.service;
 
-import com.gcmb.backend.administration.auth.dto.response.Identity;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.DepositDtos;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
 import com.gcmb.backend.booking.repository.DepositRepository;
+import com.gcmb.backend.booking.repository.DepositRepository.RefundEvidenceRow;
 import com.gcmb.backend.booking.repository.DepositRepository.RefundRequestRow;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +18,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 // Lễ tân gửi yêu cầu; kế toán xác nhận giao dịch hoàn trong phạm vi chi nhánh.
@@ -27,10 +30,13 @@ public class DepositManagementService {
 
     private final BookingRepository bookings;
     private final DepositRepository deposits;
+    private final RefundEvidenceStorageService evidenceStorage;
 
-    public DepositManagementService(BookingRepository bookings, DepositRepository deposits) {
+    public DepositManagementService(BookingRepository bookings, DepositRepository deposits,
+                                    RefundEvidenceStorageService evidenceStorage) {
         this.bookings = bookings;
         this.deposits = deposits;
+        this.evidenceStorage = evidenceStorage;
     }
 
     @Transactional(readOnly = true)
@@ -65,7 +71,8 @@ public class DepositManagementService {
         BranchScope branch = branch(identity);
         DepositDtos.DepositItem item = deposits.item(branch.id(), bookingId);
         if (item == null) throw notFound();
-        return new DepositDtos.DepositDetail(item, deposits.history(branch.id(), bookingId));
+        return new DepositDtos.DepositDetail(item, deposits.history(branch.id(), bookingId),
+            deposits.refundEvidenceForBooking(branch.id(), bookingId));
     }
 
     @Transactional
@@ -106,10 +113,9 @@ public class DepositManagementService {
 
     @Transactional
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
-                                                               DepositDtos.CompleteRefundRequest request) {
+                                                               String externalReference, MultipartFile image) {
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
-        if (request == null) throw new BookingFailure(400, "externalReference", "Vui lòng nhập mã giao dịch hoàn");
-        String reference = required(request.externalReference(), "externalReference", "Mã giao dịch hoàn", 200);
+        String reference = required(externalReference, "externalReference", "Mã giao dịch hoàn", 200);
         BranchScope branch = branch(identity);
         RefundRequestRow initial = deposits.refundRequest(branch.id(), requestId, false);
         if (initial == null) throw refundRequestNotFound();
@@ -130,9 +136,31 @@ public class DepositManagementService {
         BigDecimal balance = bookings.depositBalance(locked.bookingId());
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
-        if (!deposits.completeRefundRequest(branch.id(), locked, identity.id(), reference))
-            throw refundAlreadyProcessed();
+
+        RefundEvidenceStorageService.StoredEvidence evidence = evidenceStorage.store(image);
+        try {
+            deposits.insertAttachment(evidence.id(), evidence.objectKey(), evidence.originalName(),
+                evidence.mimeType(), evidence.byteSize(), evidence.sha256(), identity.id());
+            if (!deposits.completeRefundRequest(branch.id(), locked, identity.id(), reference, evidence.id()))
+                throw refundAlreadyProcessed();
+        } catch (RuntimeException exception) {
+            evidenceStorage.deleteQuietly(evidence.objectKey());
+            throw exception;
+        }
         return new DepositDtos.RefundCompletionResult(locked.id(), locked.bookingId(), locked.amount(), "PAID");
+    }
+
+    @Transactional(readOnly = true)
+    public DepositDtos.RefundEvidenceContent refundEvidence(Identity identity, UUID requestId) {
+        BranchScope branch = branch(identity);
+        RefundEvidenceRow evidence = deposits.refundEvidence(branch.id(), requestId);
+        if (evidence == null) throw new BookingFailure(404, "requestId", "Không tìm thấy chứng từ hoàn cọc");
+        try {
+            return new DepositDtos.RefundEvidenceContent(evidence.originalName(), evidence.mimeType(),
+                evidenceStorage.read(evidence.objectKey()));
+        } catch (IOException exception) {
+            throw new BookingFailure(404, "requestId", "Không thể đọc ảnh chứng minh hoàn cọc");
+        }
     }
 
     private BranchScope branch(Identity identity) {
