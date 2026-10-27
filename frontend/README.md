@@ -1,4 +1,4 @@
-# GCMB Frontend
+cd D:\DO_AN_2026\GCMB\frontendcd D:\DO_AN_2026\GCMB\frontend# GCMB Frontend
 
 React frontend cho hệ thống GenZ Cinema & Music Box. Landing page được chuyển từ website tĩnh sang React component, giữ nguyên thiết kế, dữ liệu phòng, bảng giá, chi nhánh và các tương tác chính.
 

@@ -29,7 +29,7 @@ public class BranchRoomRepository {
         return new RoomView(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"),
             r.getInt("floor_number"), r.getObject("room_type_id", UUID.class), r.getString("type_code"),
             r.getString("type_name"), r.getString("mode"), r.getInt("capacity"), r.getString("description"),
-            r.getString("operating_status"), r.getString("status_reason"), ready == null ? null : ready.toInstant().atOffset(java.time.ZoneOffset.UTC), r.getString("booking_status"));
+            r.getString("operating_status"), r.getString("status_reason"), ready == null ? null : ready.toInstant().atOffset(java.time.ZoneOffset.UTC), r.getString("booking_status"), r.getString("mr_code"));
     }
     private static final String SELECT = "SELECT r.*, rt.code AS type_code, rt.name AS type_name, rt.mode, CASE WHEN EXISTS (SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id AND b.branch_id=a.branch_id WHERE a.room_id=r.id AND a.branch_id=r.branch_id AND (a.state='OCCUPIED' OR b.status='IN_HOUSE') AND a.actual_end IS NULL) THEN 'IN_USE' WHEN EXISTS (SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id AND b.branch_id=a.branch_id WHERE a.room_id=r.id AND a.branch_id=r.branch_id AND a.state='RESERVED' AND b.status='CONFIRMED' AND a.starts_at>=CURRENT_TIMESTAMP AND a.starts_at<CURRENT_TIMESTAMP+INTERVAL '1 day') THEN 'BOOKED' ELSE 'READY' END AS booking_status FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id ";
     public List<RoomView> list(UUID branchId) {
@@ -41,7 +41,7 @@ public class BranchRoomRepository {
     }
     public List<RoomView> types() {
         return db.query("SELECT id, code, name, mode FROM gcmb.room_type WHERE active=true ORDER BY name",
-            (r,n)->new RoomView(null,r.getString("code"),r.getString("name"),null,r.getObject("id",UUID.class),r.getString("code"),r.getString("name"),r.getString("mode"),null,null,null,null,null,null));
+            (r,n)->new RoomView(null,r.getString("code"),r.getString("name"),null,r.getObject("id",UUID.class),r.getString("code"),r.getString("name"),r.getString("mode"),null,null,null,null,null,null,null));
     }
     public RoomView create(UUID branch, RoomCommand c) {
         UUID id=db.queryForObject("INSERT INTO gcmb.room(branch_id,room_type_id,code,name,capacity,operating_status,floor_number,description,status_reason) SELECT ?,id,?,?,?,'AVAILABLE',?,?,'' FROM gcmb.room_type WHERE id=? AND active=true RETURNING id",UUID.class,branch,c.code().trim(),c.name().trim(),c.capacity(),c.floorNumber(),c.description()==null?"":c.description().trim(),c.roomTypeId());

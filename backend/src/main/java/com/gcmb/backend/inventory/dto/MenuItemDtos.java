@@ -20,7 +20,25 @@ public final class MenuItemDtos {
             String unitName,
             BigDecimal salePrice,
             boolean active,
-            String stockStatus) {}
+            String stockStatus,
+            String description,
+            String imageUrl,
+            String imageOriginalName,
+            String imageMimeType) {}
 
     public record MenuItemStatusCommand(Boolean active) {}
+
+    public record MenuItemCommand(String name, String category, String kind, UUID inventoryItemId,
+                                  BigDecimal salePrice, Boolean active, String description,
+                                  Boolean removeImage) {}
+
+    public record InventoryOption(UUID id, String sku, String name, String unitName, boolean active) {}
+
+    public record PublicMenuItemView(UUID id, String name, String category, String kind,
+                                     BigDecimal salePrice, boolean available, String stockStatus,
+                                     String description, String imageUrl) {}
+
+    public record ImageAsset(String objectKey, String originalName, String mimeType) {}
+
+    public record StoredImage(String objectKey, String originalName, String mimeType) {}
 }

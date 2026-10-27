@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiAssetUrl } from '../../../api/client';
 import menuItemApi from '../services/menuItemApi';
 import './menu-items.css';
 
@@ -16,12 +17,20 @@ const kindLabels = {
 };
 
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)}đ`;
+const groupPriceDigits = (value) => String(value ?? '').replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const saleStatusLabel = (item) => {
+  if (!item.active) return 'Ngừng bán';
+  if (item.stockStatus === 'LOW_STOCK') return 'Sắp hết';
+  if (item.stockStatus === 'OUT_OF_STOCK') return 'Hết hàng';
+  return 'Sẵn bán';
+};
 const quantity = (value) => value == null ? 'Chưa ghi nhận' : new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(value);
 const displayError = (error) => error.response?.data?.message || error.response?.data?.detail || error.message || 'Không thể hoàn tất thao tác.';
 
 export default function MenuItemsPage({ user }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [inventoryOptions, setInventoryOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
@@ -32,7 +41,17 @@ export default function MenuItemsPage({ user }) {
   const [pendingStatus, setPendingStatus] = useState(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [editorMode, setEditorMode] = useState(null);
+  const [editorItemId, setEditorItemId] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [reviewingSave, setReviewingSave] = useState(false);
+  const [saving, setSaving] = useState(false);
   const detailPanelRef = useRef(null);
+  const editorPanelRef = useRef(null);
+  const editorReturnFocusRef = useRef(null);
+  const createButtonRef = useRef(null);
   const confirmationRef = useRef(null);
   const listFocusRef = useRef(null);
   const returnFocusRef = useRef(null);
@@ -41,10 +60,13 @@ export default function MenuItemsPage({ user }) {
     setError('');
     setLoading(true);
     try {
-      const [menuItems, menuCategories] = await Promise.all([menuItemApi.list(), menuItemApi.categories()]);
+      const [menuItems, menuCategories, linkedItems] = await Promise.all([
+        menuItemApi.list(), menuItemApi.categories(), menuItemApi.inventoryOptions(),
+      ]);
       setItems(menuItems);
       setCategories(menuCategories);
-      setSelectedId((current) => current && menuItems.some((item) => item.id === current) ? current : menuItems[0]?.id || null);
+      setInventoryOptions(linkedItems);
+      setSelectedId((current) => current && menuItems.some((item) => item.id === current) ? current : null);
     } catch (loadError) {
       setError(displayError(loadError));
     } finally {
@@ -68,7 +90,23 @@ export default function MenuItemsPage({ user }) {
       confirmation.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
     }
   }, [deleteId, pendingStatus]);
-
+  useEffect(() => {
+    if (!imageFile) { setImagePreview(''); return undefined; }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+  useEffect(() => {
+    if (!editorMode) return undefined;
+    const frame = window.requestAnimationFrame(() => document.getElementById('menu-item-name')?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [editorMode]);
+  useEffect(() => {
+    if (!editorMode) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [editorMode]);
   const restoreFocus = (fallbackToList = false) => {
     const focusKey = returnFocusRef.current;
     returnFocusRef.current = null;
@@ -93,7 +131,7 @@ export default function MenuItemsPage({ user }) {
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('vi-VN');
     return items.filter((item) => {
-      const matchesSearch = !term || [item.code, item.name, item.category, item.inventoryName, item.inventorySku]
+      const matchesSearch = !term || [item.code, item.name, item.category, item.description, item.inventoryName, item.inventorySku]
         .filter(Boolean).join(' ').toLocaleLowerCase('vi-VN').includes(term);
       const matchesCategory = category === 'all' || item.category === category;
       const matchesStatus = status === 'all' || (status === 'active' ? item.active : !item.active);
@@ -103,8 +141,179 @@ export default function MenuItemsPage({ user }) {
 
   const selected = items.find((item) => item.id === selectedId) || null;
 
+  const selectItem = (item) => {
+    setSelectedId(item.id);
+    setEditorMode(null);
+    setEditorItemId(null);
+    setDraft(null);
+    setImageFile(null);
+    setReviewingSave(false);
+    setDeleteId(null);
+    setPendingStatus(null);
+  };
+
+  const openCreate = (event) => {
+    editorReturnFocusRef.current = event.currentTarget.dataset.menuFocusKey;
+    setSelectedId(null);
+    setDeleteId(null);
+    setPendingStatus(null);
+    setEditorItemId(null);
+    setDraft({
+      name: '', category: categories[0] || '', kind: 'PACKAGED', inventoryItemId: '',
+      salePrice: '', active: true, description: '', removeImage: false,
+      imageUrl: '', imageOriginalName: '', imageMimeType: '',
+    });
+    setImageFile(null);
+    setReviewingSave(false);
+    setEditorMode('create');
+  };
+
+  const openUpdate = (item, event) => {
+    editorReturnFocusRef.current = event.currentTarget.dataset.menuFocusKey;
+    setEditorItemId(item.id);
+    setDraft({
+      name: item.name, category: item.category, kind: item.kind,
+      inventoryItemId: item.inventoryItemId || '', salePrice: String(item.salePrice),
+      active: item.active, description: item.description || '', removeImage: false,
+      imageUrl: item.imageUrl || '', imageOriginalName: item.imageOriginalName || '',
+      imageMimeType: item.imageMimeType || '',
+    });
+    setImageFile(null);
+    setReviewingSave(false);
+    setError('');
+    setEditorMode('update');
+  };
+
+  const closeEditor = useCallback(() => {
+    setEditorMode(null);
+    setEditorItemId(null);
+    setDraft(null);
+    setImageFile(null);
+    setReviewingSave(false);
+    const focusKey = editorReturnFocusRef.current;
+    window.requestAnimationFrame(() => {
+      const target = Array.from(document.querySelectorAll('[data-menu-focus-key]'))
+        .find((element) => element.dataset.menuFocusKey === focusKey);
+      target?.focus({ preventScroll: true });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!editorMode) return undefined;
+    const handleKeyDown = (event) => {
+      const dialog = editorPanelRef.current;
+      if (!dialog) return;
+      if (event.key === 'Escape' && !saving) {
+        event.preventDefault();
+        closeEditor();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialog.querySelectorAll(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editorMode, saving, closeEditor]);
+
+  const changeDraft = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+
+  const chooseImage = (event) => {
+    const file = event.target.files?.[0] || null;
+    if (file && file.size > 20_000_000) {
+      setError('Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB.');
+      event.target.value = '';
+      return;
+    }
+    setError('');
+    setImageFile(file);
+    if (file) changeDraft('removeImage', false);
+  };
+
+  const removeDraftImage = () => {
+    setImageFile(null);
+    setDraft((current) => ({ ...current, imageUrl: '', imageOriginalName: '', imageMimeType: '', removeImage: true }));
+  };
+
+  const reviewSave = (event) => {
+    event.preventDefault();
+    if (!draft) return;
+    if (!draft.name.trim() || !draft.category.trim()) {
+      setError('Vui lòng nhập tên món và danh mục.');
+      return;
+    }
+    if (!/^\d{1,18}$/.test(draft.salePrice)) {
+      setError('Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.');
+      return;
+    }
+    if (draft.kind === 'PACKAGED' && !draft.inventoryItemId) {
+      setError('Hàng hóa cần liên kết với một mặt hàng kho.');
+      return;
+    }
+    if (draft.description.length > 1000) {
+      setError('Mô tả không được vượt quá 1.000 ký tự.');
+      return;
+    }
+    setError('');
+    setReviewingSave(true);
+  };
+
+  const saveItem = async () => {
+    if (!draft || saving) return;
+    setSaving(true);
+    setError('');
+    const command = {
+      name: draft.name.trim(), category: draft.category.trim(), kind: draft.kind,
+      inventoryItemId: draft.kind === 'PACKAGED' ? draft.inventoryItemId || null : null,
+      salePrice: draft.salePrice, active: draft.active,
+      description: draft.description.trim() || null, removeImage: Boolean(draft.removeImage),
+    };
+    try {
+      const saved = editorMode === 'create'
+        ? await menuItemApi.create(command, imageFile)
+        : await menuItemApi.update(editorItemId, command, imageFile);
+      setItems((current) => [...current.filter((item) => item.id !== saved.id), saved]
+        .sort((left, right) => left.name.localeCompare(right.name, 'vi')));
+      setCategories((current) => current.includes(saved.category)
+        ? current : [...current, saved.category].sort((left, right) => left.localeCompare(right, 'vi')));
+      setSelectedId(null);
+      setToast(editorMode === 'create' ? `Đã tạo món ${saved.code}.` : `Đã cập nhật món ${saved.code}.`);
+      setEditorMode(null);
+      setEditorItemId(null);
+      setDraft(null);
+      setImageFile(null);
+      setReviewingSave(false);
+      const focusKey = editorReturnFocusRef.current;
+      editorReturnFocusRef.current = null;
+      window.requestAnimationFrame(() => {
+        const trigger = focusKey
+          ? Array.from(document.querySelectorAll('[data-menu-focus-key]')).find((element) => element.dataset.menuFocusKey === focusKey)
+          : null;
+        (trigger || listFocusRef.current)?.focus({ preventScroll: true });
+      });
+    } catch (saveError) {
+      setError(displayError(saveError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const requestStatusChange = (item, trigger) => {
     returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    setEditorMode(null);
+    setDraft(null);
+    setImageFile(null);
     setSelectedId(item.id);
     setDeleteId(null);
     setPendingStatus({ id: item.id, active: !item.active });
@@ -112,6 +321,9 @@ export default function MenuItemsPage({ user }) {
 
   const requestDelete = (item, trigger) => {
     returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    setEditorMode(null);
+    setDraft(null);
+    setImageFile(null);
     setSelectedId(item.id);
     setDeleteId(item.id);
     setPendingStatus(null);
@@ -156,12 +368,13 @@ export default function MenuItemsPage({ user }) {
   };
 
   return <div className="menu-items-page">
-    <div className="menu-breadcrumb">Quản lý cơ sở <span>/</span> Thực đơn F&amp;B</div>
     <header className="menu-heading">
       <div>
         <h1>Thực đơn F&amp;B</h1>
-        <p>Cơ sở {user.branchName || 'được phân quyền'} · Quản lý trạng thái món và lịch sử bán hàng</p>
+        <p>Cơ sở {user.branchName || 'được phân quyền'} · Thực đơn F&amp;B</p>
       </div>
+      <button ref={createButtonRef} type="button" className="menu-create-button" data-menu-focus-key="create-menu"
+        onClick={openCreate} disabled={loading || Boolean(error)}>+ Thêm món / dịch vụ</button>
     </header>
 
     {error && <div className="menu-error" role="alert">
@@ -169,32 +382,34 @@ export default function MenuItemsPage({ user }) {
     </div>}
 
     <section className="menu-filters" aria-label="Tìm kiếm và lọc thực đơn">
-      <label className="menu-search">
-        <span>Tìm món</span>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã, tên hoặc danh mục…" />
-      </label>
-      <label>
-        <span>Danh mục</span>
-        <select value={category} onChange={(event) => setCategory(event.target.value)}>
-          <option value="all">Tất cả danh mục</option>
-          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </label>
-      <label>
-        <span>Trạng thái bán</span>
-        <select value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">Tất cả trạng thái</option>
-          <option value="active">Đang bán</option>
-          <option value="inactive">Ngừng bán</option>
-        </select>
-      </label>
-      <p className="menu-scope">Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải món…' : `${visibleItems.length} món`}</p>
+      <div className="menu-filter-controls">
+        <label className="menu-search">
+          <span className="visually-hidden">Tìm món</span>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." />
+        </label>
+        <label>
+          <span className="visually-hidden">Danh mục</span>
+          <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <option value="all">Tất cả danh mục</option>
+            {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span className="visually-hidden">Trạng thái bán</span>
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">Tất cả trạng thái</option>
+            <option value="active">Đang bán</option>
+            <option value="inactive">Ngừng bán</option>
+          </select>
+        </label>
+      </div>
+      <p className="menu-scope">Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải món…' : `${visibleItems.length} bản ghi mẫu`}</p>
     </section>
 
-    <div className="menu-content-grid">
+    <div className={`menu-content-grid${selected ? ' has-selection' : ''}`}>
       <section ref={listFocusRef} className="menu-table-card" aria-label="Danh sách món và dịch vụ" tabIndex="-1">
         {loading ? <div className="menu-loading" role="status" aria-label="Đang tải thực đơn">
-          {[0, 1, 2, 3].map((row) => <div className="menu-skeleton-row" key={row}><i /><i /><i /><i /></div>)}
+          {[0, 1, 2, 3].map((row) => <div className="menu-skeleton-row" key={row}><i /><i /><i /><i /><i /></div>)}
         </div> : visibleItems.length ? <div className="menu-table-scroll">
           <table className="menu-table">
             <thead><tr>
@@ -202,31 +417,18 @@ export default function MenuItemsPage({ user }) {
               <th scope="col">Danh mục</th>
               <th scope="col">Giá bán</th>
               <th scope="col">Tồn liên kết</th>
-              <th scope="col">Tồn kho</th>
-              <th scope="col">Trạng thái món</th>
-              <th scope="col"><span className="visually-hidden">Thao tác</span></th>
+              <th scope="col">Trạng thái</th>
             </tr></thead>
             <tbody>{visibleItems.map((item) => <tr key={item.id} className={selectedId === item.id ? 'is-selected' : ''}>
               <td>
-                <button className="menu-item-link" type="button" onClick={() => { setSelectedId(item.id); setDeleteId(null); setPendingStatus(null); }}>
+                <button className="menu-item-link" type="button" onClick={() => selectItem(item)}>
                   <strong>{item.name}</strong><span>{item.code}</span>
                 </button>
               </td>
               <td>{item.category}</td>
               <td className="menu-price">{money(item.salePrice)}</td>
-              <td>{item.inventoryName ? <><strong className="menu-inventory-name">{item.inventoryName}</strong><span className="menu-secondary">{item.inventorySku || 'Liên kết kho'}</span></> : <span className="menu-secondary">Không theo dõi</span>}</td>
-              <td><span className={`menu-stock-status ${item.stockStatus.toLowerCase().replaceAll('_', '-')}`}>{stockLabels[item.stockStatus] || item.stockStatus}</span>
-                {item.inventoryItemId && <span className="menu-secondary">{quantity(item.stockQuantity)} {item.unitName || ''}</span>}
-              </td>
-              <td><span className={`menu-sale-status ${item.active ? 'active' : 'inactive'}`}>{item.active ? 'Đang bán' : 'Ngừng bán'}</span></td>
-              <td className="menu-row-actions">
-                <button type="button" className="menu-row-action" data-menu-focus-key={`status-row-${item.id}`} onClick={(event) => requestStatusChange(item, event.currentTarget)} disabled={Boolean(busyId)} aria-label={`${item.active ? 'Ngừng bán' : 'Đưa vào bán'} ${item.name}`}>
-                  {busyId === item.id ? 'Đang lưu…' : item.active ? 'Ngừng bán' : 'Đưa vào bán'}
-                </button>
-                <button type="button" className="menu-row-delete" data-menu-focus-key={`delete-row-${item.id}`} disabled={Boolean(busyId)} onClick={(event) => requestDelete(item, event.currentTarget)} aria-label={`Xóa ${item.name}`}>
-                  Xóa
-                </button>
-              </td>
+              <td className="menu-inventory-quantity">{item.inventoryItemId ? `${quantity(item.stockQuantity)} ${item.unitName || ''}`.trim() : 'Không theo dõi'}</td>
+              <td className="menu-list-status">{saleStatusLabel(item)}</td>
             </tr>)}</tbody>
           </table>
         </div> : <div className="menu-empty">
@@ -234,10 +436,9 @@ export default function MenuItemsPage({ user }) {
           <p>{items.length ? 'Thử đổi từ khóa hoặc điều kiện lọc.' : 'Món sẽ xuất hiện ở đây sau khi được thêm vào thực đơn của cơ sở.'}</p>
           {(search || category !== 'all' || status !== 'all') && <button type="button" onClick={() => { setSearch(''); setCategory('all'); setStatus('all'); }}>Xóa bộ lọc</button>}
         </div>}
-        <footer className="menu-table-footer">Hiển thị {visibleItems.length} / {items.length} món · Dữ liệu thuộc cơ sở được chọn</footer>
       </section>
 
-      <aside ref={detailPanelRef} className="menu-detail-panel" aria-label="Thông tin món được chọn">
+      <aside ref={detailPanelRef} className="menu-detail-panel" aria-label="Thông tin món được chọn" tabIndex="-1">
         {selected ? <>
           <header className="menu-detail-heading"><div><h2>Thông tin món</h2><p>{user.branchName || 'Cơ sở được phân quyền'}</p></div></header>
           <div className="menu-detail-summary">
@@ -253,7 +454,12 @@ export default function MenuItemsPage({ user }) {
             <dt>Giá bán</dt><dd>{money(selected.salePrice)}</dd>
             <dt>Liên kết kho</dt><dd>{selected.inventoryName ? `${selected.inventorySku || ''} · ${selected.inventoryName}` : 'Không theo dõi tồn kho'}</dd>
             <dt>Tồn khả dụng</dt><dd>{selected.inventoryItemId ? `${quantity(selected.stockQuantity)} ${selected.unitName || ''}` : 'Không theo dõi'}</dd>
+            {selected.description && <><dt>Mô tả</dt><dd>{selected.description}</dd></>}
           </dl>
+          {selected.imageUrl && <div className="menu-detail-image">
+            {selected.imageMimeType === 'application/pdf' ? <a href={apiAssetUrl(selected.imageUrl)} target="_blank" rel="noreferrer">Xem tệp: {selected.imageOriginalName}</a>
+              : <img src={apiAssetUrl(selected.imageUrl)} alt={`Ảnh ${selected.name}`} />}
+          </div>}
           <p className="menu-status-note">Trạng thái bán quyết định món có thể được chọn trong đơn mới. Tình trạng tồn kho được hiển thị riêng; đổi trạng thái bán không thay đổi số lượng tồn.</p>
           {deleteId === selected.id ? <div ref={confirmationRef} tabIndex="-1" className="menu-delete-confirm" role="group" aria-labelledby="menu-delete-title">
             <h3 id="menu-delete-title">Xóa món khỏi thực đơn?</h3>
@@ -268,6 +474,8 @@ export default function MenuItemsPage({ user }) {
             <div><button type="button" onClick={cancelConfirmation} disabled={Boolean(busyId)}>Quay lại</button>
               <button type="button" className="confirm-status" onClick={applyStatusChange} disabled={Boolean(busyId)}>{busyId === selected.id ? 'Đang lưu…' : 'Xác nhận trạng thái'}</button></div>
           </div> : <div className="menu-detail-actions">
+            <button type="button" className="menu-edit-action" data-menu-focus-key={`edit-detail-${selected.id}`}
+              onClick={(event) => openUpdate(selected, event)} disabled={Boolean(busyId)}>Sửa món</button>
             <button type="button" className="menu-toggle-action" data-menu-focus-key={`status-detail-${selected.id}`} onClick={(event) => requestStatusChange(selected, event.currentTarget)} disabled={Boolean(busyId)}>
               {busyId === selected.id ? 'Đang lưu…' : selected.active ? 'Ngừng bán món' : 'Đưa món vào bán'}
             </button>
@@ -276,6 +484,170 @@ export default function MenuItemsPage({ user }) {
         </> : <div className="menu-detail-empty"><h2>Chọn một món</h2><p>Thông tin và thao tác trạng thái sẽ hiển thị tại đây.</p></div>}
       </aside>
     </div>
+    <footer className="menu-page-footer">
+      <p>Hiển thị {visibleItems.length} kết quả · Trang 1</p>
+      <p>Dữ liệu minh họa · Chỉ thao tác trong cơ sở được phân quyền</p>
+    </footer>
+    {editorMode && draft && <div className="menu-editor-overlay">
+      <button type="button" className="menu-editor-scrim" aria-label="Đóng biểu mẫu" onClick={closeEditor} disabled={saving} />
+      <section ref={editorPanelRef} className="menu-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="menu-editor-title">
+        <MenuItemEditor
+          mode={editorMode}
+          draft={draft}
+          branchName={user.branchName || 'được phân quyền'}
+          categories={categories}
+          inventoryOptions={inventoryOptions}
+          imageFile={imageFile}
+          imagePreview={imagePreview}
+          reviewing={reviewingSave}
+          saving={saving}
+          onChange={changeDraft}
+          onImage={chooseImage}
+          onRemoveImage={removeDraftImage}
+          onReview={reviewSave}
+          onConfirm={saveItem}
+          onBackToEdit={() => setReviewingSave(false)}
+          onBack={closeEditor}
+        />
+      </section>
+    </div>}
     {toast && <div className="menu-toast" role="status" aria-live="polite">{toast}</div>}
   </div>;
+}
+
+function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions, imageFile, imagePreview,
+  reviewing, saving, onChange, onImage, onRemoveImage, onReview, onConfirm, onBackToEdit, onBack }) {
+  const [priceFocused, setPriceFocused] = useState(false);
+  const previewUrl = imagePreview || apiAssetUrl(draft.imageUrl);
+  const previewName = imageFile?.name || draft.imageOriginalName;
+  const previewMime = imageFile?.type || draft.imageMimeType;
+  const isPdf = previewMime === 'application/pdf' || /\.pdf$/i.test(previewName || '');
+  const inventory = inventoryOptions.find((item) => item.id === draft.inventoryItemId);
+  const changePrice = (event) => {
+    onChange('salePrice', event.currentTarget.value.replace(/\D/g, '').slice(0, 18));
+  };
+  let pricePreview = '—';
+  if (/^\d{1,18}$/.test(draft.salePrice)) {
+    pricePreview = `${groupPriceDigits(draft.salePrice)}đ`;
+  }
+
+  return <section className="menu-editor" aria-labelledby="menu-editor-title">
+    <header className="menu-editor-heading">
+      <div>
+        <h2 id="menu-editor-title">{mode === 'create' ? 'Thêm món / dịch vụ' : 'Thông tin món / dịch vụ'}</h2>
+        <p>Cơ sở {branchName}</p>
+      </div>
+      <button type="button" className="menu-editor-close" aria-label="Đóng biểu mẫu" onClick={onBack} disabled={saving}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </button>
+    </header>
+    <form className="menu-editor-form" onSubmit={onReview}>
+      {!reviewing ? <fieldset className="menu-editor-fields" disabled={saving}>
+        <label className="menu-editor-field" htmlFor="menu-item-name">Tên món *
+          <input id="menu-item-name" value={draft.name} onChange={(event) => onChange('name', event.target.value)}
+            maxLength={200} autoComplete="off" required />
+        </label>
+
+        <label className="menu-editor-field" htmlFor="menu-item-category">Danh mục
+          <input id="menu-item-category" list="menu-category-options" value={draft.category}
+            onChange={(event) => onChange('category', event.target.value)} maxLength={200} required />
+        </label>
+        <datalist id="menu-category-options">{categories.map((value) => <option key={value} value={value} />)}</datalist>
+
+        <label className="menu-editor-field" htmlFor="menu-item-kind">Loại
+          <select id="menu-item-kind" value={draft.kind} onChange={(event) => {
+            onChange('kind', event.target.value);
+            if (event.target.value !== 'PACKAGED') onChange('inventoryItemId', '');
+          }}>
+            <option value="PACKAGED">Hàng hóa</option>
+            <option value="PREPARED">Món chế biến</option>
+            <option value="SERVICE">Dịch vụ</option>
+          </select>
+        </label>
+
+        <label className="menu-editor-field" htmlFor="menu-item-price">Giá bán *
+          <div className="menu-price-input">
+            <input id="menu-item-price" type="text" inputMode="numeric" maxLength={23}
+              aria-label="Giá bán bằng đồng Việt Nam" value={priceFocused ? draft.salePrice : groupPriceDigits(draft.salePrice)}
+              onFocus={() => setPriceFocused(true)} onBlur={() => setPriceFocused(false)} onChange={changePrice}
+              placeholder="Nhập số tiền" required />
+            <span aria-hidden="true">đ</span>
+          </div>
+        </label>
+
+        {draft.kind === 'PACKAGED' && <>
+          <label className="menu-editor-field" htmlFor="menu-item-inventory">Liên kết kho
+            <select id="menu-item-inventory" value={draft.inventoryItemId}
+              onChange={(event) => onChange('inventoryItemId', event.target.value)} required>
+              <option value="">Chọn mặt hàng kho</option>
+              {inventoryOptions.map((item) => <option key={item.id} value={item.id}
+                disabled={!item.active && item.id !== draft.inventoryItemId}>
+                {item.sku} · {item.name} · {item.unitName}{item.active ? '' : ' · Ngừng dùng'}
+              </option>)}
+            </select>
+          </label>
+        </>}
+
+        <label className="menu-editor-field" htmlFor="menu-item-active">Tình trạng bán
+          <select id="menu-item-active" value={String(draft.active)}
+            onChange={(event) => onChange('active', event.target.value === 'true')}>
+            <option value="true">Sẵn bán</option>
+            <option value="false">Ngừng bán</option>
+          </select>
+        </label>
+
+        <label className="menu-editor-field" htmlFor="menu-item-description">Mô tả
+          <textarea id="menu-item-description" value={draft.description}
+            onChange={(event) => onChange('description', event.target.value)} maxLength={1000} rows={3} />
+        </label>
+
+        <div className="menu-editor-field">
+          <label htmlFor="menu-item-image">Ảnh món</label>
+          <div className="menu-upload-field">
+            <input id="menu-item-image" className="menu-upload-input" type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+              onChange={onImage} />
+            {previewUrl ? <div className="menu-upload-preview">
+              {isPdf ? <a href={previewUrl} target="_blank" rel="noreferrer">Mở tệp {previewName || 'đã tải lên'}</a>
+                : <img src={previewUrl} alt={previewName ? `Xem trước ${previewName}` : 'Ảnh món hiện tại'} />}
+              <div className="menu-upload-actions">
+                <label className="menu-upload-change" htmlFor="menu-item-image">Thay ảnh / tài liệu</label>
+                <button type="button" onClick={onRemoveImage}>Gỡ tệp</button>
+              </div>
+            </div> : <label className="menu-upload-trigger" htmlFor="menu-item-image">
+              <span>+ Tải ảnh</span>
+              <small>JPG, PNG, WebP, HEIC, HEIF, PDF</small>
+              <small>Tối đa 20 MB · Xem trước sau khi tải</small>
+            </label>}
+          </div>
+        </div>
+        {draft.kind === 'PACKAGED' && <p className="menu-inventory-note" role="note">
+          Hết hàng phụ thuộc tồn khả dụng. Lưu thực đơn không làm tăng số lượng tồn.
+        </p>}
+      </fieldset> : <section className="menu-save-review" aria-labelledby="menu-save-review-title" role="group">
+        <h3 id="menu-save-review-title">Xem lại thông tin</h3>
+        <dl>
+          <dt>Tên món</dt><dd>{draft.name.trim()}</dd>
+          <dt>Danh mục</dt><dd>{draft.category.trim()}</dd>
+          <dt>Loại</dt><dd>{kindLabels[draft.kind]}</dd>
+          <dt>Giá bán</dt><dd>{pricePreview}</dd>
+          {draft.kind === 'PACKAGED' && <><dt>Liên kết kho</dt><dd>{inventory ? `${inventory.sku} · ${inventory.name}` : 'Chưa chọn'}</dd></>}
+          <dt>Tình trạng bán</dt><dd>{draft.active ? 'Sẵn bán' : 'Ngừng bán'}</dd>
+          {draft.description.trim() && <><dt>Mô tả</dt><dd>{draft.description.trim()}</dd></>}
+          <dt>Tệp</dt><dd>{imageFile ? imageFile.name : draft.removeImage ? 'Đã gỡ tệp hiện tại' : previewName || 'Không có'}</dd>
+        </dl>
+        <p>Đơn hàng và lịch sử bán đã ghi nhận vẫn giữ nguyên thông tin tại thời điểm bán.</p>
+      </section>}
+      <footer className="menu-editor-footer">
+        <button type="button" onClick={onBack} disabled={saving}>Quay lại</button>
+        {reviewing ? <>
+          <button type="button" onClick={onBackToEdit} disabled={saving}>Quay lại chỉnh sửa</button>
+          <button type="button" className="menu-editor-confirm" onClick={onConfirm} disabled={saving}>
+            {saving ? 'Đang lưu…' : mode === 'create' ? 'Xác nhận tạo món' : 'Xác nhận cập nhật'}
+          </button>
+        </> : <button type="submit" className="menu-editor-confirm" disabled={saving}>Lưu món</button>}
+      </footer>
+    </form>
+  </section>;
 }

@@ -20,6 +20,7 @@ public final class AuditSnapshots {
         "branch_id","room_type_id","mode","capacity","description","floor_number","operating_status",
         "status_reason","expected_ready_at","active","version","valid_from","valid_to","minute_from",
         "minute_to","weekdays","day_kind","specific_date","hourly_price","overtime_hourly_price",
+        "category","kind","inventory_item_id","sale_price","image_original_name","image_mime_type","deleted_at","deleted_by",
         "billing_step_minutes","priority","price","duration_minutes","deposit_required","day_group",
         "min_guests","included_description","contact_name","contact_phone","guest_count","planned_start",
         "planned_end","actual_checkin","actual_checkout","note","channel","pricing_mode","managerId","managerNames",
@@ -31,7 +32,8 @@ public final class AuditSnapshots {
         "depositReceived","depositMethod","actualCheckin","depositBalance","earlyCheckIn",
         "plannedStartBeforeCheckIn","plannedEndBeforeCheckIn","plannedStartAfterCheckIn","plannedEndAfterCheckIn",
         "previousStart","previousEnd","expectedAmountPreserved","cancelledAt","depositOutcome",
-        "depositAmount","refundCutoffMinutes","releasedRoomId","refundRequestId","noShowAt");
+        "depositAmount","refundCutoffMinutes","releasedRoomId","refundRequestId","noShowAt",
+        "booking_id","allocation_id","assigned_employee_id","accepted_by","accepted_at","served_at");
 
     public static Map<String,Object> read(String value) {
         if (value == null) return Map.of();

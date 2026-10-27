@@ -258,7 +258,7 @@ export default function AccountantRefundPage() {
   const items = useMemo(() => queue?.items || [], [queue]);
   const visibleItems = useMemo(() => items.filter((item) => {
     const matchesFilter = filter === 'all' || (filter === 'open' ? openStatuses.has(item.status) : item.status === 'PAID');
-    const searchText = `${item.bookingCode} ${item.customerName} ${item.phone || ''} ${item.bankName} ${item.bankAccount}`.toLocaleLowerCase('vi');
+    const searchText = `${item.bookingCode} ${item.branchName || ''} ${item.customerName} ${item.phone || ''} ${item.bankName} ${item.bankAccount}`.toLocaleLowerCase('vi');
     return matchesFilter && searchText.includes(search.trim().toLocaleLowerCase('vi'));
   }), [items, filter, search]);
   const selected = items.find((item) => item.id === selectedId) || null;
@@ -337,7 +337,7 @@ export default function AccountantRefundPage() {
                 {!loading && visibleItems.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
                   onClick={() => { setSelectedId(item.id); setMutationError(''); }} tabIndex={0} aria-selected={item.id === selectedId}
                   onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(item.id); setMutationError(''); } }}>
-                  <td><strong>{item.bookingCode}</strong><small>{dateTimeText(item.requestedAt)}</small></td>
+                  <td><strong>{item.bookingCode}</strong><small>{item.branchName} · {dateTimeText(item.requestedAt)}</small></td>
                   <td><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></td>
                   <td><strong>{formatVnd(item.amount)}</strong></td>
                   <td><span className={statusClass(item.status)}>{statusLabels[item.status] || item.status}</span></td>

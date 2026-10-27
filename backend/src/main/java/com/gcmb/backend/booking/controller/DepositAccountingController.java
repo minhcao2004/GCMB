@@ -43,7 +43,7 @@ public class DepositAccountingController {
     @GetMapping("/refund-requests/{requestId}/evidence")
     public ResponseEntity<byte[]> refundEvidence(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID requestId) {
-        DepositDtos.RefundEvidenceContent evidence = deposits.refundEvidence(identity, requestId);
+        DepositDtos.RefundEvidenceContent evidence = deposits.accountingRefundEvidence(identity, requestId);
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(evidence.mimeType()))
             .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()

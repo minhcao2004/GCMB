@@ -73,7 +73,7 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. The current backend contains six peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, and `booking`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+The backend is deployed as one application. The current backend contains seven peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, and `inventory`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +82,7 @@ The backend is deployed as one application. The current backend contains six pee
 
 ## Project Structure
 
-The current backend structure is shown below; the frontend portion remains a structural overview. Inventory, workforce, and finance describe planned scope and are not empty backend packages.
+The tree below reflects the current repository structure. `inventory` is an active backend feature package. Workforce and finance remain in the planned business scope and do not yet have backend packages or frontend feature directories.
 
 ```text
 GCMB/
@@ -94,11 +94,11 @@ GCMB/
 │   │   ├── branch/
 │   │   ├── pricing/
 │   │   ├── booking/
+│   │   ├── inventory/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
-│   │   ├── application.yml
+│   │   ├── application.yaml
 │   │   ├── application-dev.yml
-│   │   ├── application-prod.yml
 │   │   └── db/migration/
 │   ├── src/test/
 │   ├── .mvn/wrapper/
@@ -109,21 +109,21 @@ GCMB/
 │   ├── public/
 │   ├── src/
 │   │   ├── features/
+│   │   │   ├── auth/
 │   │   │   ├── backoffice/
 │   │   │   ├── booking/
+│   │   │   ├── branch/
 │   │   │   ├── inventory/
-│   │   │   ├── workforce/
-│   │   │   └── finance/
+│   │   │   ├── landing/
+│   │   │   └── pricing/
 │   │   ├── shared/
 │   │   │   ├── components/
-│   │   │   ├── hooks/
 │   │   │   └── utils/
 │   │   ├── layouts/
 │   │   ├── routes/
 │   │   ├── api/
 │   │   ├── assets/
 │   │   │   ├── images/
-│   │   │   ├── icons/
 │   │   │   └── styles/
 │   │   ├── App.js
 │   │   ├── App.css
@@ -136,13 +136,13 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `auth` | Login/logout, sessions, password recovery/change, security configuration, and recovery email. |
+| `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
-| `branch` | Branches, manager assignments, rooms, and room operating status. |
+| `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
 | `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
-| `inventory` (planned) | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
+| `inventory` | F&B catalog, guest QR menu and cart persistence across reloads, room/staff order processing, service assignment, inventory item management, stock receipts, adjustments, and movement history. |
 | `workforce` (planned) | Staff, assignments, shifts, attendance, and payroll. |
 | `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
 
@@ -150,7 +150,7 @@ F&B charges are linked to an active booking and included in its checkout bill. O
 
 Within a backend feature, create `controller/`, `service/`, `repository/`, `entity/`, and `dto/` as needed. Within a frontend feature, use `pages/`, `components/`, `services/`, `hooks/`, and `styles/` as needed.
 
-Backend package reorganization (24/10/2026): the former `backoffice/` directory and `com.gcmb.backend.administration.*` declarations are replaced by the six peer packages above. All existing classes are retained. `branch`, `pricing`, and `booking` keep their existing responsibilities; this change does not extract a `rooms` module or change API routes, database schema, or business behavior. Tests follow the same package hierarchy.
+Backend package reorganization (24/10/2026): the former `backoffice/` directory and `com.gcmb.backend.administration.*` declarations were replaced by the six peer packages then in scope. All existing classes were retained. `branch`, `pricing`, and `booking` kept their existing responsibilities; this change did not extract a `rooms` module or change API routes, database schema, or business behavior. Tests follow the same package hierarchy. The `inventory` backend package was added later for F&B catalog and order processing.
 
 `auth` has six direct subpackages: `controller`, `dto`, `repository`, `service`, `security`, and `exception`. Request/response records and `LoginResult` live in `dto`; internal JDBC models `Account` and `Reset` live in `repository/model`; `AuthMapper` lives in `repository`; `AuthValidation` lives in `service`; `AuthSecurity` and `AuthSettings` live in `security`. Internal models and `LoginResult` are not automatically exposed as HTTP responses by their package location.
 

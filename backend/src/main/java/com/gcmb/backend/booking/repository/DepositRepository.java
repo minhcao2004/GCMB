@@ -13,9 +13,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-// Đọc danh sách tiền cọc, các bút toán và lịch sử xử lý theo chi nhánh.
+// Đọc tiền cọc theo chi nhánh và hàng đợi hoàn cọc kế toán toàn hệ thống.
 public class DepositRepository {
-    public record RefundRequestRow(UUID id, UUID bookingId, UUID depositId, BigDecimal amount,
+    public record RefundRequestRow(UUID id, UUID branchId, UUID bookingId, UUID depositId, BigDecimal amount,
                                    String reason, String status) {}
     public record RefundEvidenceRow(String objectKey, String originalName, String mimeType) {}
 
@@ -178,22 +178,35 @@ public class DepositRepository {
             rs.getString("phone"), instant(rs, "cancelled_at"), rs.getBigDecimal("amount")), branchId);
     }
 
-    public List<DepositDtos.RefundRequestItem> refundRequests(UUID branchId) {
+    public List<DepositDtos.RefundRequestItem> refundRequestsForAccounting() {
         return db.query("""
-            SELECT r.id,r.booking_id,b.code,b.contact_name,b.contact_phone,r.amount,r.reason,
+            SELECT r.id,r.booking_id,b.code,br.name AS branch_name,b.contact_name,b.contact_phone,r.amount,r.reason,
                    r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference,
                    r.evidence_id IS NOT NULL AS has_evidence
             FROM gcmb.refund_request r
             JOIN gcmb.booking b ON b.id=r.booking_id
-            WHERE r.branch_id=? AND r.kind='DEPOSIT'
+            JOIN gcmb.branch br ON br.id=r.branch_id
+            WHERE r.kind='DEPOSIT'
             ORDER BY CASE WHEN r.status IN ('REQUESTED','APPROVED','PROCESSING') THEN 0 ELSE 1 END,
                      r.created_at DESC,r.id DESC
             """, (rs, rowNum) -> new DepositDtos.RefundRequestItem(
                 rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class), rs.getString("code"),
-                rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
+                rs.getString("branch_name"), rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
                 rs.getString("reason"), rs.getString("beneficiary_name"), rs.getString("bank_name"),
                 rs.getString("bank_account"), rs.getString("status"), instant(rs, "created_at"),
-                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")), branchId);
+                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")));
+    }
+
+    public RefundEvidenceRow refundEvidenceForAccounting(UUID requestId) {
+        List<RefundEvidenceRow> rows = db.query("""
+            SELECT a.object_key,a.original_name,a.mime_type
+            FROM gcmb.refund_request r
+            JOIN gcmb.attachment a ON a.id=r.evidence_id
+            WHERE r.id=? AND r.kind='DEPOSIT' AND r.status='PAID'
+            """, (rs, rowNum) -> new RefundEvidenceRow(
+                rs.getString("object_key"), rs.getString("original_name"), rs.getString("mime_type")),
+            requestId);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public RefundEvidenceRow refundEvidence(UUID branchId, UUID requestId) {
@@ -233,13 +246,27 @@ public class DepositRepository {
     public RefundRequestRow refundRequest(UUID branchId, UUID requestId, boolean lock) {
         String lockClause = lock ? " FOR UPDATE" : "";
         List<RefundRequestRow> rows = db.query("""
-            SELECT id,booking_id,deposit_id,amount,reason,status
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
             FROM gcmb.refund_request
             WHERE branch_id=? AND id=? AND kind='DEPOSIT'
             """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
-                rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
+                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
+                rs.getObject("booking_id", UUID.class),
                 rs.getObject("deposit_id", UUID.class), rs.getBigDecimal("amount"),
                 rs.getString("reason"), rs.getString("status")), branchId, requestId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public RefundRequestRow refundRequestForAccounting(UUID requestId, boolean lock) {
+        String lockClause = lock ? " FOR UPDATE" : "";
+        List<RefundRequestRow> rows = db.query("""
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
+            FROM gcmb.refund_request
+            WHERE id=? AND kind='DEPOSIT'
+            """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
+                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
+                rs.getObject("booking_id", UUID.class), rs.getObject("deposit_id", UUID.class),
+                rs.getBigDecimal("amount"), rs.getString("reason"), rs.getString("status")), requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 

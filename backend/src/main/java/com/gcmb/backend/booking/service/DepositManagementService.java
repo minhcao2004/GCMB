@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
-// Lễ tân gửi yêu cầu; kế toán xác nhận giao dịch hoàn trong phạm vi chi nhánh.
+// Lễ tân gửi yêu cầu theo cơ sở; kế toán xử lý yêu cầu hoàn trên toàn hệ thống.
 public class DepositManagementService {
     // Cọc đã trừ bill vẫn có thể tra cứu và xem lịch sử APPLY.
     private static final Set<String> STATUSES = Set.of("HELD", "PENDING_REFUND", "REFUNDED", "FORFEITED", "APPLIED");
@@ -107,22 +107,22 @@ public class DepositManagementService {
 
     @Transactional(readOnly = true)
     public DepositDtos.RefundRequestQueue refundRequests(Identity identity) {
-        BranchScope branch = branch(identity);
-        return new DepositDtos.RefundRequestQueue(branch.name(), deposits.refundRequests(branch.id()));
+        requireAccountant(identity);
+        return new DepositDtos.RefundRequestQueue("Tất cả cơ sở", deposits.refundRequestsForAccounting());
     }
 
     @Transactional
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
                                                                String externalReference, MultipartFile image) {
+        requireAccountant(identity);
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
         String reference = required(externalReference, "externalReference", "Mã giao dịch hoàn", 200);
-        BranchScope branch = branch(identity);
-        RefundRequestRow initial = deposits.refundRequest(branch.id(), requestId, false);
+        RefundRequestRow initial = deposits.refundRequestForAccounting(requestId, false);
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
 
-        if (bookings.lockBookingId(initial.bookingId(), branch.id()) == null) throw notFound();
-        BookingRow booking = bookings.booking(initial.bookingId(), branch.id());
+        if (bookings.lockBookingId(initial.bookingId(), initial.branchId()) == null) throw notFound();
+        BookingRow booking = bookings.booking(initial.bookingId(), initial.branchId());
         if (booking == null) throw notFound();
         if (!"CANCELLED".equals(booking.status()))
             throw new BookingFailure(409, "requestId", "Chỉ booking đã hủy mới được hoàn tiền cọc");
@@ -130,7 +130,7 @@ public class DepositManagementService {
         if (depositId == null || !depositId.equals(initial.depositId()))
             throw new BookingFailure(409, "requestId", "Tài khoản cọc của booking đã thay đổi; vui lòng tải lại yêu cầu");
 
-        RefundRequestRow locked = deposits.refundRequest(branch.id(), requestId, true);
+        RefundRequestRow locked = deposits.refundRequestForAccounting(requestId, true);
         if (locked == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(locked.status())) throw refundAlreadyProcessed();
         BigDecimal balance = bookings.depositBalance(locked.bookingId());
@@ -141,7 +141,7 @@ public class DepositManagementService {
         try {
             deposits.insertAttachment(evidence.id(), evidence.objectKey(), evidence.originalName(),
                 evidence.mimeType(), evidence.byteSize(), evidence.sha256(), identity.id());
-            if (!deposits.completeRefundRequest(branch.id(), locked, identity.id(), reference, evidence.id()))
+            if (!deposits.completeRefundRequest(locked.branchId(), locked, identity.id(), reference, evidence.id()))
                 throw refundAlreadyProcessed();
         } catch (RuntimeException exception) {
             evidenceStorage.deleteQuietly(evidence.objectKey());
@@ -154,6 +154,16 @@ public class DepositManagementService {
     public DepositDtos.RefundEvidenceContent refundEvidence(Identity identity, UUID requestId) {
         BranchScope branch = branch(identity);
         RefundEvidenceRow evidence = deposits.refundEvidence(branch.id(), requestId);
+        return evidenceContent(evidence);
+    }
+
+    @Transactional(readOnly = true)
+    public DepositDtos.RefundEvidenceContent accountingRefundEvidence(Identity identity, UUID requestId) {
+        requireAccountant(identity);
+        return evidenceContent(deposits.refundEvidenceForAccounting(requestId));
+    }
+
+    private DepositDtos.RefundEvidenceContent evidenceContent(RefundEvidenceRow evidence) {
         if (evidence == null) throw new BookingFailure(404, "requestId", "Không tìm thấy chứng từ hoàn cọc");
         try {
             return new DepositDtos.RefundEvidenceContent(evidence.originalName(), evidence.mimeType(),
@@ -161,6 +171,11 @@ public class DepositManagementService {
         } catch (IOException exception) {
             throw new BookingFailure(404, "requestId", "Không thể đọc ảnh chứng minh hoàn cọc");
         }
+    }
+
+    private static void requireAccountant(Identity identity) {
+        if (identity == null || !"ACCOUNTANT".equals(identity.role()))
+            throw new BookingFailure(403, "form", "Chỉ kế toán được xử lý yêu cầu hoàn cọc");
     }
 
     private BranchScope branch(Identity identity) {
@@ -188,7 +203,7 @@ public class DepositManagementService {
     }
 
     private static BookingFailure refundRequestNotFound() {
-        return new BookingFailure(404, "requestId", "Không tìm thấy yêu cầu hoàn cọc tại chi nhánh đang làm việc");
+        return new BookingFailure(404, "requestId", "Không tìm thấy yêu cầu hoàn cọc");
     }
 
     private static BookingFailure refundAlreadyProcessed() {

@@ -6,6 +6,7 @@ import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
 import BookingStayDialog from './BookingStayDialog';
+import { foodOrderApi } from '../../inventory/services/foodOrderApi';
 import '../styles/booking.css';
 import '../styles/rooms.css';
 
@@ -98,6 +99,16 @@ export default function RoomOverviewPage() {
   const [stayMode, setStayMode] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleDialogRef = useRef(null);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const orderDialogRef = useRef(null);
+  const orderRequestKey = useRef('');
+  const [orderMenu, setOrderMenu] = useState([]);
+  const [orderEmployees, setOrderEmployees] = useState([]);
+  const [orderEmployeeId, setOrderEmployeeId] = useState('');
+  const [orderQuantities, setOrderQuantities] = useState({});
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
@@ -217,6 +228,13 @@ export default function RoomOverviewPage() {
     if (!scheduleOpen && dialog.open) dialog.close();
   }, [scheduleOpen]);
 
+  useEffect(() => {
+    const dialog = orderDialogRef.current;
+    if (!dialog) return;
+    if (orderDialogOpen && !dialog.open) dialog.showModal();
+    if (!orderDialogOpen && dialog.open) dialog.close();
+  }, [orderDialogOpen]);
+
   const floors = [...new Set(rooms.map((room) => floorOf(room.code)).filter(Boolean))].sort();
   const visible = rooms.filter((room) => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
@@ -253,6 +271,8 @@ export default function RoomOverviewPage() {
   const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
   const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
+  const orderLines = orderMenu.filter((item) => orderQuantities[item.id] > 0);
+  const orderTotal = orderLines.reduce((total, item) => total + Number(item.salePrice || 0) * orderQuantities[item.id], 0);
 
   const logout = async () => {
     setBusy(true);
@@ -274,6 +294,56 @@ export default function RoomOverviewPage() {
   const openCheckIn = () => {
     if (!canCheckIn || !currentBooking?.id) return;
     navigate(`/le-tan/bookings/${currentBooking.id}/check-in`, { state: { bookingDate: date } });
+  };
+
+  const openServiceOrder = async () => {
+    if (selected?.status !== 'occupied' || !currentBooking?.id || !detailReady || busy) return;
+    orderRequestKey.current = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setOrderDialogOpen(true);
+    setOrderLoading(true);
+    setOrderError('');
+    setOrderMenu([]);
+    setOrderQuantities({});
+    try {
+      const [items, employees] = await Promise.all([
+        foodOrderApi.staffMenu(), foodOrderApi.servingEmployees(),
+      ]);
+      setOrderMenu(items.filter((item) => item.available));
+      setOrderEmployees(employees);
+      setOrderEmployeeId(employees.find((employee) => employee.id === user.id)?.id || employees[0]?.id || '');
+      if (employees.length === 0) setOrderError('Chưa có lễ tân đang trong ca để phụ trách order.');
+    } catch (error) {
+      setOrderError(errorText(error));
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
+  const changeOrderQuantity = (itemId, amount) => setOrderQuantities((current) => ({
+    ...current,
+    [itemId]: Math.max(0, amount),
+  }));
+
+  const submitServiceOrder = async (event) => {
+    event.preventDefault();
+    if (!currentBooking?.id || !orderEmployeeId || orderLines.length === 0 || orderSubmitting) return;
+    setOrderSubmitting(true);
+    setOrderError('');
+    try {
+      const order = await foodOrderApi.addStaffOrder({
+        bookingId: currentBooking.id,
+        assignedEmployeeId: orderEmployeeId,
+        idempotencyKey: orderRequestKey.current,
+        items: orderLines.map((item) => ({ menuItemId: item.id, quantity: orderQuantities[item.id] })),
+      });
+      setOrderDialogOpen(false);
+      setNotice(`Đã ghi nhận ${order.code || 'order'} cho phòng ${selected.code}. Phí và tồn kho đã được cập nhật.`);
+      setReload((value) => value + 1);
+    } catch (error) {
+      setOrderError(errorText(error));
+    } finally {
+      setOrderSubmitting(false);
+    }
   };
 
   const saveStay = async (action, payload) => {
@@ -362,7 +432,7 @@ export default function RoomOverviewPage() {
           {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
           {selected.status !== 'reserved' && <>
-            <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
+            <h3>Thao tác</h3><div className="room-actions"><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !currentBooking?.id || !detailReady || busy} onClick={openServiceOrder}>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
           </>}
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
         </div>
@@ -376,6 +446,23 @@ export default function RoomOverviewPage() {
         <button type="button" onClick={() => openSelectedBooking(booking)}>Xem booking</button>
       </li>)}</ol> : <p className="room-schedule-empty">Chưa có booking nào của phòng này trong ngày {dateInputText(date)}.</p>}
       <button type="button" className="room-schedule-close" onClick={() => setScheduleOpen(false)}>Đóng</button>
+    </dialog>
+    <dialog ref={orderDialogRef} className="room-order-dialog" aria-labelledby="room-order-title" onClose={() => setOrderDialogOpen(false)}>
+      <header><div><h2 id="room-order-title">Order dịch vụ · {selected?.code}</h2><p>{currentBooking?.code} · {currentBooking?.contactName}</p></div><button type="button" aria-label="Đóng order dịch vụ" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>×</button></header>
+      <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay.</p>
+      {orderError && <div className="room-order-error" role="alert">{orderError}</div>}
+      {orderLoading ? <p className="room-order-empty" role="status">Đang tải thực đơn…</p> : orderMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form onSubmit={submitServiceOrder}>
+        <label className="room-order-employee">Nhân viên phụ trách<select value={orderEmployeeId} onChange={(event) => setOrderEmployeeId(event.target.value)} required disabled={orderEmployees.length === 0 || orderSubmitting}><option value="">Chọn lễ tân đang trong ca</option>{orderEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
+        <div className="room-order-items">{orderMenu.map((item) => {
+          const quantity = orderQuantities[item.id] || 0;
+          return <article className="room-order-item" key={item.id}>
+            <div><strong>{item.name}</strong><span>{formatVnd(item.salePrice)}</span></div>
+            <div className="room-order-quantity"><button type="button" aria-label={`Giảm ${item.name}`} disabled={quantity === 0 || orderSubmitting} onClick={() => changeOrderQuantity(item.id, quantity - 1)}>−</button><span>{quantity}</span><button type="button" aria-label={`Tăng ${item.name}`} disabled={orderSubmitting} onClick={() => changeOrderQuantity(item.id, quantity + 1)}>+</button></div>
+          </article>;
+        })}</div>
+        <footer className="room-order-footer"><span>Tạm tính <strong>{formatVnd(orderTotal)}</strong></span><button type="submit" disabled={orderLoading || orderSubmitting || !orderEmployeeId || orderLines.length === 0}>{orderSubmitting ? 'Đang ghi nhận…' : 'Ghi nhận order'}</button></footer>
+      </form>}
+      <button type="button" className="room-order-close" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>Đóng</button>
     </dialog>
     {stayMode && currentBooking && <BookingStayDialog key={`${currentBooking.id}-${stayMode}`} booking={currentBooking} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayMode(null)} onSave={saveStay} busy={busy} timezone={timezone} />}
   </AppShell>;

@@ -23,7 +23,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class MutationAudit {
     private static final Map<String, String> TABLES = Map.of(
         "ROOM", "room", "ROOM_TYPE", "room_type", "PRICE_RULE", "price_rule",
-        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch", "MENU_ITEM", "menu_item");
+        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch", "MENU_ITEM", "menu_item",
+        "FB_ORDER", "fb_order", "INVENTORY_ITEM", "inventory_item");
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;
 
@@ -71,6 +72,9 @@ public class MutationAudit {
         if ("ROOM_TYPE".equals(type)) extra = " || jsonb_build_object('combos',"
             + "(SELECT jsonb_agg(jsonb_build_object('id',id,'code',code,'name',name,'price',price)) FROM gcmb.combo WHERE room_type_id=t.id AND branch_id IS NULL),"
             + "'priceRules',(SELECT jsonb_agg(jsonb_build_object('id',id,'name',name,'hourly_price',hourly_price)) FROM gcmb.price_rule WHERE room_type_id=t.id AND branch_id IS NULL))";
+        if ("INVENTORY_ITEM".equals(type)) extra = " || jsonb_build_object('stockBalance',"
+            + "(SELECT jsonb_build_object('quantity',quantity,'minimum_quantity',minimum_quantity,'version',version)"
+            + " FROM gcmb.stock_balance WHERE inventory_item_id=t.id))";
         List<String> snapshots = db.queryForList("""
             SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
                 WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description',
@@ -80,7 +84,10 @@ public class MutationAudit {
                     'duration_minutes','deposit_required','day_group','min_guests','included_description',
                     'status','contact_name','contact_phone','guest_count','planned_start','planned_end',
                     'actual_checkin','actual_checkout','note','channel','pricing_mode','category','kind',
-                    'inventory_item_id','sale_price','deleted_at','deleted_by')),'{}'::jsonb)
+                    'inventory_item_id','sale_price','description','image_original_name','image_mime_type',
+                    'sku','unit_id','tracking_mode',
+                    'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
+                    'accepted_by','accepted_at','served_at')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
         return snapshots.isEmpty() ? null : snapshots.get(0);
     }
