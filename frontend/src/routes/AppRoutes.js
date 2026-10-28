@@ -12,6 +12,7 @@ import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
+import ReceptionShiftPage from '../features/workforce/pages/ReceptionShiftPage';
 import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
@@ -39,6 +40,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/deposits" element={<DepositManagementPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
+    <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
     <Route path="/ke-toan" element={<AccountantRefundPage />} />

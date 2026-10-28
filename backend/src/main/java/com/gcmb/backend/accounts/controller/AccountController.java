@@ -17,7 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping({"/api/v1/head-office/accounts", "/api/v1/branch-management/accounts"})
+@RequestMapping({ "/api/v1/head-office/accounts", "/api/v1/branch-management/accounts" })
 public class AccountController {
 
     private final AccountService service;
@@ -28,13 +28,14 @@ public class AccountController {
 
     @GetMapping
     public AccountPage list(
-            @RequestParam(defaultValue = "") String q,
-            @RequestParam(defaultValue = "") String role,
-            @RequestParam(required = false) UUID branchId,
-            @RequestParam(defaultValue = "") String status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @AuthenticationPrincipal Identity actor) {
+        @RequestParam(defaultValue = "") String q,
+        @RequestParam(defaultValue = "") String role,
+        @RequestParam(required = false) UUID branchId,
+        @RequestParam(defaultValue = "") String status,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size,
+        @AuthenticationPrincipal Identity actor
+    ) {
         return service.list(q, role, branchId, status, page, size, actor);
     }
 
@@ -46,8 +47,9 @@ public class AccountController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public AccountView create(
-            @RequestBody CreateAccount input,
-            @AuthenticationPrincipal Identity actor) {
+        @RequestBody CreateAccount input,
+        @AuthenticationPrincipal Identity actor
+    ) {
         return service.create(input, actor);
     }
 }

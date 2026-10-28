@@ -12,14 +12,42 @@ import java.util.List;
 import java.util.UUID;
 
 public final class CheckoutDtos {
+
     private CheckoutDtos() {}
 
     public record Surcharge(String reason, BigDecimal amount) {}
-    public record Issue(boolean inspected, String inspectionNote, List<Surcharge> surcharges,
-                        boolean overtimeConfirmed, BigDecimal overtimeAmount, boolean unservedConfirmed, Instant quotedAt, String quoteToken) {}
-    public record Overtime(Instant from, Instant to, long seconds, BigDecimal hourlyPrice,
-                           BigDecimal amount, UUID priceRuleId) {}
+
+    public record Issue(
+        boolean inspected,
+        String inspectionNote,
+        List<Surcharge> surcharges,
+        boolean overtimeConfirmed,
+        BigDecimal overtimeAmount,
+        boolean unservedConfirmed,
+        Instant quotedAt,
+        String quoteToken
+    ) {}
+
+    public record Overtime(
+        Instant from,
+        Instant to,
+        long seconds,
+        BigDecimal hourlyPrice,
+        BigDecimal amount,
+        UUID priceRuleId
+    ) {}
+
     public record PaymentPlan(String method, BigDecimal cashAmount, BigDecimal cashTendered) {}
-    public record Webhook(Long id, String gateway, String transactionDate, String accountNumber,
-        String code, String content, String transferType, BigDecimal transferAmount, String referenceCode) {}
+
+    public record Webhook(
+        Long id,
+        String gateway,
+        String transactionDate,
+        String accountNumber,
+        String code,
+        String content,
+        String transferType,
+        BigDecimal transferAmount,
+        String referenceCode
+    ) {}
 }

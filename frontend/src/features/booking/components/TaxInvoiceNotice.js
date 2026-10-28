@@ -12,12 +12,31 @@ export default function TaxInvoiceNotice() {
   const [count, setCount] = useState(null);
   useEffect(() => {
     let active = true;
-    const refresh = () => taxInvoiceApi.unread().then(data => { if (active) setCount(data.count); }).catch(() => { if (active) setCount(null); });
-    refresh(); const timer = setInterval(refresh, 30000);
+    const refresh = () =>
+      taxInvoiceApi
+        .unread()
+        .then((data) => {
+          if (active) setCount(data.count);
+        })
+        .catch(() => {
+          if (active) setCount(null);
+        });
+    refresh();
+    const timer = setInterval(refresh, 30000);
     window.addEventListener('tax-invoice-read', refresh);
-    return () => { active = false; clearInterval(timer); window.removeEventListener('tax-invoice-read', refresh); };
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener('tax-invoice-read', refresh);
+    };
   }, []);
-  return <button type="button" onClick={() => navigate('/ke-toan/hoa-don-thue')} aria-label={`Yêu cầu hóa đơn thuế${count === null ? '' : `: ${count} chưa đọc`}`}>
-    Hóa đơn thuế {count === null ? '(chưa tải được)' : `(${count} mới)`}
-  </button>;
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/ke-toan/hoa-don-thue')}
+      aria-label={`Yêu cầu hóa đơn thuế${count === null ? '' : `: ${count} chưa đọc`}`}
+    >
+      Hóa đơn thuế {count === null ? '(chưa tải được)' : `(${count} mới)`}
+    </button>
+  );
 }

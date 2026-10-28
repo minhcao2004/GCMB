@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AccountProfileService {
+
     private final AccountProfileRepository repository;
     private final AuthCrypto crypto;
 
@@ -57,25 +58,46 @@ public class AccountProfileService {
             fullName = AuthValidation.required(input.fullName(), "fullName", "họ tên", 200, true);
             // BR-119; MSG04.
             phone = AuthValidation.phone(input.phone());
-            if(phone!=null&&repository.phoneTaken(actor,phone))
-                throw new AuthFailure(409,"phone","Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác.");
-        } else if ((input.fullName() != null && !input.fullName().isBlank())
-                || (input.phone() != null && !input.phone().isBlank())) {
+            if (phone != null && repository.phoneTaken(actor, phone)) throw new AuthFailure(
+                409,
+                "phone",
+                "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
+            );
+        } else if (
+            (input.fullName() != null && !input.fullName().isBlank()) ||
+            (input.phone() != null && !input.phone().isBlank())
+        ) {
             throw new AuthFailure(409, "form", "Tài khoản chưa liên kết hồ sơ nhân viên");
         }
         boolean emailChanged = !email.equals(before.account().email());
         if (emailChanged) {
             String password = AuthValidation.required(
-                    input.currentPassword(), "currentPassword", "mật khẩu hiện tại", 128, false
+                input.currentPassword(),
+                "currentPassword",
+                "mật khẩu hiện tại",
+                128,
+                false
             );
             if (!crypto.matches(password, hash)) {
-                throw new AuthFailure(400, "currentPassword", "Mật khẩu hiện tại không đúng. Vui lòng nhập lại.");
+                throw new AuthFailure(
+                    400,
+                    "currentPassword",
+                    "Mật khẩu hiện tại không đúng. Vui lòng nhập lại."
+                );
             }
             if (repository.emailTaken(actor, email)) {
-                throw new AuthFailure(409, "email", "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác.");
+                throw new AuthFailure(
+                    409,
+                    "email",
+                    "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
+                );
             }
         }
-        if (!emailChanged && Objects.equals(fullName, before.fullName()) && Objects.equals(phone, before.phone())) {
+        if (
+            !emailChanged &&
+            Objects.equals(fullName, before.fullName()) &&
+            Objects.equals(phone, before.phone())
+        ) {
             return before;
         }
         try {

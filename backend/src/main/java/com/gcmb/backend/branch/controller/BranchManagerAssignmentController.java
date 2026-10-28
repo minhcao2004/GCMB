@@ -22,10 +22,14 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/head-office/branches")
 public class BranchManagerAssignmentController {
+
     private final BranchAdministrationService service;
     private final MutationAudit audit;
 
-    public BranchManagerAssignmentController(BranchAdministrationService service, MutationAudit audit) {
+    public BranchManagerAssignmentController(
+        BranchAdministrationService service,
+        MutationAudit audit
+    ) {
         this.service = service;
         this.audit = audit;
     }
@@ -42,14 +46,24 @@ public class BranchManagerAssignmentController {
 
     @PostMapping
     public Map<String, Object> create(@RequestBody BranchCommand body) {
-        return audit.record("CREATE_BRANCH", "BRANCH", null,
-            () -> service.create(body), result -> (UUID) result.get("branchId"));
+        return audit.record(
+            "CREATE_BRANCH",
+            "BRANCH",
+            null,
+            () -> service.create(body),
+            result -> (UUID) result.get("branchId")
+        );
     }
 
     @PutMapping("/{id}")
     public Map<String, Object> update(@PathVariable UUID id, @RequestBody BranchCommand body) {
-        return audit.record("UPDATE_BRANCH", "BRANCH", id,
-            () -> service.update(id, body), result -> id);
+        return audit.record(
+            "UPDATE_BRANCH",
+            "BRANCH",
+            id,
+            () -> service.update(id, body),
+            result -> id
+        );
     }
 
     @GetMapping("/{id}/blockers")
@@ -59,14 +73,24 @@ public class BranchManagerAssignmentController {
 
     @PostMapping("/{id}/deactivate")
     public Map<String, Object> deactivate(@PathVariable UUID id, @RequestBody StatusCommand body) {
-        return audit.record("DEACTIVATE_BRANCH", "BRANCH", id,
-            () -> service.deactivate(id, body), result -> id);
+        return audit.record(
+            "DEACTIVATE_BRANCH",
+            "BRANCH",
+            id,
+            () -> service.deactivate(id, body),
+            result -> id
+        );
     }
 
     @PostMapping("/{id}/reactivate")
     public Map<String, Object> reactivate(@PathVariable UUID id) {
-        return audit.record("REACTIVATE_BRANCH", "BRANCH", id,
-            () -> service.reactivate(id), result -> id);
+        return audit.record(
+            "REACTIVATE_BRANCH",
+            "BRANCH",
+            id,
+            () -> service.reactivate(id),
+            result -> id
+        );
     }
 
     @GetMapping("/managers")
@@ -75,8 +99,11 @@ public class BranchManagerAssignmentController {
     }
 
     @PutMapping("/{branchId}/manager")
-    public Map<String, Object> assign(@PathVariable UUID branchId,
-            @RequestBody BranchManagerAssignmentCommand body, @AuthenticationPrincipal Identity who) {
+    public Map<String, Object> assign(
+        @PathVariable UUID branchId,
+        @RequestBody BranchManagerAssignmentCommand body,
+        @AuthenticationPrincipal Identity who
+    ) {
         return service.assign(branchId, body == null ? null : body.userId(), who);
     }
 

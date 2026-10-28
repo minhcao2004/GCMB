@@ -44,14 +44,17 @@ export default function AccountProfileDialog({ onClose }) {
   useEffect(() => {
     let active = true;
     setErrors({});
-    accountProfileApi.view()
+    accountProfileApi
+      .view()
       .then((data) => {
         if (active) setProfile(data);
       })
       .catch((error) => {
         if (active) setErrors(apiErrors(error));
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [retry]);
 
   function beginEdit(event) {
@@ -103,16 +106,18 @@ export default function AccountProfileDialog({ onClose }) {
     setForm((old) => ({ ...old, [name]: value }));
   }
 
-  const information = profile ? [
-    ['Tên đăng nhập', profile.account.username],
-    ['Mã nhân viên', profile.account.employeeCode || 'Chưa liên kết'],
-    ['Họ và tên', profile.fullName || 'Chưa có hồ sơ nhân viên'],
-    ['Email', profile.account.email],
-    ['Số điện thoại', profile.phone || 'Chưa cập nhật'],
-    ['Vai trò', roleNames[profile.account.role] || profile.account.role],
-    ['Phạm vi cơ sở', profile.account.branchName],
-    ['Trạng thái', statuses[profile.account.status] || profile.account.status],
-  ] : [];
+  const information = profile
+    ? [
+        ['Tên đăng nhập', profile.account.username],
+        ['Mã nhân viên', profile.account.employeeCode || 'Chưa liên kết'],
+        ['Họ và tên', profile.fullName || 'Chưa có hồ sơ nhân viên'],
+        ['Email', profile.account.email],
+        ['Số điện thoại', profile.phone || 'Chưa cập nhật'],
+        ['Vai trò', roleNames[profile.account.role] || profile.account.role],
+        ['Phạm vi cơ sở', profile.account.branchName],
+        ['Trạng thái', statuses[profile.account.status] || profile.account.status],
+      ]
+    : [];
 
   return (
     <dialog
@@ -127,77 +132,169 @@ export default function AccountProfileDialog({ onClose }) {
       <div className="account-drawer-heading">
         <div>
           <h2 id="profile-title">Thông tin tài khoản</h2>
-          <p>{editing ? 'Cập nhật thông tin cá nhân của bạn' : 'Thông tin cá nhân và phạm vi truy cập'}</p>
+          <p>
+            {editing
+              ? 'Cập nhật thông tin cá nhân của bạn'
+              : 'Thông tin cá nhân và phạm vi truy cập'}
+          </p>
         </div>
-        <button onClick={onClose} disabled={busy} aria-label="Đóng">×</button>
+        <button onClick={onClose} disabled={busy} aria-label="Đóng">
+          ×
+        </button>
       </div>
       <div className="profile-tabs" aria-label="Mục tài khoản">
-        <button type="button" disabled={busy} aria-pressed={tab === 'profile'} onClick={() => setTab('profile')}>Thông tin cá nhân</button>
-        <button type="button" disabled={busy} aria-pressed={tab === 'password'} onClick={() => { cancelEdit(); setNotice(''); setTab('password'); }}>Đổi mật khẩu</button>
+        <button
+          type="button"
+          disabled={busy}
+          aria-pressed={tab === 'profile'}
+          onClick={() => setTab('profile')}
+        >
+          Thông tin cá nhân
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          aria-pressed={tab === 'password'}
+          onClick={() => {
+            cancelEdit();
+            setNotice('');
+            setTab('password');
+          }}
+        >
+          Đổi mật khẩu
+        </button>
       </div>
-      {tab === 'password' ? <ChangePasswordForm busy={busy} onBusyChange={setBusy} onCancel={() => setTab('profile')} /> : <form className="account-create-form" onSubmit={save}>
-        <div className="account-form-body">
-          {Object.entries(errors).map(([field, message]) => (
-            <p key={field} className="account-error" role="alert">{message}</p>
-          ))}
-          {notice && <p className="account-success-message" role="status">{notice}</p>}
-          {!profile ? (
-            Object.keys(errors).length ? (
-              <button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button>
-            ) : <p role="status">Đang tải thông tin…</p>
-          ) : !editing ? (
-            <dl className="profile-information">
-              {information.map(([label, value]) => (
-                <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
-              ))}
-            </dl>
-          ) : (
-            <fieldset className="profile-fields" disabled={busy}>
-              <div className="account-field">
-                <label htmlFor="profile-name">Họ và tên</label>
-                <input id="profile-name" name="fullName" value={form.fullName} onChange={change}
-                  disabled={!profile.linkedEmployee} required={profile.linkedEmployee} maxLength={200} autoComplete="name" />
-              </div>
-              <div className="account-field">
-                <label htmlFor="profile-phone">Số điện thoại</label>
-                <input id="profile-phone" name="phone" type="tel" value={form.phone} onChange={change}
-                  disabled={!profile.linkedEmployee} maxLength={30} autoComplete="tel" />
-              </div>
-              {!profile.linkedEmployee && (
-                <p className="account-access-note">Tài khoản chưa liên kết hồ sơ nhân viên. Liên hệ quản lý để cập nhật họ tên và số điện thoại.</p>
-              )}
-              <div className="account-field">
-                <label htmlFor="profile-email">Email</label>
-                <input id="profile-email" name="email" type="email" value={form.email} onChange={change}
-                  required maxLength={254} autoComplete="email" />
-              </div>
-              {emailChanged && (
+      {tab === 'password' ? (
+        <ChangePasswordForm busy={busy} onBusyChange={setBusy} onCancel={() => setTab('profile')} />
+      ) : (
+        <form className="account-create-form" onSubmit={save}>
+          <div className="account-form-body">
+            {Object.entries(errors).map(([field, message]) => (
+              <p key={field} className="account-error" role="alert">
+                {message}
+              </p>
+            ))}
+            {notice && (
+              <p className="account-success-message" role="status">
+                {notice}
+              </p>
+            )}
+            {!profile ? (
+              Object.keys(errors).length ? (
+                <button type="button" onClick={() => setRetry((value) => value + 1)}>
+                  Thử lại
+                </button>
+              ) : (
+                <p role="status">Đang tải thông tin…</p>
+              )
+            ) : !editing ? (
+              <dl className="profile-information">
+                {information.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <fieldset className="profile-fields" disabled={busy}>
                 <div className="account-field">
-                  <label htmlFor="profile-password">Mật khẩu hiện tại</label>
-                  <input id="profile-password" name="currentPassword" type="password" value={form.currentPassword}
-                    onChange={change} required maxLength={128} autoComplete="current-password" aria-describedby="profile-email-note" />
-                  <p id="profile-email-note">Xác nhận mật khẩu để đổi email dùng khôi phục tài khoản.</p>
+                  <label htmlFor="profile-name">Họ và tên</label>
+                  <input
+                    id="profile-name"
+                    name="fullName"
+                    value={form.fullName}
+                    onChange={change}
+                    disabled={!profile.linkedEmployee}
+                    required={profile.linkedEmployee}
+                    maxLength={200}
+                    autoComplete="name"
+                  />
                 </div>
-              )}
-              <p className="account-access-note">Tên đăng nhập, vai trò, cơ sở và trạng thái do hệ thống quản lý.</p>
-            </fieldset>
-          )}
-        </div>
-        <div className="account-drawer-footer">
-          <button type="button" disabled={busy} onClick={editing ? cancelEdit : onClose}>
-            {editing ? 'Hủy chỉnh sửa' : 'Đóng'}
-          </button>
-          {profile && (editing ? (
-            <button key="save-profile" type="submit" className="account-primary" disabled={busy}>
-              {busy ? 'Đang lưu…' : 'Lưu thay đổi'}
+                <div className="account-field">
+                  <label htmlFor="profile-phone">Số điện thoại</label>
+                  <input
+                    id="profile-phone"
+                    name="phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={change}
+                    disabled={!profile.linkedEmployee}
+                    maxLength={30}
+                    autoComplete="tel"
+                  />
+                </div>
+                {!profile.linkedEmployee && (
+                  <p className="account-access-note">
+                    Tài khoản chưa liên kết hồ sơ nhân viên. Liên hệ quản lý để cập nhật họ tên và
+                    số điện thoại.
+                  </p>
+                )}
+                <div className="account-field">
+                  <label htmlFor="profile-email">Email</label>
+                  <input
+                    id="profile-email"
+                    name="email"
+                    type="email"
+                    value={form.email}
+                    onChange={change}
+                    required
+                    maxLength={254}
+                    autoComplete="email"
+                  />
+                </div>
+                {emailChanged && (
+                  <div className="account-field">
+                    <label htmlFor="profile-password">Mật khẩu hiện tại</label>
+                    <input
+                      id="profile-password"
+                      name="currentPassword"
+                      type="password"
+                      value={form.currentPassword}
+                      onChange={change}
+                      required
+                      maxLength={128}
+                      autoComplete="current-password"
+                      aria-describedby="profile-email-note"
+                    />
+                    <p id="profile-email-note">
+                      Xác nhận mật khẩu để đổi email dùng khôi phục tài khoản.
+                    </p>
+                  </div>
+                )}
+                <p className="account-access-note">
+                  Tên đăng nhập, vai trò, cơ sở và trạng thái do hệ thống quản lý.
+                </p>
+              </fieldset>
+            )}
+          </div>
+          <div className="account-drawer-footer">
+            <button type="button" disabled={busy} onClick={editing ? cancelEdit : onClose}>
+              {editing ? 'Hủy chỉnh sửa' : 'Đóng'}
             </button>
-          ) : (
-            <button key="edit-profile" type="button" className="account-primary" onClick={beginEdit}>
-              Chỉnh sửa thông tin
-            </button>
-          ))}
-        </div>
-      </form>}
+            {profile &&
+              (editing ? (
+                <button
+                  key="save-profile"
+                  type="submit"
+                  className="account-primary"
+                  disabled={busy}
+                >
+                  {busy ? 'Đang lưu…' : 'Lưu thay đổi'}
+                </button>
+              ) : (
+                <button
+                  key="edit-profile"
+                  type="button"
+                  className="account-primary"
+                  onClick={beginEdit}
+                >
+                  Chỉnh sửa thông tin
+                </button>
+              ))}
+          </div>
+        </form>
+      )}
     </dialog>
   );
 }

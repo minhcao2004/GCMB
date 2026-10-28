@@ -18,7 +18,17 @@ import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
 import StaffPage from '../../workforce/pages/StaffPage';
 
-const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const tabs = [
+  'Tổng quan',
+  'Cơ sở',
+  'Tài khoản & phân quyền',
+  'Báo cáo kinh doanh',
+  'Phê duyệt chi',
+  'Nhân sự',
+  'Phòng & bảng giá',
+  'Thiết bị',
+  'Nhật ký hệ thống',
+];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
@@ -41,45 +51,112 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const navigate = useNavigate();
   useEffect(() => {
     // Giữ mục vừa chọn khi rời trang bảng giá về đường dẫn dashboard chung.
-    setActiveTab((current) => location.pathname === catalogPath
-      ? 'Phòng & bảng giá'
-      : current === 'Phòng & bảng giá' ? 'Tổng quan' : current);
+    setActiveTab((current) =>
+      location.pathname === catalogPath
+        ? 'Phòng & bảng giá'
+        : current === 'Phòng & bảng giá'
+          ? 'Tổng quan'
+          : current
+    );
   }, [location.pathname]);
   const selectTab = (tab) => {
     setActiveTab(tab);
     if (tab === 'Phòng & bảng giá') navigate(catalogPath);
     else if (location.pathname !== dashboardPath) navigate(dashboardPath);
   };
-  return <div className="head-office-dashboard">
-    <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">QUẢN LÝ CẤP CAO</p>
-      <nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-current={activeTab === tab ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
-        </NavLink> : <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
-        </button>)}
-      </nav>
-      <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
-    </aside>
-    <div className="manager-workspace">
-      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
-      {activeTab === 'Cơ sở' ? (
-        <BranchManagementPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
-      ) : activeTab === 'Phòng & bảng giá' ? (
-        <section className="manager-content manager-content-catalog">
-          <RoomCatalogPage />
-        </section>
-      ) : activeTab === 'Tài khoản & phân quyền' ? (
-        <AccountsPage actorId={user.id} initialSearch={accountSearch} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
-      ) : activeTab === 'Nhân sự' ? (
-        <StaffPage user={user} onAccounts={(username) => { setAccountSearch(username); setActiveTab('Tài khoản & phân quyền'); }} onBranches={() => setActiveTab('Cơ sở')} />
-      ) : activeTab === 'Nhật ký hệ thống' ? (
-        <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
-      ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
+  return (
+    <div className="head-office-dashboard">
+      <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
+        <div className="manager-brand">
+          <BrandWordmark />
+        </div>
+        <p className="manager-role">QUẢN LÝ CẤP CAO</p>
+        <nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
+          {tabs.map((tab, index) =>
+            tab === 'Phòng & bảng giá' ? (
+              <NavLink
+                key={tab}
+                to={catalogPath}
+                aria-current={activeTab === tab ? 'page' : undefined}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d={icons[index]} />
+                </svg>
+                {tab}
+              </NavLink>
+            ) : (
+              <button
+                key={tab}
+                aria-current={activeTab === tab ? 'page' : undefined}
+                onClick={() => selectTab(tab)}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d={icons[index]} />
+                </svg>
+                {tab}
+              </button>
+            )
+          )}
+        </nav>
+        <div className="manager-sidebar-footer">
+          <strong>GenZ Cinema &amp; Music Box</strong>
+          <p>Phạm vi: toàn hệ thống</p>
+        </div>
+      </aside>
+      <div className="manager-workspace">
+        <DashboardTopbar
+          role="QUẢN LÝ CẤP CAO"
+          page={activeTab}
+          user={user}
+          busy={busy}
+          onProfile={onProfile}
+          onLogout={onLogout}
+        />
+        {activeTab === 'Cơ sở' ? (
+          <BranchManagementPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+        ) : activeTab === 'Phòng & bảng giá' ? (
+          <section className="manager-content manager-content-catalog">
+            <RoomCatalogPage />
+          </section>
+        ) : activeTab === 'Tài khoản & phân quyền' ? (
+          <AccountsPage
+            actorId={user.id}
+            initialSearch={accountSearch}
+            onAudit={() => setActiveTab('Nhật ký hệ thống')}
+          />
+        ) : activeTab === 'Nhân sự' ? (
+          <StaffPage
+            user={user}
+            onAccounts={(username) => {
+              setAccountSearch(username);
+              setActiveTab('Tài khoản & phân quyền');
+            }}
+            onBranches={() => setActiveTab('Cơ sở')}
+          />
+        ) : activeTab === 'Nhật ký hệ thống' ? (
+          <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+        ) : (
+          <section className="manager-content" aria-labelledby="manager-greeting">
+            <h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1>
+          </section>
+        )}
+      </div>
     </div>
-  </div>;
+  );
 }

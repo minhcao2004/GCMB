@@ -12,7 +12,9 @@ import api from '../../../api/client';
 // Lấy token CSRF trước mỗi thao tác xác thực làm thay đổi dữ liệu.
 async function post(path, body) {
   const { data: csrf } = await api.get('/auth/csrf');
-  const { data } = await api.post(`/auth/${path}`, body, { headers: { [csrf.headerName]: csrf.token } });
+  const { data } = await api.post(`/auth/${path}`, body, {
+    headers: { [csrf.headerName]: csrf.token },
+  });
   return data;
 }
 // Các lời gọi xác thực dùng cookie HttpOnly thay vì lưu token trong JavaScript.
@@ -30,6 +32,13 @@ export const authApi = {
 };
 // Đổi lỗi HTTP hoặc lỗi mạng thành thông báo trường biểu mẫu.
 export function apiErrors(error) {
-  if (!error.response) return { form: 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.' };
-  return error.response.data?.errors || { form: error.response.data?.message || 'Chưa thể xác nhận kết quả thao tác. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.' };
+  if (!error.response)
+    return { form: 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.' };
+  return (
+    error.response.data?.errors || {
+      form:
+        error.response.data?.message ||
+        'Chưa thể xác nhận kết quả thao tác. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.',
+    }
+  );
 }
