@@ -55,6 +55,7 @@ export default function MenuItemsPage({ user }) {
   const confirmationRef = useRef(null);
   const listFocusRef = useRef(null);
   const returnFocusRef = useRef(null);
+  const actionModalOpen = Boolean(deleteId || pendingStatus);
 
   const reload = useCallback(async () => {
     setError('');
@@ -107,7 +108,13 @@ export default function MenuItemsPage({ user }) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previousOverflow; };
   }, [editorMode]);
-  const restoreFocus = (fallbackToList = false) => {
+  useEffect(() => {
+    if (!actionModalOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [actionModalOpen]);
+  const restoreFocus = useCallback((fallbackToList = false) => {
     const focusKey = returnFocusRef.current;
     returnFocusRef.current = null;
     window.requestAnimationFrame(() => {
@@ -120,13 +127,13 @@ export default function MenuItemsPage({ user }) {
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: fallbackToList ? 'start' : 'nearest', inline: 'nearest' });
     });
-  };
+  }, []);
 
-  const cancelConfirmation = () => {
+  const cancelConfirmation = useCallback(() => {
     setDeleteId(null);
     setPendingStatus(null);
     restoreFocus();
-  };
+  }, [restoreFocus]);
 
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('vi-VN');
@@ -227,6 +234,35 @@ export default function MenuItemsPage({ user }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [editorMode, saving, closeEditor]);
 
+  useEffect(() => {
+    if (!actionModalOpen) return undefined;
+    const handleKeyDown = (event) => {
+      const dialog = confirmationRef.current;
+      if (!dialog) return;
+      if (event.key === 'Escape' && !busyId) {
+        event.preventDefault();
+        cancelConfirmation();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialog.querySelectorAll(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [actionModalOpen, busyId, cancelConfirmation]);
+
   const changeDraft = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
 
   const chooseImage = (event) => {
@@ -311,6 +347,7 @@ export default function MenuItemsPage({ user }) {
 
   const requestStatusChange = (item, trigger) => {
     returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    setError('');
     setEditorMode(null);
     setDraft(null);
     setImageFile(null);
@@ -321,6 +358,7 @@ export default function MenuItemsPage({ user }) {
 
   const requestDelete = (item, trigger) => {
     returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    setError('');
     setEditorMode(null);
     setDraft(null);
     setImageFile(null);
@@ -418,6 +456,7 @@ export default function MenuItemsPage({ user }) {
               <th scope="col">Giá bán</th>
               <th scope="col">Tồn liên kết</th>
               <th scope="col">Trạng thái</th>
+              <th scope="col" className="menu-row-actions">Thao tác</th>
             </tr></thead>
             <tbody>{visibleItems.map((item) => <tr key={item.id} className={selectedId === item.id ? 'is-selected' : ''}>
               <td>
@@ -429,6 +468,21 @@ export default function MenuItemsPage({ user }) {
               <td className="menu-price">{money(item.salePrice)}</td>
               <td className="menu-inventory-quantity">{item.inventoryItemId ? `${quantity(item.stockQuantity)} ${item.unitName || ''}`.trim() : 'Không theo dõi'}</td>
               <td className="menu-list-status">{saleStatusLabel(item)}</td>
+              <td className="menu-row-actions">
+                <button type="button" className="menu-row-action" data-menu-focus-key={`edit-row-${item.id}`}
+                  aria-label={`Sửa ${item.name}`} onClick={(event) => openUpdate(item, event)}
+                  disabled={Boolean(busyId || deleteId || pendingStatus)}>Sửa</button>
+                <button type="button" className="menu-row-action" data-menu-focus-key={`status-row-${item.id}`}
+                  aria-label={`${item.active ? 'Ngừng bán' : 'Đưa vào bán'} ${item.name}`}
+                  onClick={(event) => requestStatusChange(item, event.currentTarget)}
+                  disabled={Boolean(busyId || deleteId || pendingStatus)}>
+                  {item.active ? 'Ngừng bán' : 'Bật bán'}
+                </button>
+                <button type="button" className="menu-row-delete" data-menu-focus-key={`delete-row-${item.id}`}
+                  aria-label={`Xóa ${item.name} khỏi thực đơn`}
+                  onClick={(event) => requestDelete(item, event.currentTarget)}
+                  disabled={Boolean(busyId || deleteId || pendingStatus)}>Xóa</button>
+              </td>
             </tr>)}</tbody>
           </table>
         </div> : <div className="menu-empty">
@@ -438,42 +492,10 @@ export default function MenuItemsPage({ user }) {
         </div>}
       </section>
 
-      <aside ref={detailPanelRef} className="menu-detail-panel" aria-label="Thông tin món được chọn" tabIndex="-1">
+      <aside ref={detailPanelRef} className="menu-detail-panel" aria-label="Thông tin món được chọn" aria-hidden={actionModalOpen} tabIndex="-1">
         {selected ? <>
-          <header className="menu-detail-heading"><div><h2>Thông tin món</h2><p>{user.branchName || 'Cơ sở được phân quyền'}</p></div></header>
-          <div className="menu-detail-summary">
-            <h3>{selected.name}</h3><span>{selected.code}</span>
-            <div className="menu-status-pair">
-              <span className={`menu-sale-status ${selected.active ? 'active' : 'inactive'}`}>{selected.active ? 'Đang bán' : 'Ngừng bán'}</span>
-              <span className={`menu-stock-status ${selected.stockStatus.toLowerCase().replaceAll('_', '-')}`}>{stockLabels[selected.stockStatus] || selected.stockStatus}</span>
-            </div>
-          </div>
-          <dl className="menu-detail-list">
-            <dt>Danh mục</dt><dd>{selected.category}</dd>
-            <dt>Loại</dt><dd>{kindLabels[selected.kind] || selected.kind}</dd>
-            <dt>Giá bán</dt><dd>{money(selected.salePrice)}</dd>
-            <dt>Liên kết kho</dt><dd>{selected.inventoryName ? `${selected.inventorySku || ''} · ${selected.inventoryName}` : 'Không theo dõi tồn kho'}</dd>
-            <dt>Tồn khả dụng</dt><dd>{selected.inventoryItemId ? `${quantity(selected.stockQuantity)} ${selected.unitName || ''}` : 'Không theo dõi'}</dd>
-            {selected.description && <><dt>Mô tả</dt><dd>{selected.description}</dd></>}
-          </dl>
-          {selected.imageUrl && <div className="menu-detail-image">
-            {selected.imageMimeType === 'application/pdf' ? <a href={apiAssetUrl(selected.imageUrl)} target="_blank" rel="noreferrer">Xem tệp: {selected.imageOriginalName}</a>
-              : <img src={apiAssetUrl(selected.imageUrl)} alt={`Ảnh ${selected.name}`} />}
-          </div>}
-          <p className="menu-status-note">Trạng thái bán quyết định món có thể được chọn trong đơn mới. Tình trạng tồn kho được hiển thị riêng; đổi trạng thái bán không thay đổi số lượng tồn.</p>
-          {deleteId === selected.id ? <div ref={confirmationRef} tabIndex="-1" className="menu-delete-confirm" role="group" aria-labelledby="menu-delete-title">
-            <h3 id="menu-delete-title">Xóa món khỏi thực đơn?</h3>
-            <p>Món sẽ không còn xuất hiện trong danh sách bán. Các dòng đơn và lịch sử bán hàng liên quan vẫn được giữ.</p>
-            <div><button type="button" onClick={cancelConfirmation} disabled={busyId === selected.id}>Quay lại</button>
-              <button type="button" className="confirm-delete" onClick={deleteItem} disabled={busyId === selected.id}>{busyId === selected.id ? 'Đang xóa…' : 'Xác nhận xóa'}</button></div>
-          </div> : pendingStatus?.id === selected.id ? <div ref={confirmationRef} tabIndex="-1" className="menu-status-confirm" role="group" aria-labelledby="menu-status-title">
-            <h3 id="menu-status-title">{pendingStatus.active ? 'Đưa món vào bán?' : 'Ngừng bán món?'}</h3>
-            <p>{pendingStatus.active
-              ? 'Món sẽ xuất hiện trong danh sách có thể chọn cho đơn mới. Tồn kho không thay đổi.'
-              : 'Món sẽ không thể được chọn cho đơn mới. Đơn đã ghi nhận và lịch sử bán hàng vẫn được giữ.'}</p>
-            <div><button type="button" onClick={cancelConfirmation} disabled={Boolean(busyId)}>Quay lại</button>
-              <button type="button" className="confirm-status" onClick={applyStatusChange} disabled={Boolean(busyId)}>{busyId === selected.id ? 'Đang lưu…' : 'Xác nhận trạng thái'}</button></div>
-          </div> : <div className="menu-detail-actions">
+          <MenuItemInfo item={selected} branchName={user.branchName || 'Cơ sở được phân quyền'} titleId="menu-detail-title" />
+          {!actionModalOpen && <div className="menu-detail-actions">
             <button type="button" className="menu-edit-action" data-menu-focus-key={`edit-detail-${selected.id}`}
               onClick={(event) => openUpdate(selected, event)} disabled={Boolean(busyId)}>Sửa món</button>
             <button type="button" className="menu-toggle-action" data-menu-focus-key={`status-detail-${selected.id}`} onClick={(event) => requestStatusChange(selected, event.currentTarget)} disabled={Boolean(busyId)}>
@@ -488,7 +510,29 @@ export default function MenuItemsPage({ user }) {
       <p>Hiển thị {visibleItems.length} kết quả · Trang 1</p>
       <p>Dữ liệu minh họa · Chỉ thao tác trong cơ sở được phân quyền</p>
     </footer>
-    {editorMode && draft && <div className="menu-editor-overlay">
+    {actionModalOpen && selected && <div className="menu-action-overlay">
+      <div className="menu-action-scrim" aria-hidden="true" onClick={() => { if (!busyId) cancelConfirmation(); }} />
+      <section ref={confirmationRef} className="menu-action-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="menu-action-dialog-info-title" tabIndex="-1">
+        <MenuItemInfo item={selected} branchName={user.branchName || 'Cơ sở được phân quyền'}
+          titleId="menu-action-dialog-info-title" onClose={cancelConfirmation} closeDisabled={Boolean(busyId)} />
+        {error && <p className="menu-action-error" role="alert">{error}</p>}
+        {deleteId === selected.id ? <div className="menu-action-confirm is-delete">
+          <h3 id="menu-action-title">Xóa món khỏi thực đơn?</h3>
+          <p>Món sẽ không còn xuất hiện trong danh sách bán. Các dòng đơn và lịch sử bán hàng liên quan vẫn được giữ.</p>
+          <div><button type="button" onClick={cancelConfirmation} disabled={Boolean(busyId)}>Quay lại</button>
+            <button type="button" className="confirm-delete" onClick={deleteItem} disabled={Boolean(busyId)}>{busyId === selected.id ? 'Đang xóa…' : 'Xác nhận xóa'}</button></div>
+        </div> : pendingStatus?.id === selected.id && <div className="menu-action-confirm is-status">
+          <h3 id="menu-action-title">{pendingStatus.active ? 'Đưa món vào bán?' : 'Ngừng bán món?'}</h3>
+          <p>{pendingStatus.active
+            ? 'Món sẽ xuất hiện trong danh sách có thể chọn cho đơn mới. Tồn kho không thay đổi.'
+            : 'Món sẽ không thể được chọn cho đơn mới. Đơn đã ghi nhận và lịch sử bán hàng vẫn được giữ.'}</p>
+          <div><button type="button" onClick={cancelConfirmation} disabled={Boolean(busyId)}>Quay lại</button>
+            <button type="button" className="confirm-status" onClick={applyStatusChange} disabled={Boolean(busyId)}>{busyId === selected.id ? 'Đang lưu…' : 'Xác nhận trạng thái'}</button></div>
+        </div>}
+      </section>
+    </div>}
+    {editorMode && draft && <div className={`menu-editor-overlay${editorMode === 'update' ? ' is-compact' : ''}`}>
       <button type="button" className="menu-editor-scrim" aria-label="Đóng biểu mẫu" onClick={closeEditor} disabled={saving} />
       <section ref={editorPanelRef} className="menu-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="menu-editor-title">
         <MenuItemEditor
@@ -513,6 +557,40 @@ export default function MenuItemsPage({ user }) {
     </div>}
     {toast && <div className="menu-toast" role="status" aria-live="polite">{toast}</div>}
   </div>;
+}
+
+function MenuItemInfo({ item, branchName, titleId, onClose, closeDisabled = false }) {
+  return <>
+    <header className="menu-detail-heading">
+      <div><h2 id={titleId}>Thông tin món</h2><p>{branchName}</p></div>
+      {onClose && <button type="button" className="menu-detail-close" aria-label="Đóng thông tin món"
+        onClick={onClose} disabled={closeDisabled}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </button>}
+    </header>
+    <div className="menu-detail-summary">
+      <h3>{item.name}</h3><span>{item.code}</span>
+      <div className="menu-status-pair">
+        <span className={`menu-sale-status ${item.active ? 'active' : 'inactive'}`}>{item.active ? 'Đang bán' : 'Ngừng bán'}</span>
+        <span className={`menu-stock-status ${item.stockStatus.toLowerCase().replaceAll('_', '-')}`}>{stockLabels[item.stockStatus] || item.stockStatus}</span>
+      </div>
+    </div>
+    <dl className="menu-detail-list">
+      <dt>Danh mục</dt><dd>{item.category}</dd>
+      <dt>Loại</dt><dd>{kindLabels[item.kind] || item.kind}</dd>
+      <dt>Giá bán</dt><dd>{money(item.salePrice)}</dd>
+      <dt>Liên kết kho</dt><dd>{item.inventoryName ? `${item.inventorySku || ''} · ${item.inventoryName}` : 'Không theo dõi tồn kho'}</dd>
+      <dt>Tồn khả dụng</dt><dd>{item.inventoryItemId ? `${quantity(item.stockQuantity)} ${item.unitName || ''}` : 'Không theo dõi'}</dd>
+      {item.description && <><dt>Mô tả</dt><dd>{item.description}</dd></>}
+    </dl>
+    {item.imageUrl && <div className="menu-detail-image">
+      {item.imageMimeType === 'application/pdf' ? <a href={apiAssetUrl(item.imageUrl)} target="_blank" rel="noreferrer">Xem tệp: {item.imageOriginalName}</a>
+        : <img src={apiAssetUrl(item.imageUrl)} alt={`Ảnh ${item.name}`} />}
+    </div>}
+    <p className="menu-status-note">Trạng thái bán quyết định món có thể được chọn trong đơn mới. Tình trạng tồn kho được hiển thị riêng; đổi trạng thái bán không thay đổi số lượng tồn.</p>
+  </>;
 }
 
 function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions, imageFile, imagePreview,

@@ -2,6 +2,17 @@ import apiClient from '../../../api/client';
 
 const base = '/branch-management/inventory';
 
+async function writeJson(method, url, command) {
+  const { data: csrf } = await apiClient.get('/auth/csrf');
+  const { data } = await apiClient.request({
+    method,
+    url,
+    data: command,
+    headers: { [csrf.headerName]: csrf.token },
+  });
+  return data;
+}
+
 async function writeForm(url, command, evidence) {
   const { data: csrf } = await apiClient.get('/auth/csrf');
   const body = new FormData();
@@ -35,15 +46,13 @@ const inventoryApi = {
     return data;
   },
   async createItem(command) {
-    const { data } = await apiClient.post(`${base}/items`, command);
-    return data;
+    return writeJson('post', `${base}/items`, command);
   },
   async updateItem(id, command) {
-    const { data } = await apiClient.put(`${base}/items/${id}`, command);
-    return data;
+    return writeJson('put', `${base}/items/${id}`, command);
   },
   async deleteItem(id) {
-    await apiClient.delete(`${base}/items/${id}`);
+    await writeJson('delete', `${base}/items/${id}`);
   },
   receive(command, evidence) {
     return writeForm(`${base}/receipts`, command, evidence);

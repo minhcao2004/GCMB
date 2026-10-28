@@ -358,8 +358,8 @@ export default function InventoryPage({ user }) {
   </main>;
 
   if (screen === 'items') return <main className="inventory-page">
-    {heading('Quản lý mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Danh mục mặt hàng kho`,
-      <><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Quay lại tồn kho</button><button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
+    {heading('Danh mục mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Danh mục mặt hàng kho`,
+      <><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Tồn kho</button><button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
     {toastNotice}
     {errorNotice}
     <section className="inv-filter-panel inv-item-filters">
@@ -511,14 +511,14 @@ export default function InventoryPage({ user }) {
   </main>;
 
   return <main className="inventory-page">
-    {heading('Tồn kho & lịch sử', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`,
-      <><button type="button" className="inv-button inv-button-manage" onClick={() => { setError(''); setScreen('items'); }}>Quản lý mặt hàng</button><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Điều chỉnh tồn</button><button type="button" className="inv-button inv-button-primary" onClick={openReceipt} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Nhập hàng</button></>)}
+    {heading('Tồn kho', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
+      <><button type="button" className="inv-button inv-button-manage" onClick={() => { setError(''); setScreen('items'); }}>Danh mục mặt hàng</button><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-primary" onClick={openReceipt} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button></>)}
     {errorNotice}
     {toastNotice}
     <section className="inv-filter-panel" aria-label="Tìm và lọc tồn kho">
-      <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." /></label>
-      <label className="inv-field"><span className="inv-sr-only">Nhóm mặt hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
-      <label className="inv-field"><span className="inv-sr-only">Tình trạng tồn</span><select value={stockStatus} onChange={(event) => setStockStatus(event.target.value)}>
+      <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
+      <label className="inv-field"><span>Nhóm hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+      <label className="inv-field"><span>Tình trạng tồn</span><select value={stockStatus} onChange={(event) => setStockStatus(event.target.value)}>
         <option value="all">Tình trạng tồn</option><option value="AVAILABLE">Còn hàng</option><option value="LOW_STOCK">Sắp hết</option><option value="OUT_OF_STOCK">Hết hàng</option>
       </select></label>
       <small>Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải dữ liệu…' : `${visibleItems.length} mặt hàng`}</small>
@@ -527,7 +527,7 @@ export default function InventoryPage({ user }) {
       {loading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /><i /></div> : visibleItems.length ? <div className="inv-table-scroll"><table className="inv-table inv-stock-table">
         <thead><tr><th>Mặt hàng</th><th>Đơn vị</th><th>Tồn hiện tại</th><th>Ngưỡng</th><th>Trạng thái</th></tr></thead>
         <tbody>{visibleItems.map((item) => <tr key={item.id}>
-          <td><button type="button" className="inv-item-link" onClick={() => openHistory(item)}><strong>{item.sku} · {item.name}</strong><span>{item.category} · {trackingLabel(item.trackingMode)}</span></button></td>
+          <td><button type="button" className="inv-item-link" aria-label={`Xem lịch sử biến động của ${item.name}`} onClick={() => openHistory(item)}><strong>{item.sku} · {item.name}</strong><span>{item.category} · {trackingLabel(item.trackingMode)}</span><span className="inv-item-action">Xem lịch sử</span></button></td>
           <td>{item.unitName}</td><td className="inv-quantity-cell">{formatQuantity(item.quantity)}</td><td>{formatQuantity(item.minimumQuantity)}</td><td><span className={`inv-status ${stockClass(item)}`}>{stockLabel(item)}</span></td>
         </tr>)}</tbody>
       </table></div> : <div className="inv-empty"><strong>{activeItems.length ? 'Không tìm thấy mặt hàng phù hợp' : 'Chưa có mặt hàng kho'}</strong><span>{activeItems.length ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Tạo danh mục mặt hàng trước khi ghi nhận nhập kho.'}</span>{!activeItems.length && <button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Tạo mặt hàng</button>}</div>}

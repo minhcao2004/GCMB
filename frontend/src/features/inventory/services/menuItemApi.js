@@ -2,6 +2,17 @@ import apiClient from '../../../api/client';
 
 const base = '/branch-management/menu-items';
 
+async function writeJson(method, url, command) {
+  const { data: csrf } = await apiClient.get('/auth/csrf');
+  const { data } = await apiClient.request({
+    method,
+    url,
+    data: command,
+    headers: { [csrf.headerName]: csrf.token },
+  });
+  return data;
+}
+
 async function write(method, url, command, image) {
   const { data: csrf } = await apiClient.get('/auth/csrf');
   const body = new FormData();
@@ -36,11 +47,10 @@ const menuItemApi = {
     return write('put', `${base}/${id}`, command, image);
   },
   async setActive(id, active) {
-    const { data } = await apiClient.put(`${base}/${id}/status`, { active });
-    return data;
+    return writeJson('put', `${base}/${id}/status`, { active });
   },
   async remove(id) {
-    await apiClient.delete(`${base}/${id}`);
+    await writeJson('delete', `${base}/${id}`);
   },
 };
 
