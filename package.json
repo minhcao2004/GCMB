@@ -1,0 +1,10 @@
+{
+  "name": "gcmb",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Khởi chạy ứng dụng GCMB từ thư mục gốc.",
+  "author": "TrongNV",
+  "scripts": {
+    "start": "node frontend/scripts/start-project.cjs"
+  }
+}

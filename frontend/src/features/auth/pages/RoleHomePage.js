@@ -15,6 +15,7 @@ import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
+import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
 
 const names = { HEAD_OFFICE_MANAGER: 'Quản lý cấp cao', BRANCH_MANAGER: 'Quản lý chi nhánh', RECEPTIONIST: 'Lễ tân' };
 // Kiểm tra phiên/đúng vai trò trước khi hiển thị trang sau đăng nhập.
@@ -59,7 +60,7 @@ export default function RoleHomePage({ role }) {
         <button onClick={() => setProfileOpen(true)}>Thông tin tài khoản</button>
         <button disabled={busy} onClick={logout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
       </header>
-      <p>Xin chào, <strong>{user.username}</strong> — {names[role]}.</p>
+      {role === 'RECEPTIONIST' ? <EquipmentIncidentsPage user={user} /> : <p>Xin chào, <strong>{user.username}</strong> — {names[role]}.</p>}
       </>}
     </> : !error && <p role="status">Đang kiểm tra phiên đăng nhập…</p>}
     {user && profileOpen && <AccountProfileDialog onClose={() => setProfileOpen(false)} />}

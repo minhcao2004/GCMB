@@ -15,10 +15,11 @@ spring:
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
+  # Copyright (c) 2026 SEP490-G12. Author: TrongNV. Created: 28/10. Description: Cho phép tải ảnh thiết bị theo BR-115/BR-116.
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 gcmb:
   auth:

@@ -1,0 +1,8 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 28/10
+ * Description: Thanh chuyển màn hình giữa nhóm thiết bị và tài sản thiết bị.
+ */
+.equipment-management{min-width:0}.equipment-management .em-tabs{display:flex;gap:6px;padding:18px 30px 0;background:#f4f7fb;border-bottom:1px solid #e6eaf1}.equipment-management .em-tabs button{position:relative;min-height:44px;border:1px solid transparent;border-radius:10px 10px 0 0;padding:0 18px;background:transparent;color:#758196;font:inherit;font-size:13px;font-weight:650;cursor:pointer;transition:color .15s ease,background .15s ease}.equipment-management .em-tabs button:hover{background:#fff;color:#39445a}.equipment-management .em-tabs button.active{border-color:#e6eaf1;border-bottom-color:#fff;background:#fff;color:#d20d7a}.equipment-management .em-tabs button.active:after{position:absolute;right:10px;bottom:-1px;left:10px;height:2px;background:#e9158b;content:""}.equipment-management .em-tabs button:focus-visible{outline:2px solid #e9158b;outline-offset:2px}.branch-manager-dashboard .equipment-management .em-tabs{padding:12px 18px 0}.manager-content-catalog .equipment-management .em-tabs{padding-left:0}@media(max-width:560px){.equipment-management .em-tabs{gap:2px;padding:12px 14px 0;overflow-x:auto}.equipment-management .em-tabs button{flex:0 0 auto;padding:0 11px;font-size:12px;white-space:nowrap}}

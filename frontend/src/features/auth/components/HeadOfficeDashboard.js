@@ -16,6 +16,7 @@ import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
@@ -75,6 +76,8 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
         <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+      ) : activeTab === 'Thiết bị' ? (
+        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
     </div>
   </div>;

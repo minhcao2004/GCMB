@@ -1,11 +1,3 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: TrongNV
- * Created: 13/10/2026
- * Description: Bổ sung dữ liệu phân quyền cơ sở, phòng và lịch sử trạng thái.
- */
-
 -- Bind each branch manager to exactly one branch for authentication and authorization.
 CREATE TABLE gcmb.branch_manager_assignment (
   branch_id uuid PRIMARY KEY,

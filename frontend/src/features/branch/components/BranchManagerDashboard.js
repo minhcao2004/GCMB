@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { authApi, apiErrors } from '../../auth/services/authApi';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BranchRoomsPage from '../pages/BranchRoomsPage';
+import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
@@ -75,7 +76,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
         </label>} />
       <section className="manager-content branch-manager-content">
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
-        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={user} search={search} onSearchChange={setSearch} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={user} search={search} onSearchChange={setSearch} /> : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage key={user.branchId} user={user} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>
   </div>;
