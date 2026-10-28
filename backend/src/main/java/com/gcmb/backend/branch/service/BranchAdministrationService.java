@@ -137,7 +137,7 @@ public class BranchAdministrationService {
             throw failure(HttpStatus.CONFLICT, "Cơ sở đã đóng, không thể chuyển trạng thái này.");
         }
         if (!blockers(id).isEmpty()) {
-            String branchName = (String) get(id).get("name");
+            String branchName = (String) get(id).get("branchName");
             throw failure(HttpStatus.CONFLICT,
                 "Chưa thể ngừng hoạt động cơ sở " + branchName + " vì còn booking chờ nhận phòng, khách đang sử dụng phòng hoặc bill chưa thanh toán. Vui lòng xử lý các mục còn tồn tại.");
         }
@@ -315,9 +315,7 @@ public class BranchAdministrationService {
         if (clean(input.address()).length() > 2000) {
             throw failure(HttpStatus.BAD_REQUEST, "Địa chỉ cơ sở chỉ được chứa tối đa 2000 ký tự.");
         }
-        if (!clean(input.phone()).isEmpty() && !clean(input.phone()).matches("0[0-9]{6,14}")) {
-            throw failure(HttpStatus.BAD_REQUEST, "Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.");
-        }
+        com.gcmb.backend.auth.service.AuthValidation.phone(input.phone());
         if (clean(input.notes()).length() > 4000) {
             throw failure(HttpStatus.BAD_REQUEST, "Ghi chú chỉ được chứa tối đa 4000 ký tự.");
         }

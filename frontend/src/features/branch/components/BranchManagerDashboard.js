@@ -11,24 +11,30 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { authApi, apiErrors } from '../../auth/services/authApi';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import BranchRoomsPage from '../pages/BranchRoomsPage';
 import MenuItemsPage from '../../inventory/pages/MenuItemsPage';
 import InventoryPage from '../../inventory/pages/InventoryPage';
+import WorkforcePage from '../../workforce/pages/WorkforcePage';
+import StaffPage from '../../workforce/pages/StaffPage';
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
-const screenIds = ['overview', 'rooms', 'menu', 'inventory', 'equipment', 'staff', 'attendance', 'cash-closing', 'expenses'];
+const branchNav = [...nav, 'Tài khoản'];
+const screenIds = ['overview', 'rooms', 'menu', 'inventory', 'equipment', 'staff', 'attendance', 'cash-closing', 'expenses', 'accounts'];
 const icons = ['M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z', 'M4 21V4h16v17 M8 8h8 M8 12h8', 'M4 4h16v16H4z M8 8l8 8 M16 8l-8 8', 'M3 7l9-4 9 4-9 4-9-4z M3 7v10l9 4 9-4V7 M12 11v10', 'M14 7l3 3m-8 8-3 3m8-14 3-3 4 4-3 3m-8 8 4-4', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M8 2v4m8-4v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2', 'M3 7h18v14H3z M7 11h10', 'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5'];
 
 export default function BranchManagerDashboard({ user, busy, onLogout, onProfile, onBranchChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
-  const active = nav[activeIndex] || 'Phòng';
+  const active = branchNav[activeIndex] || 'Phòng';
   const [search, setSearch] = useState('');
+  const [accountSearch, setAccountSearch] = useState('');
   const [branches, setBranches] = useState([]);
   const [loadingBranches, setLoadingBranches] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [branchError, setBranchError] = useState('');
+  const readOnly = user.readOnly || branches.some((branch) => branch.id === user.branchId && branch.status === 'SUSPENDED');
   useEffect(() => {
     let active = true;
     const load = () => {
@@ -55,7 +61,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     finally { setSwitching(false); }
   };
   const selectScreen = (label) => {
-    const screen = screenIds[nav.indexOf(label)];
+    const screen = screenIds[branchNav.indexOf(label)];
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set('screen', screen);
@@ -68,7 +74,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
       <div className="manager-brand"><BrandWordmark /></div>
       <p className="manager-role">QUẢN LÝ CƠ SỞ</p>
       <nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
-        {nav.map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
+        {branchNav.map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
         </button>)}
       </nav>
@@ -89,8 +95,9 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
           </select>
         </label>} />
       <section className="manager-content branch-manager-content">
+        {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
-        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={user} search={search} onSearchChange={setSearch} /> : active === 'Thực đơn F&B' ? <MenuItemsPage key={user.branchId} user={user} /> : active === 'Kho hàng' ? <InventoryPage key={user.branchId} user={user} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Nhân sự' ? <StaffPage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} /> : active === 'Ca làm & chấm công' ? <WorkforcePage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : active === 'Thực đơn F&B' ? <MenuItemsPage key={user.branchId} user={{ ...user, readOnly }} /> : active === 'Kho hàng' ? <InventoryPage key={user.branchId} user={{ ...user, readOnly }} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>
   </div>;

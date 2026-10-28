@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/account/profile")
 public class AccountProfileController {
+
     private final AccountProfileService service;
 
     public AccountProfileController(AccountProfileService service) {
@@ -29,8 +30,9 @@ public class AccountProfileController {
 
     @PostMapping
     public Profile update(
-            @AuthenticationPrincipal Identity actor,
-            @RequestBody UpdateProfile input) {
+        @AuthenticationPrincipal Identity actor,
+        @RequestBody UpdateProfile input
+    ) {
         return service.update(actor.id(), input);
     }
 }

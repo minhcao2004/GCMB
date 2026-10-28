@@ -15,6 +15,21 @@ export function emailError(value) {
   if (!emailPattern.test(email) || email.indexOf('@') > 64 || email.startsWith('.') || email.includes('..') || email.includes('.@')) return 'Nhập địa chỉ email theo dạng ten@tenmien.com.';
   return '';
 }
+// BR-114; MSG29. Chỉ áp dụng chính sách này cho mật khẩu mới.
+export function passwordError(value) {
+  if (
+    value.length < 8 ||
+    value.length > 64 ||
+    !/[A-Z]/.test(value) ||
+    !/[a-z]/.test(value) ||
+    !/[0-9]/.test(value) ||
+    !/[^A-Za-z0-9\s]/.test(value) ||
+    /[\s\uFEFF]/u.test(value)
+  ) {
+    return 'Mật khẩu phải có từ 8 đến 64 ký tự, gồm ít nhất một chữ hoa, một chữ thường, một chữ số và một ký tự đặc biệt; không được chứa khoảng trắng.';
+  }
+  return '';
+}
 // BR-111, BR-120: đồng bộ kiểm tra trường bắt buộc và xác nhận mật khẩu với MSG-02/MSG-06.
 export function validate(mode, values) {
   const errors = {};
@@ -28,6 +43,10 @@ export function validate(mode, values) {
     }
     if (!values.password.trim()) errors.password = mode === 'login' ? 'Vui lòng bổ sung mật khẩu.' : 'Vui lòng bổ sung mật khẩu mới.';
     if (mode === 'reset') {
+      if (values.password.trim()) {
+        const policyError = passwordError(values.password);
+        if (policyError) errors.password = policyError;
+      }
       if (!values.confirmation.trim()) errors.confirmation = 'Vui lòng bổ sung xác nhận mật khẩu.';
       else if (values.confirmation !== values.password) errors.confirmation = 'Mật khẩu xác nhận không khớp với mật khẩu mới.';
       if (!values.code) errors.code = 'Vui lòng bổ sung mã xác minh.';

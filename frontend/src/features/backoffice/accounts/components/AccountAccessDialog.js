@@ -10,24 +10,42 @@ import { apiErrors } from '../../../auth/services/authApi';
 import { accountAccessApi, roleNames } from '../services/accountAccessApi';
 import '../styles/accountAccess.css';
 
-export default function AccountAccessDialog({ account, options, actorId, onClose, onSaved }) {
+export default function AccountAccessDialog({
+  account,
+  options,
+  actorId,
+  branchScope,
+  readOnly = false,
+  onClose,
+  onSaved,
+}) {
   const dialog = useRef(null);
   const [role, setRole] = useState(account.role);
   const [branchId, setBranchId] = useState(account.branchId || '');
   const [branchIds, setBranchIds] = useState(() => {
-    const assigned = account.managedBranchIds?.length ? account.managedBranchIds : account.branchId ? [account.branchId] : [];
+    const assigned = account.managedBranchIds?.length
+      ? account.managedBranchIds
+      : account.branchId
+        ? [account.branchId]
+        : [];
     return assigned.filter((id) => options.branches.some((branch) => branch.id === id));
   });
-  const [mode, setMode] = useState('role');
+  const [mode, setMode] = useState(
+    account.status !== 'ACTIVE' ? 'reactivate' : branchScope ? 'deactivate' : 'role'
+  );
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(role);
-  const immutable = account.id === actorId || account.status === 'REVOKED';
+  const immutable = account.id === actorId || readOnly;
   const branchName = chain
     ? 'Toàn chuỗi'
-    : role === 'BRANCH_MANAGER' ? options.branches.filter((branch) => branchIds.includes(branch.id)).map((branch) => branch.name).join(', ') || 'Chưa chọn cơ sở'
-    : options.branches.find((branch) => branch.id === branchId)?.name || 'Chưa chọn cơ sở';
+    : role === 'BRANCH_MANAGER'
+      ? options.branches
+          .filter((branch) => branchIds.includes(branch.id))
+          .map((branch) => branch.name)
+          .join(', ') || 'Chưa chọn cơ sở'
+      : options.branches.find((branch) => branch.id === branchId)?.name || 'Chưa chọn cơ sở';
 
   useEffect(() => {
     const element = dialog.current;
@@ -53,7 +71,9 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
     setErrors({});
     try {
       if (mode === 'deactivate') {
-        await accountAccessApi.deactivate(account.id, reason);
+        await accountAccessApi.deactivate(account.id, reason, branchScope);
+      } else if (mode === 'reactivate') {
+        await accountAccessApi.reactivate(account.id, branchScope);
       } else {
         await accountAccessApi.setRole(account.id, {
           role,
@@ -61,7 +81,13 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
           ...(role === 'BRANCH_MANAGER' ? { branchIds } : {}),
         });
       }
-      onSaved(mode === 'deactivate' ? 'Đã thu hồi quyền truy cập.' : 'Đã lưu vai trò và phạm vi truy cập.');
+      onSaved(
+        mode === 'deactivate'
+          ? 'Đã chuyển trạng thái của tài khoản thành “Vô hiệu hóa”.'
+          : mode === 'reactivate'
+            ? 'Đã chuyển trạng thái của tài khoản thành “Hoạt động”.'
+            : 'Đã cập nhật vai trò và phạm vi truy cập.'
+      );
     } catch (error) {
       setErrors(apiErrors(error));
     } finally {
@@ -82,16 +108,26 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
       <div className="account-drawer-heading">
         <div>
           <h2 id="account-access-title">
-            {mode === 'deactivate' ? 'Thu hồi quyền truy cập' : 'Vai trò & phạm vi truy cập'}
+            {mode === 'deactivate'
+              ? 'Vô hiệu hóa tài khoản'
+              : mode === 'reactivate'
+                ? 'Kích hoạt tài khoản'
+                : 'Vai trò & phạm vi truy cập'}
           </h2>
-          <p>{account.employeeName} · {account.username}</p>
+          <p>
+            {account.employeeName} · {account.username}
+          </p>
         </div>
-        <button aria-label="Đóng" disabled={busy} onClick={onClose}>×</button>
+        <button aria-label="Đóng" disabled={busy} onClick={onClose}>
+          ×
+        </button>
       </div>
       <form className="account-create-form" onSubmit={submit}>
         <fieldset className="account-form-body" disabled={busy || immutable}>
           {Object.entries(errors).map(([field, message]) => (
-            <p className="account-error" role="alert" key={field}>{message}</p>
+            <p className="account-error" role="alert" key={field}>
+              {message}
+            </p>
           ))}
           {immutable && (
             <p className="account-access-note">
@@ -104,50 +140,97 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
             <>
               <div className="account-field">
                 <label htmlFor="access-role">Vai trò</label>
-                <select id="access-role" value={role} onChange={(event) => setRole(event.target.value)}>
+                <select
+                  id="access-role"
+                  value={role}
+                  onChange={(event) => setRole(event.target.value)}
+                >
                   {options.roles.map((item) => (
-                    <option key={item.id} value={item.id}>{roleNames[item.id] || item.name}</option>
+                    <option key={item.id} value={item.id}>
+                      {roleNames[item.id] || item.name}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="account-field">
                 <label htmlFor="access-branch">Phạm vi cơ sở</label>
-                {chain ? <input id="access-branch" readOnly value="Toàn chuỗi" /> : role === 'BRANCH_MANAGER' ? (
-                  <div className="account-managed-branches" role="group" aria-label="Các cơ sở quản lý">
-                    {options.branches.map((branch) => <label key={branch.id}>
-                      <input type="checkbox" checked={branchIds.includes(branch.id)} onChange={(event) => {
-                        setBranchIds((current) => event.target.checked ? [...current, branch.id] : current.filter((id) => id !== branch.id));
-                      }} />
-                      <span>{branch.name}</span>
-                    </label>)}
+                {chain ? (
+                  <input id="access-branch" readOnly value="Toàn chuỗi" />
+                ) : role === 'BRANCH_MANAGER' ? (
+                  <div
+                    className="account-managed-branches"
+                    role="group"
+                    aria-label="Các cơ sở quản lý"
+                  >
+                    {options.branches.map((branch) => (
+                      <label key={branch.id}>
+                        <input
+                          type="checkbox"
+                          checked={branchIds.includes(branch.id)}
+                          onChange={(event) => {
+                            setBranchIds((current) =>
+                              event.target.checked
+                                ? [...current, branch.id]
+                                : current.filter((id) => id !== branch.id)
+                            );
+                          }}
+                        />
+                        <span>{branch.name}</span>
+                      </label>
+                    ))}
                   </div>
                 ) : (
-                  <select id="access-branch" required value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+                  <select
+                    id="access-branch"
+                    required
+                    value={branchId}
+                    onChange={(event) => setBranchId(event.target.value)}
+                  >
                     <option value="">Chọn cơ sở</option>
                     {options.branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
                     ))}
                   </select>
                 )}
               </div>
               <div className="account-access-note access-preview">
                 <strong>Phạm vi sau khi lưu</strong>
-                <p>{roleNames[role]} · {branchName}</p>
-                {role === 'BRANCH_MANAGER' && <p>Một quản lý có thể phụ trách nhiều cơ sở, mỗi cơ sở tối đa 2 quản lý. Chọn các cơ sở được phép quản lý; bỏ chọn để thu hồi phân công tại cơ sở đó.</p>}<p>Tài khoản cần đăng nhập lại sau khi thay đổi quyền.</p>
+                <p>
+                  {roleNames[role]} · {branchName}
+                </p>
+                {role === 'BRANCH_MANAGER' && (
+                  <p>
+                    Một quản lý có thể phụ trách nhiều cơ sở, mỗi cơ sở tối đa 2 quản lý. Chọn các
+                    cơ sở được phép quản lý; bỏ chọn để thu hồi phân công tại cơ sở đó.
+                  </p>
+                )}
+                <p>Tài khoản cần đăng nhập lại sau khi thay đổi quyền.</p>
               </div>
               <button
                 type="button"
                 className="account-link access-revoke-link"
-                onClick={() => { setErrors({}); setMode('deactivate'); }}
+                onClick={() => {
+                  setErrors({});
+                  setMode('deactivate');
+                }}
               >
                 Thu hồi quyền truy cập ›
               </button>
             </>
+          ) : mode === 'reactivate' ? (
+            <p>
+              Kích hoạt lại tài khoản {account.username}? Tài khoản cần đăng nhập lại; hệ thống kiểm
+              tra trạng thái nhân viên và phân công cơ sở trước khi kích hoạt.
+            </p>
           ) : (
             <>
               <div className="access-warning">
                 <strong>Hồ sơ nhân viên vẫn được giữ</strong>
-                <p>Tài khoản sẽ không thể tiếp tục truy cập; lịch sử thao tác vẫn có thể tra cứu.</p>
+                <p>
+                  Tài khoản sẽ không thể tiếp tục truy cập; lịch sử thao tác vẫn có thể tra cứu.
+                </p>
               </div>
               <div className="account-field">
                 <label htmlFor="revoke-reason">Lý do</label>
@@ -161,19 +244,29 @@ export default function AccountAccessDialog({ account, options, actorId, onClose
                 />
               </div>
               {account.role === 'BRANCH_MANAGER' && (
-                <p className="account-error">Đang có quyền quản lý tại {account.branchName}. Hãy bố trí người thay thế nếu cần.</p>
+                <p className="account-error">
+                  Đang có quyền quản lý tại {account.branchName}. Hãy bố trí người thay thế nếu cần.
+                </p>
               )}
             </>
           )}
         </fieldset>
         <div className="account-drawer-footer">
-          <button type="button" disabled={busy} onClick={onClose}>Hủy</button>
+          <button type="button" disabled={busy} onClick={onClose}>
+            Hủy
+          </button>
           <button
             className={mode === 'deactivate' ? 'account-danger' : 'account-primary'}
             disabled={busy || immutable}
             type="submit"
           >
-            {busy ? 'Đang lưu…' : mode === 'deactivate' ? 'Thu hồi truy cập' : 'Lưu phân quyền'}
+            {busy
+              ? 'Đang lưu…'
+              : mode === 'deactivate'
+                ? 'Xác nhận vô hiệu hóa'
+                : mode === 'reactivate'
+                  ? 'Xác nhận kích hoạt'
+                  : 'Lưu phân quyền'}
           </button>
         </div>
       </form>

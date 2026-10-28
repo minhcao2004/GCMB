@@ -41,7 +41,7 @@ public class AuthSecurity {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(List.of(policy.frontendOrigin()));
 config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-                config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN", "X-GCMB-QR-SESSION"));
+                config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN", "X-GCMB-QR-SESSION", "X-GCMB-Branch-Id"));
                 config.setAllowCredentials(true); return config;
             }))
             .csrf(config -> config.csrfTokenRepository(csrf)

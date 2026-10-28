@@ -9,12 +9,14 @@
  */
 
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+import StaffPage from '../../workforce/pages/StaffPage';
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
@@ -36,6 +38,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const location = useLocation();
   const navigate = useNavigate();
   const requestedTab = new URLSearchParams(location.search).get('screen');
+  const [accountSearch, setAccountSearch] = useState('');
   const activeTab = location.pathname === catalogPath
     ? 'Phòng & bảng giá'
     : tabs.includes(requestedTab) && requestedTab !== 'Phòng & bảng giá' ? requestedTab : 'Tổng quan';
@@ -71,7 +74,16 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
           <RoomCatalogPage />
         </section>
       ) : activeTab === 'Tài khoản & phân quyền' ? (
-        <AccountsPage actorId={user.id} onAudit={() => selectTab('Nhật ký hệ thống')} />
+        <AccountsPage actorId={user.id} initialSearch={accountSearch} onAudit={() => selectTab('Nhật ký hệ thống')} />
+      ) : activeTab === 'Nhân sự' ? (
+        <StaffPage
+          user={user}
+          onAccounts={(username) => {
+            setAccountSearch(username);
+            selectTab('Tài khoản & phân quyền');
+          }}
+          onBranches={() => selectTab('Cơ sở')}
+        />
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}

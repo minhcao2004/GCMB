@@ -54,6 +54,85 @@ Customer interaction is limited to in-room F&B ordering. Room reservations recei
 
 The current scope excludes a customer booking portal, hardware barcode-scanner integration, statutory tax report generation, recipe/BOM-based ingredient management, content licensing management, and regulatory or safety compliance enforcement.
 
+### Staff records (UC-77–82)
+
+Migration numbering update: the staff, tax-invoice, shift-version and attendance-state migrations were renumbered from 21–24 to 26–29 without changing their SQL contents. Databases that already applied the old versions need their Flyway history coordinated with this rename before restarting the backend; do not rerun the same DDL or disable validation. Fresh databases use the new filenames directly. The renumbering does not add schema or business behavior.
+
+The staff module implements create, view/search, update, deactivate/reactivate, initial home-branch assignment and transfer. The UI uses the supplied staff mockups; attachments are excluded from this implementation.
+
+- APIs: `/api/v1/head-office/staff` and `/api/v1/branch-management/staff`; list, `/options`, `/{id}`, `/{id}/status`, `/{id}/branch`, and `/{id}/transfers`. Updates require the current record `version`; stale writes return HTTP 409.
+- BR-52/177: branch managers access staff in their managed branch; suspended branches remain readable and reject changes. Initial assignment and transfers are head-office-only. A branch-manager-created record is assigned to the current branch as part of creation.
+- BR-171: deactivating an employee revokes the linked login and tokens in the same transaction. Reactivating a record does not automatically restore login access. Transfers retain assignment history; linked receptionist access follows the new branch and existing sessions are revoked. Manager responsibilities remain separately managed.
+- BR-111/119/199 and corresponding MSG references are recorded in the service and UI validation. Previous record values are retained in audit entries. Phone validation follows BR-119 (digits with an optional leading `+`, maximum 30 characters from the schema), not a ten-digit-only rule.
+- Flyway migration `V26__staff_records.sql` adds position, contact email, notes, optimistic version and the account-lock trigger. Restart the backend to apply migrations before using the staff screens. No attachment storage or endpoints are introduced.
+
+### Weekly shifts (UC-83–86)
+
+The Branch Manager's **Ca làm & chấm công** menu now opens the weekly schedule. The receptionist's **Ca làm việc** menu opens `/le-tan/ca-lam`. The calendar uses seven day columns and four fixed shift rows, a sticky time column, today highlighting, staffing counts, employee names for managers, status text/color, search/filter, week navigation, and an accessible detail/confirmation dialog. Smaller screens scroll the calendar horizontally. Unpublished cells are explicit; no demonstration employees or shifts are saved.
+
+- UC-85 / BR-53, BR-111, BR-192, BR-203: managers configure dates, fixed shifts, positive integer capacities and registration availability. At the user's request this covers both the **current** and upcoming Monday–Sunday week. The toolbar's **Mở / chỉnh ca tuần đang xem** opens the displayed week; an unpublished eligible cell has a **Mở ca** button that preselects that cell. The header shortcut still opens next week. Ended shifts, shifts with attendance and closed attendance months cannot be changed. Ongoing shifts without attendance remain editable until their end; closing registration retains existing assignments and capacity cannot fall below confirmed headcount. Each request must contain slots from one week and returns that same week's schedule. Four fixed local-time periods are 00:00–07:00, 07:00–12:00, 12:00–18:00 and 18:00–00:00 next day.
+- UC-84: managers view/search/filter their assigned branch's schedules. BR-60: receptionists receive only their own assignment details; available-shift cards expose aggregate capacity, not coworker names or history.
+- UC-83 / BR-54, BR-55, BR-56: receptionists self-register for open shifts at their home branch in the **current or upcoming week**, provided the shift has not started. This extends the original next-week-only requirement at the user's request, in step with current-week publication. Registration is automatically confirmed, duplicate retries are idempotent, and capacity is checked under transaction/row locks. Staff/account activity, current branch and assignment coverage for the shift are rechecked at confirmation. The calendar disables started shifts and labels them “Ca đã bắt đầu”; the server rechecks the actual start time at confirmation. No approval queue is introduced.
+- User-approved UC-86 revision / BR-58: when A cannot work, the manager replaces A with an active receptionist B in the **same shift**. Candidates come from employee profiles with position `RECEPTIONIST` and a current assignment at that branch; accountants and branch managers are excluded. The server rechecks the receptionist position and assignment coverage when confirming, including direct API calls. The date, times and capacity are preserved. A's assignment is marked cancelled and retained with the reason; B receives a confirmed manager assignment. The new employee cannot already occupy the same/overlapping shift. Ended shifts, assignments with attendance, and closed attendance periods cannot be changed by this workflow. A replacement is permitted on a shift closed to new self-registration.
+- BR-177 / MSG43: suspended branches remain readable and reject writes. Server authorization uses actual account/branch assignments. A global workforce/account lock coordinates transfers/status changes with shift operations; optimistic shift versions reject stale confirmations. The calendar reloads after successful changes and refreshes when focused/every 15 seconds outside dialogs. Editor data is not silently overwritten while a dialog is open.
+- BR/MSG references are included near validation: MSG01, MSG02, MSG19, MSG24, MSG43 where applicable, MSG44, MSG84, MSG85. Technical stale/duplicate/overlap and replacement errors have explicit messages rather than invented BR numbers.
+
+Migration `V28__shift_schedule_versions.sql` adds only a shift version and week-query index; existing `shift_template`, `scheduled_shift`, `shift_assignment`, `attendance_period` and audit tables are reused. Restart the backend to apply Flyway migrations. APIs: `GET /api/v1/branch-management/shifts?week=YYYY-MM-DD`, `PUT /api/v1/branch-management/shifts/availability`, `POST /api/v1/branch-management/shifts/assignments/{assignmentId}/replacement`; receptionist APIs are `GET /api/v1/reception/shifts` and `POST /api/v1/reception/shifts/{shiftId}/register`. Manager calls carry the selected branch header. Availability payload contains changed slots `{date,templateId,capacity,open,version}`; replacement uses `{employeeId,reason,version}`. Week dates start Monday and follow the branch timezone. Weekly responses include `editableSlots` (date/template keys computed using server time, attendance and period state) to disable locked editor controls; the server rechecks these conditions when saving.
+
+**Documentation/mockup differences and team follow-up:**
+
+- The first mockup and both requirement documents use the four fixed periods above. Other supplied mockups show three different shifts (08–14, 14–18, 18–23). Implementation follows BR-53, not those inconsistent time labels.
+- Report 3 UC-86 currently describes moving an employee to another shift. The user explicitly chose **B covers A's existing shift**, not a date/time move or an exchange of two schedules. Update UC-86 description, steps 4–8, postconditions and the mockup's duplicate “Người hiện tại” labels to identify current employee / replacement employee.
+- `Business Rules.docx` includes BR-57 forbidding cross-branch self-registration; Report 3 expresses the branch restriction through BR-54 and omits BR-57. The implementation enforces both meanings. The older Business Rules file also points attendance BR-59/61 to UC-88, while Report 3 uses UC-87; align those references before implementing attendance.
+- The mockup does not clearly distinguish the viewed week from the week being configured. The calendar can view other weeks; the editor labels its actual target dates. The user extended manager publication from next week to the current week as well; update UC-85 to cover current-week opening/capacity/status adjustments before a shift ends, excluding shifts with attendance or finalized periods. Update UC-83 to allow receptionist self-registration in either week before the shift starts. This does not add an initial manager-assignment workflow.
+- The documents do not define per-day/week maximum shifts, minimum rest time, a registration cutoff within the upcoming week, self-cancellation, or a required employee-to-employee agreement for replacement. No such limits, approval/cancellation flow or notifications were invented. Repeated names across all four daily shifts in the sample images are not a staffing policy.
+- The receptionist registration screen is not provided in the screenshots. It reuses the calendar with self-registration actions and own-assignment privacy. Attendance entry and monthly closing are implemented separately below; payroll calculation remains outside the shift/attendance implementation.
+
+### Daily attendance and monthly attendance sheets (UC-87–89)
+
+The Branch Manager's **Ca làm & chấm công** menu has **Lịch ca tuần**, **Chấm công ngày / ca**, and **Bảng công tháng** tabs based on the supplied mockups. UC-88 supports searching by employee name/code, filtering by work date, fixed shift and attendance status, and viewing records/details. Monthly sheets show assigned shift count, actual worked hours, absence shifts, shifts with exceptions, missing/invalid records and unresolved attendance issues. Counts are shifts, not an assumed eight-hour workday. Historical employees remain visible after transfer/deactivation. Summaries always cover the whole selected branch/month, independently of the name filter.
+
+- UC-87 / BR-59, BR-61, BR-111, BR-193, BR-194, BR-195, BR-204: only the branch's current authorized manager records/corrects a confirmed shift assignment. At the user's request the existing form now prefills a new record's entry/exit from its assigned shift, using **HH:mm-only** inputs. The manager edits these suggested times when actual work differs and reviews before confirming; no attendance is created merely by opening the form. Existing attendance retains its saved actual values. The UI combines the entered clock time with the date closest to the original actual timestamp (or planned endpoint for a new record), displays same/previous/next-day hints, and sends full dated timestamps to the unchanged API. This handles midnight checkout and an early 23:xx checkout before scheduled 00:00 without adding a spurious day. Worked minutes equal actual exit minus actual entry without deducting breaks. Absence clears actual timestamps and records zero minutes. Late arrival, early departure and time after the planned end are displayed as attendance exceptions; these labels do not calculate overtime pay.
+- UC-89 / BR-62, BR-63, BR-64: closing checks every required assignment, existing record validity and open `attendance_issue` entries. Existing issues are shown in the daily record form; a manager may explicitly select resolved issues and supply a resolution while confirming corrected attendance. Issues are never automatically resolved merely by editing a record. Closing requires a separate confirmation that all employee attendance is correct. Closed records cannot be edited or reopened through these APIs.
+- MSG02/07/20/24/43/86 are referenced at validation. BR-177 keeps suspended branch history readable and blocks all writes. Transactions use the shared workforce lock and attendance-period row lock; record versions and a monthly snapshot revision reject stale confirmations. Existing PostgreSQL closed-period guards remain enabled. Every record/correction and monthly closure retains an audit entry with before/after data.
+- Additional operational guards: inputs have whole-minute precision in the branch timezone; future actual exit times/work dates cannot be recorded. Closing is available only after the calendar month and its final overnight shift have ended, and only for a nonempty, complete sheet. Notes/resolutions are limited to 2000 characters. Invalid legacy records (including records that deduct breaks or lack required actual times) must be corrected before closure; they are not silently counted as valid work.
+
+Migration `V29__attendance_record_state.sql` adds explicit `WORKED`/`ABSENT` status and optimistic versions, reusing the existing attendance, attendance-period and attendance-issue tables. It fixes the attendance trigger's schema references and locks issue changes against finalized periods, including concurrent reports while closing. Restart the backend to apply it. APIs: `GET /api/v1/branch-management/attendance?date=YYYY-MM-DD`, `GET /api/v1/branch-management/attendance/month?month=YYYY-MM`, `POST /api/v1/branch-management/attendance/{assignmentId}/record` with `{status,actualIn,actualOut,note,version,resolvedIssueIds,resolution}`, and `POST /api/v1/branch-management/attendance/month/{month}/close` with `{revision,confirmedCorrect}`. Calls use the selected branch header. Month ownership follows the assigned shift's work date, including shifts ending in the next month.
+
+Team follow-up: Report 3 assigns Record Daily Attendance to UC-87 and View Attendance Records to UC-88; the older Business Rules file still labels attendance recording UC-88. Align those references and document the operational guards above. Receptionist personal work-record viewing/reporting (UC-90) and accountant payroll processing (UC-91 onward) are not added by this task. Finalized attendance is stored for the later payroll module; this implementation does not calculate salary.
+
+### Account creation from staff profiles
+
+Staff contact uniqueness (user-requested extension to UC-77/79 and BR-134): create/update checks contact email against all other employee profiles and login accounts, including inactive records. Email comparison ignores case and surrounding spaces. Staff phone numbers are also unique across employee profiles after trimming; BR-119 syntax remains unchanged, and no conversion between local/international prefixes is performed. Optional blank contact fields remain allowed. A record and its own linked account may share the same email; retaining one's own contact values is allowed when no other record conflicts.
+
+The same checks apply when changing account-profile contact information and creating accounts from older staff records. All these write paths use the existing transaction advisory lock so simultaneous application writes cannot reserve the same email/phone. Duplicate errors are returned against `contactEmail`/`phone` in staff forms and `email`/`phone` in account forms. Existing duplicates are not automatically changed or deleted; the responsible manager must correct the conflicting profile before account creation. No migration or new test source file is introduced. The team should document staff phone uniqueness and the expanded email uniqueness rule; BR-119 alone only defines phone syntax.
+
+Contact validation was checked against PostgreSQL in an always-rolled-back transaction, including create/update conflicts, case-insensitive email, trimmed contacts, inactive records, own linked account, optional blanks, existing conflicting account data, and the shared lock. Existing `AccountProfileServiceTest` reports 25/29 passing: four cases still require the former 7–15-digit, leading-zero, no-plus phone policy, which differs from the current BR-119. The test source and existing phone-format validation were kept unchanged.
+
+UC-04 now takes the selected employee's position, current home branch and contact email from the database, ignoring client overrides. The create screen displays those values read-only; only employee, username and password are submitted. Missing email, unsupported position or missing branch for REC/BM must be resolved in the employee profile first. HOM/ACC retain chain-wide access. Later role changes use the existing permission workflow; editing the staff position does not silently change an existing login role. This replaces manual role/branch/email selection at account creation at the user's request.
+
+### Tax invoice request tracking (UC-127)
+
+User-approved revision to UC-127 / BR-125: the receptionist records and sends a booking's tax invoice request from checkout at `/le-tan/hoa-don-thue`, then has read-only access to progress and delivery results. The accountant reviews/confirms progress updates at `/ke-toan/hoa-don-thue`. Requests retain buyer details, notes, delivery results and an audit history. Issuance and delivery take place outside GCMB; this feature never changes booking charges or payments. BR-177 still allows reading but blocks writes at a suspended branch.
+
+The optional customer note is labeled “Yêu cầu bổ sung của khách” when creating a request. The accountant progress form has no processing-note field. The confirmation summary and compact action buttons occupy separate rows.
+
+The detail screen separates saved information from progress edits and explains delivery-result requirements. Switching to the request list offers a return button to the last booking and preserves unsaved fields per booking in component memory, including a new request not yet present in the list. Drafts are cleared after saving or leaving the screen; a draft is restored only if the server version is unchanged. The tax-invoice navigation item includes a receipt icon for both receptionist and accountant menus.
+
+The requested addition beyond Report 3 is an accountant inbox at `/ke-toan/hoa-don-thue`, with a persistent per-account read receipt and an unread notification refreshed every 30 seconds. Accountants view requests, mark notifications read and update progress and delivery results. Receptionists create requests and view updates; they cannot change handling progress. There are no external email sends, invoice issuance integrations or attachments. Implementation statuses are `REQUESTED`, `PREPARING`, `ISSUED`, `DELIVERED`, and `DELIVERY_FAILED`; delivery outcomes require a predefined result selection. Updates require a current version to prevent overwriting another user's change.
+
+Migration `V27__tax_invoice_requests.sql` adds request/read-receipt storage. APIs use `/api/v1/reception/tax-invoices` and `/api/v1/accounting/tax-invoices`; each request is identified by its booking UUID. Restart the backend to apply migrations.
+
+The single “Trạng thái xử lý” dropdown has two groups with detailed choices: “Đã giao thành công” (email, direct handover, Zalo/contact channel) and “Chưa giao thành công” (invalid contact, unreachable customer, sending failure). Pending/preparing/externally-issued stages are not selectable. Selecting a detailed outcome maps to the matching existing status/result fields. The saved summary and list display that same detailed outcome only after the confirmed API update succeeds. Requests without a result display “Chưa giao thành công”; the dropdown requires an explicit outcome before saving. Earlier values remain readable. The read button stays at the bottom; processing notes remain removed. No database migration is needed.
+
+The update endpoint is `PUT /api/v1/accounting/tax-invoices/{bookingId}`. Receptionists cannot update progress through either the UI or service/API; accountants cannot create requests on behalf of receptionists. Customer notes submitted at creation remain available in the creation audit snapshot when processing notes are updated. No new database migration is needed for this role change.
+
+Team handoff: Report 3 UC-127 currently names Receptionist as its primary actor, and BR-125 assigns progress updates to Receptionist. Update both to Accountant and revise the permission matrix: REC creates/reads requests; ACC reads/updates progress and delivery. This user-approved workflow supersedes those passages; the original Word specification has not been edited.
+
+The staff review covers BR-52/111/119/171/177/199, email validation reused from BR-113, and MSG01–05/10–12/14/24/26/27/40/43/88. UC-81/82 history and confirmation requirements are checked directly against the use-case text. Technical conflicts and duplicate employee identifiers use explicit messages because Report 3 does not assign a staff-specific message to those cases.
+
+Validation note (27/10/2026): the database rollback checks pass for profile-derived account creation and invoice request lifecycle, read receipts, branch authorization, stale versions and suspended-branch access. Existing `AccountServiceTest` has not been edited per instruction: 14/30 cases pass; 16 fail/error because its fixtures and assertions still target manually supplied role/branch/email and do not provide the new employee-profile lookup. The team must update those tests to the revised UC-04 contract before requiring a green full test suite.
+
 ## Tech Stack
 
 | Area | Technology |
@@ -82,7 +161,7 @@ The backend is deployed as one application. The current backend contains seven p
 
 ## Project Structure
 
-The tree below reflects the current repository structure. `inventory` is an active backend feature package. Workforce and finance remain in the planned business scope and do not yet have backend packages or frontend feature directories.
+The tree below reflects the current repository structure. `inventory` and `workforce` are active backend feature packages. Finance remains in the planned business scope.
 
 ```text
 GCMB/
@@ -95,6 +174,7 @@ GCMB/
 │   │   ├── pricing/
 │   │   ├── booking/
 │   │   ├── inventory/
+│   │   ├── workforce/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yaml
@@ -115,7 +195,8 @@ GCMB/
 │   │   │   ├── branch/
 │   │   │   ├── inventory/
 │   │   │   ├── landing/
-│   │   │   └── pricing/
+│   │   │   ├── pricing/
+│   │   │   └── workforce/
 │   │   ├── shared/
 │   │   │   ├── components/
 │   │   │   └── utils/
@@ -141,9 +222,9 @@ GCMB/
 | `audit` | Mutation audit recording and audit-history lookup. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
+| `booking` | Reservations, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and cart persistence across reloads, room/staff order processing, service assignment, inventory item management, stock receipts, adjustments, and movement history. |
-| `workforce` (planned) | Staff, assignments, shifts, attendance, and payroll. |
+| `workforce` | Staff records, branch assignments/transfers, shift schedules, and attendance. Payroll remains planned. |
 | `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
@@ -420,8 +501,28 @@ Hợp nhất giao diện (25/10/2026): `BookingManagementPage` giữ khung chi t
 
 ### Checkout booking quá giờ (25/10/2026)
 
-- Checkout tự báo phần quá giờ chưa thu từ `plannedEnd` hiện hành (đã gồm thời lượng gia hạn) đến lúc chốt bill, không yêu cầu bật đồng hồ trước. Đơn giá lấy từ cấu hình giá giờ của hạng phòng/cơ sở tại giờ bắt đầu quá hạn; làm tròn thời lượng lên từng phút và làm tròn tiền HALF_UP đến đồng.
-- Nếu bật đồng hồ muộn, bổ sung đoạn từ `plannedEnd` đến `billedFrom` theo giá tại `plannedEnd`. Đoạn đồng hồ RUNNING dùng đơn giá đã lưu và tự dừng khi lập bill. Đồng hồ STOPPED giữ nguyên khoản đã ghi và thời điểm dừng; checkout chỉ bổ sung đoạn trước đồng hồ nếu thiếu, không thu lại thời gian đã chốt. Các đoạn được làm tròn phút riêng.
-- API preview checkout bổ sung `overtime: [{from,to,minutes,hourlyPrice,amount,priceRuleId}]` và `overtimeAmount`; `lines` và `amount` đã bao gồm các khoản này. Preview chỉ đọc, chưa ghi phí. Request lập bill bổ sung `overtimeConfirmed` và `overtimeAmount`. Backend tính lại bằng giờ máy chủ trong giao dịch có khóa booking; thiếu xác nhận hoặc số tiền thay đổi trả 409, không ghi phí/bill. Gửi lại booking đã có bill trả bill hiện hữu, không thu trùng.
+- Checkout tự báo phần quá giờ chưa thu từ `plannedEnd` hiện hành (đã gồm thời lượng gia hạn) đến lúc chốt bill, không yêu cầu bật đồng hồ trước. Theo BR-169/170: quá hạn không quá 5 phút được miễn phí; vượt ngưỡng tính đủ số giây, chia theo từng khung giá và làm tròn tiền từng đoạn lên đồng. Không làm tròn thời gian lên phút.
+- Nếu bật đồng hồ muộn, bổ sung đoạn từ `plannedEnd` đến `billedFrom` theo giá tại `plannedEnd`. Đoạn đồng hồ RUNNING dùng đơn giá đã lưu và tự dừng khi lập bill. Đồng hồ STOPPED giữ nguyên khoản đã ghi và thời điểm dừng; checkout chỉ bổ sung đoạn trước đồng hồ nếu thiếu, không thu lại thời gian đã chốt. Các đoạn tính theo giây; tiền từng khung giá làm tròn lên đồng. Khoản giờ lẻ chưa lập bill theo cách cũ được thay bằng phép tính đúng BR-170; giữ lại bản gốc SUPERSEDED.
+- API preview checkout bổ sung `overtime: [{from,to,seconds,hourlyPrice,amount,priceRuleId}]` và `overtimeAmount`; `lines` và `amount` đã bao gồm các khoản này. Preview chỉ đọc, chưa ghi phí. Request lập bill bổ sung `overtimeConfirmed` và `overtimeAmount`. Backend kiểm tra báo giá máy chủ đã ký trong giao dịch có khóa booking; thiếu xác nhận, báo giá hết hạn hoặc dữ liệu thay đổi trả 409, không ghi phí/bill. Gửi lại booking đã có bill trả bill hiện hữu, không thu trùng.
 - Màn Checkout hiển thị từng khoảng giờ, đơn giá, tiền phát sinh và ô xác nhận bắt buộc; có nút **Cập nhật tiền phòng**. Khi lập bill gặp 409, tải lại preview và bỏ chọn xác nhận để lễ tân kiểm tra lại. Cần triển khai frontend/backend cùng nhau. Không thêm migration; không tính lại hóa đơn đã lập.
 - File ảnh hưởng: `CheckoutDtos.java`, `BookingService.java`, `CheckoutService.java`, `CheckoutPage.js`. Các file test tạo trong đợt sửa này đã được xóa theo yêu cầu; giữ nguyên các test có sẵn.
+
+### Đồng bộ Iteration 1 HuyDV với Report 3 (25/10/2026)
+
+Phạm vi: UC-01–UC-13 và UC-41. Hoãn BR-125 (nhu cầu hóa đơn thuế) và BR-22 (giảm giá/voucher) theo yêu cầu; không coi hai phần này đã hoàn thành. Không tạo file test mới, không sửa các test có sẵn.
+
+- BR-114: dùng chung kiểm tra mật khẩu 8–64 ký tự, đủ nhóm chữ hoa/thường/số/ký tự đặc biệt, không khoảng trắng. Áp dụng tạo/đổi/reset mật khẩu, không áp đặt lên mật khẩu cũ khi đăng nhập. BR-126: mã reset hết hạn sau 10 phút; kiểm tra cả mã cũ lưu hạn infinity theo created_at, không thay hạn phiên đăng nhập.
+- UC-04/05/07: dashboard quản lý cơ sở thêm Tài khoản. API `/api/v1/branch-management/accounts` hỗ trợ GET danh sách, GET `/options`, POST tạo, POST `/{id}/deactivate`, POST `/{id}/reactivate`. Server xác minh phân công cơ sở đang chọn qua header `X-GCMB-Branch-Id`; chỉ quản lý tài khoản Lễ tân tại cơ sở đó, không cấp vai trò quản lý/toàn chuỗi. UC-06 vẫn chỉ Head Office Manager. API head-office giữ nguyên và bổ sung reactivate. Mở lại yêu cầu nhân viên và cơ sở hợp lệ; không khôi phục token đã thu hồi.
+- BR-119: hồ sơ cá nhân và thông tin cơ sở dùng chữ số, tùy chọn một dấu + đầu chuỗi, tối đa 30 ký tự theo cột lưu trữ. Không cho dấu cách ở giữa, ngoặc hoặc gạch nối.
+- BR-177: API danh tính bổ sung readOnly. Cơ sở SUSPENDED vẫn xuất hiện trong danh sách quản lý và được đọc; cấm ghi nghiệp vụ, hiện MSG43 và khóa nút ghi. Kiểm tra trạng thái trong transaction với khóa chia sẻ của cơ sở để tránh ghi đồng thời khi tạm ngừng. Việc chọn cơ sở không tạo phân công mới; phân công mới vẫn cần ACTIVE (BR-132).
+- BR-13/215/216/218: checkout tính thuê giờ theo số giây thực dùng, giới hạn từng chặng và khung giờ trong snapshot giá đã xác nhận; không lấy giá catalogue mới để thay đơn giá gốc. Combo trả sớm giữ giá đã mua. BR-169/170: miễn phí tổng quá giờ <=300 giây, nếu vượt thì tính toàn khoảng theo từng khung giá và làm tròn tiền lên đồng. Dừng đồng hồ dùng cùng phép tính checkout. Phí cũ chưa lập bill được lưu SUPERSEDED khi chốt lại, không sửa hóa đơn đã phát hành.
+- BR-159, MSG71: order chưa phục vụ chỉ cảnh báo, cho tiếp tục sau xác nhận. Các dòng ACCEPTED/SERVED tính theo giá chốt, PENDING chưa xác nhận không tính tiền. Dòng thuộc combo có unit_price=0 không thu thêm (BR-172).
+- Hợp đồng checkout bổ sung unservedConfirmed, quotedAt, quoteToken; overtime dùng seconds thay minutes. Preview trả unservedItemCount, quoteToken và tổng đã tính thời gian thực tế. Báo giá có chữ ký HMAC gắn người dùng, booking, thời điểm và số tiền, hiệu lực 5 phút. Lập bill chốt sử dụng tại thời điểm báo giá hiển thị; nếu khách tiếp tục dùng phòng thì cập nhật báo giá. Backend khởi động lại làm báo giá cũ mất hiệu lực và yêu cầu tải lại. Gửi lại bill đã lập trả bill hiện có (BR-164). Cần triển khai frontend/backend cùng nhau; không thêm migration.
+
+Tra cứu BR trong code bằng `rg "BR-169|BR-170" backend/src/main frontend/src` hoặc tìm từng mã BR. Các điểm thực thi chính:
+
+- `auth/service/AuthValidation`: BR-111/113/114/119/120 và MSG02/03/04/05/06/29; `AuthRepository`, `AuthService`: BR-126/130/131; `SessionFilter`, `AuthMapper`: BR-177.
+- `accounts/service/AccountService`: BR-111/112/113/114/129/132/133/134/164; `AccountAccessService`: UC-06/07, BR-131/177/183; `AccountRepository`: phạm vi UC-04/05/07. `AccountProfileService`: BR-111/113/119/134.
+- `branch/service/BranchAdministrationService`: BR-111/119/135/136/149/177/179/180/181/184; `BranchRoomService` và repository: BR-177. `audit/service/AuditService`: BR-163, MSG106.
+- `booking/service/BookingPricingService`: BR-169/170/215; `BookingService.checkoutHourlyCharges`, `checkoutOvertime`, `settleCheckoutCharges`: BR-13/164/169/170/215/216/218. Giá thay đổi phòng/combo đã được xác nhận từ UC-39/40 được giữ theo các dòng phí nguồn; không áp thêm một phí đổi phòng lần hai ở checkout.
+- `booking/service/CheckoutService`: BR-01/13/20/21/23/24/25/26/28/29/30/141/142/144/145/158/159/160/161/162/164/167/172/182/185/218/232. `CheckoutPage` và `BookingStayDialog`: xác nhận và hiển thị đúng báo giá server. BR-22/125 là hai mục hoãn ở trên.

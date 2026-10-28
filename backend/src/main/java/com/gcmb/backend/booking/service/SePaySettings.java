@@ -13,15 +13,18 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SePaySettings {
+
     public final String bank;
     public final String account;
     public final String holder;
     private final String webhookKey;
 
-    public SePaySettings(@Value("${SEPAY_BANK:}") String bank,
-            @Value("${SEPAY_ACCOUNT_NUMBER:}") String account,
-            @Value("${SEPAY_ACCOUNT_HOLDER:}") String holder,
-            @Value("${SEPAY_WEBHOOK_KEY:}") String webhookKey) {
+    public SePaySettings(
+        @Value("${SEPAY_BANK:}") String bank,
+        @Value("${SEPAY_ACCOUNT_NUMBER:}") String account,
+        @Value("${SEPAY_ACCOUNT_HOLDER:}") String holder,
+        @Value("${SEPAY_WEBHOOK_KEY:}") String webhookKey
+    ) {
         this.bank = bank.trim();
         this.account = account.trim();
         this.holder = holder.trim();
@@ -33,7 +36,13 @@ public class SePaySettings {
     }
 
     public boolean authorized(String header) {
-        return ready() && header != null && MessageDigest.isEqual(
-            ("Apikey " + webhookKey).getBytes(StandardCharsets.UTF_8), header.getBytes(StandardCharsets.UTF_8));
+        return (
+            ready() &&
+            header != null &&
+            MessageDigest.isEqual(
+                ("Apikey " + webhookKey).getBytes(StandardCharsets.UTF_8),
+                header.getBytes(StandardCharsets.UTF_8)
+            )
+        );
     }
 }

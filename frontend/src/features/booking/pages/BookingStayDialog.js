@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
+import { checkoutApi } from '../services/checkoutApi';
 import { bookingApi } from '../services/bookingApi';
 import { formatVnd } from '../data/bookingData';
 
@@ -62,6 +63,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const [hourlyHours, setHourlyHours] = useState('1');
   const [extensionQuote, setExtensionQuote] = useState(null);
   const [meter, setMeter] = useState(detail?.meter || null);
+  const [meterQuote, setMeterQuote] = useState(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
   const bookingSummary = detail?.booking?.id === booking.id ? detail.booking : booking;
@@ -72,6 +74,18 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const meterVisible = Boolean(meter) || reservationExpired;
   const meterAction = meter?.status === 'RUNNING' ? 'meterStop'
     : !meter && reservationExpired ? 'meterStart' : null;
+
+  // BR-169/170: tiền tạm tính lấy từ cùng báo giá checkout, không tự nhân một đơn giá cố định.
+  useEffect(() => {
+    if (!meterVisible || mode !== 'extend') return undefined;
+    let active = true;
+    const refreshQuote = () => checkoutApi.preview(booking.id).then(value => {
+      if (active) { setMeterQuote(value); setError(''); }
+    }).catch(failure => { if (active) setError(requestError(failure)); });
+    refreshQuote();
+    const timer = window.setInterval(refreshQuote, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [booking.id, meterVisible, mode, meter?.status]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
@@ -186,8 +200,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const stopped = meter?.status === 'STOPPED';
   const elapsedSeconds = meter ? Math.max(0, Math.floor(((stopped ? new Date(meter.stoppedAt).getTime() : clockNow) - new Date(meter.billedFrom).getTime()) / 1000)) : 0;
   const clockText = `${String(Math.floor(elapsedSeconds / 3600)).padStart(2, '0')}:${String(Math.floor(elapsedSeconds % 3600 / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
-  const chargedMinutes = meter ? Math.ceil(Math.max(0, (stopped ? new Date(meter.stoppedAt).getTime() : clockNow) - new Date(meter.billedFrom).getTime()) / 60000) : 0;
-  const estimatedAmount = stopped ? Number(meter.amount || 0) : Math.round(Number(meter?.hourlyPrice || 0) * chargedMinutes / 60);
+  const estimatedAmount = meterQuote?.overtimeAmount ?? (stopped ? meter?.amount : null);
 
   return <div className="booking-stay-backdrop" role="presentation">
     <form className="booking-stay-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-stay-title" onSubmit={submit}>
@@ -270,12 +283,12 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
           {meterVisible && <section className={`booking-stay-meter${running ? ' is-running' : ''}`} aria-live="polite">
               <span className="booking-stay-meter-label">{running ? 'Đang tính giờ lẻ' : stopped ? 'Đồng hồ đã dừng' : 'Tính theo thời gian thực dùng'}</span>
               <strong className="booking-stay-meter-clock" role="timer">{clockText}</strong>
-              {meter ? <><div><span>Giá mỗi giờ</span><strong>{formatVnd(meter.hourlyPrice)}</strong></div>
-                <div><span>{stopped ? `Đã chốt · ${meter.billedMinutes} phút` : `Đã tính tạm · ${chargedMinutes} phút`}</span><strong>{formatVnd(estimatedAmount)}</strong></div>
+              {meter ? <><div><span>Đơn giá lúc bắt đầu</span><strong>{formatVnd(meter.hourlyPrice)}</strong></div>
+                <div><span>{stopped ? 'Đã chốt' : 'Tiền quá giờ tạm tính'}</span><strong>{estimatedAmount == null ? 'Đang tải giá…' : formatVnd(estimatedAmount)}</strong></div>
                 <div><span>Giữ phòng đến</span><strong>{dateTimeText(meter.reservedUntil, timezone)}</strong></div>
                 {running && clockNow > new Date(meter.reservedUntil).getTime() && <p className="booking-stay-meter-warning" role="alert">Đã quá hạn giữ phòng. Dừng đồng hồ và kiểm tra booking kế tiếp.</p>}
-                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking.' : 'Số tiền đang chạy là tạm tính; hệ thống chốt theo phút thực dùng khi bạn dừng.'}</small>
-              </> : <p>Đơn giá được chốt lúc bắt đầu. Phụ thu tính theo số phút thực dùng.</p>}
+                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking.' : 'Miễn phí tối đa 5 phút; vượt ngưỡng tính đủ số giây theo từng khung giá và làm tròn tiền lên đồng.'}</small>
+              </> : <p>Phụ thu tính từ giờ trả dự kiến theo từng khung giá. Miễn phí nếu quá giờ không quá 5 phút.</p>}
             </section>}
           {!meter && !reservationExpired && extensionQuote && <section className="booking-stay-quote" aria-live="polite">
             <div><span>Phòng được giữ thêm đến</span><strong>{dateTimeText(extensionQuote.endsAt, timezone)}</strong></div>

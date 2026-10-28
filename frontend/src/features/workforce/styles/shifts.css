@@ -1,0 +1,645 @@
+/**
+ * Author: HuyDV
+ * Created: 27/10/2026
+ * Description: Lịch tuần rõ hàng ca / cột ngày, trạng thái bằng chữ và màu, form xác nhận gọn.
+ */
+
+.shift-page {
+  color: #202338;
+  min-width: 0;
+  padding: 12px 0 32px;
+  font: 13px/1.5 'Manrope', 'Segoe UI', sans-serif;
+}
+
+.booking-main > .shift-page {
+  padding: 22px;
+}
+
+.shift-page *, .shift-dialog * {
+  box-sizing: border-box;
+}
+
+.shift-page button, .shift-dialog button {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #dce3ed;
+  color: #536078;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 13px;
+  min-height: 36px;
+}
+
+.shift-page button:disabled, .shift-dialog button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.shift-page button.shift-primary, .shift-dialog button.shift-primary {
+  color: #fff;
+  background: #ed138a;
+  border-color: #ed138a;
+}
+
+.shift-page :focus-visible, .shift-dialog :focus-visible {
+  outline: 2px solid #1596b9;
+  outline-offset: 2px;
+}
+
+.shift-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.shift-heading h1 {
+  font-size: 27px;
+  line-height: 1.3;
+  margin: 2px 0 6px;
+}
+
+.shift-heading p {
+  margin: 0;
+  color: #788399;
+}
+
+.shift-heading .shift-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  color: #07849b;
+}
+
+.shift-heading > button {
+  flex-shrink: 0;
+}
+
+.shift-toolbar {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: #fff;
+  padding: 16px;
+  border: 1px solid #edf0f4;
+  border-radius: 12px;
+}
+
+.shift-week-nav, .shift-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shift-week-nav > div {
+  min-width: 190px;
+  text-align: center;
+}
+
+.shift-week-nav small {
+  display: block;
+  color: #8992a2;
+  font-size: 11px;
+}
+
+.shift-page input, .shift-page select, .shift-dialog input:not([type=checkbox]), .shift-dialog select, .shift-dialog textarea {
+  font: inherit;
+  color: #28364c;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #fff;
+  min-width: 0;
+}
+
+.shift-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  align-items: center;
+  padding: 18px 2px;
+  color: #758096;
+  font-size: 12px;
+}
+
+.shift-stats strong {
+  color: #27334a;
+  font-size: 17px;
+  margin-right: 5px;
+}
+
+.shift-grid-wrap {
+  overflow: auto;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.shift-week-grid {
+  width: 100%;
+  min-width: 1000px;
+  table-layout: fixed;
+  border-spacing: 0;
+}
+
+.shift-week-grid th {
+  background: #f8fafc;
+  color: #5a6880;
+  font-size: 12px;
+  text-align: center;
+  padding: 13px 8px;
+  border-bottom: 1px solid #e3e8ef;
+}
+
+.shift-week-grid thead th:first-child, .shift-week-grid tbody th {
+  width: 125px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 #e3e8ef;
+}
+
+.shift-week-grid thead th:first-child {
+  z-index: 2;
+}
+
+.shift-week-grid thead strong {
+  display: block;
+  color: #24324a;
+  font-size: 16px;
+}
+
+.shift-week-grid thead small {
+  color: #0086a1;
+  font-size: 10px;
+}
+
+.shift-week-grid tbody th strong {
+  display: block;
+  color: #24324a;
+  font-size: 15px;
+  margin-bottom: 5px;
+}
+
+.shift-week-grid tbody th span {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.shift-week-grid td {
+  padding: 7px;
+  vertical-align: top;
+  border-right: 1px solid #edf0f4;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.shift-week-grid .shift-today {
+  background: #eaf8fc;
+}
+
+.shift-today-column {
+  background: #f6fcfe;
+}
+
+.shift-slot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 160px;
+  padding: 11px;
+  border: 1px solid #e8edf2;
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.shift-slot.full {
+  border-left-color: #20a879;
+}
+
+.shift-slot.short {
+  border-left-color: #e4a23c;
+}
+
+.shift-slot.unpublished {
+  border-style: dashed;
+  background: #fafbfd;
+  color: #94a0b2;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+
+.shift-slot-count {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px;
+  align-items: center;
+}
+
+.shift-slot-count > strong {
+  font-size: 22px;
+  line-height: 1.1;
+  color: #27364e;
+}
+
+.shift-slot-count strong > span {
+  font-size: 12px;
+  color: #929baa;
+  font-weight: 500;
+}
+
+.shift-badge {
+  font-size: 9px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.shift-badge.full {
+  color: #08875e;
+  background: #e8f8ef;
+}
+
+.shift-badge.short {
+  color: #a56812;
+  background: #fff2db;
+}
+
+.shift-slot-status {
+  color: #7a879b;
+  font-size: 10px;
+  margin-top: 7px;
+}
+
+.shift-slot ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+  font-size: 11px;
+}
+
+.shift-slot li {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  margin: 4px 0;
+}
+
+.shift-slot li > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-slot li > small {
+  color: #b13d82;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.shift-page button.shift-slot-action {
+  min-height: 30px;
+  padding: 5px 0;
+  color: #d7117d;
+  font-size: 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  margin-top: auto;
+}
+
+.shift-unpublished-mark {
+  font-size: 25px;
+}
+
+.shift-slot.unpublished p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.shift-mine {
+  color: #0584a1;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.shift-dim {
+  opacity: .35;
+}
+
+.shift-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 15px 0;
+  color: #7a879b;
+  font-size: 11px;
+}
+
+.shift-legend span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.shift-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.shift-legend i.full {
+  background: #20a879;
+}
+
+.shift-legend i.short {
+  background: #e4a23c;
+}
+
+.shift-legend i.unpublished {
+  background: #cbd3df;
+}
+
+.shift-message {
+  padding: 13px 16px;
+  margin: 12px 0;
+  border-radius: 8px;
+  background: #eaf7fc;
+  color: #257b92;
+  font-size: 12px;
+}
+
+.shift-message p {
+  margin: 5px 0;
+}
+
+.shift-message.error {
+  color: #b63143;
+  background: #fff0f2;
+}
+
+.shift-message.success {
+  background: #e8f8ef;
+  color: #08875e;
+}
+
+.shift-help {
+  color: #8590a2;
+  font-size: 11px;
+}
+
+.shift-loading {
+  padding: 40px;
+  text-align: center;
+  color: #7a879b;
+}
+
+.shift-dialog {
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: #25334b;
+  width: min(540px, calc(100vw - 28px));
+  max-height: calc(100dvh - 36px);
+  font: 13px/1.5 'Manrope', 'Segoe UI', sans-serif;
+}
+
+.shift-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.shift-dialog-wide {
+  width: min(1100px, calc(100vw - 32px));
+}
+
+.shift-dialog::backdrop {
+  background: #20223266;
+}
+
+.shift-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e6eaf0;
+  flex-shrink: 0;
+}
+
+.shift-dialog h2 {
+  font-size: 21px;
+  margin: 0 0 4px;
+}
+
+.shift-dialog header p {
+  margin: 0;
+  color: #8590a2;
+  font-size: 11px;
+}
+
+.shift-dialog header button {
+  border: 0;
+  min-height: 0;
+  padding: 0 5px;
+  font-size: 23px;
+  align-self: flex-start;
+}
+
+.shift-dialog form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.shift-dialog-body {
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.shift-dialog fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.shift-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 24px;
+  border-top: 1px solid #e6eaf0;
+  flex-shrink: 0;
+}
+
+.shift-bulk {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.shift-bulk label {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.shift-bulk input {
+  width: 110px;
+}
+
+.shift-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(7,minmax(110px,1fr));
+  gap: 8px;
+  min-width: 880px;
+}
+
+.shift-editor-grid h3 {
+  font-size: 12px;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.shift-editor-grid h3 small {
+  display: block;
+  font-size: 10px;
+  color: #8590a2;
+}
+
+.shift-editor-grid section > div {
+  border: 1px solid #e4e9f0;
+  background: #f9fafc;
+  padding: 10px;
+  margin: 8px 0;
+  border-radius: 8px;
+}
+
+.shift-editor-grid section > div.selected {
+  background: #fff7fc;
+  border-color: #f4b4d7;
+}
+
+.shift-editor-grid label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.shift-editor-grid label:not(:first-child) {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 4px;
+}
+
+.shift-editor-grid input:not([type=checkbox]) {
+  width: 100%;
+  padding: 5px 8px;
+}
+
+.shift-editor-grid small {
+  display: block;
+  color: #8590a2;
+  font-size: 9px;
+}
+
+.shift-fields {
+  display: grid;
+  gap: 18px;
+}
+
+.shift-fields > label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.shift-fields textarea {
+  min-height: 95px;
+  resize: vertical;
+}
+
+.shift-people {
+  list-style: none;
+  padding: 0;
+}
+
+.shift-people li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.shift-people small {
+  display: block;
+  color: #8590a2;
+  font-size: 11px;
+}
+
+.shift-review {
+  padding: 15px 18px;
+  background: #f8f9fc;
+  border-radius: 8px;
+}
+
+.shift-review h3 {
+  margin-top: 0;
+}
+
+.shift-review li {
+  margin: 8px 0;
+}
+
+.shift-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 700px) {
+  .shift-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .shift-heading h1 {
+    font-size: 24px;
+  }
+  .shift-toolbar {
+    padding: 12px;
+  }
+  .shift-week-nav > div {
+    min-width: 150px;
+  }
+  .shift-filters {
+    width: 100%;
+  }
+  .shift-filters input {
+    flex: 1;
+    width: 130px;
+  }
+  .shift-dialog > header,.shift-dialog-body {
+    padding: 17px;
+  }
+  .booking-main > .shift-page {
+    padding: 14px;
+  }
+}

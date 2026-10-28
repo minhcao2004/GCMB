@@ -8,9 +8,11 @@ import api from '../../../api/client';
 
 async function post(path, data) {
   const { data: csrf } = await api.get('/auth/csrf');
-  return (await api.post(`/reception${path}`, data, {
-    headers: { [csrf.headerName]: csrf.token },
-  })).data;
+  return (
+    await api.post(`/reception${path}`, data, {
+      headers: { [csrf.headerName]: csrf.token },
+    })
+  ).data;
 }
 
 export const checkoutApi = {

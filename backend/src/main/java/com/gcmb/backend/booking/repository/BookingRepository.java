@@ -92,7 +92,7 @@ public class BookingRepository {
               AND (ea.valid_to IS NULL OR ea.valid_to > CURRENT_TIMESTAMP)
             JOIN gcmb.branch b ON b.id=COALESCE(u.branch_id,ea.branch_id)
             WHERE u.id=? AND u.status='ACTIVE'
-              AND b.status='ACTIVE'
+              AND b.status IN ('ACTIVE','SUSPENDED')
             ORDER BY ea.valid_from DESC
             LIMIT 1
             """, (rs, rowNum) -> new BranchScope(rs.getObject("id", UUID.class), rs.getString("name"), ZoneId.of(rs.getString("timezone"))), userId);
@@ -432,9 +432,16 @@ public class BookingRepository {
 
     // Khóa booking thuộc chi nhánh để serialize các cập nhật đồng thời.
     public UUID lockBookingId(UUID bookingId, UUID branchId) {
+        requireActiveBranch(branchId);
         List<UUID> rows = db.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
             (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    // BR-177: khóa chia sẻ tới cuối transaction, tránh ghi đồng thời lúc cơ sở vừa bị tạm ngừng.
+    public void requireActiveBranch(UUID branchId) {
+        if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE", UUID.class, branchId).isEmpty())
+            throw new com.gcmb.backend.booking.exception.BookingFailure(403,"form","Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
     }
 
     // Đọc booking theo ID và chi nhánh, kể cả dữ liệu giờ được khôi phục từ lịch sử.

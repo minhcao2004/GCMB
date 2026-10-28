@@ -25,30 +25,80 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 public class SessionFilter extends OncePerRequestFilter {
+
     private final AuthService auth;
+
     // Dùng service để xác thực token trên từng request được bảo vệ.
-    public SessionFilter(AuthService auth) { this.auth = auth; }
+    public SessionFilter(AuthService auth) {
+        this.auth = auth;
+    }
+
     // Lấy token phiên từ cookie mà không đưa token vào URL hoặc log.
     public static String token(HttpServletRequest request) {
-        if (request.getCookies() != null) for (var cookie : request.getCookies()) if ("GCMB_SESSION".equals(cookie.getName())) return cookie.getValue();
+        if (request.getCookies() != null) for (var cookie : request.getCookies())
+            if ("GCMB_SESSION".equals(cookie.getName())) return cookie.getValue();
         return null;
     }
+
     // Nạp danh tính và quyền vào SecurityContext trước khi request tới controller.
-    @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
+    @Override
+    protected void doFilterInternal(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain chain
+    ) throws ServletException, IOException {
         try {
             Identity identity = auth.authenticate(token(request));
             String branch = request.getHeader("X-GCMB-Branch-Id");
-            if (identity != null && "BRANCH_MANAGER".equals(identity.role()) && branch != null
-                    && request.getServletPath().startsWith("/api/v1/branch-management/")) {
+            if (
+                identity != null &&
+                "BRANCH_MANAGER".equals(identity.role()) &&
+                branch != null &&
+                request.getServletPath().startsWith("/api/v1/branch-management/")
+            ) {
                 identity = auth.forBranch(identity, branch);
             }
-            if (identity != null) SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(identity, null, List.of(new SimpleGrantedAuthority("ROLE_" + identity.role()))));
+            // BR-177; MSG43: cho đọc và đổi cơ sở/đăng xuất, chặn mọi ghi nghiệp vụ tại cơ sở tạm ngừng.
+            boolean writing = !List.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
+            if (
+                identity != null &&
+                identity.readOnly() &&
+                writing &&
+                !request.getServletPath().startsWith("/api/v1/auth/") &&
+                !request.getServletPath().equals("/api/v1/account/profile")
+            ) {
+                response.setStatus(403);
+                response.setContentType("application/json;charset=UTF-8");
+                response
+                    .getWriter()
+                    .write(
+                        "{\"message\":\"Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.\"}"
+                    );
+                return;
+            }
+            if (identity != null) SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                    identity,
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + identity.role()))
+                )
+            );
         } catch (AuthFailure e) {
-            response.setStatus(e.status()); response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"message\":\"Cơ sở đang chọn không hợp lệ hoặc bạn không còn quyền quản lý. Vui lòng chọn lại cơ sở.\"}"); return;
+            response.setStatus(e.status());
+            response.setContentType("application/json;charset=UTF-8");
+            response
+                .getWriter()
+                .write(
+                    "{\"message\":\"Cơ sở đang chọn không hợp lệ hoặc bạn không còn quyền quản lý. Vui lòng chọn lại cơ sở.\"}"
+                );
+            return;
         } catch (Exception e) {
-            response.setStatus(503); response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"message\":\"Không thể kiểm tra phiên đăng nhập. Vui lòng thử lại\"}"); return;
+            response.setStatus(503);
+            response.setContentType("application/json;charset=UTF-8");
+            response
+                .getWriter()
+                .write("{\"message\":\"Không thể kiểm tra phiên đăng nhập. Vui lòng thử lại\"}");
+            return;
         }
         chain.doFilter(request, response);
     }
