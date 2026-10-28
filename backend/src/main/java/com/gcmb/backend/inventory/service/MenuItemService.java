@@ -149,6 +149,7 @@ public class MenuItemService {
         }
         if (input.active() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn tình trạng bán.");
         UUID inventoryId = input.inventoryItemId();
+        // BR-39: món chế biến và dịch vụ không liên kết thẳng với tồn kho nguyên liệu; chỉ hàng đóng gói mới gắn mặt hàng kho.
         if ("PACKAGED".equals(kind)) {
             if (inventoryId == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hàng hóa cần liên kết với một mặt hàng kho.");
             if (!repository.activeInventory(branchId, inventoryId) && !Objects.equals(existingInventoryId, inventoryId)) {

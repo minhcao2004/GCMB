@@ -148,7 +148,7 @@ export default function TaxInvoicePage({ accounting = false }) {
       setNotice(
         detail.request
           ? 'Đã cập nhật yêu cầu hóa đơn thuế.'
-          : 'Đã tạo yêu cầu hóa đơn thuế. Kế toán nhận được thông báo trong GCMB.'
+          : 'Đã tạo yêu cầu hóa đơn thuế.'
       ); // MSG10/11
     } catch (e) {
       setError(errorText(e));

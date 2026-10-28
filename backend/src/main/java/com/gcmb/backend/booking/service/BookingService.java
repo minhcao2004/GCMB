@@ -256,8 +256,18 @@ public class BookingService {
         AllocationRow current = repository.currentAllocationForUpdate(bookingId);
         validateActiveAllocation(current);
         BookingDtos.ExtensionQuote extension = extensionQuote(branch, booking, current, request);
-        if (repository.hasRoomOverlap(current.roomId(), extension.startsAt(), extension.endsAt(), bookingId))
+        if (repository.hasRoomOverlap(current.roomId(), extension.startsAt(), extension.endsAt(), bookingId)) {
+            // MSG17/MSG64: báo giờ kết thúc tối đa khi còn khoảng trống; dùng MSG64 khi không còn khoảng trống.
+            Instant nextStart = repository.nextRoomBookingStart(current.roomId(), booking.plannedEnd(), bookingId);
+            if (nextStart != null && nextStart.isAfter(booking.plannedEnd())) {
+                String latestEnd = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                    .withZone(branch.timezone()).format(nextStart);
+                throw new BookingFailure(409, "hours",
+                    "Không thể gia hạn đến thời gian đã chọn vì trùng với booking tiếp theo. " +
+                        "Có thể gia hạn tối đa đến " + latestEnd + ".");
+            }
             throw new BookingFailure(409, "hours", "Không thể gia hạn vì không còn thời gian trống trước booking tiếp theo của phòng " + current.roomCode() + ".");
+        }
         if (repository.updateInHouseBookingEnd(bookingId, booking.plannedEnd(), extension.endsAt()) != 1
             || repository.updateOccupiedAllocationEnd(current.id(), current.endsAt(), extension.endsAt()) != 1)
             throw new BookingFailure(409, "form", "Booking vừa được gia hạn ở một phiên khác; vui lòng tải lại");

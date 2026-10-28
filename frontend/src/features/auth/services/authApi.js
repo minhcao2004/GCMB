@@ -38,7 +38,7 @@ export function apiErrors(error) {
     error.response.data?.errors || {
       form:
         error.response.data?.message ||
-        'Chưa thể xác nhận kết quả thao tác. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.',
+        'Chưa thể xác nhận kết quả thao tác. Vui lòng kiểm tra lại trạng thái của dữ liệu liên quan trước khi thực hiện lại.',
     }
   );
 }

@@ -218,16 +218,17 @@ public class FoodOrderRepository {
         if (itemIds.isEmpty()) return List.of();
         String placeholders = String.join(",", java.util.Collections.nCopies(itemIds.size(), "?"));
         return db.query("""
-            SELECT m.id,m.name,m.kind,m.inventory_item_id,m.sale_price,i.tracking_mode,
+            SELECT m.id,m.name,m.kind,m.inventory_item_id,m.sale_price,i.tracking_mode,u.name AS unit_name,
                    COALESCE(sb.quantity,0) AS stock_quantity
             FROM gcmb.menu_item m
             LEFT JOIN gcmb.inventory_item i ON i.id=m.inventory_item_id
+            LEFT JOIN gcmb.unit u ON u.id=i.unit_id
             LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=m.inventory_item_id
             WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true
                 AND m.id IN (""" + placeholders + ") ORDER BY m.id",
             (rs, row) -> new SellableItem(rs.getObject("id", UUID.class), rs.getString("name"),
                 rs.getString("kind"), rs.getObject("inventory_item_id", UUID.class),
-                rs.getBigDecimal("sale_price"), rs.getString("tracking_mode"),
+                rs.getBigDecimal("sale_price"), rs.getString("tracking_mode"), rs.getString("unit_name"),
                 rs.getBigDecimal("stock_quantity")), bind(branchId, itemIds));
     }
 
@@ -307,6 +308,7 @@ public class FoodOrderRepository {
     }
 
     private List<OrderView> loadOrders(String predicate, Object[] predicateArgs, String status, int limit) {
+        // BR-28, BR-29: thành tiền từng dòng bằng số lượng xác nhận nhân đơn giá; tổng order bằng tổng các dòng.
         String statusClause = status == null ? "" : " AND o.status=?";
         Object[] args = status == null ? predicateArgs : append(predicateArgs, status);
         args = append(args, limit);
@@ -382,7 +384,7 @@ public class FoodOrderRepository {
     public record PendingLine(UUID id, UUID menuItemId, String name, BigDecimal quantity, BigDecimal unitPrice) {}
     public record ComboAllowance(UUID id, BigDecimal includedQuantity, BigDecimal usedQuantity) {}
     public record SellableItem(UUID id, String name, String kind, UUID inventoryItemId,
-                               BigDecimal salePrice, String trackingMode, BigDecimal stockQuantity) {}
+                               BigDecimal salePrice, String trackingMode, String unitName, BigDecimal stockQuantity) {}
     public record OrderLock(UUID id, UUID branchId, UUID bookingId, UUID allocationId, String channel,
                             UUID qrSessionId, String status, UUID assignedEmployeeId, UUID assignedUserId) {}
     private record OrderHeader(UUID id, UUID bookingId, String bookingCode, String roomCode, String roomName,

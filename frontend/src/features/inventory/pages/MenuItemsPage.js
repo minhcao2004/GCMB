@@ -37,6 +37,7 @@ export default function MenuItemsPage({ user }) {
   const [status, setStatus] = useState('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [pendingStatus, setPendingStatus] = useState(null);
   const [error, setError] = useState('');
@@ -48,14 +49,13 @@ export default function MenuItemsPage({ user }) {
   const [imagePreview, setImagePreview] = useState('');
   const [reviewingSave, setReviewingSave] = useState(false);
   const [saving, setSaving] = useState(false);
-  const detailPanelRef = useRef(null);
   const editorPanelRef = useRef(null);
   const editorReturnFocusRef = useRef(null);
   const createButtonRef = useRef(null);
   const confirmationRef = useRef(null);
   const listFocusRef = useRef(null);
   const returnFocusRef = useRef(null);
-  const actionModalOpen = Boolean(deleteId || pendingStatus);
+  const actionModalOpen = Boolean(detailOpen || deleteId || pendingStatus);
 
   const reload = useCallback(async () => {
     setError('');
@@ -67,9 +67,12 @@ export default function MenuItemsPage({ user }) {
       setItems(menuItems);
       setCategories(menuCategories);
       setInventoryOptions(linkedItems);
+      setCategory((current) => current === 'all' || menuCategories.includes(current) ? current : 'all');
       setSelectedId((current) => current && menuItems.some((item) => item.id === current) ? current : null);
+      return true;
     } catch (loadError) {
       setError(displayError(loadError));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -82,7 +85,7 @@ export default function MenuItemsPage({ user }) {
     return () => window.clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
-    if (!deleteId && !pendingStatus) return;
+    if (!detailOpen && !deleteId && !pendingStatus) return;
     const confirmation = confirmationRef.current;
     if (!confirmation) return;
     confirmation.focus({ preventScroll: true });
@@ -90,7 +93,7 @@ export default function MenuItemsPage({ user }) {
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       confirmation.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
     }
-  }, [deleteId, pendingStatus]);
+  }, [detailOpen, deleteId, pendingStatus]);
   useEffect(() => {
     if (!imageFile) { setImagePreview(''); return undefined; }
     const url = URL.createObjectURL(imageFile);
@@ -130,8 +133,10 @@ export default function MenuItemsPage({ user }) {
   }, []);
 
   const cancelConfirmation = useCallback(() => {
+    setDetailOpen(false);
     setDeleteId(null);
     setPendingStatus(null);
+    setSelectedId(null);
     restoreFocus();
   }, [restoreFocus]);
 
@@ -148,8 +153,10 @@ export default function MenuItemsPage({ user }) {
 
   const selected = items.find((item) => item.id === selectedId) || null;
 
-  const selectItem = (item) => {
+  const selectItem = (item, event) => {
+    returnFocusRef.current = event.currentTarget.dataset.menuFocusKey || null;
     setSelectedId(item.id);
+    setDetailOpen(true);
     setEditorMode(null);
     setEditorItemId(null);
     setDraft(null);
@@ -161,6 +168,7 @@ export default function MenuItemsPage({ user }) {
 
   const openCreate = (event) => {
     editorReturnFocusRef.current = event.currentTarget.dataset.menuFocusKey;
+    setDetailOpen(false);
     setSelectedId(null);
     setDeleteId(null);
     setPendingStatus(null);
@@ -176,7 +184,10 @@ export default function MenuItemsPage({ user }) {
   };
 
   const openUpdate = (item, event) => {
-    editorReturnFocusRef.current = event.currentTarget.dataset.menuFocusKey;
+    const focusKey = event.currentTarget.dataset.menuFocusKey;
+    editorReturnFocusRef.current = focusKey?.startsWith('edit-detail-') ? `menu-item-${item.id}` : focusKey;
+    setDetailOpen(false);
+    setSelectedId(null);
     setEditorItemId(item.id);
     setDraft({
       name: item.name, category: item.category, kind: item.kind,
@@ -346,7 +357,9 @@ export default function MenuItemsPage({ user }) {
   };
 
   const requestStatusChange = (item, trigger) => {
-    returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    const focusKey = trigger?.dataset.menuFocusKey;
+    returnFocusRef.current = focusKey?.startsWith('status-detail-') ? `menu-item-${item.id}` : focusKey || null;
+    setDetailOpen(false);
     setError('');
     setEditorMode(null);
     setDraft(null);
@@ -357,7 +370,9 @@ export default function MenuItemsPage({ user }) {
   };
 
   const requestDelete = (item, trigger) => {
-    returnFocusRef.current = trigger?.dataset.menuFocusKey || null;
+    const focusKey = trigger?.dataset.menuFocusKey;
+    returnFocusRef.current = focusKey?.startsWith('delete-detail-') ? `menu-item-${item.id}` : focusKey || null;
+    setDetailOpen(false);
     setError('');
     setEditorMode(null);
     setDraft(null);
@@ -376,6 +391,7 @@ export default function MenuItemsPage({ user }) {
       const updated = await menuItemApi.setActive(selected.id, active);
       setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
       setToast(active ? 'Đã đưa món vào bán.' : 'Đã ngừng bán món.');
+      setSelectedId(null);
       setDeleteId(null);
       setPendingStatus(null);
       restoreFocus();
@@ -388,16 +404,21 @@ export default function MenuItemsPage({ user }) {
 
   const deleteItem = async () => {
     if (!selected || busyId) return;
-    setBusyId(selected.id);
+    const deletedId = selected.id;
+    setBusyId(deletedId);
     setError('');
     try {
-      await menuItemApi.remove(selected.id);
-      setItems((current) => current.filter((item) => item.id !== selected.id));
-      setSelectedId(null);
+      await menuItemApi.remove(deletedId);
+      setDetailOpen(false);
       setDeleteId(null);
       setPendingStatus(null);
-      setToast('Đã xóa món khỏi thực đơn. Lịch sử bán hàng được giữ nguyên.');
+      setSelectedId(null);
+      setItems((current) => current.filter((item) => item.id !== deletedId));
       restoreFocus(true);
+      const refreshed = await reload();
+      setToast(refreshed
+        ? 'Đã xóa món khỏi thực đơn. Lịch sử bán hàng được giữ nguyên.'
+        : 'Đã xóa món, nhưng chưa tải lại được danh sách. Hãy thử tải lại để đồng bộ dữ liệu.');
     } catch (actionError) {
       setError(displayError(actionError));
     } finally {
@@ -444,7 +465,7 @@ export default function MenuItemsPage({ user }) {
       <p className="menu-scope">Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải món…' : `${visibleItems.length} bản ghi mẫu`}</p>
     </section>
 
-    <div className={`menu-content-grid${selected ? ' has-selection' : ''}`}>
+    <div className="menu-content-grid">
       <section ref={listFocusRef} className="menu-table-card" aria-label="Danh sách món và dịch vụ" tabIndex="-1">
         {loading ? <div className="menu-loading" role="status" aria-label="Đang tải thực đơn">
           {[0, 1, 2, 3].map((row) => <div className="menu-skeleton-row" key={row}><i /><i /><i /><i /><i /></div>)}
@@ -460,7 +481,8 @@ export default function MenuItemsPage({ user }) {
             </tr></thead>
             <tbody>{visibleItems.map((item) => <tr key={item.id} className={selectedId === item.id ? 'is-selected' : ''}>
               <td>
-                <button className="menu-item-link" type="button" onClick={() => selectItem(item)}>
+                <button className="menu-item-link" type="button" data-menu-focus-key={`menu-item-${item.id}`}
+                  onClick={(event) => selectItem(item, event)}>
                   <strong>{item.name}</strong><span>{item.code}</span>
                 </button>
               </td>
@@ -469,19 +491,21 @@ export default function MenuItemsPage({ user }) {
               <td className="menu-inventory-quantity">{item.inventoryItemId ? `${quantity(item.stockQuantity)} ${item.unitName || ''}`.trim() : 'Không theo dõi'}</td>
               <td className="menu-list-status">{saleStatusLabel(item)}</td>
               <td className="menu-row-actions">
-                <button type="button" className="menu-row-action" data-menu-focus-key={`edit-row-${item.id}`}
-                  aria-label={`Sửa ${item.name}`} onClick={(event) => openUpdate(item, event)}
-                  disabled={Boolean(busyId || deleteId || pendingStatus)}>Sửa</button>
-                <button type="button" className="menu-row-action" data-menu-focus-key={`status-row-${item.id}`}
-                  aria-label={`${item.active ? 'Ngừng bán' : 'Đưa vào bán'} ${item.name}`}
-                  onClick={(event) => requestStatusChange(item, event.currentTarget)}
-                  disabled={Boolean(busyId || deleteId || pendingStatus)}>
-                  {item.active ? 'Ngừng bán' : 'Bật bán'}
-                </button>
-                <button type="button" className="menu-row-delete" data-menu-focus-key={`delete-row-${item.id}`}
-                  aria-label={`Xóa ${item.name} khỏi thực đơn`}
-                  onClick={(event) => requestDelete(item, event.currentTarget)}
-                  disabled={Boolean(busyId || deleteId || pendingStatus)}>Xóa</button>
+                <div className="menu-row-action-group">
+                  <button type="button" className="menu-row-action" data-menu-focus-key={`edit-row-${item.id}`}
+                    aria-label={`Sửa ${item.name}`} onClick={(event) => openUpdate(item, event)}
+                    disabled={Boolean(busyId || deleteId || pendingStatus)}>Sửa</button>
+                  <button type="button" className="menu-row-action" data-menu-focus-key={`status-row-${item.id}`}
+                    aria-label={`${item.active ? 'Ngừng bán' : 'Đưa vào bán'} ${item.name}`}
+                    onClick={(event) => requestStatusChange(item, event.currentTarget)}
+                    disabled={Boolean(busyId || deleteId || pendingStatus)}>
+                    {item.active ? 'Ngừng bán' : 'Bật bán'}
+                  </button>
+                  <button type="button" className="menu-row-delete" data-menu-focus-key={`delete-row-${item.id}`}
+                    aria-label={`Xóa ${item.name} khỏi thực đơn`}
+                    onClick={(event) => requestDelete(item, event.currentTarget)}
+                    disabled={Boolean(busyId || deleteId || pendingStatus)}>Xóa</button>
+                </div>
               </td>
             </tr>)}</tbody>
           </table>
@@ -492,19 +516,6 @@ export default function MenuItemsPage({ user }) {
         </div>}
       </section>
 
-      <aside ref={detailPanelRef} className="menu-detail-panel" aria-label="Thông tin món được chọn" aria-hidden={actionModalOpen} tabIndex="-1">
-        {selected ? <>
-          <MenuItemInfo item={selected} branchName={user.branchName || 'Cơ sở được phân quyền'} titleId="menu-detail-title" />
-          {!actionModalOpen && <div className="menu-detail-actions">
-            <button type="button" className="menu-edit-action" data-menu-focus-key={`edit-detail-${selected.id}`}
-              onClick={(event) => openUpdate(selected, event)} disabled={Boolean(busyId)}>Sửa món</button>
-            <button type="button" className="menu-toggle-action" data-menu-focus-key={`status-detail-${selected.id}`} onClick={(event) => requestStatusChange(selected, event.currentTarget)} disabled={Boolean(busyId)}>
-              {busyId === selected.id ? 'Đang lưu…' : selected.active ? 'Ngừng bán món' : 'Đưa món vào bán'}
-            </button>
-            <button type="button" className="menu-delete-action" data-menu-focus-key={`delete-detail-${selected.id}`} onClick={(event) => requestDelete(selected, event.currentTarget)} disabled={Boolean(busyId)}>Xóa khỏi thực đơn</button>
-          </div>}
-        </> : <div className="menu-detail-empty"><h2>Chọn một món</h2><p>Thông tin và thao tác trạng thái sẽ hiển thị tại đây.</p></div>}
-      </aside>
     </div>
     <footer className="menu-page-footer">
       <p>Hiển thị {visibleItems.length} kết quả · Trang 1</p>
@@ -517,7 +528,16 @@ export default function MenuItemsPage({ user }) {
         <MenuItemInfo item={selected} branchName={user.branchName || 'Cơ sở được phân quyền'}
           titleId="menu-action-dialog-info-title" onClose={cancelConfirmation} closeDisabled={Boolean(busyId)} />
         {error && <p className="menu-action-error" role="alert">{error}</p>}
-        {deleteId === selected.id ? <div className="menu-action-confirm is-delete">
+        {detailOpen ? <div className="menu-detail-actions">
+          <button type="button" className="menu-edit-action" data-menu-focus-key={`edit-detail-${selected.id}`}
+            onClick={(event) => openUpdate(selected, event)} disabled={Boolean(busyId)}>Sửa món</button>
+          <button type="button" className="menu-toggle-action" data-menu-focus-key={`status-detail-${selected.id}`}
+            onClick={(event) => requestStatusChange(selected, event.currentTarget)} disabled={Boolean(busyId)}>
+            {busyId === selected.id ? 'Đang lưu…' : selected.active ? 'Ngừng bán món' : 'Đưa món vào bán'}
+          </button>
+          <button type="button" className="menu-delete-action" data-menu-focus-key={`delete-detail-${selected.id}`}
+            onClick={(event) => requestDelete(selected, event.currentTarget)} disabled={Boolean(busyId)}>Xóa khỏi thực đơn</button>
+        </div> : deleteId === selected.id ? <div className="menu-action-confirm is-delete">
           <h3 id="menu-action-title">Xóa món khỏi thực đơn?</h3>
           <p>Món sẽ không còn xuất hiện trong danh sách bán. Các dòng đơn và lịch sử bán hàng liên quan vẫn được giữ.</p>
           <div><button type="button" onClick={cancelConfirmation} disabled={Boolean(busyId)}>Quay lại</button>

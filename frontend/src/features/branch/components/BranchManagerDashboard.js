@@ -7,7 +7,7 @@
  */
 
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { authApi, apiErrors } from '../../auth/services/authApi';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
@@ -28,6 +28,9 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
   const [searchParams, setSearchParams] = useSearchParams();
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
   const active = branchNav[activeIndex] || 'Phòng';
+  useLayoutEffect(() => {
+    if (active === 'Thực đơn F&B' || active === 'Kho hàng') window.scrollTo(0, 0);
+  }, [active]);
   const [search, setSearch] = useState('');
   const [accountSearch, setAccountSearch] = useState('');
   const [branches, setBranches] = useState([]);

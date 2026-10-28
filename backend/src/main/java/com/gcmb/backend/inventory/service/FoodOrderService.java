@@ -69,6 +69,7 @@ public class FoodOrderService {
     }
 
     @Transactional
+    // BR-27, BR-117: yêu cầu QR gắn với booking đang sử dụng và số lượng món là số nguyên dương.
     public GuestOrderView submitRoomRequest(String mrCode, String token, RoomRequest request) {
         RoomQrSession session = roomSession(mrCode, token);
         if (request == null) throw bad("Vui lòng chọn món cần gửi.");
@@ -125,6 +126,7 @@ public class FoodOrderService {
     }
 
     @Transactional
+    // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: tính phí đơn booking và phân công lễ tân ca hiện tại.
     public OrderView addItems(Identity actor, StaffOrderRequest request) {
         UUID branchId = branch(actor);
         if (request == null || request.bookingId() == null) throw bad("Vui lòng chọn booking đang sử dụng.");
@@ -158,6 +160,7 @@ public class FoodOrderService {
     }
 
     @Transactional
+    // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: chỉ lượng được xác nhận mới tính tiền và gắn combo.
     public OrderView confirmRequest(Identity actor, UUID orderId, ConfirmRequest request) {
         UUID branchId = branch(actor);
         OrderLock order = lockOrder(orderId, branchId);
@@ -218,6 +221,7 @@ public class FoodOrderService {
     }
 
     @Transactional
+    // BR-123: chỉ lễ tân được phân công cho đơn mới cập nhật được tiến độ phục vụ.
     public OrderView updateServiceStatus(Identity actor, UUID orderId, ServiceStatusCommand command) {
         UUID branchId = branch(actor);
         OrderLock order = lockOrder(orderId, branchId);
@@ -233,6 +237,7 @@ public class FoodOrderService {
         return requiredOrder(orderId, branchId);
     }
 
+    // BR-30, BR-172: phần món đã nằm trong combo không bị tính lại như món gọi thêm.
     private void allocateComboInclusions(UUID bookingId, UUID branchId, UUID orderId) {
         for (PendingLine line : orders.pendingLines(orderId)) {
             ComboAllowance allowance = orders.comboAllowance(bookingId, line.menuItemId(), orderId);
@@ -249,6 +254,7 @@ public class FoodOrderService {
         }
     }
 
+    // BR-36, BR-37, BR-38; MSG18: trừ đúng một lần khi xác nhận bán và báo tên, số tồn, đơn vị khi thiếu hàng.
     private void deductAutomaticStock(UUID orderId, UUID branchId, UUID actorId, String reason) {
         List<PendingLine> lines = orders.pendingLines(orderId);
         LinkedHashSet<UUID> itemIds = lines.stream().map(PendingLine::menuItemId)
@@ -256,11 +262,13 @@ public class FoodOrderService {
         Map<UUID, SellableItem> items = requireSellableItems(branchId, itemIds);
         Map<UUID, BigDecimal> requiredByInventory = new LinkedHashMap<>();
         Map<UUID, String> nameByInventory = new HashMap<>();
+        Map<UUID, String> unitByInventory = new HashMap<>();
         for (PendingLine line : lines) {
             SellableItem item = items.get(line.menuItemId());
             if (item.inventoryItemId() == null || !"AUTO_ON_SALE".equals(item.trackingMode())) continue;
             requiredByInventory.merge(item.inventoryItemId(), line.quantity(), BigDecimal::add);
             nameByInventory.putIfAbsent(item.inventoryItemId(), item.name());
+            unitByInventory.putIfAbsent(item.inventoryItemId(), item.unitName());
         }
 
         List<UUID> inventoryIds = requiredByInventory.keySet().stream()
@@ -270,8 +278,8 @@ public class FoodOrderService {
             BigDecimal available = orders.lockStock(inventoryId);
             BigDecimal required = requiredByInventory.get(inventoryId);
             if (available.compareTo(required) < 0) {
-                throw conflict(nameByInventory.get(inventoryId) + " chỉ còn " + available.stripTrailingZeros().toPlainString()
-                    + "; hãy giảm số lượng hoặc chọn món khác.");
+                throw conflict(stockShortageMessage(nameByInventory.get(inventoryId), available,
+                    unitByInventory.get(inventoryId)));
             }
             remaining.put(inventoryId, available);
         }
@@ -297,13 +305,20 @@ public class FoodOrderService {
         return result;
     }
 
+    // BR-38; MSG18: số lượng tồn bằng không cũng dùng mẫu báo thiếu hàng có đơn vị tính.
     private void requireAvailableItems(Map<UUID, SellableItem> items) {
         for (SellableItem item : items.values()) {
             if ("PACKAGED".equals(item.kind())
                     && (item.stockQuantity() == null || item.stockQuantity().signum() <= 0)) {
-                throw conflict(item.name() + " hiện đã hết hàng.");
+                BigDecimal available = item.stockQuantity() == null ? ZERO : item.stockQuantity();
+                throw conflict(stockShortageMessage(item.name(), available, item.unitName()));
             }
         }
+    }
+
+    private static String stockShortageMessage(String itemName, BigDecimal available, String unitName) {
+        return itemName + " chỉ còn " + available.stripTrailingZeros().toPlainString() + " " + unitName
+            + ". Vui lòng giảm số lượng hoặc chọn món khác.";
     }
 
     private static LinkedHashMap<UUID, Integer> quantities(List<ItemRequest> items, boolean allowZero) {

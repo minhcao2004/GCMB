@@ -730,7 +730,8 @@ export default function CheckoutPage() {
                             ? '✓ SePay đã xác nhận đúng số tiền và nội dung.'
                             : data.request.expired
                               ? 'QR đã hết hạn. Chưa xác nhận thu tiền; cần kiểm tra giao dịch trước khi tiếp tục.'
-                              : 'Đang chờ SePay xác nhận thanh toán…'}
+                              : `Đang chờ xác nhận chuyển khoản ${formatVnd(data.request.amount).replace(/đ$/, '')} đ ` +
+                                `cho booking ${data.bookingCode}.`}
                         </div>
                       </>
                     )}

@@ -136,6 +136,7 @@ public class InventoryService {
     }
 
     @Transactional
+    // BR-31, BR-32, BR-33, BR-40, BR-197: xác nhận phiếu nhập cộng kho theo số lượng nhận, không ghi nhận thanh toán nhà cung cấp.
     public StockReceiptResult receive(Identity actor, StockReceiptCommand input, MultipartFile evidence) {
         UUID branchId = writableBranch(actor);
         StockReceiptCommand command = validateReceipt(input, branchId);
@@ -183,6 +184,7 @@ public class InventoryService {
     }
 
     @Transactional
+    // BR-34, BR-35, BR-40, BR-189, BR-190: lưu lý do và chênh lệch kiểm kê; yêu cầu rà soát khi số tồn đã đổi.
     public StockMovementView adjust(Identity actor, StockAdjustmentCommand input, MultipartFile evidence) {
         UUID branchId = writableBranch(actor);
         if (input == null || input.inventoryItemId() == null) throw bad("Vui lòng chọn mặt hàng cần kiểm kê.");
@@ -222,6 +224,7 @@ public class InventoryService {
         }
     }
 
+    // BR-31, BR-33, BR-197: số lượng nhận phải dương; chi phí dòng là số lượng nhân đơn giá.
     private StockReceiptCommand validateReceipt(StockReceiptCommand input, UUID branchId) {
         if (input == null) throw bad("Vui lòng bổ sung thông tin phiếu nhập.");
         if (input.receivedAt() == null) throw bad("Vui lòng nhập ngày nhận hàng.");
@@ -298,6 +301,7 @@ public class InventoryService {
         return item;
     }
 
+    // BR-177: cơ sở tạm ngừng chỉ được xem dữ liệu; thao tác ghi tồn kho bị từ chối.
     private UUID writableBranch(Identity actor) {
         UUID branchId = branch(actor);
         if (!repository.activeBranch(branchId)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,

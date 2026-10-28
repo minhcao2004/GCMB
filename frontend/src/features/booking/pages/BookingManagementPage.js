@@ -525,7 +525,8 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
   } else if (hasDeposit) {
     outcomeTitle = '! Không đủ điều kiện hoàn cọc';
-    outcomeDescription = `${remainingLabel} · hủy dưới mốc ${cutoffMinutes} phút`;
+    // MSG16: giải thích việc giữ cọc và yêu cầu lễ tân xác nhận tiếp tục hủy.
+    outcomeDescription = `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
   } else {
     outcomeTitle = 'Không có tiền cọc';
     outcomeDescription = 'Booking sẽ được hủy và phòng được giải phóng.';
@@ -836,7 +837,11 @@ export default function BookingManagementPage() {
       const requestedDeposit = Number(payload.depositAmount || 0);
       if (requestedDeposit > 0 && payload.paymentMethod === 'BANK_TRANSFER') {
         setNoticeKind('success');
-        setNotice(`Đã tạo booking ${booking.code}; đang chờ chuyển khoản cọc.`);
+        // MSG22: chờ xác nhận chuyển khoản cọc cho booking vừa tạo.
+        const amount = formatVnd(requestedDeposit).replace(/đ$/, '');
+        setNotice(
+          `Đang chờ xác nhận chuyển khoản ${amount} đ cho booking ${booking.code}.`
+        );
         return { ok: true, booking };
       }
       clearBookingDraft(user);
