@@ -223,7 +223,7 @@ GCMB/
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
 | `booking` | Reservations, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
-| `inventory` | F&B catalog, guest QR menu and cart persistence across reloads, room/staff order processing, service assignment, inventory item management, stock receipts, adjustments, and movement history. |
+| `inventory` | F&B catalog, guest QR menu and cart persistence across reloads, room/staff order processing, room-screen QR-order dialogs and service-order pending checks, service assignment, polled arrival alerts and room bell indicators, inventory item management, stock receipts, adjustments, and movement history. |
 | `workforce` | Staff records, branch assignments/transfers, shift schedules, and attendance. Payroll remains planned. |
 | `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
 

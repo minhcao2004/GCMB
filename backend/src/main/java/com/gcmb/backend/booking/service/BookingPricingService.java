@@ -46,7 +46,8 @@ public class BookingPricingService {
     }
 
     public static BigDecimal depositFor(BigDecimal amount) {
-        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.HALF_UP);
+        // BR-137, BR-178: tiền cọc bằng 30% giá booking, làm tròn lên đến đồng.
+        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.CEILING);
     }
 
     // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.
@@ -66,10 +67,11 @@ public class BookingPricingService {
     private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
         ComboRow combo = repository.combo(comboId);
-        if (combo == null || !roomTypeId.equals(combo.roomTypeId()))
-            throw new BookingFailure(400, "comboId", "Combo không áp dụng cho loại phòng đã chọn");
+        if (combo == null) throw new BookingFailure(400, "comboId", "Vui lòng bổ sung combo phù hợp.");
+        if (!roomTypeId.equals(combo.roomTypeId()))
+            throw new BookingFailure(400, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
         if (combo.validFrom().isAfter(start) || (combo.validTo() != null && !start.isBefore(combo.validTo())))
-            throw new BookingFailure(409, "comboId", "Combo không có hiệu lực tại thời gian đặt phòng");
+            throw new BookingFailure(409, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
         long expectedSeconds = combo.durationMinutes() * 60L;
         if (!Duration.between(start, end).equals(Duration.ofSeconds(expectedSeconds)))
             throw new BookingFailure(400, "plannedEnd", "Thời lượng đặt phòng phải khớp thời lượng combo đã chọn");
@@ -90,7 +92,7 @@ public class BookingPricingService {
         return hourlyQuote(roomTypeId, branchId, timezone, start, end, false);
     }
 
-    // BR-169/170: miễn phí <=5 phút trên TOÀN khoảng quá giờ; vượt ngưỡng tính đủ số giây.
+    // BR-169/170: miễn phí nếu tổng thời gian quá hạn không quá 5 phút; sau đó tính theo số giây thực tế.
     public List<BookingDtos.ChargeLine> overstay(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
         if (!end.isAfter(start) || Duration.between(start, end).compareTo(Duration.ofMinutes(5)) <= 0) return List.of();
         return hourlyQuote(roomTypeId, branchId, timezone, start, end, true).charges();

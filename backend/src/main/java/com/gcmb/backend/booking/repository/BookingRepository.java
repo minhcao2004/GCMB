@@ -223,6 +223,19 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    // Read a room even when its operating state prevents assignment, so callers can report MSG55.
+    public RoomRow lockRoomForValidation(UUID roomId, UUID branchId) {
+        List<RoomRow> rows = db.query("""
+            SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
+            FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
+            WHERE r.id=? AND r.branch_id=? AND rt.active=true
+            FOR UPDATE OF r
+            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
+                rs.getString("room_type_name")), roomId, branchId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     // Đọc phòng đích đang hoạt động trong phạm vi chi nhánh.
     public RoomRow availableRoom(UUID roomId, UUID branchId) {
         List<RoomRow> rows = db.query("""
@@ -438,6 +451,11 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    public boolean bookingExists(UUID bookingId) {
+        return Boolean.TRUE.equals(db.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM gcmb.booking WHERE id=?)", Boolean.class, bookingId));
+    }
+
     // BR-177: khóa chia sẻ tới cuối transaction, tránh ghi đồng thời lúc cơ sở vừa bị tạm ngừng.
     public void requireActiveBranch(UUID branchId) {
         if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE", UUID.class, branchId).isEmpty())
@@ -523,6 +541,14 @@ public class BookingRepository {
     // Tạo tài khoản cọc cho booking mới.
     public void createDepositAccount(UUID bookingId) {
         db.update("INSERT INTO gcmb.deposit(booking_id) VALUES (?) ON CONFLICT (booking_id) DO NOTHING", bookingId);
+    }
+
+    // BR-26, BR-27: invalidate pending QR requests whenever the quoted booking price changes.
+    public void cancelPendingDepositPaymentRequests(UUID bookingId) {
+        db.update("""
+            UPDATE gcmb.payment_request SET status='CANCELLED'
+            WHERE booking_id=? AND purpose='DEPOSIT' AND status='PENDING'
+            """, bookingId);
     }
 
     // Ghi thanh toán và bút toán nhận cọc trong cùng giao dịch.
@@ -659,6 +685,13 @@ public class BookingRepository {
     public void event(UUID bookingId, UUID actorId, String type, String reason, Map<String, Object> details) {
         db.update("INSERT INTO gcmb.booking_event(booking_id,actor_id,event_type,reason,details) VALUES (?,?,?, ?,CAST(? AS jsonb))",
             bookingId, actorId, type, reason, toJson(details));
+    }
+
+    public boolean hasEventIdempotencyKey(UUID bookingId, String eventType, String idempotencyKey) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.booking_event
+                WHERE booking_id=? AND event_type=? AND details ->> 'idempotencyKey'=?)
+            """, Boolean.class, bookingId, eventType, idempotencyKey));
     }
 
     // Truy vấn trang booking cùng bộ lọc và thông tin tổng hợp cho danh sách.

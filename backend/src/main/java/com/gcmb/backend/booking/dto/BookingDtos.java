@@ -41,7 +41,11 @@ public final class BookingDtos {
                               long currentDurationMinutes,
                               List<AvailableRoom> availableRooms, List<ComboOption> extensionCombos) {}
     // Phòng đích, nguyên nhân áp giá và ghi chú đổi phòng.
-    public record RoomChangeRequest(UUID targetRoomId, String cause, String reason) {}
+    public record RoomChangeRequest(UUID targetRoomId, String cause, String reason, String idempotencyKey) {
+        public RoomChangeRequest(UUID targetRoomId, String cause, String reason) {
+            this(targetRoomId, cause, reason, null);
+        }
+    }
     // So sánh tổng phí trước/sau đổi phòng và từng phần sử dụng.
     public record RoomChangeQuote(BigDecimal currentAmount, BigDecimal projectedAmount,
                                   BigDecimal adjustmentAmount, BigDecimal usedSegmentAmount,
@@ -50,7 +54,11 @@ public final class BookingDtos {
     public record RoomChangeResult(BookingDetail booking, BigDecimal previousAmount,
                                    BigDecimal updatedAmount, BigDecimal adjustmentAmount) {}
     // Yêu cầu gia hạn bằng combo hoặc số giờ cho client cũ.
-    public record ExtendStayRequest(String pricingMode, UUID comboId, Integer hours) {}
+    public record ExtendStayRequest(String pricingMode, UUID comboId, Integer hours, String idempotencyKey) {
+        public ExtendStayRequest(String pricingMode, UUID comboId, Integer hours) {
+            this(pricingMode, comboId, hours, null);
+        }
+    }
     // Mốc gia hạn và báo giá trước khi ghi dữ liệu.
     public record ExtensionQuote(Instant startsAt, Instant endsAt, PriceQuote quote) {}
     // Booking sau khi gia hạn và giá đã ghi nhận.

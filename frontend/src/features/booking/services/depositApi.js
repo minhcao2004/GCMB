@@ -7,8 +7,8 @@ export const depositApi = {
   completeRefundRequest: async (requestId, externalReference, image) => {
     const { data: csrf } = await api.get('/auth/csrf');
     const form = new FormData();
-    form.append('externalReference', externalReference);
-    form.append('image', image);
+    if (externalReference?.trim()) form.append('externalReference', externalReference.trim());
+    if (image) form.append('image', image);
     return (await api.post(`/accounting/deposits/refund-requests/${requestId}/complete`, form, {
       headers: { [csrf.headerName]: csrf.token, 'Content-Type': 'multipart/form-data' },
     })).data;

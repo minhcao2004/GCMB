@@ -70,7 +70,11 @@ public class DepositManagementService {
     public DepositDtos.DepositDetail detail(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);
         DepositDtos.DepositItem item = deposits.item(branch.id(), bookingId);
-        if (item == null) throw notFound();
+        if (item == null) {
+            if (bookings.bookingExists(bookingId))
+                throw new BookingFailure(403, "bookingId", "Bạn không có quyền xem tiền cọc đối với booking.");
+            throw notFound();
+        }
         return new DepositDtos.DepositDetail(item, deposits.history(branch.id(), bookingId),
             deposits.refundEvidenceForBooking(branch.id(), bookingId));
     }
@@ -78,9 +82,13 @@ public class DepositManagementService {
     @Transactional
     public DepositDtos.RefundRequestResult createRefundRequest(Identity identity, DepositDtos.CreateRefundRequest request) {
         if (request == null || request.bookingId() == null)
-            throw new BookingFailure(400, "bookingId", "Vui lòng chọn booking cần yêu cầu hoàn cọc");
+            throw new BookingFailure(400, "bookingId", "Vui lòng bổ sung booking cần yêu cầu hoàn cọc.");
         BranchScope branch = branch(identity);
-        if (bookings.lockBookingId(request.bookingId(), branch.id()) == null) throw notFound();
+        if (bookings.lockBookingId(request.bookingId(), branch.id()) == null) {
+            if (bookings.bookingExists(request.bookingId()))
+                throw new BookingFailure(403, "bookingId", "Bạn không có quyền gửi yêu cầu hoàn cọc đối với booking.");
+            throw notFound();
+        }
         BookingRow booking = bookings.booking(request.bookingId(), branch.id());
         if (booking == null) throw notFound();
         if (!"CANCELLED".equals(booking.status()))
@@ -116,7 +124,13 @@ public class DepositManagementService {
                                                                String externalReference, MultipartFile image) {
         requireAccountant(identity);
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
-        String reference = required(externalReference, "externalReference", "Mã giao dịch hoàn", 200);
+        // BR-157: kế toán được xác nhận hoàn bằng mã giao dịch hoặc tệp minh chứng.
+        String normalizedReference = externalReference == null ? "" : externalReference.trim();
+        String reference = normalizedReference.isEmpty() ? null
+            : required(normalizedReference, "externalReference", "Mã giao dịch hoàn", 200);
+        boolean hasImage = image != null && !image.isEmpty();
+        if (reference == null && !hasImage)
+            throw new BookingFailure(400, "form", "Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.");
         RefundRequestRow initial = deposits.refundRequestForAccounting(requestId, false);
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
@@ -137,14 +151,17 @@ public class DepositManagementService {
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
 
-        RefundEvidenceStorageService.StoredEvidence evidence = evidenceStorage.store(image);
+        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? evidenceStorage.store(image) : null;
         try {
-            deposits.insertAttachment(evidence.id(), evidence.objectKey(), evidence.originalName(),
-                evidence.mimeType(), evidence.byteSize(), evidence.sha256(), identity.id());
-            if (!deposits.completeRefundRequest(locked.branchId(), locked, identity.id(), reference, evidence.id()))
+            if (evidence != null) {
+                deposits.insertAttachment(evidence.id(), evidence.objectKey(), evidence.originalName(),
+                    evidence.mimeType(), evidence.byteSize(), evidence.sha256(), identity.id());
+            }
+            if (!deposits.completeRefundRequest(locked.branchId(), locked, identity.id(), reference,
+                    evidence == null ? null : evidence.id()))
                 throw refundAlreadyProcessed();
         } catch (RuntimeException exception) {
-            evidenceStorage.deleteQuietly(evidence.objectKey());
+            if (evidence != null) evidenceStorage.deleteQuietly(evidence.objectKey());
             throw exception;
         }
         return new DepositDtos.RefundCompletionResult(locked.id(), locked.bookingId(), locked.amount(), "PAID");
@@ -154,6 +171,8 @@ public class DepositManagementService {
     public DepositDtos.RefundEvidenceContent refundEvidence(Identity identity, UUID requestId) {
         BranchScope branch = branch(identity);
         RefundEvidenceRow evidence = deposits.refundEvidence(branch.id(), requestId);
+        if (evidence == null && deposits.refundRequestForAccounting(requestId, false) != null)
+            throw new BookingFailure(403, "requestId", "Bạn không có quyền xem chứng từ hoàn cọc đối với yêu cầu hoàn cọc.");
         return evidenceContent(evidence);
     }
 
@@ -175,12 +194,12 @@ public class DepositManagementService {
 
     private static void requireAccountant(Identity identity) {
         if (identity == null || !"ACCOUNTANT".equals(identity.role()))
-            throw new BookingFailure(403, "form", "Chỉ kế toán được xử lý yêu cầu hoàn cọc");
+            throw new BookingFailure(403, "form", "Bạn không có quyền xử lý yêu cầu hoàn cọc đối với yêu cầu hoàn cọc.");
     }
 
     private BranchScope branch(Identity identity) {
         BranchScope scope = bookings.branchScope(identity.id());
-        if (scope == null) throw new BookingFailure(403, "form", "Tài khoản chưa được phân công tại chi nhánh đang hoạt động");
+        if (scope == null) throw new BookingFailure(403, "form", "Bạn không có quyền truy cập đối với tiền cọc.");
         return scope;
     }
 
@@ -193,8 +212,8 @@ public class DepositManagementService {
 
     private static String required(String value, String field, String label, int maxLength) {
         String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) throw new BookingFailure(400, field, label + " không được để trống");
-        if (normalized.length() > maxLength) throw new BookingFailure(400, field, label + " không được vượt quá " + maxLength + " ký tự");
+        if (normalized.isEmpty()) throw new BookingFailure(400, field, "Vui lòng bổ sung " + label.toLowerCase(Locale.ROOT) + ".");
+        if (normalized.length() > maxLength) throw new BookingFailure(400, field, label + " chỉ được chứa tối đa " + maxLength + " ký tự.");
         return normalized;
     }
 
@@ -207,6 +226,6 @@ public class DepositManagementService {
     }
 
     private static BookingFailure refundAlreadyProcessed() {
-        return new BookingFailure(409, "requestId", "Yêu cầu hoàn cọc đã được xử lý; vui lòng tải lại danh sách");
+        return new BookingFailure(409, "requestId", "Thao tác này đã được ghi nhận. Không tạo thêm bản ghi; vui lòng kiểm tra kết quả hiện có.");
     }
 }

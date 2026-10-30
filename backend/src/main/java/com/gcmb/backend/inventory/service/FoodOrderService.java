@@ -327,7 +327,7 @@ public class FoodOrderService {
         for (ItemRequest item : items) {
             if (item == null || item.menuItemId() == null || item.quantity() == null
                     || item.quantity() < (allowZero ? 0 : 1)) {
-                throw bad("Số lượng mỗi món phải là số nguyên dương.");
+                throw bad("Số lượng phải là số nguyên lớn hơn 0.");
             }
             if (result.putIfAbsent(item.menuItemId(), item.quantity()) != null) {
                 throw bad("Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.");

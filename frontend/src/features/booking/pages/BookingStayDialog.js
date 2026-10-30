@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { checkoutApi } from '../services/checkoutApi';
 import { bookingApi } from '../services/bookingApi';
@@ -66,6 +66,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const [meterQuote, setMeterQuote] = useState(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
+  const operationKeys = useRef({ change: null, extend: null });
   const bookingSummary = detail?.booking?.id === booking.id ? detail.booking : booking;
   const scheduledEnd = options?.plannedEnd || bookingSummary.plannedEnd;
   const scheduledEndAt = scheduledEnd ? new Date(scheduledEnd).getTime() : NaN;
@@ -74,6 +75,8 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const meterVisible = Boolean(meter) || reservationExpired;
   const meterAction = meter?.status === 'RUNNING' ? 'meterStop'
     : !meter && reservationExpired ? 'meterStart' : null;
+  const inGracePeriod = meter?.status === 'RUNNING'
+    && clockNow < new Date(meter.billedFrom).getTime();
 
   // BR-169/170: tiền tạm tính lấy từ cùng báo giá checkout, không tự nhân một đơn giá cố định.
   useEffect(() => {
@@ -159,14 +162,21 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
     try {
       let result;
       if (mode === 'change') {
-        result = await onSave('change', { targetRoomId, cause, reason: reason.trim() || null });
+        operationKeys.current.change ||= window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        result = await onSave('change', { targetRoomId, cause, reason: reason.trim() || null,
+          idempotencyKey: operationKeys.current.change });
       } else if (meterAction) {
         result = await onSave(meterAction);
         if (result?.detail) {
           setMeter(result.detail.meter);
         }
       } else {
-        result = await onSave('extend', extensionRequest);
+        operationKeys.current.extend ||= window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        result = await onSave('extend', { ...extensionRequest, idempotencyKey: operationKeys.current.extend });
+      }
+      if (result?.ok) {
+        if (mode === 'change') operationKeys.current.change = null;
+        if (mode === 'extend') operationKeys.current.extend = null;
       }
       if (result?.error) setError(result.error);
     } finally { setSubmitting(false); }
@@ -258,9 +268,11 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
               <div><dt>Giờ trả hiện tại</dt><dd>{dateTimeText(options?.plannedEnd || currentBooking.plannedEnd, timezone)}</dd></div>
             </dl>
             <p>{running
-              ? 'Đồng hồ giờ lẻ đang chạy; phụ thu sẽ được chốt khi dừng đồng hồ.'
+              ? inGracePeriod
+                ? 'Đang trong 15 phút miễn phí sau giờ trả; phụ thu chỉ bắt đầu sau thời gian này.'
+                : 'Đồng hồ giờ lẻ đang chạy; phụ thu sẽ được chốt khi dừng đồng hồ.'
               : reservationExpired
-                ? 'Giờ trả đã qua; booking vẫn đang chờ check-out.'
+                ? 'Giờ trả đã qua; miễn phí 15 phút đầu trước khi tính giờ lẻ.'
               : 'Giờ hẹn ban đầu được giữ nguyên. Đồng hồ giờ lẻ chỉ bật khi hết thời lượng đặt mà khách chưa check-out.'}</p>
           </section>
           {!meter && !reservationExpired && <fieldset className="booking-stay-cause"><legend>Chọn cách gia hạn</legend>
@@ -281,14 +293,14 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
             <small>Phụ thu tính theo số giờ đã chọn; giá cụ thể hiển thị ở phần báo giá.</small>
           </label>}
           {meterVisible && <section className={`booking-stay-meter${running ? ' is-running' : ''}`} aria-live="polite">
-              <span className="booking-stay-meter-label">{running ? 'Đang tính giờ lẻ' : stopped ? 'Đồng hồ đã dừng' : 'Tính theo thời gian thực dùng'}</span>
+              <span className="booking-stay-meter-label">{inGracePeriod ? 'Đang trong 15 phút miễn phí' : running ? 'Đang tính giờ lẻ' : stopped ? 'Đồng hồ đã dừng' : 'Tính theo thời gian thực dùng'}</span>
               <strong className="booking-stay-meter-clock" role="timer">{clockText}</strong>
               {meter ? <><div><span>Đơn giá lúc bắt đầu</span><strong>{formatVnd(meter.hourlyPrice)}</strong></div>
                 <div><span>{stopped ? 'Đã chốt' : 'Tiền quá giờ tạm tính'}</span><strong>{estimatedAmount == null ? 'Đang tải giá…' : formatVnd(estimatedAmount)}</strong></div>
                 <div><span>Giữ phòng đến</span><strong>{dateTimeText(meter.reservedUntil, timezone)}</strong></div>
                 {running && clockNow > new Date(meter.reservedUntil).getTime() && <p className="booking-stay-meter-warning" role="alert">Đã quá hạn giữ phòng. Dừng đồng hồ và kiểm tra booking kế tiếp.</p>}
-                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking.' : 'Miễn phí tối đa 5 phút; vượt ngưỡng tính đủ số giây theo từng khung giá và làm tròn tiền lên đồng.'}</small>
-              </> : <p>Phụ thu tính từ giờ trả dự kiến theo từng khung giá. Miễn phí nếu quá giờ không quá 5 phút.</p>}
+                <small>{stopped ? 'Thời lượng và phụ thu đã được chốt vào booking.' : 'Miễn phí 15 phút đầu sau giờ trả; sau đó tính thời gian thực dùng theo từng khung giá và làm tròn tiền lên đồng.'}</small>
+              </> : <p>Miễn phí 15 phút đầu sau giờ trả dự kiến; sau đó mới tính giờ lẻ theo từng khung giá.</p>}
             </section>}
           {!meter && !reservationExpired && extensionQuote && <section className="booking-stay-quote" aria-live="polite">
             <div><span>Phòng được giữ thêm đến</span><strong>{dateTimeText(extensionQuote.endsAt, timezone)}</strong></div>
@@ -300,7 +312,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
       {error && <p className="booking-inline-error" role="alert">{error}</p>}
       <footer className="booking-stay-actions">
         <button type="button" className="booking-button booking-button-secondary" onClick={onClose} disabled={active}>Đóng</button>
-        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : meterAction ? false : !extensionQuote)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : meterAction === 'meterStop' ? 'Dừng tính giờ' : meterAction === 'meterStart' ? 'Bắt đầu tính giờ' : 'Xác nhận gia hạn'}</button>}
+        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : meterAction ? false : !extensionQuote)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : meterAction === 'meterStop' ? 'Dừng tính giờ' : meterAction === 'meterStart' ? 'Bắt đầu theo dõi thời gian' : 'Xác nhận gia hạn'}</button>}
       </footer>
     </form>
   </div>;

@@ -91,9 +91,9 @@ public class CheckoutService {
         if (create && !reusable) {
             if (!sepay.ready()) throw fail(
                 503,
-                "Chưa cấu hình ngân hàng và khóa webhook SePay trong backend/.env."
+                "Chưa nhận được phản hồi từ SePay. Nếu đang thanh toán, hãy kiểm tra trạng thái thanh toán trước khi thực hiện lại."
             );
-            if (amount.signum() <= 0) throw fail(400, "Giá booking phải lớn hơn 0 để tạo QR cọc.");
+            if (amount.signum() <= 0) throw fail(400, "Số tiền cọc phải lớn hơn 0 đ.");
             db.update(
                 "UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')",
                 bookingId
@@ -705,10 +705,7 @@ public class CheckoutService {
             "Thiếu mã giao dịch SePay."
         );
         money(payload.transferAmount());
-        if (payload.transferAmount().signum() <= 0) throw fail(
-            400,
-            "Số tiền giao dịch phải lớn hơn 0."
-        );
+        if (payload.transferAmount().signum() <= 0) throw fail(400, "Số tiền giao dịch phải lớn hơn 0 đ.");
         if (
             !sepay.account.equals(payload.accountNumber()) ||
             !sepay.bank.equalsIgnoreCase(payload.gateway())
@@ -993,19 +990,17 @@ public class CheckoutService {
                     branch
                 )
                 .isEmpty()
-        ) throw fail(404, "Không tìm thấy booking.");
+        ) {
+            if (repository.bookingExists(id)) throw fail(403, "Bạn không có quyền tạo yêu cầu thanh toán đối với booking.");
+            throw fail(404, "Không tìm thấy booking.");
+        }
     }
 
     private UUID branch(Identity actor) {
-        if (actor == null || !"RECEPTIONIST".equals(actor.role())) throw fail(
-            403,
-            "Chỉ lễ tân được thực hiện checkout."
-        );
+        if (actor == null || !"RECEPTIONIST".equals(actor.role()))
+            throw fail(403, "Bạn không có quyền checkout đối với booking.");
         var scope = repository.branchScope(actor.id());
-        if (scope == null) throw fail(
-            403,
-            "Tài khoản chưa được phân công tại cơ sở đang hoạt động."
-        );
+        if (scope == null) throw fail(403, "Bạn không có quyền truy cập đối với tiền cọc.");
         return scope.id();
     }
 

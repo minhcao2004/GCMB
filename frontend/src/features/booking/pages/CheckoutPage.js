@@ -320,7 +320,7 @@ export default function CheckoutPage() {
                       </p>
                     ))}
                     <p>
-                      Quá giờ không quá 5 phút được miễn phí. Vượt ngưỡng tính đủ số giây theo từng
+                      Miễn phí 15 phút đầu sau giờ trả. Sau đó tính thời gian thực dùng theo từng
                       khung giá, làm tròn tiền lên đồng. Khoản này đã được cộng vào tổng hóa đơn.
                     </p>
                     <label className="co-inspection">
