@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import inventoryApi from '../services/inventoryApi';
 import './inventory.css';
 
@@ -25,6 +25,7 @@ const newId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.rando
 const EMPTY_LINES = [];
 
 export default function InventoryPage({ user }) {
+  const pageRef = useRef(null);
   const [items, setItems] = useState([]);
   const [metadata, setMetadata] = useState({ units: [], categories: [] });
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,10 @@ export default function InventoryPage({ user }) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [screen, setScreen] = useState('stock');
+  // Each inventory screen starts at its heading, even after scrolling a long list.
+  useLayoutEffect(() => {
+    pageRef.current?.scrollTo(0, 0);
+  }, [screen]);
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
@@ -49,9 +54,12 @@ export default function InventoryPage({ user }) {
   const [receiptDraft, setReceiptDraft] = useState(null);
   const [adjustDraft, setAdjustDraft] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
+  const [adjustLoading, setAdjustLoading] = useState(false);
+  const [adjustLoadAttempt, setAdjustLoadAttempt] = useState(0);
   const [staleStock, setStaleStock] = useState(null);
   const [evidence, setEvidence] = useState(null);
   const [evidenceUrl, setEvidenceUrl] = useState('');
+  const adjustmentItemId = adjustDraft?.inventoryItemId || '';
 
   const reload = async () => {
     setError('');
@@ -93,6 +101,29 @@ export default function InventoryPage({ user }) {
     return () => { current = false; };
   }, [screen, selectedId, historyKind, historySearch, historyFrom, historyTo]);
 
+  useEffect(() => {
+    if (screen !== 'adjustment' || !adjustmentItemId) return undefined;
+    let current = true;
+    setAdjustLoading(true);
+    setAdjustItem(null);
+    setError('');
+    // BR-190: lấy tồn hiện tại của mặt hàng, không dùng lại dữ liệu đã tải cho danh sách/lịch sử.
+    inventoryApi.item(adjustmentItemId)
+      .then((item) => {
+        if (!current) return;
+        setItems((rows) => rows.map((row) => row.id === item.id ? item : row));
+        if (!item.active) {
+          setError('Mặt hàng đã ngừng sử dụng nên không thể điều chỉnh tồn.');
+          return;
+        }
+        setAdjustItem(item);
+        setStaleStock((previous) => previous ? { ...previous, latest: item.quantity, reviewed: false } : null);
+      })
+      .catch((loadError) => { if (current) setError(displayError(loadError)); })
+      .finally(() => { if (current) setAdjustLoading(false); });
+    return () => { current = false; };
+  }, [screen, adjustmentItemId, adjustLoadAttempt]);
+
   const activeItems = useMemo(() => items.filter((item) => item.active), [items]);
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('vi-VN');
@@ -114,8 +145,16 @@ export default function InventoryPage({ user }) {
   }).filter((line) => line.item), [receiptLines, items]);
   const receiptTotalQuantity = receiptSummary.reduce((total, line) => total + line.quantity, 0);
   const receiptTotalValue = receiptSummary.reduce((total, line) => total + line.amount, 0);
-  const adjustActual = Number(adjustDraft?.actualQuantity || 0);
-  const adjustDelta = adjustItem ? adjustActual - Number(adjustItem.quantity) : 0;
+  const actualQuantityInput = String(adjustDraft?.actualQuantity ?? '').trim();
+  const adjustActual = actualQuantityInput === '' ? null : Number(actualQuantityInput);
+  // BR-35, BR-189: chỉ tính chênh lệch sau khi nhập số kiểm đếm hợp lệ; để trống không phải là 0.
+  const validActualQuantity = adjustActual !== null && Number.isFinite(adjustActual) && adjustActual >= 0;
+  const actualQuantityError = actualQuantityInput !== '' && !validActualQuantity
+    ? 'Tồn thực tế phải lớn hơn hoặc bằng 0.' : '';
+  const adjustDelta = adjustItem && validActualQuantity ? adjustActual - Number(adjustItem.quantity) : null;
+  const canSubmitAdjustment = !busy && !adjustLoading && adjustItem?.id === adjustmentItemId
+    && validActualQuantity && Boolean(adjustDraft?.reason.trim()) && adjustDelta !== null && adjustDelta !== 0
+    && !Boolean(staleStock && !staleStock.reviewed);
   const managedItems = items.filter((item) => {
     const term = search.trim().toLocaleLowerCase('vi-VN');
     return (itemStatus === 'archived' ? !item.active : item.active)
@@ -158,7 +197,8 @@ export default function InventoryPage({ user }) {
 
   const openAdjustment = () => {
     const first = activeItems[0] || null;
-    setAdjustItem(first);
+    setAdjustItem(null);
+    setAdjustLoading(Boolean(first));
     setAdjustDraft({
       adjustedAt: makeLocalDateTime(), inventoryItemId: first?.id || '', actualQuantity: '',
       reason: '',
@@ -243,17 +283,18 @@ export default function InventoryPage({ user }) {
   };
 
   const selectAdjustmentItem = (id) => {
-    const item = activeItems.find((row) => row.id === id) || null;
-    setAdjustItem(item);
+    setAdjustItem(null);
+    setAdjustLoading(Boolean(id));
     setAdjustDraft((draft) => ({ ...draft, inventoryItemId: id, actualQuantity: '' }));
     setStaleStock(null);
+    setError('');
   };
 
   const acknowledgeLatestStock = () => setStaleStock((current) => current ? { ...current, reviewed: true } : null);
 
   const submitAdjustment = async (event) => {
     event.preventDefault();
-    if (!adjustItem) return;
+    if (!canSubmitAdjustment) return;
     setBusy(true);
     setError('');
     try {
@@ -262,7 +303,7 @@ export default function InventoryPage({ user }) {
         occurredAt: new Date(adjustDraft.adjustedAt).toISOString(),
         expectedStockVersion: adjustItem.stockVersion,
         expectedQuantity: Number(adjustItem.quantity),
-        actualQuantity: Number(adjustDraft.actualQuantity),
+        actualQuantity: adjustActual,
         reason: adjustDraft.reason,
       };
       await inventoryApi.adjust(command, evidence);
@@ -273,8 +314,15 @@ export default function InventoryPage({ user }) {
     } catch (submitError) {
       const detail = submitError.response?.data?.detail || submitError.response?.data?.message || '';
       if (submitError.response?.status === 409 && detail.includes('Tồn kho đã thay đổi')) {
+        setStaleStock({ previous: adjustItem.quantity, latest: null, reviewed: false });
+        setAdjustItem(null);
         try {
           const latest = await inventoryApi.item(adjustItem.id);
+          setItems((rows) => rows.map((row) => row.id === latest.id ? latest : row));
+          if (!latest.active) {
+            setError('Mặt hàng đã ngừng sử dụng nên không thể điều chỉnh tồn.');
+            return;
+          }
           setStaleStock({ previous: adjustItem.quantity, latest: latest.quantity, reviewed: false });
           setAdjustItem(latest);
           setError('');
@@ -327,7 +375,7 @@ export default function InventoryPage({ user }) {
     </div>}
   </div>;
 
-  if (screen === 'history') return <main className="inventory-page">
+  if (screen === 'history') return <main ref={pageRef} className="inventory-page">
     {heading(`Lịch sử kho · ${selectedItem?.name || 'Mặt hàng'}`, `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`,
       <button type="button" className="inv-button inv-button-primary" onClick={() => setScreen('stock')}>Quay lại tồn kho</button>)}
     {toastNotice}
@@ -357,7 +405,7 @@ export default function InventoryPage({ user }) {
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Mọi điều chỉnh đều được lưu lý do và người ghi nhận</p>
   </main>;
 
-  if (screen === 'items') return <main className="inventory-page">
+  if (screen === 'items') return <main ref={pageRef} className="inventory-page">
     {heading('Danh mục mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Danh mục mặt hàng kho`,
       <><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Tồn kho</button><button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
     {toastNotice}
@@ -392,7 +440,7 @@ export default function InventoryPage({ user }) {
     <p className="inv-footnote">Cập nhật thông tin mặt hàng không làm thay đổi số tồn hoặc lịch sử kho</p>
   </main>;
 
-  if (screen === 'item-form') return <main className="inventory-page">
+  if (screen === 'item-form') return <main ref={pageRef} className="inventory-page">
     {heading(itemMode === 'create' ? 'Tạo mặt hàng kho' : 'Cập nhật mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Quản lý danh mục`,
       <button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('items')}>Quay lại danh sách</button>)}
     {toastNotice}
@@ -428,7 +476,7 @@ export default function InventoryPage({ user }) {
     <p className="inv-footnote">Dữ liệu mặt hàng chỉ thuộc cơ sở đang được phân quyền</p>
   </main>;
 
-  if (screen === 'receipt') return <main className="inventory-page">
+  if (screen === 'receipt') return <main ref={pageRef} className="inventory-page">
     {heading('Ghi nhận nhập hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`)}
     {toastNotice}
     {errorNotice}
@@ -473,7 +521,7 @@ export default function InventoryPage({ user }) {
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Xác nhận nhập kho cập nhật ledger tồn kho</p>
   </main>;
 
-  if (screen === 'adjustment') return <main className="inventory-page">
+  if (screen === 'adjustment') return <main ref={pageRef} className="inventory-page">
     {heading('Kiểm kê & điều chỉnh tồn', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`)}
     {toastNotice}
     {errorNotice}
@@ -483,34 +531,36 @@ export default function InventoryPage({ user }) {
         <div className="inv-form-grid">
           <label className="inv-field"><span>Thời điểm kiểm kê *</span><input required type="datetime-local" value={adjustDraft?.adjustedAt || ''} onChange={(event) => setAdjustDraft({ ...adjustDraft, adjustedAt: event.target.value })} /></label>
           <label className="inv-field"><span>Người thực hiện</span><input value={user.fullName || user.username || 'Quản lý cơ sở'} disabled /></label>
-          <label className="inv-field"><span>Mặt hàng *</span><select required value={adjustDraft?.inventoryItemId || ''} onChange={(event) => selectAdjustmentItem(event.target.value)}>
+          <label className="inv-field"><span>Mặt hàng *</span><select required disabled={busy} value={adjustDraft?.inventoryItemId || ''} onChange={(event) => selectAdjustmentItem(event.target.value)}>
             <option value="">Chọn mặt hàng</option>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.sku} · {item.name}</option>)}
           </select></label>
           <label className="inv-field"><span>Đơn vị</span><input value={adjustItem?.unitName || ''} disabled /></label>
-          <label className="inv-field"><span>Tồn hệ thống</span><input value={formatQuantity(adjustItem?.quantity)} disabled /></label>
-          <label className="inv-field"><span>Tồn thực tế *</span><input required type="number" min="0" step="0.001" value={adjustDraft?.actualQuantity ?? ''} onChange={(event) => setAdjustDraft({ ...adjustDraft, actualQuantity: event.target.value })} /></label>
+          <div className="inv-field"><span id="inventory-system-stock-label">Tồn hệ thống</span><input aria-labelledby="inventory-system-stock-label" value={adjustLoading ? 'Đang tải…' : adjustItem ? formatQuantity(adjustItem.quantity) : '—'} disabled />
+            {!adjustLoading && !adjustItem && adjustmentItemId && <button type="button" className="inv-text-button" disabled={busy} onClick={() => setAdjustLoadAttempt((attempt) => attempt + 1)}>Thử tải lại tồn hệ thống</button>}
+          </div>
+          <label className="inv-field"><span>Tồn thực tế *</span><input required type="number" min="0" step="0.001" aria-invalid={Boolean(actualQuantityError)} aria-describedby={actualQuantityError ? 'inventory-actual-quantity-error' : undefined} value={adjustDraft?.actualQuantity ?? ''} onChange={(event) => setAdjustDraft({ ...adjustDraft, actualQuantity: event.target.value })} /></label>
           <label className="inv-field"><span>Lý do *</span><textarea required maxLength="1000" rows="3" value={adjustDraft?.reason || ''} onChange={(event) => setAdjustDraft({ ...adjustDraft, reason: event.target.value })} placeholder="Giải thích chênh lệch tồn kho" /></label>
           {attachmentField}
         </div>
-        {staleStock && <div className={`inv-alert ${staleStock.reviewed ? 'inv-alert-info' : 'inv-alert-warning'}`} role="status">
-          <span>Tồn kho đã thay đổi từ {formatQuantity(staleStock.previous)} thành {formatQuantity(staleStock.latest)} {adjustItem?.unitName}. Kiểm tra lại số chênh lệch trước khi xác nhận.</span>
+        {staleStock?.latest != null && <div className={`inv-alert ${staleStock.reviewed ? 'inv-alert-info' : 'inv-alert-warning'}`} role="status">
+          <span>Tồn kho đã thay đổi từ {formatQuantity(staleStock.previous)} thành {formatQuantity(staleStock.latest)} {adjustItem?.unitName}. Vui lòng kiểm tra lại trước khi xác nhận điều chỉnh.</span>
           {!staleStock.reviewed && <button type="button" className="inv-button inv-button-quiet" onClick={acknowledgeLatestStock}>Đã kiểm tra tồn mới</button>}
         </div>}
       </form>
       <aside className="inv-summary inv-action-summary"><h2>Tóm tắt &amp; xử lý</h2>
         <p>{adjustItem?.name || 'Chọn mặt hàng'} · Đơn vị {adjustItem?.unitName || '—'}</p>
-        <dl className="inv-adjust-summary"><div><dt>Hệ thống</dt><dd>{formatQuantity(adjustItem?.quantity)}</dd></div><div><dt>Thực tế</dt><dd>{formatQuantity(adjustDraft?.actualQuantity)}</dd></div>
-          <div><dt>Điều chỉnh</dt><dd className={adjustDelta >= 0 ? 'inv-positive' : 'inv-negative'}>{adjustDelta > 0 ? '+' : ''}{formatQuantity(adjustDelta)} {adjustItem?.unitName || ''}</dd></div>
-          <div><dt>Tồn mới</dt><dd>{formatQuantity(adjustDraft?.actualQuantity)} {adjustItem?.unitName || ''}</dd></div><div><dt>Lý do</dt><dd>{adjustDraft?.reason || 'Chưa nhập'}</dd></div></dl>
-        <div className="inv-alert inv-alert-warning">Không nhập số tồn thực tế âm. Nếu tồn thay đổi trước khi xác nhận, cần kiểm tra lại.</div>
-        <div className="inv-summary-actions"><button type="submit" form="inventory-adjustment-form" className="inv-button inv-button-primary" disabled={busy || !adjustItem || !adjustDraft?.reason.trim() || adjustDelta === 0 || Boolean(staleStock && !staleStock.reviewed)}>{busy ? 'Đang xác nhận…' : 'Xác nhận điều chỉnh'}</button>
-          <button type="button" className="inv-button inv-button-quiet" onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại danh sách</button></div>
+        <dl className="inv-adjust-summary" aria-live="polite"><div><dt>Hệ thống</dt><dd>{adjustLoading ? 'Đang tải…' : adjustItem ? formatQuantity(adjustItem.quantity) : '—'}</dd></div><div><dt>Thực tế</dt><dd>{validActualQuantity ? formatQuantity(adjustActual) : actualQuantityInput ? 'Không hợp lệ' : 'Chưa nhập'}</dd></div>
+          <div><dt>Điều chỉnh</dt><dd className={adjustDelta === null ? undefined : adjustDelta >= 0 ? 'inv-positive' : 'inv-negative'}>{adjustDelta === null ? '—' : `${adjustDelta > 0 ? '+' : ''}${formatQuantity(adjustDelta)} ${adjustItem.unitName}`}</dd></div>
+          <div><dt>Tồn mới</dt><dd>{adjustDelta === null ? '—' : `${formatQuantity(adjustActual)} ${adjustItem.unitName}`}</dd></div><div><dt>Lý do</dt><dd>{adjustDraft?.reason || 'Chưa nhập'}</dd></div></dl>
+        {actualQuantityError && <div id="inventory-actual-quantity-error" className="inv-alert inv-alert-warning" role="alert">{actualQuantityError}</div>}
+        <div className="inv-summary-actions"><button type="submit" form="inventory-adjustment-form" className="inv-button inv-button-primary" disabled={!canSubmitAdjustment}>{busy ? 'Đang xác nhận…' : 'Xác nhận điều chỉnh'}</button>
+          <button type="button" className="inv-button inv-button-quiet" disabled={busy} onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại danh sách</button></div>
       </aside>
     </div>
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Điều chỉnh lưu người ghi, lý do và số tồn trước/sau</p>
   </main>;
 
-  return <main className="inventory-page">
+  return <main ref={pageRef} className="inventory-page">
     {heading('Tồn kho', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
       <><button type="button" className="inv-button inv-button-manage" onClick={() => { setError(''); setScreen('items'); }}>Danh mục mặt hàng</button><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-primary" onClick={openReceipt} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button></>)}
     {errorNotice}

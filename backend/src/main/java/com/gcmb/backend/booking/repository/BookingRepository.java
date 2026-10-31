@@ -172,7 +172,7 @@ public class BookingRepository {
                 rs.getString("room_type_name")), branchId);
     }
 
-    // Tìm phòng không trùng lịch trong khoảng yêu cầu.
+    // BR-03, BR-04: đặt trước theo khoảng lịch; khách hiện tại không chặn lịch sau giờ trả dự kiến.
     public List<RoomRow> availableRooms(UUID branchId, UUID roomTypeId, Instant start, Instant end) {
         return db.query("""
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
@@ -182,8 +182,7 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE')
-                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
-                       OR (a.starts_at < ? AND a.ends_at > ?))
+                  AND a.starts_at < ? AND a.ends_at > ?
               )
             ORDER BY r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
@@ -193,6 +192,12 @@ public class BookingRepository {
 
     // Tìm phòng trống nhưng bỏ qua allocation của booking đang sửa.
     public List<RoomRow> availableRoomsForEdit(UUID branchId, Instant start, Instant end, UUID excludeBookingId) {
+        return availableRoomsForEdit(branchId, start, end, excludeBookingId, false);
+    }
+
+    // BR-04, BR-07: sửa lịch xét khoảng đặt; đổi phòng ngay còn phải chặn khách chưa checkout.
+    public List<RoomRow> availableRoomsForEdit(UUID branchId, Instant start, Instant end, UUID excludeBookingId,
+                                              boolean requireVacantNow) {
         return db.query("""
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
@@ -201,13 +206,13 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE') AND b.id<>?
-                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                  AND (? AND a.state='OCCUPIED' AND b.status='IN_HOUSE'
                        OR (a.starts_at < ? AND a.ends_at > ?))
               )
             ORDER BY rt.name,r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
                 rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), branchId, excludeBookingId, ts(end), ts(start));
+                rs.getString("room_type_name")), branchId, excludeBookingId, requireVacantNow, ts(end), ts(start));
     }
 
     // Khóa hàng phòng trước khi đổi để giảm tranh chấp đồng thời.
@@ -250,14 +255,20 @@ public class BookingRepository {
 
     // Phòng đang OCCUPIED vẫn bị giữ sau ends_at dự kiến cho tới khi kết thúc lượt sử dụng.
     public boolean hasRoomOverlap(UUID roomId, Instant start, Instant end, UUID excludeBookingId) {
+        return hasRoomOverlap(roomId, start, end, excludeBookingId, true);
+    }
+
+    // BR-03, BR-07: đặt trước chỉ chặn khoảng trùng; nhận/đổi phòng ngay kiểm tra thêm khách đang sử dụng.
+    public boolean hasRoomOverlap(UUID roomId, Instant start, Instant end, UUID excludeBookingId,
+                                  boolean requireVacantNow) {
         String sql = """
             SELECT EXISTS (
               SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
               WHERE a.room_id=? AND a.state IN ('RESERVED','OCCUPIED') AND b.status IN ('CONFIRMED','IN_HOUSE')
-                AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                AND (? AND a.state='OCCUPIED' AND b.status='IN_HOUSE'
                      OR (a.starts_at < ? AND a.ends_at > ?))
             """;
-        List<Object> params = new ArrayList<>(List.of(roomId, ts(end), ts(start)));
+        List<Object> params = new ArrayList<>(List.of(roomId, requireVacantNow, ts(end), ts(start)));
         if (excludeBookingId != null) { sql += " AND a.booking_id<>?"; params.add(excludeBookingId); }
         sql += ")";
         return Boolean.TRUE.equals(db.queryForObject(sql, Boolean.class, params.toArray()));

@@ -152,7 +152,7 @@ public class BookingService {
         if (allocation == null || !"OCCUPIED".equals(allocation.state()))
             throw new BookingFailure(409, "roomId", "Không tìm thấy chặng phòng đang được sử dụng");
         Instant now = Instant.now();
-        List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId)
+        List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId, true)
             .stream().filter(room -> !room.id().equals(allocation.roomId()) && room.capacity() >= booking.guestCount())
             .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
         List<BookingDtos.ComboOption> combos = repository.combos(allocation.roomTypeId()).stream()
@@ -472,7 +472,8 @@ public class BookingService {
 
         RoomRow room = lockUsableRoom(request.roomId(), branch);
         if (room == null) throw new BookingFailure(409, "roomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
-        if (repository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null))
+        // BR-03, BR-04: lịch đặt trước có thể nối sau lượt hiện tại; khách vãng lai cần phòng trống ngay.
+        if (repository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null, "WALK_IN".equals(channel)))
             throw roomConflict(room.code());
         int guestCount = request.guestCount() == null ? 1 : request.guestCount();
         if (guestCount < 1)
@@ -710,7 +711,7 @@ public class BookingService {
                 throw new BookingFailure(400, "roomId", "Combo " + comboName + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             }
             repository.releaseAllocation(current.id(), "Thay đổi lịch đặt");
-            if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict(targetRoom.code());
+            if (repository.hasRoomOverlap(roomId, start, end, bookingId, false)) throw roomConflict(targetRoom.code());
         }
         String contactName = request.contactName() == null ? booking.contactName() : required(request.contactName(), "contactName", "Tên khách", 200);
         String contactPhone = request.contactPhone() == null ? booking.contactPhone() : contactPhone(request.contactPhone());
