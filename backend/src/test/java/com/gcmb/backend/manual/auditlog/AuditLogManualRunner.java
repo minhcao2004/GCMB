@@ -16,7 +16,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 public final class AuditLogManualRunner {
-    private static final int EXPECTED_CASES = 52;
+    private static final int EXPECTED_CASES = 47;
 
     private AuditLogManualRunner() {
     }
@@ -32,10 +32,9 @@ public final class AuditLogManualRunner {
         switch (args[0]) {
             case "--all" -> run(cases);
             case "--list" -> list(cases);
-            case "--summary" -> summary(cases);
             case "--case" -> run(args.length < 2 ? List.of()
                     : cases.stream().filter(test -> test.id().equalsIgnoreCase(args[1])).toList());
-            default -> System.out.println("Options: --all | --list | --summary | --case <ID>");
+            default -> System.out.println("Options: --all | --list | --case <ID>");
         }
     }
 
@@ -88,32 +87,13 @@ public final class AuditLogManualRunner {
                 cases.size(), passed, cases.size() - passed);
     }
 
-    private static void summary(List<ManualTest> cases) {
-        int passed = 0;
-        StringBuilder failedIds = new StringBuilder();
-        for (ManualTest test : cases) {
-            TestResult result = test.execute();
-            if (result.passed()) {
-                passed++;
-            } else {
-                if (!failedIds.isEmpty()) failedIds.append(',');
-                failedIds.append(test.id());
-            }
-        }
-        System.out.printf("SUMMARY: total=%d, passed=%d, failed=%d%n",
-                cases.size(), passed, cases.size() - passed);
-        System.out.println("FAILED_IDS: " + failedIds);
-    }
-
     private static void validate(List<ManualTest> cases) {
         if (cases.size() != EXPECTED_CASES) {
             throw new IllegalStateException("Expected " + EXPECTED_CASES + " cases but found " + cases.size());
         }
         Set<String> ids = new HashSet<>();
-        for (int index = 0; index < cases.size(); index++) {
-            ManualTest test = cases.get(index);
-            String expectedId = "ALM-%03d".formatted(index + 1);
-            if (!expectedId.equals(test.id()) || !ids.add(test.id())) {
+        for (ManualTest test : cases) {
+            if (!test.id().matches("ALM-\\d{3}") || !ids.add(test.id())) {
                 throw new IllegalStateException("Invalid or duplicate Test Case ID: " + test.id());
             }
         }

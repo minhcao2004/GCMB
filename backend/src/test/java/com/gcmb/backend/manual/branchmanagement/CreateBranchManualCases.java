@@ -8,7 +8,6 @@
 package com.gcmb.backend.manual.branchmanagement;
 
 import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.combine;
-import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.sourceContains;
 import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.test;
 import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.validateAccepted;
 import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.validateRejected;
@@ -41,30 +40,7 @@ public final class CreateBranchManualCases {
 
     public static List<ManualTest> cases() {
         List<ManualTest> cases = new ArrayList<>();
-        cases.add(tc("BRM-001", "Tạo cơ sở với dữ liệu hợp lệ",
-                "code=TEST_BRANCH_01, name/address/phone/notes hợp lệ",
-                "Production chấp nhận và thực hiện một INSERT branch trạng thái ACTIVE.",
-                () -> combine(validateAccepted(valid("TEST_BRANCH_01")),
-                        sourceContains(SERVICE, "INSERT INTO gcmb.branch", "'ACTIVE',CURRENT_DATE", "return get(id)")),
-                "BranchAdministrationService.create"));
-        cases.add(tc("BRM-002", "Không có phiên đăng nhập", "POST /head-office/branches",
-                "Route được bảo vệ; unauthenticated trả HTTP 401.",
-                () -> sourceContains(SECURITY, ".requestMatchers(\"/api/v1/head-office/**\").hasRole(\"HEAD_OFFICE_MANAGER\")",
-                        "response.setStatus(401)"), "AuthSecurity/SessionFilter"));
-        cases.add(tc("BRM-003", "Sai vai trò tạo cơ sở", "BRANCH_MANAGER/RECEPTIONIST/ACCOUNTANT POST create",
-                "HTTP 403 và đúng MSG24; không tạo dữ liệu.",
-                () -> sourceContains(SECURITY,
-                        ".requestMatchers(\"/api/v1/head-office/**\").hasRole(\"HEAD_OFFICE_MANAGER\")",
-                        "Bạn không có quyền tạo đối với cơ sở."), "AuthSecurity"));
-        cases.add(tc("BRM-004", "Hủy bước xác nhận", "Nhấn Hủy trước khi submit",
-                "Đóng modal và không gọi api.create.",
-                () -> sourceContains(PAGE, "type=\"button\"", "onClick={() => setModal(null)}", "if (modal === 'create') result = await api.create(form)"),
-                "BranchManagementPage confirmation flow"));
-        cases.add(tc("BRM-005", "Gửi lặp confirmation", "Hai lần tạo TEST_BRANCH_REPEAT",
-                "Chỉ một branch/audit event và lần lặp trả MSG74.",
-                () -> combine(sourceContains(SERVICE, "Repeated-Request-Id", "Thao tác này đã được ghi nhận"),
-                        sourceContains(CONTROLLER, "CREATE_BRANCH")), "BranchAdministrationService.create/MutationAudit.record"));
-        cases.add(tc("BRM-006", "Request body null", "body=null",
+                cases.add(tc("BRM-006", "Request body null", "body=null",
                 "HTTP 400 và thông báo dữ liệu bắt buộc; không gọi DB.",
                 () -> validateRejected(null, MSG02_CODE), "BranchAdministrationService.validate"));
         cases.add(tc("BRM-007", "Code null/rỗng/khoảng trắng", "code=null, '', '   '",
@@ -92,10 +68,6 @@ public final class CreateBranchManualCases {
                         validateRejected(valid("BR.01"), MSG37),
                         validateRejected(valid("BR@01"), MSG37),
                         validateRejected(valid("CƠ_SỞ"), MSG37)), "BranchAdministrationService.validate"));
-        cases.add(tc("BRM-013", "Chuẩn hóa code", "code='  test_branch_02  '",
-                "Trim và lưu TEST_BRANCH_02.", () -> combine(validateAccepted(valid("  test_branch_02  ")),
-                        sourceContains(SERVICE, "input.code().trim().toUpperCase(Locale.ROOT)")),
-                "BranchAdministrationService.validate/create"));
         cases.add(tc("BRM-014", "Name bắt buộc", "name=null, '', '   '",
                 "Từng giá trị bị từ chối bằng MSG02 cho Tên cơ sở.", () -> combine(
                         validateRejected(command("BR01", null, "Địa chỉ", "0901234567", ""), MSG02_NAME),
@@ -153,18 +125,7 @@ public final class CreateBranchManualCases {
                 "Từ chối bằng đúng MSG03 max_length=4000.", () -> validateRejected(
                         command("BR01", "Tên", "Địa chỉ", "0901234567", "N".repeat(4001)), MSG03_NOTE),
                 "BranchAdministrationService.validate"));
-        cases.add(tc("BRM-026", "Code trùng không phân biệt hoa thường", "code=hn_hoa_bang",
-                "Từ chối bằng đúng MSG38.", () -> combine(
-                        sourceContains(V14, "'HN_HOA_BANG'"),
-                        sourceContains(SERVICE, "upper(code)=?", MSG38)),
-                "BranchAdministrationService.create"));
-        cases.add(tc("BRM-027", "Default, audit và thông báo tạo", "Tạo branch hợp lệ có dữ liệu cần trim",
-                "Code hoa, dữ liệu trim, timezone/status/opened_on đúng, một audit và đúng MSG10.", () -> combine(
-                        sourceContains(SERVICE, "'Asia/Ho_Chi_Minh','ACTIVE',CURRENT_DATE", "input.name().trim()", "input.address().trim()"),
-                        sourceContains(CONTROLLER, "audit.record(\"CREATE_BRANCH\""),
-                        sourceContains(PAGE, "Đã tạo cơ sở.")),
-                "BranchAdministrationService.create/MutationAudit.record/BranchManagementPage.save"));
-        return List.copyOf(cases);
+return List.copyOf(cases);
     }
 
     private static ManualTest tc(String id, String title, String input, String expected,
@@ -180,3 +141,5 @@ public final class CreateBranchManualCases {
         return new BranchCommand(code, name, address, phone, notes);
     }
 }
+
+

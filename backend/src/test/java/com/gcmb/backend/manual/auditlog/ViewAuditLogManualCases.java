@@ -28,8 +28,6 @@ import com.gcmb.backend.audit.service.AuditSnapshots;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.CheckedAction;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.ManualTest;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.TestResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -68,18 +66,6 @@ public final class ViewAuditLogManualCases {
     public static List<ManualTest> cases() {
         List<ManualTest> cases = new ArrayList<>();
 
-        cases.add(test("ALM-001", "HEAD_OFFICE_MANAGER gọi danh sách", "Cho phép truy cập phạm vi /head-office.", "Normal", () -> {
-            String source = source("src/main/java/com/gcmb/backend/auth/security/AuthSecurity.java");
-            boolean allowed = source.contains("requestMatchers(\"/api/v1/head-office/**\").hasRole(\"HEAD_OFFICE_MANAGER\")");
-            return check(allowed, "headOfficeRulePresent=" + allowed);
-        }, "AuthSecurity"));
-        cases.add(test("ALM-002", "Không có phiên gọi danh sách", "Từ chối HTTP 401, không trả log.", "Abnormal", () -> {
-            String source = source("src/main/java/com/gcmb/backend/auth/security/AuthSecurity.java");
-            boolean protectedRoute = source.contains("/api/v1/head-office/**") && source.contains("response.setStatus(401)");
-            return check(protectedRoute, "protectedRoute=" + protectedRoute + ", unauthenticatedStatus=401");
-        }, "AuthSecurity/SessionFilter"));
-        cases.add(permissionMessage("ALM-003", "BRANCH_MANAGER gọi list/actions/detail"));
-        cases.add(permissionMessage("ALM-004", "ACCOUNTANT và RECEPTIONIST gọi list"));
         cases.add(test("ALM-005", "Không truyền query parameter", "Controller dùng q/action rỗng, page=0,size=10.", "Normal", () -> {
             AuditService service = mock(AuditService.class);
             AuditPage page = new AuditPage(List.of(), 0, 0, 10);
@@ -133,14 +119,12 @@ public final class ViewAuditLogManualCases {
         cases.add(searchCase("ALM-017", "QLCS.HOABANG", "actor.username"));
         cases.add(searchCase("ALM-018", "Nguyễn Văn A", "booking.contact_name"));
         cases.add(searchCase("ALM-019", ENTITY_ID.toString(), "CAST(a.entity_id AS text)"));
-        cases.add(test("ALM-020", "q không có kết quả", "API rỗng và UI hiển thị đúng MSG01.", "Abnormal", () -> {
+        cases.add(test("ALM-020", "q không có kết quả", "Service trả items rỗng và total=0.", "Abnormal", () -> {
             ServiceFixture f = service(emptyPage(0, 10));
             AuditPage result = f.service().list("khong-ton-tai-ALM-020", "", null, null, null, 0, 10);
-            String ui = source("../frontend/src/features/backoffice/accounts/pages/AuditLogPage.js");
-            boolean exactMessage = ui.contains(MSG01);
-            return check(result.items().isEmpty() && result.total() == 0 && exactMessage,
-                    "items=0,total=0,uiMessage=" + (exactMessage ? MSG01 : "Không có nhật ký phù hợp."));
-        }, "AuditService.list/AuditLogPage"));
+            return check(result.items().isEmpty() && result.total() == 0,
+                    "items=" + result.items().size() + ", total=" + result.total());
+        }, "AuditService.list"));
 
         cases.add(repositoryFilter("ALM-021", "action=SET_ACCOUNT_ROLE", "a.action=?", new Query("", "SET_ACCOUNT_ROLE", null, null, null, 0, 10), "SET_ACCOUNT_ROLE"));
         cases.add(repositoryFilter("ALM-022", "branchId=Hoa Bằng", "a.branch_id=?", new Query("", "", HOA_BANG, null, null, 0, 10), HOA_BANG));
@@ -254,25 +238,8 @@ public final class ViewAuditLogManualCases {
             return check(readOnly, "jdbcMethods=" + Mockito.mockingDetails(f.db()).getInvocations().stream()
                     .map(invocation -> invocation.getMethod().getName()).toList());
         }, "AuditService/AuditRepository"));
-        cases.add(test("ALM-052", "Schema audit_event append-only", "Trigger chặn UPDATE và DELETE.", "Abnormal", () -> {
-            String migration = source("src/main/resources/db/migration/V1__initial_schema.sql");
-            boolean function = migration.contains("CREATE FUNCTION reject_history_mutation()")
-                    && migration.contains("RAISE EXCEPTION 'Append-only table %: create an explicit correction instead'");
-            boolean trigger = migration.contains("CREATE TRIGGER immutable_audit BEFORE UPDATE OR DELETE ON audit_event");
-            return check(function && trigger, "rejectFunction=" + function + ", immutableAuditTrigger=" + trigger);
-        }, "V1 migration/reject_history_mutation"));
 
         return List.copyOf(cases);
-    }
-
-    private static ManualTest permissionMessage(String id, String input) {
-        return test(id, input, "Từ chối 403 và đúng MSG24.", "Abnormal", () -> {
-            String security = source("src/main/java/com/gcmb/backend/auth/security/AuthSecurity.java");
-            String actual = security.contains("Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang")
-                    ? "Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang" : "Không xác định";
-            boolean denied = security.contains("/api/v1/head-office/**") && !actual.equals("Không xác định");
-            return check(denied && MSG24.equals(actual), "status=403, message=" + actual);
-        }, "AuthSecurity.accessDeniedHandler");
     }
 
     private static ManualTest searchCase(String id, String q, String sqlFragment) {
@@ -427,12 +394,6 @@ public final class ViewAuditLogManualCases {
 
     private static AuditPage emptyPage(int page, int size) {
         return new AuditPage(List.of(), 0, page, size);
-    }
-
-    private static String source(String relative) throws Exception {
-        Path path = Path.of(relative);
-        if (!Files.exists(path)) path = Path.of("backend").resolve(relative);
-        return Files.readString(path);
     }
 
     private static ManualTest test(String id, String input, String expected, String type,

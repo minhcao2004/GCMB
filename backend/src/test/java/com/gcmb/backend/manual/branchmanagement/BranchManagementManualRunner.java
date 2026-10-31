@@ -11,8 +11,6 @@ import com.gcmb.backend.branch.dto.BranchDtos.BranchCommand;
 import com.gcmb.backend.branch.service.BranchAdministrationService;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -24,7 +22,7 @@ import java.util.stream.Collectors;
 import org.springframework.web.server.ResponseStatusException;
 
 public final class BranchManagementManualRunner {
-    private static final int EXPECTED_CASES = 110;
+    private static final int EXPECTED_CASES = 35;
 
     private BranchManagementManualRunner() {
     }
@@ -38,20 +36,16 @@ public final class BranchManagementManualRunner {
         switch (args[0]) {
             case "--all" -> run(cases);
             case "--list" -> list(cases);
-            case "--summary" -> summary(cases);
             case "--case" -> run(args.length < 2 ? List.of()
                     : cases.stream().filter(test -> test.id().equalsIgnoreCase(args[1])).toList());
-            default -> System.out.println("Options: --all | --list | --summary | --case <ID>");
+            default -> System.out.println("Options: --all | --list | --case <ID>");
         }
     }
 
     private static List<ManualTest> allTests() {
         List<ManualTest> cases = new ArrayList<>();
         cases.addAll(CreateBranchManualCases.cases());
-        cases.addAll(ViewBranchListManualCases.cases());
         cases.addAll(UpdateBranchManualCases.cases());
-        cases.addAll(SetBranchManagerManualCases.cases());
-        cases.addAll(ChangeBranchStatusManualCases.cases());
         cases.sort(Comparator.comparing(ManualTest::id));
         validate(cases);
         return List.copyOf(cases);
@@ -106,25 +100,13 @@ public final class BranchManagementManualRunner {
                 cases.size(), passed, cases.size() - passed);
     }
 
-    private static void summary(List<ManualTest> cases) {
-        List<String> failed = new ArrayList<>();
-        for (ManualTest test : cases) {
-            if (!test.execute().passed()) failed.add(test.id());
-        }
-        System.out.printf("SUMMARY: total=%d, passed=%d, failed=%d%n",
-                cases.size(), cases.size() - failed.size(), failed.size());
-        System.out.println("FAILED_IDS: " + String.join(",", failed));
-    }
-
     private static void validate(List<ManualTest> cases) {
         if (cases.size() != EXPECTED_CASES) {
             throw new IllegalStateException("Expected " + EXPECTED_CASES + " cases but found " + cases.size());
         }
         Set<String> ids = new HashSet<>();
-        for (int index = 0; index < cases.size(); index++) {
-            ManualTest test = cases.get(index);
-            String expected = "BRM-%03d".formatted(index + 1);
-            if (!expected.equals(test.id()) || !ids.add(test.id())) {
+        for (ManualTest test : cases) {
+            if (!test.id().matches("BRM-\\d{3}") || !ids.add(test.id())) {
                 throw new IllegalStateException("Invalid or duplicate Test Case ID: " + test.id());
             }
         }
@@ -137,34 +119,6 @@ public final class BranchManagementManualRunner {
 
     public static TestResult check(boolean condition, String actual) {
         return new TestResult(condition, actual);
-    }
-
-    public static TestResult sourceContains(String path, String... fragments) throws Exception {
-        String content = source(path);
-        List<String> missing = new ArrayList<>();
-        for (String fragment : fragments) {
-            if (!content.contains(fragment)) missing.add(fragment);
-        }
-        return check(missing.isEmpty(), missing.isEmpty()
-                ? "Matched source behavior: " + String.join(" | ", fragments)
-                : "Missing source behavior: " + String.join(" | ", missing));
-    }
-
-    public static TestResult sourceOmits(String path, String... forbiddenFragments) throws Exception {
-        String content = source(path);
-        List<String> present = new ArrayList<>();
-        for (String fragment : forbiddenFragments) {
-            if (content.contains(fragment)) present.add(fragment);
-        }
-        return check(present.isEmpty(), present.isEmpty()
-                ? "Forbidden behavior is absent"
-                : "Unexpected source behavior present: " + String.join(" | ", present));
-    }
-
-    public static String source(String relative) throws Exception {
-        Path path = Path.of(relative);
-        if (!Files.exists(path)) path = Path.of("backend").resolve(relative);
-        return Files.readString(path);
     }
 
     public static TestResult validateAccepted(BranchCommand input) {

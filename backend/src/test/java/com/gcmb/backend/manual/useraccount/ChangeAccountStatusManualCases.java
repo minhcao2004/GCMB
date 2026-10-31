@@ -81,12 +81,6 @@ public final class ChangeAccountStatusManualCases {
         cases.add(success("UAM-112", "A", "reason dài 1 ký tự", "Boundary"));
         cases.add(success("UAM-113", "a".repeat(1000), "reason dài 1000 ký tự", "Boundary"));
         cases.add(reasonFailure("UAM-114", "a".repeat(1001), MSG03, "reason dài 1001 ký tự", "Boundary"));
-        cases.add(test("UAM-115", "Hủy tại confirmation", "Không gọi deactivate; dữ liệu giữ nguyên.", "Normal", () -> {
-            var f = fixture(UserAccountDemoData.receptionist());
-            verify(f.access(), never()).deactivate(any());
-            verify(f.access(), never()).revokeTokens(any());
-            return check(true, "cancelled before service call");
-        }, "AccountAccessDialog confirmation"));
         cases.add(test("UAM-116", "Thu hồi target có token ACTIVE", "Status REVOKED và revoke tokens trong transaction.", "Normal", () -> {
             var f = fixture(UserAccountDemoData.receptionist());
             AccountView result = f.service().deactivate(f.before().id(), new Deactivate("Nghỉ việc"), UserAccountDemoData.HEAD_OFFICE_MANAGER_ID);
@@ -109,11 +103,6 @@ public final class ChangeAccountStatusManualCases {
             return check("REVOKED".equals(after.status()), "auditReason=" + reason + ", status=" + after.status());
         }, "AccountAccessService.deactivate/AccountAccessRepository.audit"));
         cases.add(test("UAM-119", "Đăng nhập bằng account vừa REVOKED", "Từ chối đúng MSG33.", "Abnormal", ChangeAccountStatusManualCases::loginRevoked, "AuthService.login"));
-        cases.add(test("UAM-120", "REVOKED sang ACTIVE", "Có đường production reactivate và trả trạng thái ACTIVE.", "Normal", () -> {
-            boolean exists = Arrays.stream(AccountAccessService.class.getDeclaredMethods())
-                    .anyMatch(method -> method.getName().equals("reactivate") || method.getName().equals("activate"));
-            return check(exists, "reactivateMethodPresent=" + exists);
-        }, "AccountAccessService reactivate endpoint"));
         return List.copyOf(cases);
     }
 

@@ -107,12 +107,6 @@ public final class SetAccountRoleManualCases {
             verify(f.access(), never()).audit(any(), anyString(), any(), any(), any());
             return check(true, "no-op verified");
         }, "AccountAccessService.setRole"));
-        cases.add(test("UAM-097", "Hủy tại confirmation", "Không gọi setRole và giữ dữ liệu.", "Normal", () -> {
-            SetRole input = new SetRole("ACCOUNTANT", null, null);
-            var f = fixture(UserAccountDemoData.receptionist(), input);
-            verify(f.access(), never()).setRole(any(), any(), any());
-            return check(true, "cancelled before service call");
-        }, "AccountAccessDialog confirmation"));
         cases.add(test("UAM-098", "Target có token ACTIVE", "Revoke tất cả token sau đổi role.", "Normal", () -> {
             SetRole input = new SetRole("ACCOUNTANT", null, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);

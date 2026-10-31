@@ -31,7 +31,6 @@ public final class PersonalAccountManualRunner {
         switch (args[0]) {
             case "--all" -> run(cases);
             case "--list" -> list(cases);
-            case "--summary" -> summary(cases);
             case "--case" -> {
                 if (args.length < 2) {
                     System.out.println("Usage: --case <Test Case ID>");
@@ -39,7 +38,7 @@ public final class PersonalAccountManualRunner {
                 }
                 run(cases.stream().filter(test -> test.id().equalsIgnoreCase(args[1])).toList());
             }
-            default -> System.out.println("Options: --all | --list | --summary | --case <ID>");
+            default -> System.out.println("Options: --all | --list | --case <ID>");
         }
     }
 
@@ -102,23 +101,6 @@ public final class PersonalAccountManualRunner {
         }
         System.out.printf("%nSUMMARY: total=%d, passed=%d, failed=%d%n",
                 cases.size(), passed, cases.size() - passed);
-    }
-
-    private static void summary(List<ManualTest> cases) {
-        int passed = 0;
-        StringBuilder failedIds = new StringBuilder();
-        for (ManualTest test : cases) {
-            TestResult result = test.execute();
-            if (result.passed()) {
-                passed++;
-            } else {
-                if (!failedIds.isEmpty()) failedIds.append(",");
-                failedIds.append(test.id());
-            }
-        }
-        System.out.printf("SUMMARY: total=%d, passed=%d, failed=%d%n",
-                cases.size(), passed, cases.size() - passed);
-        System.out.println("FAILED_IDS: " + failedIds);
     }
 
     private static void validate(List<ManualTest> cases, String prefix, int expectedCount) {

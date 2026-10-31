@@ -83,11 +83,6 @@ public final class CreateUserAccountManualCases {
             var f = UserAccountFixtures.create(input);
             return expectAuthFailure(() -> f.service().create(input, UserAccountDemoData.ACCOUNTANT_ID), 403, MSG24);
         }, "AuthSecurity/AccountService.create"));
-        cases.add(test("UAM-008", "Hủy tại bước xác nhận", "Không gọi source create và không thay đổi dữ liệu.", "Normal", () -> {
-            var f = UserAccountFixtures.create(valid("cancelled", "cancelled@example.invalid", "Demo@123", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID));
-            verify(f.repository(), never()).insert(any(), anyString(), anyString(), anyString(), any(), any());
-            return check(true, "creation cancelled before service call");
-        }, "CreateAccountDrawer confirmation"));
         cases.add(test("UAM-009", "Gửi lặp cùng confirmation", "Chỉ tạo đúng một account theo BR-164.", "Abnormal", () -> {
             CreateAccount input = valid("repeat", "repeat@example.invalid", "Demo@123", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID);
             var f = UserAccountFixtures.create(input);

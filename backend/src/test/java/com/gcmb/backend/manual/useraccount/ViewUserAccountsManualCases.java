@@ -82,7 +82,7 @@ public final class ViewUserAccountsManualCases {
         }, "AccountRepository.list"));
         cases.add(filter("UAM-065", "", "", null, "ACTIVE", "filter ACTIVE/REVOKED status"));
         cases.add(filter("UAM-066", "letan", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, "ACTIVE", "combined filters use AND"));
-        cases.add(test("UAM-067", "q không có kết quả", "items rỗng,total=0; UI dùng MSG01.", "Abnormal", () -> {
+        cases.add(test("UAM-067", "q không có kết quả", "Service trả items rỗng và total=0.", "Abnormal", () -> {
             var f = UserAccountFixtures.list(new AccountPage(List.of(), 0, 0, 10));
             AccountPage result = f.service().list("khong-ton-tai-xyz", "", null, "", 0, 10);
             return check(result.items().isEmpty() && result.total() == 0, "items=" + result.items().size() + ", total=" + result.total());
