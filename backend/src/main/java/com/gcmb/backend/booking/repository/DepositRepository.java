@@ -13,9 +13,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-// Đọc danh sách tiền cọc, các bút toán và lịch sử xử lý theo chi nhánh.
+// Đọc tiền cọc theo chi nhánh và hàng đợi hoàn cọc kế toán toàn hệ thống.
 public class DepositRepository {
-    public record RefundRequestRow(UUID id, UUID bookingId, UUID depositId, BigDecimal amount,
+    public record RefundRequestRow(UUID id, UUID branchId, UUID bookingId, UUID depositId, BigDecimal amount,
                                    String reason, String status) {}
     public record RefundEvidenceRow(String objectKey, String originalName, String mimeType) {}
 
@@ -178,22 +178,35 @@ public class DepositRepository {
             rs.getString("phone"), instant(rs, "cancelled_at"), rs.getBigDecimal("amount")), branchId);
     }
 
-    public List<DepositDtos.RefundRequestItem> refundRequests(UUID branchId) {
+    public List<DepositDtos.RefundRequestItem> refundRequestsForAccounting() {
         return db.query("""
-            SELECT r.id,r.booking_id,b.code,b.contact_name,b.contact_phone,r.amount,r.reason,
+            SELECT r.id,r.booking_id,b.code,br.name AS branch_name,b.contact_name,b.contact_phone,r.amount,r.reason,
                    r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference,
                    r.evidence_id IS NOT NULL AS has_evidence
             FROM gcmb.refund_request r
             JOIN gcmb.booking b ON b.id=r.booking_id
-            WHERE r.branch_id=? AND r.kind='DEPOSIT'
+            JOIN gcmb.branch br ON br.id=r.branch_id
+            WHERE r.kind='DEPOSIT'
             ORDER BY CASE WHEN r.status IN ('REQUESTED','APPROVED','PROCESSING') THEN 0 ELSE 1 END,
                      r.created_at DESC,r.id DESC
             """, (rs, rowNum) -> new DepositDtos.RefundRequestItem(
                 rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class), rs.getString("code"),
-                rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
+                rs.getString("branch_name"), rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
                 rs.getString("reason"), rs.getString("beneficiary_name"), rs.getString("bank_name"),
                 rs.getString("bank_account"), rs.getString("status"), instant(rs, "created_at"),
-                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")), branchId);
+                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")));
+    }
+
+    public RefundEvidenceRow refundEvidenceForAccounting(UUID requestId) {
+        List<RefundEvidenceRow> rows = db.query("""
+            SELECT a.object_key,a.original_name,a.mime_type
+            FROM gcmb.refund_request r
+            JOIN gcmb.attachment a ON a.id=r.evidence_id
+            WHERE r.id=? AND r.kind='DEPOSIT' AND r.status='PAID'
+            """, (rs, rowNum) -> new RefundEvidenceRow(
+                rs.getString("object_key"), rs.getString("original_name"), rs.getString("mime_type")),
+            requestId);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public RefundEvidenceRow refundEvidence(UUID branchId, UUID requestId) {
@@ -233,13 +246,27 @@ public class DepositRepository {
     public RefundRequestRow refundRequest(UUID branchId, UUID requestId, boolean lock) {
         String lockClause = lock ? " FOR UPDATE" : "";
         List<RefundRequestRow> rows = db.query("""
-            SELECT id,booking_id,deposit_id,amount,reason,status
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
             FROM gcmb.refund_request
             WHERE branch_id=? AND id=? AND kind='DEPOSIT'
             """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
-                rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
+                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
+                rs.getObject("booking_id", UUID.class),
                 rs.getObject("deposit_id", UUID.class), rs.getBigDecimal("amount"),
                 rs.getString("reason"), rs.getString("status")), branchId, requestId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public RefundRequestRow refundRequestForAccounting(UUID requestId, boolean lock) {
+        String lockClause = lock ? " FOR UPDATE" : "";
+        List<RefundRequestRow> rows = db.query("""
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
+            FROM gcmb.refund_request
+            WHERE id=? AND kind='DEPOSIT'
+            """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
+                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
+                rs.getObject("booking_id", UUID.class), rs.getObject("deposit_id", UUID.class),
+                rs.getBigDecimal("amount"), rs.getString("reason"), rs.getString("status")), requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -259,7 +286,63 @@ public class DepositRepository {
             """, request.depositId(), request.amount(), request.id(), actorId, request.reason(),
             "DEPOSIT-REFUND-" + request.id());
         if (inserted != 1) throw new IllegalStateException("Deposit refund entry was not recorded");
+
+        // BR-108, BR-157: hoàn cọc phải giảm quỹ nguồn trong cùng giao dịch với sổ cọc.
+        UUID accountId = refundAccount(request);
+        if (accountId == null)
+            throw new com.gcmb.backend.booking.exception.BookingFailure(409, "requestId",
+                "Không tìm thấy quỹ nhận khoản cọc để ghi nhận bút toán hoàn.");
+        UUID periodId = openFinancialPeriod();
+        if (periodId == null)
+            throw new com.gcmb.backend.booking.exception.BookingFailure(409, "requestId",
+                "Không có kỳ tài chính đang mở để ghi nhận bút toán hoàn cọc.");
+        UUID transactionId = UUID.randomUUID();
+        int transactionInserted = db.update("""
+            INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,refund_id,reason,created_by,idempotency_key)
+            VALUES(?,?,CURRENT_DATE,CURRENT_TIMESTAMP,'REFUND',?,?,?,?)
+            """, transactionId, periodId, request.id(), "Hoàn cọc: " + request.reason(), actorId,
+            "DEPOSIT-REFUND-" + request.id());
+        if (transactionInserted != 1) throw new IllegalStateException("Refund financial transaction was not recorded");
+        int entryInserted = db.update("""
+            INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed)
+            VALUES(?,?,?,?)
+            """, transactionId, accountId, branchId, request.amount().negate());
+        if (entryInserted != 1) throw new IllegalStateException("Refund financial entry was not recorded");
         return true;
+    }
+
+    // Use the same fund as the deposit receipt; cash receipts without a linked fund use the branch drawer.
+    private UUID refundAccount(RefundRequestRow request) {
+        List<UUID> rows = db.query("""
+            SELECT COALESCE(
+                (SELECT fe.account_id
+                 FROM gcmb.deposit_entry de
+                 JOIN gcmb.financial_transaction ft ON ft.payment_id=de.payment_id AND ft.kind='PAYMENT'
+                 JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
+                 WHERE de.deposit_id=? AND de.kind='RECEIVE' AND de.payment_id IS NOT NULL
+                 ORDER BY de.created_at,de.id LIMIT 1),
+                (SELECT pr.account_id
+                 FROM gcmb.deposit_entry de
+                 JOIN gcmb.payment p ON p.id=de.payment_id
+                 JOIN gcmb.payment_request pr ON pr.id=p.request_id
+                 WHERE de.deposit_id=? AND de.kind='RECEIVE' AND de.payment_id IS NOT NULL
+                 ORDER BY de.created_at,de.id LIMIT 1),
+                (SELECT fa.id FROM gcmb.financial_account fa
+                 WHERE fa.branch_id=? AND fa.kind='CASH_DRAWER' AND fa.active
+                 ORDER BY fa.code LIMIT 1)
+            ) AS account_id
+            """, (rs, rowNum) -> rs.getObject("account_id", UUID.class),
+            request.depositId(), request.depositId(), request.branchId());
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private UUID openFinancialPeriod() {
+        List<UUID> rows = db.query("""
+            SELECT id FROM gcmb.financial_period
+            WHERE month=date_trunc('month',CURRENT_DATE)::date AND status='OPEN'
+            FOR SHARE
+            """, (rs, rowNum) -> rs.getObject("id", UUID.class));
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public boolean canRequestRefund(UUID branchId, UUID bookingId) {

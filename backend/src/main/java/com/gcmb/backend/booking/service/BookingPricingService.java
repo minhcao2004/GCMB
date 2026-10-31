@@ -29,11 +29,11 @@ public class BookingPricingService {
     // Rule giá và combo luôn đọc từ cấu hình database thay vì giá do client gửi.
     public BookingPricingService(BookingRepository repository) { this.repository = repository; }
 
-    // Chọn cách tính giá theo combo hoặc theo giờ và kiểm tra tham số tương ứng.
+    // BR-13: báo giá dùng cấu hình hiện hành và lưu snapshot để booking giữ nguyên giá đã chốt.
     public BookingDtos.PriceQuote quote(UUID roomTypeId, UUID branchId, ZoneId timezone,
                                         Instant start, Instant end, String mode, UUID comboId) {
         if (start == null || end == null || !end.isAfter(start))
-            throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu");
+            throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu.");
         String normalizedMode = mode == null || mode.isBlank() ? "HOURLY" : mode.trim().toUpperCase();
         if ("COMBO".equals(normalizedMode)) {
             var result = comboQuote(roomTypeId, start, end, comboId);
@@ -46,7 +46,8 @@ public class BookingPricingService {
     }
 
     public static BigDecimal depositFor(BigDecimal amount) {
-        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.HALF_UP);
+        // BR-137, BR-178: tiền cọc bằng 30% giá booking, làm tròn lên đến đồng.
+        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.CEILING);
     }
 
     // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.
@@ -62,14 +63,15 @@ public class BookingPricingService {
             .orElseThrow(() -> new BookingFailure(409, "pricingMode", "Chưa cấu hình giá giờ lẻ cho phòng và thời điểm bắt đầu"));
     }
 
-    // Xác thực combo, thời hạn áp dụng và thời lượng trước khi dùng giá niêm yết.
+    // BR-13: lưu giá và điều khoản combo hiện hành vào snapshot của booking.
     private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
         ComboRow combo = repository.combo(comboId);
-        if (combo == null || !roomTypeId.equals(combo.roomTypeId()))
-            throw new BookingFailure(400, "comboId", "Combo không áp dụng cho loại phòng đã chọn");
+        if (combo == null) throw new BookingFailure(400, "comboId", "Vui lòng bổ sung combo phù hợp.");
+        if (!roomTypeId.equals(combo.roomTypeId()))
+            throw new BookingFailure(400, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
         if (combo.validFrom().isAfter(start) || (combo.validTo() != null && !start.isBefore(combo.validTo())))
-            throw new BookingFailure(409, "comboId", "Combo không có hiệu lực tại thời gian đặt phòng");
+            throw new BookingFailure(409, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
         long expectedSeconds = combo.durationMinutes() * 60L;
         if (!Duration.between(start, end).equals(Duration.ofSeconds(expectedSeconds)))
             throw new BookingFailure(400, "plannedEnd", "Thời lượng đặt phòng phải khớp thời lượng combo đã chọn");
@@ -85,12 +87,27 @@ public class BookingPricingService {
         return new BookingDtos.PriceQuote("COMBO", combo.price(), combo.depositRequired(), List.of(line));
     }
 
-    // Chia khoảng sử dụng theo ranh giới price rule và cộng giá của từng đoạn.
+    // BR-13: chia khoảng theo price rule và lưu snapshot của từng phần giá đã chốt.
     private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
+        return hourlyQuote(roomTypeId, branchId, timezone, start, end, false);
+    }
+
+    // BR-169/170: miễn phí nếu tổng thời gian quá hạn không quá 5 phút; sau đó tính theo số giây thực tế.
+    public List<BookingDtos.ChargeLine> overstay(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end) {
+        if (!end.isAfter(start) || Duration.between(start, end).compareTo(Duration.ofMinutes(5)) <= 0) return List.of();
+        return hourlyQuote(roomTypeId, branchId, timezone, start, end, true).charges();
+    }
+
+    // BR-170/215: không làm tròn thời gian; làm tròn tiền lên đồng trên từng khung giá.
+    public static BigDecimal actualAmount(BigDecimal rate, long seconds) {
+        return rate.multiply(BigDecimal.valueOf(Math.max(0, seconds))).divide(BigDecimal.valueOf(3600), 0, RoundingMode.CEILING);
+    }
+
+    private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end, boolean actual) {
         LocalDate firstDate = start.atZone(timezone).toLocalDate();
         LocalDate lastDate = end.minusNanos(1).atZone(timezone).toLocalDate();
         List<PricingRule> rules = repository.pricingRules(roomTypeId, branchId, firstDate, lastDate);
-        if (rules.isEmpty()) throw new BookingFailure(409, "plannedStart", "Chưa cấu hình giá giờ cho loại phòng và thời gian đã chọn");
+        if (rules.isEmpty()) throw new BookingFailure(409, "plannedStart", "Không có phòng hoặc mức giá phù hợp với lựa chọn hiện tại. Vui lòng thay đổi thời gian, hạng phòng hoặc hình thức thuê.");
 
         List<Segment> segments = new ArrayList<>();
         Instant cursor = start;
@@ -102,7 +119,7 @@ public class BookingPricingService {
                 .max(Comparator.comparing((PricingRule rule) -> rule.branchId() != null)
                     .thenComparingInt(PricingRule::priority)
                     .thenComparingInt(rule -> specificity(rule.dayKind())))
-                .orElseThrow(() -> new BookingFailure(409, "plannedStart", "Không có quy tắc giá áp dụng cho toàn bộ thời gian đã chọn"));
+                .orElseThrow(() -> new BookingFailure(409, "plannedStart", "Không có phòng hoặc mức giá phù hợp với lựa chọn hiện tại. Vui lòng thay đổi thời gian, hạng phòng hoặc hình thức thuê."));
             Instant nextBoundary = nextBoundary(cursor, end, date, minute, rules, timezone);
             if (!segments.isEmpty() && segments.get(segments.size() - 1).rule().id().equals(selected.id())) {
                 Segment previous = segments.remove(segments.size() - 1);
@@ -124,12 +141,17 @@ public class BookingPricingService {
             BigDecimal quantity = BigDecimal.valueOf(billedMinutes).divide(BigDecimal.valueOf(60), 3, RoundingMode.HALF_UP);
             BigDecimal amount = segment.rule().hourlyPrice().multiply(BigDecimal.valueOf(billedMinutes))
                 .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP);
+            if (actual) {
+                quantity = BigDecimal.valueOf(seconds).divide(BigDecimal.valueOf(3600), 3, RoundingMode.UP);
+                amount = actualAmount(segment.rule().hourlyPrice(), seconds);
+            }
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("pricingMode", "HOURLY"); snapshot.put("ruleName", segment.rule().name());
             snapshot.put("ruleId", segment.rule().id().toString()); snapshot.put("from", segment.start().toString());
             snapshot.put("to", segment.end().toString()); snapshot.put("actualMinutes", actualMinutes);
             snapshot.put("billedMinutes", billedMinutes); snapshot.put("billingStepMinutes", step);
             snapshot.put("hourlyPrice", segment.rule().hourlyPrice());
+            if (actual) { snapshot.put("billedSeconds", seconds); snapshot.put("billing", "ACTUAL_SECONDS_BR170"); }
             charges.add(new BookingDtos.ChargeLine("ROOM", segment.rule().name(), quantity,
                 segment.rule().hourlyPrice(), amount, segment.rule().id(), null, snapshot));
             total = total.add(amount);

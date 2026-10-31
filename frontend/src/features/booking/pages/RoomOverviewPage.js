@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
@@ -6,6 +6,8 @@ import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
 import BookingStayDialog from './BookingStayDialog';
+import { foodOrderApi } from '../../inventory/services/foodOrderApi';
+import IncomingRoomOrderDialog from '../../inventory/components/IncomingRoomOrderDialog';
 import '../styles/booking.css';
 import '../styles/rooms.css';
 
@@ -98,10 +100,31 @@ export default function RoomOverviewPage() {
   const [stayMode, setStayMode] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleDialogRef = useRef(null);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const orderDialogRef = useRef(null);
+  const orderRequestKey = useRef('');
+  const [orderMenu, setOrderMenu] = useState([]);
+  const [orderEmployees, setOrderEmployees] = useState([]);
+  const [pendingRoomOrders, setPendingRoomOrders] = useState([]);
+  const [incomingOrders, setIncomingOrders] = useState([]);
+  const [incomingOrderNotice, setIncomingOrderNotice] = useState('');
+  const [incomingOrderError, setIncomingOrderError] = useState('');
+  const [checkingRoomOrders, setCheckingRoomOrders] = useState(false);
+  const [roomOrderCheckError, setRoomOrderCheckError] = useState('');
+  const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
+  const [orderSoundError, setOrderSoundError] = useState('');
+  const [orderEmployeeId, setOrderEmployeeId] = useState('');
+  const [orderQuantities, setOrderQuantities] = useState({});
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const orderAudioContext = useRef(null);
+  const knownPendingQrOrderIds = useRef(null);
+  const pendingOrderPollInProgress = useRef(false);
 
   useEffect(() => { document.title = 'Phòng | GenZ Cinema & Music Box'; }, []);
   useEffect(() => {
@@ -129,6 +152,99 @@ export default function RoomOverviewPage() {
       .catch((error) => { if (active) setLoadError(errorText(error)); });
     return () => { active = false; };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true;
+    foodOrderApi.servingEmployees().then((employees) => {
+      if (active) setOrderEmployees(employees);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [user]);
+
+  const playOrderSound = useCallback(() => {
+    const context = orderAudioContext.current;
+    if (!orderSoundEnabled || !context || context.state !== 'running') return;
+    const nowAt = context.currentTime;
+    [[880, 0], [660, 0.16], [880, 0.32]].forEach(([frequency, offset]) => {
+      const startAt = nowAt + offset;
+      const oscillator = context.createOscillator();
+      const volume = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, startAt);
+      volume.gain.setValueAtTime(0.0001, startAt);
+      volume.gain.exponentialRampToValueAtTime(0.16, startAt + 0.015);
+      volume.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14);
+      oscillator.connect(volume);
+      volume.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.15);
+    });
+  }, [orderSoundEnabled]);
+
+  const refreshPendingRoomOrders = useCallback(async () => {
+    if (pendingOrderPollInProgress.current) return;
+    pendingOrderPollInProgress.current = true;
+    try {
+      const rows = await foodOrderApi.staffOrders('PENDING');
+      const pending = rows.filter((order) => order.channel === 'ROOM_QR' && order.bookingId && order.roomCode);
+      const firstLoad = knownPendingQrOrderIds.current === null;
+      let newOrders = [];
+      if (firstLoad) {
+        knownPendingQrOrderIds.current = new Set(pending.map((order) => order.id));
+        newOrders = pending;
+      } else {
+        const knownIds = knownPendingQrOrderIds.current;
+        newOrders = pending.filter((order) => !knownIds.has(order.id));
+        pending.forEach((order) => knownIds.add(order.id));
+      }
+
+      setPendingRoomOrders(pending);
+      const pendingById = new Map(pending.map((order) => [order.id, order]));
+      setIncomingOrders((current) => {
+        const refreshed = current.filter((order) => pendingById.has(order.id))
+          .map((order) => pendingById.get(order.id));
+        const queuedIds = new Set(refreshed.map((order) => order.id));
+        return [...refreshed, ...newOrders.filter((order) => !queuedIds.has(order.id))];
+      });
+      if (!firstLoad && newOrders.length > 0) playOrderSound();
+    } catch {
+      // The next interval retries without interrupting room operations.
+    } finally {
+      pendingOrderPollInProgress.current = false;
+    }
+  }, [playOrderSound]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    refreshPendingRoomOrders();
+    const timer = window.setInterval(refreshPendingRoomOrders, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshPendingRoomOrders, user]);
+
+  useEffect(() => () => { orderAudioContext.current?.close(); }, []);
+
+  const toggleOrderSound = async () => {
+    setOrderSoundError('');
+    if (orderSoundEnabled) {
+      setOrderSoundEnabled(false);
+      await orderAudioContext.current?.suspend();
+      return;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      setOrderSoundError('Trình duyệt này không hỗ trợ âm báo.');
+      return;
+    }
+    try {
+      orderAudioContext.current ||= new AudioContextClass();
+      await orderAudioContext.current.resume();
+      if (orderAudioContext.current.state !== 'running') throw new Error('Audio context is not running.');
+      setOrderSoundEnabled(true);
+    } catch {
+      setOrderSoundError('Chưa bật được âm báo. Hãy kiểm tra âm lượng và quyền âm thanh của trình duyệt.');
+    }
+  };
 
   const currentMinute = Math.floor(now / 60000);
   const date = selectedDate || toLocalDateInput(new Date((currentMinute + 5) * 60000));
@@ -217,6 +333,13 @@ export default function RoomOverviewPage() {
     if (!scheduleOpen && dialog.open) dialog.close();
   }, [scheduleOpen]);
 
+  useEffect(() => {
+    const dialog = orderDialogRef.current;
+    if (!dialog) return;
+    if (orderDialogOpen && !dialog.open) dialog.showModal();
+    if (!orderDialogOpen && dialog.open) dialog.close();
+  }, [orderDialogOpen]);
+
   const floors = [...new Set(rooms.map((room) => floorOf(room.code)).filter(Boolean))].sort();
   const visible = rooms.filter((room) => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
@@ -253,6 +376,16 @@ export default function RoomOverviewPage() {
   const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
   const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
+  const orderLines = orderMenu.filter((item) => orderQuantities[item.id] > 0);
+  const orderTotal = orderLines.reduce((total, item) => total + Number(item.salePrice || 0) * orderQuantities[item.id], 0);
+  const pendingOrdersByRoomCode = useMemo(() => {
+    const counts = new Map();
+    pendingRoomOrders.forEach((order) => counts.set(order.roomCode, (counts.get(order.roomCode) || 0) + 1));
+    return counts;
+  }, [pendingRoomOrders]);
+  const selectedPendingOrders = selected?.code
+    ? pendingRoomOrders.filter((order) => order.roomCode === selected.code)
+    : [];
 
   const logout = async () => {
     setBusy(true);
@@ -275,6 +408,127 @@ export default function RoomOverviewPage() {
     if (!canCheckIn || !currentBooking?.id) return;
     navigate(`/le-tan/bookings/${currentBooking.id}/check-in`, { state: { bookingDate: date } });
   };
+
+  const openServiceOrder = async () => {
+    if (selected?.status !== 'occupied' || !currentBooking?.id || !detailReady || busy || checkingRoomOrders) return;
+    setCheckingRoomOrders(true);
+    setRoomOrderCheckError('');
+    setIncomingOrderNotice('');
+    let roomOrders = [];
+    try {
+      const rows = await foodOrderApi.staffOrders('PENDING');
+      const pending = rows.filter((order) => order.channel === 'ROOM_QR' && order.bookingId && order.roomCode);
+      roomOrders = pending.filter((order) => order.roomCode === selected.code);
+      setPendingRoomOrders(pending);
+    } catch (error) {
+      setRoomOrderCheckError(`Chưa kiểm tra được order đang chờ: ${errorText(error)}`);
+      setCheckingRoomOrders(false);
+      return;
+    }
+    setCheckingRoomOrders(false);
+    if (roomOrders.length > 0) {
+      const roomOrderIds = new Set(roomOrders.map((order) => order.id));
+      setIncomingOrderNotice(`Phòng ${selected.code} có ${roomOrders.length} order QR đang chờ. Vui lòng xử lý trước khi tạo order dịch vụ mới.`);
+      setIncomingOrderError('');
+      setIncomingOrders((current) => [
+        ...roomOrders,
+        ...current.filter((order) => !roomOrderIds.has(order.id)),
+      ]);
+      setNotice('');
+      return;
+    }
+    orderRequestKey.current = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setOrderDialogOpen(true);
+    setOrderLoading(true);
+    setOrderError('');
+    setOrderMenu([]);
+    setOrderQuantities({});
+    try {
+      const [items, employees] = await Promise.all([
+        foodOrderApi.staffMenu(), foodOrderApi.servingEmployees(),
+      ]);
+      setOrderMenu(items.filter((item) => item.available));
+      setOrderEmployees(employees);
+      setOrderEmployeeId(employees.find((employee) => employee.id === user.id)?.id || employees[0]?.id || '');
+      if (employees.length === 0) setOrderError('Chưa có lễ tân đang trong ca để phụ trách order.');
+    } catch (error) {
+      setOrderError(errorText(error));
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
+  const changeOrderQuantity = (itemId, amount) => setOrderQuantities((current) => ({
+    ...current,
+    [itemId]: Math.max(0, amount),
+  }));
+
+  const submitServiceOrder = async (event) => {
+    event.preventDefault();
+    if (!currentBooking?.id || !orderEmployeeId || orderLines.length === 0 || orderSubmitting) return;
+    setOrderSubmitting(true);
+    setOrderError('');
+    try {
+      const order = await foodOrderApi.addStaffOrder({
+        bookingId: currentBooking.id,
+        assignedEmployeeId: orderEmployeeId,
+        idempotencyKey: orderRequestKey.current,
+        items: orderLines.map((item) => ({ menuItemId: item.id, quantity: orderQuantities[item.id] })),
+      });
+      setOrderDialogOpen(false);
+      setNotice(`Đã ghi nhận ${order.code || 'order'} cho phòng ${selected.code}. Phí và tồn kho đã được cập nhật.`);
+      setReload((value) => value + 1);
+    } catch (error) {
+      setOrderError(errorText(error));
+    } finally {
+      setOrderSubmitting(false);
+    }
+  };
+
+  const deferIncomingOrder = (orderId) => {
+    setIncomingOrderError('');
+    setIncomingOrderNotice('');
+    setIncomingOrders((current) => current.filter((order) => order.id !== orderId));
+  };
+
+  const openSelectedRoomOrders = () => {
+    if (selectedPendingOrders.length === 0) return;
+    setIncomingOrderError('');
+    const selectedIds = new Set(selectedPendingOrders.map((order) => order.id));
+    setIncomingOrders((current) => [
+      ...selectedPendingOrders,
+      ...current.filter((order) => !selectedIds.has(order.id)),
+    ]);
+  };
+
+  const actOnIncomingOrder = async (order, action, successMessage) => {
+    setBusy(true);
+    setIncomingOrderError('');
+    setIncomingOrderNotice('');
+    setNotice('');
+    try {
+      await action();
+      setNotice(successMessage);
+      setIncomingOrders((current) => current.filter((queued) => queued.id !== order.id));
+      await refreshPendingRoomOrders();
+    } catch (error) {
+      setIncomingOrderError(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmIncomingOrder = (order, assignedEmployeeId, items) => actOnIncomingOrder(
+    order,
+    () => foodOrderApi.confirmRoomOrder(order.id, { assignedEmployeeId, items }),
+    'Đã xác nhận order, ghi nhận phí và xử lý tồn kho.',
+  );
+
+  const rejectIncomingOrder = (order) => actOnIncomingOrder(
+    order,
+    () => foodOrderApi.rejectRoomOrder(order.id),
+    'Đã từ chối yêu cầu món.',
+  );
 
   const saveStay = async (action, payload) => {
     if (!currentBooking) return { error: 'Chưa chọn phòng đang sử dụng.' };
@@ -303,7 +557,8 @@ export default function RoomOverviewPage() {
   if (!user) return <main className="booking-auth-state">{authError ? <div className="booking-auth-message" role="alert">{authError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div> : <p role="status">Đang kiểm tra phiên đăng nhập…</p>}</main>;
 
   return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms" hideSearch>
-    <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1><p>Theo dõi trạng thái và thao tác nhanh tại quầy</p></div></div>
+    <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1><p>Theo dõi trạng thái và thao tác nhanh tại quầy</p></div><div className="room-page-heading-actions">{orderSoundError && <span role="status">{orderSoundError}</span>}<button type="button" className={`room-order-sound-toggle${orderSoundEnabled ? ' is-enabled' : ''}`} aria-pressed={orderSoundEnabled} onClick={toggleOrderSound}>{orderSoundEnabled ? 'Tắt âm báo order' : 'Bật âm báo order'}</button></div></div>
+    {roomOrderCheckError && <div className="booking-inline-error" role="alert">{roomOrderCheckError}<button type="button" onClick={() => setRoomOrderCheckError('')}>Đóng</button></div>}
     {notice && <div className="booking-live-notice" role="status"><span>✓</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
     {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
     {overdueCount > 0 && <section className="room-overdue-alert" role="alert">
@@ -324,8 +579,11 @@ export default function RoomOverviewPage() {
         {loading ? <p className="room-empty" role="status">Đang tải phòng…</p> : !visible.length ? <p className="room-empty">{loadError ? 'Chưa tải được danh sách phòng. Vui lòng thử lại.' : 'Không có phòng phù hợp với bộ lọc này.'}</p> : <div className="room-grid">{visible.map((room) => {
           const roomOverdue = roomIsOverdue(room);
           const roomMeter = meterForBooking(room.booking?.id);
-          return <button type="button" key={room.id} className={`room-card room-card-${room.status}${roomOverdue ? ' room-card-overdue' : ''}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}>
+          // BR-27: show each QR alert on the room code recorded with the customer's order.
+          const orderCount = pendingOrdersByRoomCode.get(room.code) || 0;
+          return <button type="button" key={room.id} className={`room-card room-card-${room.status}${roomOverdue ? ' room-card-overdue' : ''}${orderCount ? ' room-card--has-orders' : ''}${selectedRoomId === room.id ? ' is-selected' : ''}`} aria-pressed={selectedRoomId === room.id} onClick={() => setSelectedRoomId(room.id)}>
             <strong>{room.code} {room.name}</strong>
+            {orderCount > 0 && <span className="room-card-order-alert" title={`${orderCount} order QR đang chờ xác nhận`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg><b>{orderCount > 9 ? '9+' : orderCount}</b><span className="sr-only">Có {orderCount} order QR chờ xác nhận</span></span>}
             <small>{room.roomTypeName || 'Phòng'}{room.capacity ? ` · ${room.capacity} người` : ''}</small>
             <span>{statusText(room.status)}</span>
             {roomMeter?.status === 'RUNNING' && <small className="room-card-meter" role="timer">Giờ lẻ · {elapsedClockText(roomMeter.billedFrom, now)}</small>}
@@ -360,9 +618,14 @@ export default function RoomOverviewPage() {
             {!canCheckIn && currentBooking.status === 'CONFIRMED' && now < roomBookingStart && <small className="room-checkout-note">Có thể nhận phòng từ {timeText(currentBooking.plannedStart, timezone)}.</small>}
           </>}
           {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
+          {selectedPendingOrders.length > 0 && <section className="room-pending-orders" aria-label="Yêu cầu món đang chờ">
+            <div className="room-pending-orders-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></div>
+            <div><strong>{selectedPendingOrders.length} order QR đang chờ</strong><span>{selectedPendingOrders.map((order) => order.code).join(' · ')}</span></div>
+            <button type="button" onClick={openSelectedRoomOrders}>Xử lý tại đây</button>
+          </section>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
           {selected.status !== 'reserved' && <>
-            <h3>Thao tác</h3><div className="room-actions"><button type="button" disabled>+ Order dịch vụ</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
+            <h3>Thao tác</h3><div className="room-actions"><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !currentBooking?.id || !detailReady || busy || checkingRoomOrders} onClick={openServiceOrder}>{checkingRoomOrders ? 'Đang kiểm tra order…' : '+ Order dịch vụ'}</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
           </>}
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
         </div>
@@ -377,6 +640,25 @@ export default function RoomOverviewPage() {
       </li>)}</ol> : <p className="room-schedule-empty">Chưa có booking nào của phòng này trong ngày {dateInputText(date)}.</p>}
       <button type="button" className="room-schedule-close" onClick={() => setScheduleOpen(false)}>Đóng</button>
     </dialog>
+    <dialog ref={orderDialogRef} className="room-order-dialog" aria-labelledby="room-order-title" onClose={() => setOrderDialogOpen(false)}>
+      <header><div><h2 id="room-order-title">Order dịch vụ · {selected?.code}</h2><p>{currentBooking?.code} · {currentBooking?.contactName}</p></div><button type="button" aria-label="Đóng order dịch vụ" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>×</button></header>
+      <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay.</p>
+      {orderError && <div className="room-order-error" role="alert">{orderError}</div>}
+      {orderLoading ? <p className="room-order-empty" role="status">Đang tải thực đơn…</p> : orderMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form onSubmit={submitServiceOrder}>
+        <label className="room-order-employee">Nhân viên phụ trách<select value={orderEmployeeId} onChange={(event) => setOrderEmployeeId(event.target.value)} required disabled={orderEmployees.length === 0 || orderSubmitting}><option value="">Chọn lễ tân đang trong ca</option>{orderEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
+        <div className="room-order-items">{orderMenu.map((item) => {
+          const quantity = orderQuantities[item.id] || 0;
+          return <article className="room-order-item" key={item.id}>
+            <div><strong>{item.name}</strong><span>{formatVnd(item.salePrice)}</span></div>
+            <div className="room-order-quantity"><button type="button" aria-label={`Giảm ${item.name}`} disabled={quantity === 0 || orderSubmitting} onClick={() => changeOrderQuantity(item.id, quantity - 1)}>−</button><span>{quantity}</span><button type="button" aria-label={`Tăng ${item.name}`} disabled={orderSubmitting} onClick={() => changeOrderQuantity(item.id, quantity + 1)}>+</button></div>
+          </article>;
+        })}</div>
+        <footer className="room-order-footer"><span>Tạm tính <strong>{formatVnd(orderTotal)}</strong></span><button type="submit" disabled={orderLoading || orderSubmitting || !orderEmployeeId || orderLines.length === 0}>{orderSubmitting ? 'Đang ghi nhận…' : 'Ghi nhận order'}</button></footer>
+      </form>}
+      <button type="button" className="room-order-close" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>Đóng</button>
+    </dialog>
     {stayMode && currentBooking && <BookingStayDialog key={`${currentBooking.id}-${stayMode}`} booking={currentBooking} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayMode(null)} onSave={saveStay} busy={busy} timezone={timezone} />}
+    {!orderDialogOpen && !scheduleOpen && <IncomingRoomOrderDialog orders={incomingOrders} employees={orderEmployees} busy={busy} error={incomingOrderError} notice={incomingOrderNotice}
+      onConfirm={confirmIncomingOrder} onReject={rejectIncomingOrder} onDefer={deferIncomingOrder} />}
   </AppShell>;
 }

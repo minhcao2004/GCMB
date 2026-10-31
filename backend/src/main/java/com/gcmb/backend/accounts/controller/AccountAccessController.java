@@ -17,8 +17,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/head-office/accounts")
+@RequestMapping({ "/api/v1/head-office/accounts", "/api/v1/branch-management/accounts" })
 public class AccountAccessController {
+
     private final AccountAccessService service;
 
     public AccountAccessController(AccountAccessService service) {
@@ -32,17 +33,24 @@ public class AccountAccessController {
 
     @PostMapping("/{id}/role")
     public AccountView setRole(
-            @PathVariable UUID id,
-            @RequestBody SetRole input,
-            @AuthenticationPrincipal Identity actor) {
+        @PathVariable UUID id,
+        @RequestBody SetRole input,
+        @AuthenticationPrincipal Identity actor
+    ) {
         return service.setRole(id, input, actor.id());
     }
 
     @PostMapping("/{id}/deactivate")
     public AccountView deactivate(
-            @PathVariable UUID id,
-            @RequestBody Deactivate input,
-            @AuthenticationPrincipal Identity actor) {
-        return service.deactivate(id, input, actor.id());
+        @PathVariable UUID id,
+        @RequestBody Deactivate input,
+        @AuthenticationPrincipal Identity actor
+    ) {
+        return service.changeStatus(id, input, actor, false);
+    }
+
+    @PostMapping("/{id}/reactivate")
+    public AccountView reactivate(@PathVariable UUID id, @AuthenticationPrincipal Identity actor) {
+        return service.changeStatus(id, null, actor, true);
     }
 }

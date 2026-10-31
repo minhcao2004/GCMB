@@ -10,5 +10,8 @@ package com.gcmb.backend.auth.dto;
 
 // Dữ liệu đăng nhập; không tạo toString để tránh lộ mật khẩu vào log.
 public class LoginRequest {
-    public String username; public String password; public boolean remember;
+
+    public String username;
+    public String password;
+    public boolean remember;
 }

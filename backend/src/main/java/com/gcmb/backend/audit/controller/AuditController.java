@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/head-office/audit-logs")
 public class AuditController {
+
     private final AuditService service;
 
     public AuditController(AuditService service) {
@@ -25,13 +26,14 @@ public class AuditController {
 
     @GetMapping
     public AuditPage list(
-            @RequestParam(defaultValue = "") String q,
-            @RequestParam(defaultValue = "") String action,
-            @RequestParam(required = false) UUID branchId,
-            @RequestParam(required = false) LocalDate from,
-            @RequestParam(required = false) LocalDate to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+        @RequestParam(defaultValue = "") String q,
+        @RequestParam(defaultValue = "") String action,
+        @RequestParam(required = false) UUID branchId,
+        @RequestParam(required = false) LocalDate from,
+        @RequestParam(required = false) LocalDate to,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size
+    ) {
         return service.list(q, action, branchId, from, to, page, size);
     }
 

@@ -12,9 +12,13 @@ import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
+import ReceptionShiftPage from '../features/workforce/pages/ReceptionShiftPage';
+import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
+import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
+import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
@@ -28,6 +32,7 @@ export default function AppRoutes() {
     <Route path="/quan-ly-he-thong" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-he-thong/phong-bang-gia" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-chi-nhanh" element={<RoleHomePage role="BRANCH_MANAGER" />} />
+    <Route path="/mr/:mrCode" element={<GuestRoomOrderPage />} />
     <Route path="/le-tan/bookings/new" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/edit" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/check-in" element={<BookingManagementPage />} />
@@ -36,8 +41,12 @@ export default function AppRoutes() {
     <Route path="/le-tan/bills/:billId" element={<CheckoutPage />} />
     <Route path="/le-tan/thanh-toan" element={<CheckoutPage />} />
     <Route path="/le-tan/deposits" element={<DepositManagementPage />} />
+    <Route path="/le-tan/don-mon" element={<ReceptionOrdersPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
+    <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
+    <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
+    <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
     <Route path="/ke-toan" element={<AccountantRefundPage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />

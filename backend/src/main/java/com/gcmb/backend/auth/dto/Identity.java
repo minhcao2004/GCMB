@@ -17,4 +17,8 @@ import java.util.UUID;
 
 // Danh tính công khai của phiên, cơ sở được gán và trang đích theo vai trò.
 public record Identity(UUID id, String username, String role, String destination,
-                       UUID branchId, String branchName) {}
+                       UUID branchId, String branchName, boolean readOnly) {
+    public Identity(UUID id, String username, String role, String destination, UUID branchId, String branchName) {
+        this(id, username, role, destination, branchId, branchName, false);
+    }
+}

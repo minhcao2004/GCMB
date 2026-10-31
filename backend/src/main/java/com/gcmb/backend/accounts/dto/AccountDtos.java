@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.UUID;
 
 public final class AccountDtos {
-    private AccountDtos() {
-    }
+
+    private AccountDtos() {}
 
     public record CreateAccount(
         UUID employeeId,
@@ -22,8 +22,7 @@ public final class AccountDtos {
         String email,
         String role,
         UUID branchId
-    ) {
-    }
+    ) {}
 
     public record AccountView(
         UUID id,
@@ -37,21 +36,53 @@ public final class AccountDtos {
         String status,
         List<UUID> managedBranchIds
     ) {
-        public AccountView(UUID id, String employeeName, String employeeCode, String username,
-                String email, String role, UUID branchId, String branchName, String status) {
-            this(id, employeeName, employeeCode, username, email, role, branchId, branchName, status, List.of());
+        public AccountView(
+            UUID id,
+            String employeeName,
+            String employeeCode,
+            String username,
+            String email,
+            String role,
+            UUID branchId,
+            String branchName,
+            String status
+        ) {
+            this(
+                id,
+                employeeName,
+                employeeCode,
+                username,
+                email,
+                role,
+                branchId,
+                branchName,
+                status,
+                List.of()
+            );
         }
     }
 
-    public record Option(String id, String name) {
+    public record Option(String id, String name) {}
+
+    public record EmployeeOption(
+        UUID id,
+        String name,
+        String code,
+        String role,
+        String email,
+        UUID branchId,
+        String branchName
+    ) {
+        public EmployeeOption(UUID id, String name, String code) {
+            this(id, name, code, null, null, null, null);
+        }
     }
 
-    public record EmployeeOption(UUID id, String name, String code) {
-    }
+    public record Options(
+        List<EmployeeOption> employees,
+        List<Option> roles,
+        List<Option> branches
+    ) {}
 
-    public record Options(List<EmployeeOption> employees, List<Option> roles, List<Option> branches) {
-    }
-
-    public record AccountPage(List<AccountView> items, long total, int page, int size) {
-    }
+    public record AccountPage(List<AccountView> items, long total, int page, int size) {}
 }

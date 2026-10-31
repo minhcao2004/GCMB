@@ -55,7 +55,11 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
   const combos = selectedType?.combos || [];
   const selectedCombo = combos.find((item) => item.id === form.comboId) || combos[0] || null;
-  const hourlyDurationValid = /^(?:[1-9]|1\d|2[0-4])$/.test(String(form.durationHours));
+  // BR-150: giờ thuê hỗ trợ bước 30 phút để chấp nhận booking 90 phút.
+  const parsedHourlyDuration = Number(form.durationHours);
+  const hourlyDurationValid = Number.isFinite(parsedHourlyDuration)
+    && parsedHourlyDuration >= 1 && parsedHourlyDuration <= 24
+    && Number.isInteger(parsedHourlyDuration * 2);
   const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyDurationValid ? Number(form.durationHours) * 60 : null;
   const plannedStart = useMemo(() => {
     if (!form.date || !isValidTimeInput(form.time)) return null;
@@ -74,7 +78,13 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const paymentMethod = String(form.paymentMethod || '').trim().toUpperCase();
   const cashPayment = paymentMethod === 'CASH';
   const guestCount = Number(form.guestCount);
-  const guestCountValid = Number.isInteger(guestCount) && guestCount >= 1 && (!chosenRoom || guestCount <= chosenRoom.capacity);
+  // BR-150, BR-128; MSG44, MSG54: validate and explain the booking guest count.
+  const guestCountError = !Number.isInteger(guestCount) || guestCount < 1
+    ? 'Số lượng khách phải là số nguyên lớn hơn 0.'
+    : chosenRoom && guestCount > chosenRoom.capacity
+      ? `Phòng ${chosenRoom.code} chỉ phù hợp tối đa ${chosenRoom.capacity} khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.`
+      : '';
+  const guestCountValid = !guestCountError;
   const validSchedule = Boolean(plannedStart && plannedEnd && plannedStart > new Date() && plannedEnd > plannedStart);
   const pricingSelectionValid = form.pricingMode === 'COMBO' ? Boolean(selectedCombo) : hourlyDurationValid;
   const depositAmountValid = Number.isFinite(depositAmount) && depositAmount > 0;
@@ -89,8 +99,8 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   if (contactPhoneError) bookingBlockers.push(contactPhoneError);
   if (!selectedType) bookingBlockers.push('Chọn hạng phòng.');
   if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date() ? 'Chọn ngày giờ nhận phòng trong tương lai.' : 'Chọn ngày giờ nhận phòng hợp lệ.');
-  if (!guestCountValid) bookingBlockers.push(chosenRoom && guestCount > chosenRoom.capacity ? `Giảm số khách còn tối đa ${chosenRoom.capacity} người.` : 'Nhập số khách từ 1 trở lên.');
-  if (!pricingSelectionValid) bookingBlockers.push(form.pricingMode === 'COMBO' ? 'Chọn một combo dịch vụ.' : 'Nhập thời lượng thuê từ 1 đến 24 giờ nguyên.');
+  if (guestCountError) bookingBlockers.push(guestCountError);
+  if (!pricingSelectionValid) bookingBlockers.push(form.pricingMode === 'COMBO' ? 'Chọn một combo dịch vụ.' : 'Nhập thời lượng thuê từ 1 đến 24 giờ, theo bước 0,5 giờ.');
   if (!loadingAvailability && !chosenRoom) {
     bookingBlockers.push(availabilityError ? 'Không xác nhận được phòng trống; hãy đổi lịch hoặc hạng phòng để thử lại.' : availableRooms.length ? 'Chọn một phòng còn trống.' : 'Đổi thời gian hoặc hạng phòng để tìm phòng trống.');
   }
@@ -263,7 +273,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
           </Field>
           <Field label="Số lượng khách *" className={showGuestCountError ? 'is-invalid' : ''}>
             <input type="number" name="guestCount" min="1" value={form.guestCount} onChange={change} onBlur={() => markTouched('guestCount')} required aria-invalid={showGuestCountError} aria-describedby={showGuestCountError ? 'booking-guest-count-error' : undefined} />
-            {showGuestCountError && <small id="booking-guest-count-error" className="booking-field-error" aria-live="polite">{chosenRoom && guestCount > chosenRoom.capacity ? `Phòng này nhận tối đa ${chosenRoom.capacity} khách.` : 'Nhập ít nhất 1 khách.'}</small>}
+            {showGuestCountError && <small id="booking-guest-count-error" className="booking-field-error" aria-live="polite">{guestCountError}</small>}
           </Field>
           <Field label="Hạng phòng *" className={showRoomTypeError ? 'is-invalid' : ''}>
             <select name="roomTypeId" value={selectedType?.id || ''} onChange={(event) => { markTouched('roomTypeId'); autoSelectRoom.current = false; setFormError(''); setForm((current) => ({ ...current, roomTypeId: event.target.value, roomId: '' })); }} required aria-invalid={showRoomTypeError} aria-describedby={showRoomTypeError ? 'booking-room-type-error' : undefined}>
@@ -299,9 +309,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
           </div> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
-            <input type="number" name="durationHours" min="1" max="24" step="1" inputMode="numeric" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
+            <input type="number" name="durationHours" min="1" max="24" step="0.5" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
             <small id="booking-duration-help" className={showDurationError ? 'booking-field-error' : 'booking-field-hint'} aria-live={showDurationError ? 'polite' : undefined}>
-              {showDurationError ? 'Thời lượng thuê phải là số giờ nguyên từ 1 đến 24.' : 'Nhập số giờ nguyên từ 1 đến 24.'}
+              {showDurationError ? 'Thời lượng thuê phải từ 1 đến 24 giờ, theo bước 0,5 giờ.' : 'Nhập thời lượng từ 1 đến 24 giờ; chấp nhận bước 0,5 giờ.'}
             </small>
           </Field>}
           {showComboError && <small className="booking-field-error booking-combo-error" role="status">Hãy chọn một combo đang áp dụng cho hạng phòng này.</small>}

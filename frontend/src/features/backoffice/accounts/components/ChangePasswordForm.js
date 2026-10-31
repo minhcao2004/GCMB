@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authApi, apiErrors } from '../../../auth/services/authApi';
+import { passwordError } from '../../../auth/services/validation';
 
 export default function ChangePasswordForm({ busy, onBusyChange, onCancel }) {
   const [form, setForm] = useState({ currentPassword: '', password: '', confirmation: '' });
@@ -11,19 +12,22 @@ export default function ChangePasswordForm({ busy, onBusyChange, onCancel }) {
     event.preventDefault();
     if (busy) return;
     setNotice('');
+    // BR-114, BR-120, BR-121: backend luôn kiểm tra lại.
+    const policyError = passwordError(form.password);
+    if (policyError) { setErrors({ password: policyError }); return; }
     if (form.password !== form.confirmation) {
-      setErrors({ confirmation: 'Mật khẩu xác nhận không khớp' });
+      setErrors({ confirmation: 'Mật khẩu xác nhận không khớp với mật khẩu mới.' });
       return;
     }
     if (form.password === form.currentPassword) {
-      setErrors({ password: 'Mật khẩu mới phải khác mật khẩu hiện tại' });
+      setErrors({ password: 'Mật khẩu mới phải khác mật khẩu hiện tại.' });
       return;
     }
     onBusyChange(true);
     setErrors({});
     try {
       await authApi.changePassword(form);
-      setNotice('Đổi mật khẩu thành công.');
+      setNotice('Đã cập nhật mật khẩu.');
     } catch (error) {
       setErrors(apiErrors(error));
     } finally {

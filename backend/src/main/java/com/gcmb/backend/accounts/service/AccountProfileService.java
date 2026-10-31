@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AccountProfileService {
+
     private final AccountProfileRepository repository;
     private final AuthCrypto crypto;
 
@@ -42,6 +43,7 @@ public class AccountProfileService {
         }
     }
 
+    // BR-111/113/119/134; dữ liệu cá nhân không đổi phạm vi truy cập.
     @Transactional
     public Profile update(UUID actor, UpdateProfile input) {
         String email = AuthValidation.email(input.email());
@@ -54,28 +56,48 @@ public class AccountProfileService {
         String phone = null;
         if (before.linkedEmployee()) {
             fullName = AuthValidation.required(input.fullName(), "fullName", "họ tên", 200, true);
-            phone = input.phone() == null || input.phone().isBlank() ? null : input.phone().trim();
-            if (phone != null && (!phone.matches("\\+?[0-9 ()-]{7,30}")
-                    || phone.replaceAll("[^0-9]", "").length() < 7)) {
-                throw new AuthFailure(400, "phone", "Số điện thoại cần 7–30 ký tự, gồm số và dấu + ( ) -");
-            }
-        } else if ((input.fullName() != null && !input.fullName().isBlank())
-                || (input.phone() != null && !input.phone().isBlank())) {
+            // BR-119; MSG04.
+            phone = AuthValidation.phone(input.phone());
+            if (phone != null && repository.phoneTaken(actor, phone)) throw new AuthFailure(
+                409,
+                "phone",
+                "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
+            );
+        } else if (
+            (input.fullName() != null && !input.fullName().isBlank()) ||
+            (input.phone() != null && !input.phone().isBlank())
+        ) {
             throw new AuthFailure(409, "form", "Tài khoản chưa liên kết hồ sơ nhân viên");
         }
         boolean emailChanged = !email.equals(before.account().email());
         if (emailChanged) {
             String password = AuthValidation.required(
-                    input.currentPassword(), "currentPassword", "mật khẩu hiện tại", 128, false
+                input.currentPassword(),
+                "currentPassword",
+                "mật khẩu hiện tại",
+                128,
+                false
             );
             if (!crypto.matches(password, hash)) {
-                throw new AuthFailure(400, "currentPassword", "Mật khẩu hiện tại không đúng");
+                throw new AuthFailure(
+                    400,
+                    "currentPassword",
+                    "Mật khẩu hiện tại không đúng. Vui lòng nhập lại."
+                );
             }
             if (repository.emailTaken(actor, email)) {
-                throw new AuthFailure(409, "email", "Email đã được sử dụng bởi tài khoản khác");
+                throw new AuthFailure(
+                    409,
+                    "email",
+                    "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
+                );
             }
         }
-        if (!emailChanged && Objects.equals(fullName, before.fullName()) && Objects.equals(phone, before.phone())) {
+        if (
+            !emailChanged &&
+            Objects.equals(fullName, before.fullName()) &&
+            Objects.equals(phone, before.phone())
+        ) {
             return before;
         }
         try {

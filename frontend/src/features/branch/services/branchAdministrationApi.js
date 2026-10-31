@@ -10,12 +10,14 @@ const base = '/head-office/branches';
 
 async function write(method, path, data) {
   const { data: csrf } = await api.get('/auth/csrf');
-  return (await api.request({
-    method,
-    url: `${base}${path}`,
-    data,
-    headers: { [csrf.headerName]: csrf.token },
-  })).data;
+  return (
+    await api.request({
+      method,
+      url: `${base}${path}`,
+      data,
+      headers: { [csrf.headerName]: csrf.token },
+    })
+  ).data;
 }
 
 export const branchAdministrationApi = {
@@ -32,6 +34,9 @@ export const branchAdministrationApi = {
 };
 
 export function branchError(error) {
-  return error.response?.data?.detail || error.response?.data?.message
-    || 'Không thể xử lý yêu cầu. Vui lòng kiểm tra kết nối và thử lại.';
+  return (
+    error.response?.data?.detail ||
+    error.response?.data?.message ||
+    'Không thể xử lý yêu cầu. Vui lòng kiểm tra kết nối và thử lại.'
+  );
 }
