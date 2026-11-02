@@ -125,9 +125,23 @@ export default function CheckoutPage() {
   }
   function issue(event) {
     event.preventDefault();
-    if (fees.some((fee) => !Number.isSafeInteger(Number(fee.amount)) || Number(fee.amount) <= 0)) {
-      setError('Phụ phí phải là số tiền nguyên lớn hơn 0.');
-      return;
+    for (const fee of fees) {
+      if (!fee.reason.trim()) {
+        setError('Vui lòng bổ sung lý do phụ phí.');
+        return;
+      }
+      if (fee.reason.length > 180) {
+        setError('Lý do phụ phí chỉ được chứa tối đa 180 ký tự.');
+        return;
+      }
+      if (Number(fee.amount) <= 0) {
+        setError('Phụ phí phải lớn hơn 0 đ.');
+        return;
+      }
+      if (!Number.isSafeInteger(Number(fee.amount))) {
+        setError('Phụ phí phải là số tiền nguyên đồng, không có phần thập phân.');
+        return;
+      }
     }
     run(async () => {
       let result;
@@ -162,6 +176,10 @@ export default function CheckoutPage() {
   }
   function pay(event) {
     event.preventDefault();
+    if (method !== 'BANK_TRANSFER' && !Number.isInteger(Number(cashTendered))) {
+      setError('Tiền khách đưa phải là số tiền nguyên đồng, không có phần thập phân.');
+      return;
+    }
     if (
       method !== 'BANK_TRANSFER' &&
       (!Number.isSafeInteger(Number(cashTendered)) ||

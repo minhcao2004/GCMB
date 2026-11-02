@@ -103,7 +103,7 @@ public class AccountProfileService {
         try {
             repository.update(actor, fullName, phone, email, emailChanged);
         } catch (DuplicateKeyException exception) {
-            throw new AuthFailure(409, "email", "Email vừa được sử dụng bởi tài khoản khác");
+            throw new AuthFailure(409, "email", "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
         }
         Profile after = repository.find(actor);
         repository.audit(before, after);

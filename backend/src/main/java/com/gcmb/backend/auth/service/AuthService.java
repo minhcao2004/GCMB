@@ -76,7 +76,7 @@ public class AuthService {
             throw new AuthFailure(
                 403,
                 "form",
-                "Tài khoản quản lý cơ sở chưa được gán cơ sở. Vui lòng liên hệ quản lý cấp cao"
+                "Bạn không có quyền đăng nhập đối với tài khoản."
             );
         }
         Instant now = Instant.now();

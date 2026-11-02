@@ -103,11 +103,7 @@ public final class AuthValidation {
 
     // Chỉ chấp nhận đúng 6 chữ số ASCII cho mã xác nhận.
     public static void code(String code) {
-        if (code == null || code.isBlank()) throw new AuthFailure(
-            400,
-            "code",
-            "Vui lòng nhập mã xác nhận"
-        );
+        required(code, "code", "Mã xác minh", Integer.MAX_VALUE, false);
         if (!code.matches("[0-9]{6}")) throw new AuthFailure(
             400,
             "code",
