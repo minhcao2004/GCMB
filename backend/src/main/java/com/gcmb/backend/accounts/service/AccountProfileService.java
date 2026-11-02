@@ -35,7 +35,7 @@ public class AccountProfileService {
         try {
             Profile profile = repository.find(actor);
             if (!"ACTIVE".equals(profile.account().status())) {
-                throw new AuthFailure(403, "form", "Tài khoản không còn hoạt động");
+                throw new AuthFailure(403, "form", "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
             }
             return profile;
         } catch (EmptyResultDataAccessException exception) {
