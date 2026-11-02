@@ -199,7 +199,87 @@
 }
 
 .shift-week-grid .shift-today {
-  background: #eaf8fc;
+  background: #d5f2f5;
+  box-shadow: inset 0 4px #07849b;
+}
+
+.shift-week-grid .shift-day {
+  background: #edf2fc;
+  color: #344d83;
+}
+
+.shift-week-grid .shift-weekend {
+  background: #faedf4;
+  color: #8b285e;
+}
+
+.shift-week-grid .shift-day strong {
+  color: inherit;
+}
+
+.shift-week-grid .shift-day.shift-today {
+  background: #dff2f5;
+  color: #196779;
+  box-shadow: inset 0 3px #71b6c4;
+}
+
+.shift-week-grid .shift-today small {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #c7e8ee;
+  color: #196779;
+  font-weight: 700;
+}
+
+/* HuyDV: màu hàng nhận diện ca; nhãn Đủ/Thiếu vẫn thể hiện tình trạng nhân sự. */
+.shift-period-0 {
+  --shift-accent: #7562aa;
+  --shift-tint: #f6f3fc;
+  --shift-header: #e8e0f5;
+}
+
+.shift-period-420 {
+  --shift-accent: #3d7c9e;
+  --shift-tint: #f0f8fc;
+  --shift-header: #dcedf7;
+}
+
+.shift-period-720 {
+  --shift-accent: #986b30;
+  --shift-tint: #fffaf0;
+  --shift-header: #f7e9ce;
+}
+
+.shift-period-1080 {
+  --shift-accent: #a15a80;
+  --shift-tint: #fcf3f8;
+  --shift-header: #f3deea;
+}
+
+.shift-week-grid tbody th {
+  background: var(--shift-header);
+  color: var(--shift-accent);
+}
+
+.shift-week-grid tbody th strong {
+  color: inherit;
+}
+
+.shift-week-grid tbody .shift-slot {
+  background: var(--shift-tint);
+  border-left-color: var(--shift-accent);
+  border-left-width: 3px;
+}
+
+.shift-week-grid .shift-slot-count > strong {
+  color: var(--shift-accent);
+}
+
+.shift-week-grid tbody .shift-slot.unpublished {
+  background: #fafbfd;
+  border-left-color: #cbd3df;
 }
 
 .shift-today-column {

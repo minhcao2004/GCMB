@@ -239,7 +239,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                   <tr>
                     <th scope="col">Ca / giờ</th>
                     {days.map((date, day) => (
-                      <th scope="col" key={date} className={date === today() ? 'shift-today' : ''}>
+                      <th
+                        scope="col"
+                        key={date}
+                        className={`shift-day ${day >= 5 ? 'shift-weekend' : ''} ${date === today() ? 'shift-today' : ''}`}
+                      >
                         <span>
                           {['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'][day]}
                         </span>
@@ -251,7 +255,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                 </thead>
                 <tbody>
                   {data.templates.map((t, index) => (
-                    <tr key={t.id}>
+                    <tr key={t.id} className={`shift-period-${t.startMinute}`}>
                       <th scope="row">
                         <strong>Ca {index + 1}</strong>
                         <span>{shiftLabel(t)}</span>
