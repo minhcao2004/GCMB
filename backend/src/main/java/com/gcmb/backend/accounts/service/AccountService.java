@@ -60,7 +60,7 @@ public class AccountService {
         ) throw new AuthFailure(
             403,
             "form",
-            "Bạn không có quyền quản lý tài khoản đối với cơ sở này."
+            "Bạn không có quyền " + (writing ? "tạo" : "xem") + " đối với tài khoản."
         ); // MSG24
         return actor.branchId();
     }
@@ -75,7 +75,7 @@ public class AccountService {
         int size,
         Identity actor
     ) {
-        if ("HEAD_OFFICE_MANAGER".equals(actor.role())) return list(
+        if (actor != null && "HEAD_OFFICE_MANAGER".equals(actor.role())) return list(
             q,
             role,
             branch,
@@ -87,7 +87,7 @@ public class AccountService {
         if (branch != null && !scope.equals(branch)) throw new AuthFailure(
             403,
             "form",
-            "Bạn không có quyền xem tài khoản đối với cơ sở này."
+            "Bạn không có quyền xem đối với tài khoản."
         );
         if (!role.isEmpty() && !"RECEPTIONIST".equals(role)) return new AccountPage(
             List.of(),
@@ -107,7 +107,7 @@ public class AccountService {
 
     @Transactional
     public AccountView create(CreateAccount input, Identity actor) {
-        input = fromEmployee(input);
+        if (actor == null) throw new AuthFailure(403, "form", "Bạn không có quyền tạo đối với tài khoản.");
         if (!"HEAD_OFFICE_MANAGER".equals(actor.role())) {
             UUID scope = managerScope(actor, true);
             if (
@@ -118,7 +118,7 @@ public class AccountService {
             ) throw new AuthFailure(
                 403,
                 "form",
-                "Bạn chỉ được tạo tài khoản Lễ tân cho nhân viên thuộc cơ sở đang quản lý."
+                "Bạn không có quyền tạo đối với tài khoản."
             );
         }
         return create(input, actor.id());
@@ -127,12 +127,12 @@ public class AccountService {
     // BR-111/112/113/114/129/132/133/134/164; MSG34–40.
     @Transactional
     public AccountView create(CreateAccount input, UUID actor) {
-        input = fromEmployee(input);
+        if (input == null) throw new AuthFailure(400, "form", "Vui lòng bổ sung thông tin tài khoản.");
         String username = AuthValidation.required(
             input.username(),
             "username",
             "tên đăng nhập",
-            100,
+            Integer.MAX_VALUE,
             true
         );
         if (!username.matches("[A-Za-z0-9._-]{3,100}")) {
@@ -146,7 +146,7 @@ public class AccountService {
         // BR-114; dùng cùng chính sách với đổi và đặt lại mật khẩu.
         AuthValidation.passwordStrength(input.password());
         if (input.employeeId() == null) {
-            throw new AuthFailure(400, "employeeId", "Vui lòng chọn hồ sơ nhân viên");
+            throw new AuthFailure(400, "employeeId", "Vui lòng bổ sung hồ sơ nhân viên.");
         }
         if (!repository.lockAvailableEmployee(input.employeeId())) {
             throw new AuthFailure(
@@ -155,7 +155,8 @@ public class AccountService {
                 "Chỉ có thể tạo tài khoản cho nhân viên đang hoạt động và chưa có tài khoản. Vui lòng chọn nhân viên khác."
             );
         }
-        UUID role = input.role() == null ? null : repository.roleId(input.role());
+        String requestedRole = AuthValidation.required(input.role(), "role", "Vai trò", 100, false);
+        UUID role = repository.roleId(requestedRole);
         if (role == null) {
             throw new AuthFailure(400, "role", "Vui lòng chọn vai trò hợp lệ");
         }
@@ -163,9 +164,11 @@ public class AccountService {
         if (chain && input.branchId() != null) {
             throw new AuthFailure(400, "branchId", "Vai trò này có phạm vi toàn chuỗi");
         }
-        if (!chain && (input.branchId() == null || !repository.activeBranch(input.branchId()))) {
-            throw new AuthFailure(400, "branchId", "Vui lòng chọn cơ sở đang hoạt động");
-        }
+        if (!chain && input.branchId() == null) throw new AuthFailure(400, "branchId", "Vui lòng bổ sung Cơ sở.");
+        if (!chain && !repository.activeBranch(input.branchId())) throw new AuthFailure(
+            400, "branchId", "Cơ sở " + repository.branchName(input.branchId()) +
+                " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công."
+        );
         for (String field : List.of("username", "email")) {
             if (
                 field.equals("email")
@@ -177,7 +180,7 @@ public class AccountService {
                     field,
                     field.equals("username")
                         ? "Tên đăng nhập này đã được sử dụng. Vui lòng chọn tên khác."
-                        : "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng cập nhật email trong hồ sơ nhân viên trước khi tạo tài khoản."
+                        : "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác."
                 );
             }
         }
@@ -201,73 +204,4 @@ public class AccountService {
         }
     }
 
-    // UC-04, BR-133: chỉ chọn nhân viên; vai trò, email và cơ sở được đọc lại dưới khóa giao dịch.
-    private CreateAccount fromEmployee(CreateAccount input) {
-        if (input == null) throw new AuthFailure(
-            400,
-            "form",
-            "Vui lòng bổ sung thông tin tài khoản."
-        );
-        String username = AuthValidation.required(
-            input.username(),
-            "username",
-            "tên đăng nhập",
-            100,
-            true
-        );
-        if (!username.matches("[A-Za-z0-9._-]{3,100}")) throw new AuthFailure(
-            400,
-            "username",
-            "Tên đăng nhập phải có từ 3 đến 100 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu chấm (.), dấu gạch dưới (_) hoặc dấu gạch nối (-)."
-        );
-        AuthValidation.passwordStrength(input.password());
-        if (input.employeeId() == null) throw new AuthFailure(
-            400,
-            "employeeId",
-            "Vui lòng bổ sung hồ sơ nhân viên."
-        ); // MSG02
-        if (!repository.lockAvailableEmployee(input.employeeId())) throw new AuthFailure(
-            409,
-            "employeeId",
-            "Chỉ có thể tạo tài khoản cho nhân viên đang hoạt động và chưa có tài khoản. Vui lòng chọn nhân viên khác."
-        ); // MSG39
-        var profile = repository.employeeProfile(input.employeeId());
-        if (profile == null) throw new AuthFailure(
-            409,
-            "employeeId",
-            "Không tìm thấy thông tin cấp tài khoản trong hồ sơ. Vui lòng tải lại hồ sơ nhân viên."
-        );
-        if (
-            profile.role() == null ||
-            !List.of(
-                "HEAD_OFFICE_MANAGER",
-                "BRANCH_MANAGER",
-                "RECEPTIONIST",
-                "ACCOUNTANT"
-            ).contains(profile.role())
-        ) throw new AuthFailure(
-            400,
-            "employeeId",
-            "Hồ sơ nhân viên chưa có vai trò được cấp tài khoản. Vui lòng cập nhật hồ sơ trước."
-        );
-        if (profile.email() == null || profile.email().isBlank()) throw new AuthFailure(
-            400,
-            "employeeId",
-            "Hồ sơ nhân viên chưa có email. Vui lòng cập nhật hồ sơ trước."
-        );
-        boolean chain = List.of("HEAD_OFFICE_MANAGER", "ACCOUNTANT").contains(profile.role());
-        if (!chain && profile.branchId() == null) throw new AuthFailure(
-            400,
-            "employeeId",
-            "Nhân viên chưa được gán cơ sở. Vui lòng cập nhật phân công trước."
-        );
-        return new CreateAccount(
-            input.employeeId(),
-            input.username(),
-            input.password(),
-            profile.email(),
-            profile.role(),
-            chain ? null : profile.branchId()
-        );
-    }
 }

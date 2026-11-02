@@ -89,7 +89,7 @@ public class AccountProfileService {
                 throw new AuthFailure(
                     409,
                     "email",
-                    "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
+                    "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác."
                 );
             }
         }

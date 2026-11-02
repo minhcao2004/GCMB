@@ -27,6 +27,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.cors.CorsConfiguration;
 
 @Configuration
@@ -68,7 +69,17 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                 })
                 .accessDeniedHandler((request, response, e) -> {
                     response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"message\":\"Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang\"}");
+                    String path = request.getServletPath();
+                    boolean accounts = path.equals("/api/v1/head-office/accounts") ||
+                        path.startsWith("/api/v1/head-office/accounts/") ||
+                        path.equals("/api/v1/branch-management/accounts") ||
+                        path.startsWith("/api/v1/branch-management/accounts/");
+                    if (accounts && !(e instanceof CsrfException)) {
+                        String action = path.endsWith("/role") ? "phân quyền" :
+                            path.endsWith("/deactivate") || path.endsWith("/reactivate") ? "đổi trạng thái" :
+                            "GET".equals(request.getMethod()) ? "xem" : "tạo";
+                        response.getWriter().write("{\"message\":\"Bạn không có quyền " + action + " đối với tài khoản.\"}");
+                    } else response.getWriter().write("{\"message\":\"Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang\"}");
                 }))
             .addFilterBefore(new SessionFilter(auth), UsernamePasswordAuthenticationFilter.class).build();
     }

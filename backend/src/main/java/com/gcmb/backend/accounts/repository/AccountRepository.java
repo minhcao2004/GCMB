@@ -187,7 +187,7 @@ public class AccountRepository {
             .isEmpty();
     }
 
-    // UC-04: dữ liệu cấp tài khoản luôn lấy từ hồ sơ, không tin role/email/branch gửi từ client.
+    // Gợi ý từ hồ sơ cho form UC-04; service kiểm tra email, vai trò và cơ sở do quản lý xác nhận.
     private static final String EMPLOYEE_OPTIONS = """
         SELECT e.id,e.full_name,e.code,e.position,e.contact_email,b.id AS branch_id,b.name AS branch_name
         FROM gcmb.employee e LEFT JOIN LATERAL (
@@ -235,6 +235,11 @@ public class AccountRepository {
                 branch
             )
             .isEmpty();
+    }
+
+    public String branchName(UUID branch) {
+        var names = db.queryForList("SELECT name FROM gcmb.branch WHERE id=?", String.class, branch);
+        return names.isEmpty() ? "đã chọn" : names.get(0);
     }
 
     public boolean exists(String column, String value) {
