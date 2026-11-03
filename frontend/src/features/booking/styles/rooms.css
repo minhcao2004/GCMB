@@ -198,7 +198,7 @@
   .room-detail--compact .room-detail-header { justify-content: flex-end; }
 }
 
-@media (min-width: 1000px) and (min-height: 700px) {
+@media (min-width: 1000px) and (min-height: 560px) {
   .booking-app--reception .booking-main--rooms { display: flex; flex-direction: column; overflow: hidden; }
   .booking-main--rooms > :not(.room-layout) { flex: 0 0 auto; }
   .booking-main--rooms .room-page-heading { margin-bottom: 8px; }
@@ -219,4 +219,16 @@
   .booking-main--rooms .room-detail h2 { margin: 6px 0 8px; font-size: 19px; }
   .booking-main--rooms .room-detail-divider { margin: 10px 0; }
   .booking-main--rooms .room-detail-total { margin: 10px 0; padding: 10px; }
+  .booking-main--rooms .room-detail #room-detail-content > p { margin: 6px 0; }
+  .booking-main--rooms .room-detail-facts { gap: 5px; margin-bottom: 8px; }
+  .booking-main--rooms .room-reservation-facts { gap: 5px; margin-bottom: 7px; }
+  .booking-main--rooms .room-reservation-facts > div:not(.room-detail-divider) { gap: 2px; }
+  .booking-main--rooms .room-reservation-link { gap: 2px; margin-bottom: 6px; padding: 8px; }
+  .booking-main--rooms .room-usage { gap: 1px; padding-top: 6px; }
+  .booking-main--rooms .room-usage strong { font-size: 19px; }
+  .booking-main--rooms .room-detail h3 { margin: 6px 0; }
+  .booking-main--rooms .room-actions { gap: 5px; }
+  .booking-main--rooms .room-actions button, .booking-main--rooms .room-booking-actions button { min-height: 34px; }
+  .booking-main--rooms .room-checkout { min-height: 36px; margin-top: 6px; }
+  .booking-main--rooms .room-pending-orders { margin: 6px 0; padding: 6px; }
 }

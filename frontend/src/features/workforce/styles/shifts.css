@@ -15,21 +15,27 @@
   padding: 22px;
 }
 
-@media (min-width: 1000px) and (min-height: 700px) {
+@media (min-width: 1000px) and (min-height: 560px) {
   .booking-app--reception .booking-main--shifts { display: flex; flex-direction: column; overflow: hidden; }
   .booking-main--shifts > .shift-page { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; padding: 0; }
-  .booking-main--shifts .shift-heading { margin-bottom: 10px; }
-  .booking-main--shifts .shift-toolbar { gap: 8px; padding: 10px; }
-  .booking-main--shifts .shift-stats { padding: 8px 2px; }
+  .booking-main--shifts .shift-heading { margin-bottom: 5px; }
+  .booking-main--shifts .shift-heading h1 { margin: 0 0 2px; font-size: 22px; line-height: 1.2; }
+  .booking-main--shifts .shift-heading p { line-height: 1.3; }
+  .booking-main--shifts .shift-toolbar { gap: 6px; padding: 6px 10px; }
+  .booking-main--shifts .shift-week-nav, .booking-main--shifts .shift-filters { gap: 6px; }
+  .booking-main--shifts .shift-stats { gap: 8px 20px; padding: 4px 2px; }
   .booking-main--shifts .shift-grid-wrap { flex: 1 1 auto; min-height: 0; }
-  .booking-main--shifts .shift-week-grid th { padding: 7px; }
-  .booking-main--shifts .shift-week-grid td { padding: 4px; }
-  .booking-main--shifts .shift-slot { min-height: 105px; padding: 6px; }
+  .booking-main--shifts .shift-week-grid th { padding: 4px; line-height: 1.2; }
+  .booking-main--shifts .shift-week-grid thead strong { font-size: 14px; }
+  .booking-main--shifts .shift-week-grid tbody th strong { margin-bottom: 2px; }
+  .booking-main--shifts .shift-week-grid td { padding: 2px; }
+  .booking-main--shifts .shift-slot { min-height: 0; padding: 4px 6px; line-height: 1.2; }
   .booking-main--shifts .shift-slot-count > strong { font-size: 17px; }
-  .booking-main--shifts .shift-slot-status { margin-top: 3px; }
+  .booking-main--shifts .shift-slot-status { margin-top: 2px; }
   .booking-main--shifts .shift-mine,
-  .booking-main--shifts .shift-help { margin: 3px 0; }
-  .booking-main--shifts .shift-legend { margin: 8px 0 0; }
+  .booking-main--shifts .shift-help { margin: 2px 0; }
+  .booking-main--shifts .shift-page button.shift-slot-action { min-height: 25px; padding: 3px 0; }
+  .booking-main--shifts .shift-legend { margin: 4px 0 0; }
 }
 
 .shift-page *, .shift-dialog * {

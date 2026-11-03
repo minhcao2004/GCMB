@@ -653,6 +653,7 @@ export default function BookingManagementPage() {
   const [optionsError, setOptionsError] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => bookingDateFromNavigation(location.state?.bookingDate));
   const [activeFilter, setActiveFilter] = useState('all');
+  const [bookingPage, setBookingPage] = useState(0);
   const [roomTier, setRoomTier] = useState('all');
   const [search, setSearch] = useState(() => location.state?.search || '');
   const [rows, setRows] = useState([]);
@@ -786,6 +787,15 @@ export default function BookingManagementPage() {
     if (roomTier !== 'all' && !(item.roomTypeName || item.roomName || '').toLocaleLowerCase('vi-VN').includes(roomTier.toLocaleLowerCase('vi-VN'))) return false;
     return true;
   }), [rows, activeFilter, roomTier]);
+  const bookingPageSize = 4;
+  const bookingPageCount = Math.max(1, Math.ceil(visibleRows.length / bookingPageSize));
+  const currentBookingPage = Math.min(bookingPage, bookingPageCount - 1);
+  const pageRows = visibleRows.slice(currentBookingPage * bookingPageSize, (currentBookingPage + 1) * bookingPageSize);
+  useEffect(() => { setBookingPage(0); }, [selectedDate, search, activeFilter, roomTier]);
+  useEffect(() => {
+    const index = visibleRows.findIndex((item) => item.id === selectedId);
+    if (index >= 0) setBookingPage(Math.floor(index / bookingPageSize));
+  }, [selectedId, visibleRows]);
 
   useEffect(() => {
     if (!hasLoadedRows || listLoading) return;
@@ -983,13 +993,13 @@ export default function BookingManagementPage() {
     </section>
     <section className="booking-status-tabs" aria-label="Lọc theo trạng thái booking">
       {tabs.map(([id, label, count]) => <button type="button" key={id} className={`booking-filter-chip chip-${id}${activeFilter === id ? ' is-active' : ''}`} aria-pressed={activeFilter === id} onClick={() => setActiveFilter(id)}><span>{label}</span>{id === 'all' && <small>{count}</small>}</button>)}
-      <span className="booking-result-count">Hiển thị {visibleRows.length}/{rows.length}</span>
+      <span className="booking-result-count">Phù hợp {visibleRows.length}/{rows.length}</span>
     </section>
       <div className={`booking-content-grid${detailsOpen ? ' has-details' : ''}`}>
       <section className="booking-table-card" aria-label="Danh sách booking">
         <div className="booking-table-scroll"><table className="booking-table">
           <thead><tr><th>Mã booking</th><th>Giờ hẹn</th><th>Khách hàng / SĐT</th><th>Hạng / Phòng</th><th>Cọc đã nhận</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-          <tbody>{visibleRows.map((item) => {
+          <tbody>{pageRows.map((item) => {
             const selectedRow = item.id === selected?.id;
             const lateMinutes = item.status === 'CONFIRMED' ? Math.floor((Date.now() - new Date(item.plannedStart).getTime()) / 60000) : 0;
             return <tr key={item.id} className={selectedRow ? 'is-selected' : ''} onClick={(event) => openBookingDetails(item.id, event.currentTarget)}>
@@ -1005,6 +1015,11 @@ export default function BookingManagementPage() {
         {listLoading && <div className="booking-table-message" role="status">Đang tải booking…</div>}
         {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
         </div>
+        {bookingPageCount > 1 && <nav className="booking-pagination" aria-label="Trang danh sách booking">
+          <button type="button" disabled={currentBookingPage === 0} onClick={() => setBookingPage(currentBookingPage - 1)}>Trang trước</button>
+          <span>Trang {currentBookingPage + 1}/{bookingPageCount} · {visibleRows.length} booking</span>
+          <button type="button" disabled={currentBookingPage + 1 >= bookingPageCount} onClick={() => setBookingPage(currentBookingPage + 1)}>Trang sau</button>
+        </nav>}
       </section>
       {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
         <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}

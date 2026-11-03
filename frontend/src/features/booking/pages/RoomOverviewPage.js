@@ -343,13 +343,13 @@ export default function RoomOverviewPage() {
   }, [orderDialogOpen]);
 
   const floors = [...new Set(rooms.map((room) => floorOf(room.code)).filter(Boolean))].sort();
-  const visible = rooms.filter((room) => {
+  const visible = useMemo(() => rooms.filter((room) => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
     return (floor === 'all' || floorOf(room.code) === floor)
       && (status === 'all' || room.status === status)
       && (tier === 'all' || room.roomTypeName === tier)
       && (!keyword || [room.code, room.name, room.booking?.contactName, room.booking?.code].some((part) => String(part || '').toLocaleLowerCase('vi-VN').includes(keyword)));
-  });
+  }), [rooms, floor, status, tier, search]);
   const counts = Object.fromEntries(['vacant', 'reserved', 'occupied', 'maintenance', 'inactive'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
   const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
