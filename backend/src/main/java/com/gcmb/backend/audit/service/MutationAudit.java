@@ -21,14 +21,20 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class MutationAudit {
-    private static final Map<String, String> TABLES = Map.of(
-        "ROOM", "room", "ROOM_TYPE", "room_type", "PRICE_RULE", "price_rule",
-
-        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch", "MENU_ITEM", "menu_item",
-        "FB_ORDER", "fb_order", "INVENTORY_ITEM", "inventory_item");
-
-        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch", "ASSET_CATEGORY", "asset_category",
-        "ASSET", "asset", "INCIDENT", "asset_incident", "TRANSFER", "asset_transfer");
+    private static final Map<String, String> TABLES = Map.ofEntries(
+        Map.entry("ROOM", "room"),
+        Map.entry("ROOM_TYPE", "room_type"),
+        Map.entry("PRICE_RULE", "price_rule"),
+        Map.entry("COMBO", "combo"),
+        Map.entry("BOOKING", "booking"),
+        Map.entry("BRANCH", "branch"),
+        Map.entry("MENU_ITEM", "menu_item"),
+        Map.entry("FB_ORDER", "fb_order"),
+        Map.entry("INVENTORY_ITEM", "inventory_item"),
+        Map.entry("ASSET_CATEGORY", "asset_category"),
+        Map.entry("ASSET", "asset"),
+        Map.entry("INCIDENT", "asset_incident"),
+        Map.entry("TRANSFER", "asset_transfer"));
 
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;

@@ -17,4 +17,4 @@ Màn hình nhóm thiết bị triển khai năm use case trong Report 3: UC-60 t
 - Quản lý cấp cao: `/api/v1/head-office/equipment-categories?branchId={id}`
 - `GET` hỗ trợ `search` và `active`; `POST` tạo; `PUT /{id}` sửa; `PUT /{id}/status` đổi trạng thái; `DELETE /{id}` xóa khi chưa có tham chiếu.
 
-Schema `gcmb.asset_category` và khóa ngoại từ `gcmb.asset.category_id` đã có trong migration V1. Migration V21 bổ sung trường mô tả cho nhóm thiết bị mà không sửa các migration đã áp dụng.
+Schema `gcmb.asset_category` và khóa ngoại từ `gcmb.asset.category_id` đã có trong migration V1. Migration V30 bổ sung mô tả nhóm thiết bị. Dùng `ADD COLUMN IF NOT EXISTS` để tương thích database phát triển đã có cột này từ lần đánh số V21 trước đây. V21 hiện dành cho xóa mềm món F&B.

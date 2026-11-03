@@ -24,11 +24,11 @@
   line-height: 1.55;
 }
 
-.branch-manager-dashboard.has-menu-items { height: calc(100svh - 8px); min-height: 0; overflow: hidden; }
+.branch-manager-dashboard.has-menu-items { height: 100%; min-height: 0; overflow: hidden; }
 .branch-manager-dashboard.has-menu-items .manager-workspace { height: 100%; min-height: 0; overflow: hidden; padding-left: 0; }
 .branch-manager-dashboard.has-menu-items .manager-topbar { min-height: 62px; padding: 8px 28px; }
 .branch-manager-dashboard.has-menu-items .branch-manager-content { display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
-.branch-manager-dashboard.has-menu-items .menu-items-page { width: 100%; min-width: 0; min-height: 0; flex: 1 1 0%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #c5ceda transparent; scrollbar-width: thin; }
+.branch-manager-dashboard.has-menu-items .menu-items-page { width: 100%; min-width: 0; min-height: 0; flex: 1 1 0%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 
 .menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
 .menu-heading h1 { margin: 0; font-size: 26px; font-weight: 750; letter-spacing: -.025em; line-height: 1.27; }

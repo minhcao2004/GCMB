@@ -18,4 +18,4 @@ UC65–UC69 hỗ trợ tạo, xem/tìm kiếm/lọc, cập nhật, ngừng/kích
 - Quản lý cơ sở: `/api/v1/branch-management/equipment-assets`
 - Quản lý cấp cao: `/api/v1/head-office/equipment-assets?branchId={id}`
 - `GET` hỗ trợ từ khóa, phòng, tình trạng, trạng thái sử dụng; `POST` tạo; `PUT /{id}` sửa; `PUT /{id}/status` đổi trạng thái sử dụng; `DELETE /{id}` xóa khi không có lịch sử; `POST /{id}/image` tải ảnh; `GET /{id}/image` xem ảnh.
-- Migration V22 thêm cờ hoạt động, hạn bảo hành và liên kết ảnh; V1 chứa sẵn bảng tài sản, sự cố, điều chuyển và file đính kèm.
+- Migration V1 chứa sẵn bảng tài sản, sự cố, điều chuyển và file đính kèm. Migration V31 thêm cờ hoạt động, hạn bảo hành và liên kết ảnh. DDL idempotent để tương thích database phát triển đã có các cột này từ lần đánh số V22 trước đây. V22 hiện dành cho chi tiết và ảnh món F&B.

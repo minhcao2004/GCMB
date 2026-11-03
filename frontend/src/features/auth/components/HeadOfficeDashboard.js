@@ -89,10 +89,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
           onBranches={() => selectTab('Cơ sở')}
         />
       ) : activeTab === 'Nhật ký hệ thống' ? (
-
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
-
-        <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
         <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
