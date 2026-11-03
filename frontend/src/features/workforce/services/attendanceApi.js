@@ -1,7 +1,7 @@
 /**
  * Author: HuyDV
  * Created: 27/10/2026
- * Description: UC-87..89, API công thực tế và định dạng ngày giờ theo múi giờ cơ sở.
+ * Description: UC-87..90, API công thực tế và định dạng ngày giờ theo múi giờ cơ sở.
  */
 import api from '../../../api/client';
 
@@ -18,6 +18,7 @@ async function write(path, body, scope) {
 }
 
 export const attendanceApi = {
+  personal: async (month) => (await api.get('/reception/work-records', { params: { month } })).data,
   daily: async (date, scope) => (await api.get(base, { ...config(scope), params: { date } })).data,
   monthly: async (month, scope) =>
     (await api.get(`${base}/month`, { ...config(scope), params: { month } })).data,
@@ -40,7 +41,7 @@ export function localInput(value, timezone = 'Asia/Ho_Chi_Minh') {
       hourCycle: 'h23',
     })
       .formatToParts(new Date(value))
-      .map((p) => [p.type, p.value])
+      .map((p) => [p.type, p.value]),
   );
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }

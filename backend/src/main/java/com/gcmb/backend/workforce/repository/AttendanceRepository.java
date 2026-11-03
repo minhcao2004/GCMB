@@ -52,12 +52,23 @@ public class AttendanceRepository {
     }
 
     public List<Map<String, Object>> rows(UUID branch, LocalDate from, LocalDate until) {
+        return rows(branch, from, until, null);
+    }
+
+    public List<Map<String, Object>> personalRows(UUID employee, LocalDate from, LocalDate until) {
+        // BR-60: UUID này do service lấy từ phiên, không nhận mã nhân viên từ request.
+        java.util.Objects.requireNonNull(employee);
+        return rows(null, from, until, employee);
+    }
+
+    private List<Map<String, Object>> rows(UUID branch, LocalDate from, LocalDate until, UUID employee) {
         // UC-88: giữ cả công cũ của người đã điều chuyển/ngừng; không lọc theo hồ sơ hiện tại.
         return db.queryForList(
             """
             SELECT sa.id AS "assignmentId",sa.employee_id AS "employeeId",e.code,
               e.full_name AS "fullName",s.id AS "shiftId",s.work_date::text AS "workDate",
               s.template_id AS "templateId",s.starts_at AS "startsAt",s.ends_at AS "endsAt",
+              br.name AS "branchName",p.status AS "periodStatus",
               a.id AS "attendanceId",a.status,COALESCE(a.version,0) AS version,
               a.actual_in AS "actualIn",a.actual_out AS "actualOut",
               COALESCE(a.worked_minutes,0) AS "workedMinutes",COALESCE(a.break_minutes,0) AS "breakMinutes",
@@ -66,13 +77,19 @@ public class AttendanceRepository {
             FROM gcmb.shift_assignment sa JOIN gcmb.scheduled_shift s ON s.id=sa.shift_id
             JOIN gcmb.employee e ON e.id=sa.employee_id
             LEFT JOIN gcmb.attendance a ON a.assignment_id=sa.id
-            WHERE s.branch_id=? AND s.work_date>=? AND s.work_date<?
+            JOIN gcmb.branch br ON br.id=s.branch_id
+            LEFT JOIN gcmb.attendance_period p ON p.id=a.period_id
+            WHERE (CAST(? AS uuid) IS NULL OR s.branch_id=?) AND s.work_date>=? AND s.work_date<?
+              AND (CAST(? AS uuid) IS NULL OR sa.employee_id=?)
               AND ((sa.status='CONFIRMED' AND s.status<>'CANCELLED') OR a.id IS NOT NULL)
             ORDER BY s.work_date,s.starts_at,e.full_name,sa.id
             """,
             branch,
+            branch,
             from,
-            until
+            until,
+            employee,
+            employee
         );
     }
 

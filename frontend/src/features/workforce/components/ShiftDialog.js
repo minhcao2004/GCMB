@@ -90,7 +90,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
         )
           found.form = 'Số chỗ phải là số nguyên lớn hơn 0.'; // MSG44
         else if (Number(s.capacity) < count)
-          found.form = `Ca ngày ${dateLabel(s.date)} đã có ${count} người đăng ký. Số chỗ không được nhỏ hơn ${count}.`; // MSG85
+          found.form = `Ca này đã có ${count} người đăng ký. Số chỗ không được nhỏ hơn ${count}.`; // MSG85
       }
     }
     if (type === 'replace') {

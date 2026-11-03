@@ -1,7 +1,7 @@
 /**
  * Author: HuyDV
  * Created: 27/10/2026
- * Description: UC-87..89, công thực tế, xử lý phản ánh và chốt công tháng đúng cơ sở.
+ * Description: UC-87..90, công thực tế, chốt công tháng và xem công cá nhân đúng phạm vi.
  */
 package com.gcmb.backend.workforce.service;
 
@@ -62,6 +62,42 @@ public class AttendanceService {
         return summary(actor.branchId(), branch, month(month, branch));
     }
 
+    // UC-90 / BR-60/61/177: chỉ đọc công của hồ sơ gắn với phiên; giữ lịch sử khi điều chuyển.
+    @Transactional(readOnly = true)
+    public Map<String, Object> personal(Identity actor, String value) {
+        if (actor == null || !"RECEPTIONIST".equals(actor.role())) throw new AuthFailure(
+            403,
+            "form",
+            "Bạn không có quyền xem đối với công cá nhân."
+        ); // MSG24
+        var branch = shiftService.scope(actor, false, false);
+        UUID employee = shifts.linkedEmployee(actor.id());
+        if (employee == null) throw new AuthFailure(
+            403,
+            "form",
+            "Bạn không có quyền xem đối với công cá nhân."
+        );
+        YearMonth month = month(value, branch);
+        var rows = decorate(repo.personalRows(employee, month.atDay(1), month.plusMonths(1).atDay(1)));
+        var result = base(branch);
+        result.put("month", month.toString());
+        result.put("rows", rows);
+        result.put(
+            "workedMinutes",
+            rows.stream()
+                .filter(row -> Boolean.TRUE.equals(row.get("valid")))
+                .mapToLong(row -> number(row, "workedMinutes"))
+                .sum()
+        );
+        result.put(
+            "missing",
+            rows.stream().filter(row -> row.get("attendanceId") == null).count()
+        );
+        result.put("assignmentCount", rows.size());
+        result.put("readOnly", true);
+        return result;
+    }
+
     public Map<String, Object> record(Identity actor, UUID assignment, RecordCommand input) {
         var branch = shiftService.scope(actor, true, true); // BR-177 / MSG43, khóa chung với lịch ca.
         var row = repo.row(actor.branchId(), assignment);
@@ -112,7 +148,7 @@ public class AttendanceService {
             "Chưa thể chấm công cho ngày làm việc trong tương lai."
         );
         String note = input.note() == null ? "" : input.note().trim();
-        if (note.length() > 2000) throw bad("note", "Ghi chú không được dài quá 2000 ký tự.");
+        if (note.length() > 2000) throw bad("note", "Ghi chú chỉ được chứa tối đa 2000 ký tự."); // MSG03
         var selected =
             input.resolvedIssueIds() == null
                 ? Set.<UUID>of()
