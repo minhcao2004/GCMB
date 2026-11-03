@@ -124,7 +124,7 @@
 .deposit-form-field input:focus,.deposit-form-field select:focus,.deposit-form-field textarea:focus { border-color: #67ccdc; box-shadow: 0 0 0 3px rgb(8 127 147 / 9%); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
 
-@media (min-width: 1200px) {
+@media (min-width: 1000px) {
   .booking-app--fit .booking-main { display: flex; min-height: 0; overflow: hidden; padding: 10px 24px 12px; }
   .booking-app--fit .deposit-page { width: 100%; min-height: 0; height: 100%; gap: 11px; }
   .booking-app--fit .deposit-page-heading { flex: 0 0 auto; min-height: 57px; }
@@ -153,11 +153,14 @@
 }
 
 @media (min-width: 1000px) and (max-width: 1199px) {
-  .booking-app--fit { min-height: 100vh; height: auto; overflow: visible; }
-  .booking-app--fit .booking-workspace { height: auto; min-height: 100vh; overflow: visible; }
-  .booking-app--fit .booking-main { display: block; overflow: visible; padding: 18px 22px 24px; }
   .deposit-filter-row { grid-template-columns: 1fr 12px 1fr 1fr 1fr; }
   .deposit-filter-search { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1000px) and (max-height: 699px) {
+  .booking-app--reception.booking-app--fit .deposit-page { height: auto; }
+  .booking-app--reception.booking-app--fit .deposit-content-grid,
+  .booking-app--reception.booking-app--fit .deposit-table-card { min-height: 320px; }
 }
 
 @media (max-width: 999px) {

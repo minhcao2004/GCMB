@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import RoomOverviewPage from './RoomOverviewPage';
+import WalkInDialog from './WalkInDialog';
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -15,8 +16,31 @@ jest.mock('../../auth/services/authApi', () => ({
   apiErrors: () => ({ form: 'Không thể tải dữ liệu.' }),
 }));
 jest.mock('../services/bookingApi', () => ({
-  bookingApi: { options: jest.fn(), rooms: jest.fn(), listAll: jest.fn(), availability: jest.fn(), detail: jest.fn() },
+  bookingApi: { options: jest.fn(), rooms: jest.fn(), listAll: jest.fn(), availability: jest.fn(), detail: jest.fn(), openWalkIn: jest.fn() },
 }));
+
+test.each([
+  [{ walkInBeforeSubmit: true }, /Chưa gửi yêu cầu mở phòng/, false],
+  [{ response: { status: 503 } }, /Máy chủ báo lỗi \(503\)/, true],
+  [{}, /Mất kết nối khi gửi yêu cầu/, true],
+])('distinguishes walk-in request failures and preserves the uncertain warning', async (failure, message, disabled) => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  bookingApi.availability.mockResolvedValue({ rooms: [{ id: 'room-1' }], quote: { expectedAmount: 192000 } });
+  bookingApi.openWalkIn.mockRejectedValue(failure);
+  render(<WalkInDialog room={{ id: 'room-1', roomTypeId: 'type-1', code: 'Q02', name: 'Queen 02', capacity: 4 }}
+    options={{ roomTypes: [{ id: 'type-1', combos: [] }] }} onClose={jest.fn()} onOpened={jest.fn()} />);
+  const submit = await screen.findByRole('button', { name: 'Check-in & mở phòng' });
+  await screen.findByText(/192\.000/);
+  fireEvent.change(screen.getByLabelText(/Họ tên khách/), { target: { value: 'Khách' } });
+  fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0900000000' } });
+  fireEvent.click(submit);
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  expect(submit.disabled).toBe(disabled);
+  if (disabled) {
+    fireEvent.change(screen.getByLabelText(/Họ tên khách/), { target: { value: 'Khách mới' } });
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+  }
+});
 
 test('renders the room page while data is loading and when no room is returned', async () => {
   authApi.me.mockResolvedValue({ username: 'reception', role: 'RECEPTIONIST' });

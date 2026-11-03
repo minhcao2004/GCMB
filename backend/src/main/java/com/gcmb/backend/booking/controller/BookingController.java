@@ -191,6 +191,13 @@ public class BookingController {
         return audit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookings.checkIn(identity, bookingId),null);
     }
 
+    @PostMapping("/bookings/walk-in")
+    public BookingDtos.BookingDetail openWalkIn(@AuthenticationPrincipal Identity identity,
+            @RequestBody BookingDtos.WalkInRequest request) {
+        return audit.record("WALK_IN_CHECKED_IN", "BOOKING", null,
+            () -> bookings.openWalkIn(identity, request), result -> result.booking().id());
+    }
+
     @PostMapping("/bookings")
     // POST: tạo booking và các khoản thu đã xác nhận.
     public BookingDtos.BookingDetail create(@AuthenticationPrincipal Identity identity,

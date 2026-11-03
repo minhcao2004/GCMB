@@ -1,8 +1,13 @@
 import api from '../../../api/client';
 
 // Lấy CSRF mới trước mỗi yêu cầu ghi và gửi cookie phiên kèm theo.
-async function mutate(method, path, body) {
-  const { data: csrf } = await api.get('/auth/csrf');
+async function mutate(method, path, body, markPreflightFailure = false) {
+  let csrf;
+  try { ({ data: csrf } = await api.get('/auth/csrf')); }
+  catch (error) {
+    if (markPreflightFailure) error.walkInBeforeSubmit = true;
+    throw error;
+  }
   const response = await api.request({
     method,
     url: path,
@@ -39,6 +44,7 @@ export const bookingApi = {
   editOptions: async (id, params) => (await api.get(`/reception/bookings/${id}/edit-options`, { params })).data,
   // Mọi lệnh ghi đều đi qua mutate để gắn token CSRF mới.
   create: (body) => mutate('post', '/reception/bookings', body),
+  openWalkIn: (body) => mutate('post', '/reception/bookings/walk-in', body, true),
   planDeposit: (id) => mutate('post', `/reception/bookings/${id}/deposit-payment`, {}),
   depositPayment: async (id) => (await api.get(`/reception/bookings/${id}/deposit-payment`)).data,
   update: (id, body) => mutate('patch', `/reception/bookings/${id}`, body),

@@ -527,6 +527,20 @@ public class BookingService {
     }
 
     @Transactional
+    // BR-01, BR-02, BR-03, BR-05, BR-128, BR-155: tạo booking và nhận phòng trong cùng giao dịch.
+    public BookingDtos.BookingDetail openWalkIn(Identity identity, BookingDtos.WalkInRequest request) {
+        if (request == null || request.durationMinutes() == null || request.durationMinutes() <= 0)
+            throw new BookingFailure(400, "form", "Vui lòng chọn thời lượng sử dụng hợp lệ.");
+        Instant start = Instant.now();
+        var createRequest = new BookingDtos.CreateBookingRequest(request.roomId(), start,
+            start.plus(Duration.ofMinutes(request.durationMinutes())), request.pricingMode(), request.comboId(),
+            request.contactName(), request.contactPhone(), "WALK_IN", request.note(), request.guestCount(),
+            BigDecimal.ZERO, null, null);
+        var created = create(identity, createRequest);
+        return checkIn(identity, created.booking().id());
+    }
+
+    @Transactional
     // BR-01, BR-05, BR-155: chỉ check-in booking còn hợp lệ và phòng sẵn sàng sử dụng.
     public BookingDtos.BookingDetail checkIn(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);

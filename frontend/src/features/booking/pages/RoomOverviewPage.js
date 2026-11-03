@@ -6,6 +6,7 @@ import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
 import BookingStayDialog from './BookingStayDialog';
+import WalkInDialog from './WalkInDialog';
 import { foodOrderApi } from '../../inventory/services/foodOrderApi';
 import IncomingRoomOrderDialog from '../../inventory/components/IncomingRoomOrderDialog';
 import '../styles/booking.css';
@@ -98,6 +99,7 @@ export default function RoomOverviewPage() {
   const [hourlyMetersByBookingId, setHourlyMetersByBookingId] = useState({});
   const meterDetailsRequestedRef = useRef(new Set());
   const [stayMode, setStayMode] = useState(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleDialogRef = useRef(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
@@ -624,13 +626,15 @@ export default function RoomOverviewPage() {
             <button type="button" onClick={openSelectedRoomOrders}>Xử lý tại đây</button>
           </section>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
-          {selected.status !== 'reserved' && <>
+          {selected.status === 'vacant' && <><h3>Thao tác</h3><button type="button" className="room-checkout room-open-button" disabled={loading || Boolean(loadError) || date !== dateInputInZone(now, timezone)} onClick={() => setWalkInOpen(true)}>Mở phòng</button><small className="room-checkout-note">{date === dateInputInZone(now, timezone) ? 'Nhập thông tin khách và xác nhận nhận phòng.' : 'Chọn ngày hôm nay để nhận khách tại quầy.'}</small></>}
+          {selected.status !== 'reserved' && selected.status !== 'vacant' && <>
             <h3>Thao tác</h3><div className="room-actions"><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !currentBooking?.id || !detailReady || busy || checkingRoomOrders} onClick={openServiceOrder}>{checkingRoomOrders ? 'Đang kiểm tra order…' : '+ Order dịch vụ'}</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
           </>}
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
         </div>
       </aside>
     </div>
+    {walkInOpen && selected && <WalkInDialog room={selected} options={options} onClose={() => { setWalkInOpen(false); setReload((value) => value + 1); }} onOpened={(booking) => { setWalkInOpen(false); setNotice(`Đã check-in booking ${booking.code}.`); setReload((value) => value + 1); }} />}
     <dialog ref={scheduleDialogRef} className="room-schedule-dialog" aria-labelledby="room-schedule-title" onClose={() => setScheduleOpen(false)}>
       <header><div><h2 id="room-schedule-title">Lịch phòng {selected?.code}</h2><p>{dateInputText(date)} · các booking trong ngày</p></div><button type="button" aria-label="Đóng lịch phòng" onClick={() => setScheduleOpen(false)}>×</button></header>
       {selectedRoomBookings.length ? <ol className="room-schedule-list">{selectedRoomBookings.map((booking) => <li key={booking.id}>

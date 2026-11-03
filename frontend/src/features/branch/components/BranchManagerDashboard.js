@@ -6,6 +6,7 @@
  * Description: Dashboard, điều hướng, đồng hồ và hồ sơ quản lý cơ sở.
  */
 
+import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -27,7 +28,7 @@ const icons = ['M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z', 'M4 21V4
 export default function BranchManagerDashboard({ user, busy, onLogout, onProfile, onBranchChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
-  const active = branchNav[activeIndex] || 'Phòng';
+  const active = branchNav[activeIndex] || 'Tổng quan';
   useLayoutEffect(() => {
     if (active === 'Thực đơn F&B' || active === 'Kho hàng') window.scrollTo(0, 0);
   }, [active]);
@@ -100,7 +101,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
       <section className="manager-content branch-manager-content">
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
-        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Nhân sự' ? <StaffPage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} /> : active === 'Ca làm & chấm công' ? <WorkforcePage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : active === 'Thực đơn F&B' ? <MenuItemsPage key={user.branchId} user={{ ...user, readOnly }} /> : active === 'Kho hàng' ? <InventoryPage key={user.branchId} user={{ ...user, readOnly }} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+        {switching ? <p role="status">Đang chuyển cơ sở…</p> : active === 'Tổng quan' ? <PerformanceDashboard key={user.branchId} user={user} onNavigate={selectScreen} /> : active === 'Tài khoản' ? <AccountsPage key={user.branchId} actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Nhân sự' ? <StaffPage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} /> : active === 'Ca làm & chấm công' ? <WorkforcePage key={user.branchId} user={user} branchScope={user.branchId} readOnly={readOnly} /> : active === 'Phòng' ? <BranchRoomsPage key={user.branchId} user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} /> : active === 'Thực đơn F&B' ? <MenuItemsPage key={user.branchId} user={{ ...user, readOnly }} /> : active === 'Kho hàng' ? <InventoryPage key={user.branchId} user={{ ...user, readOnly }} /> : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>
   </div>;

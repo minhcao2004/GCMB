@@ -241,7 +241,7 @@ export function AppShell({
 
   return (
     <>
-      <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''}`}>
+      <div className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}>
         <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
           <aside className="manager-sidebar" id="app-sidebar" aria-label="Lễ tân">
             <div className="manager-brand"><BrandWordmark /></div>
@@ -296,7 +296,7 @@ export function AppShell({
                 </label>
               )}
             </DashboardTopbar>
-            <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
+            <main className={`booking-main${activeTab === 'rooms' ? ' booking-main--rooms' : ''}${activeTab === 'shifts' ? ' booking-main--shifts' : ''}`} id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
           </div>
         </div>
       </div>

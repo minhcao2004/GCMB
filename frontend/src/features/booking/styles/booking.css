@@ -39,6 +39,10 @@
 .booking-app header { position: static; inset: auto; z-index: auto; padding: 0; }
 .booking-app { padding: 4px; background: #e4e9f1; }
 .reception-dashboard { font-family: 'Be Vietnam Pro', Arial, sans-serif; }
+.reception-dashboard .manager-sidebar-toggle { min-width: 40px; width: 40px; height: 40px; padding: 0; border: 1px solid #dce4eb; color: #52677b; background: #fff; }
+.reception-dashboard .manager-sidebar-toggle:hover { border-color: #9bc9d0; color: #087f93; background: #f0f9fa; }
+.reception-dashboard .manager-sidebar-toggle:active { background: #e4f4f6; }
+.reception-dashboard .manager-sidebar-toggle-label { display: none; }
 .reception-dashboard .manager-sidebar { line-height: 1.65; }
 .reception-dashboard .booking-sidebar-toggle { width: 34px; height: 34px; align-self: flex-end; border: 1px solid var(--booking-line); border-radius: 8px; padding: 0; color: var(--booking-text); background: var(--booking-panel); font: inherit; font-size: 22px; cursor: pointer; }
 .reception-dashboard .booking-sidebar-toggle:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
@@ -60,6 +64,22 @@
 .reception-dashboard .booking-main { margin-top: 6px; border-radius: 6px; padding: 24px; }
 .reception-dashboard .booking-global-search { display: flex; min-width: 0; width: clamp(180px, 23vw, 330px); height: 34px; margin-left: auto; }
 .reception-dashboard .booking-global-search svg { width: 18px; height: 18px; flex-shrink: 0; }
+/* Keep reception navigation visible while long forms remain accessible inside the workspace. */
+@media (min-width: 1000px) {
+  .booking-app--reception {
+    box-sizing: border-box;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .booking-app--reception .head-office-dashboard { height: 100%; min-height: 0; }
+  .booking-app--reception .manager-sidebar { min-height: 0; overflow-y: auto; }
+  .booking-app--reception .manager-workspace { height: 100%; min-height: 0; overflow: hidden; }
+  .booking-app--reception .manager-topbar { flex: 0 0 auto; }
+  .booking-app--reception .booking-main { min-height: 0; overflow: auto; padding: 12px 20px; }
+  .booking-app--reception.booking-app--fit .booking-main { overflow: hidden; }
+}
 @media (max-width: 720px) {
   .reception-dashboard .booking-global-search { order: 3; width: 100%; }
 }
@@ -614,6 +634,11 @@
   .booking-app--fit .booking-detail-room-link { min-height: 36px; margin-top: 0; }
   .booking-app--fit .booking-detail-actions { gap: 6px; margin-top: 0; }
   .booking-app--fit .booking-detail-actions button { min-height: 36px; padding: 6px 7px; }
+}
+
+@media (min-width: 1000px) and (max-height: 699px) {
+  .booking-app--reception.booking-app--fit .booking-main { overflow: auto; }
+  .booking-app--reception.booking-app--fit .booking-content-grid { flex: 0 0 auto; min-height: 350px; }
 }
 
 .booking-edit-dialog {
