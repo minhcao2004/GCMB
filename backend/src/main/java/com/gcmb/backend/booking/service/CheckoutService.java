@@ -53,103 +53,51 @@ public class CheckoutService {
         this.json = json;
     }
 
-    @Transactional
-    public Map<String, Object> depositPayment(Identity actor, UUID bookingId, boolean create) {
+    private Map<String, Object> depositStatus(Identity actor, UUID bookingId) {
         UUID branchId = branch(actor);
         lockBooking(bookingId, branchId);
         var booking = repository.booking(bookingId, branchId);
         BigDecimal received = repository.depositReceivedAmount(bookingId);
-        BigDecimal amount = BookingPricingService.depositFor(
-            repository.activeChargeTotal(bookingId)
-        );
         var result = new LinkedHashMap<String, Object>();
         result.put("bookingId", bookingId);
         result.put("bookingCode", booking.code());
-        result.put("amount", amount);
+        result.put("amount", BookingPricingService.depositFor(repository.activeChargeTotal(bookingId)));
         result.put("receivedAmount", received);
-        if (received.signum() > 0) {
-            result.put("status", "SETTLED");
-            return result;
-        }
-        if (!"CONFIRMED".equals(booking.status())) throw fail(
-            409,
-            "Chỉ tạo QR cọc cho booking đang xác nhận và chưa sử dụng."
-        );
-        var requests = db.queryForList(
-            """
-            SELECT * FROM gcmb.payment_request WHERE booking_id=? AND purpose='DEPOSIT'
-                AND status IN ('PENDING','EXPIRED') ORDER BY created_at DESC,id DESC LIMIT 1
-            """,
-            bookingId
-        );
-        var request = requests.isEmpty() ? null : requests.get(0);
-        boolean reusable =
-            request != null &&
-            "PENDING".equals(request.get("status")) &&
-            ((BigDecimal) request.get("expected_amount")).compareTo(amount) == 0 &&
-            ((Timestamp) request.get("expires_at")).toInstant().isAfter(Instant.now());
-        if (create && !reusable) {
-            if (!sepay.ready()) throw fail(
-                503,
-                "Chưa nhận được phản hồi từ SePay. Nếu đang thanh toán, hãy kiểm tra trạng thái thanh toán trước khi thực hiện lại."
-            );
-            if (amount.signum() <= 0) throw fail(400, "Số tiền cọc phải lớn hơn 0 đ.");
-            db.update(
-                "UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')",
-                bookingId
-            );
-            UUID account = bankAccount();
-            String reference =
-                "GZ" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
-            request = db.queryForMap(
-                """
-                INSERT INTO gcmb.payment_request(branch_id,booking_id,account_id,purpose,reference_code,expected_amount,expires_at,status)
-                VALUES (?,?,?,'DEPOSIT',?,?,CURRENT_TIMESTAMP+interval '30 minutes','PENDING') RETURNING *
-                """,
-                branchId,
-                bookingId,
-                account,
-                reference,
-                amount
-            );
-            audit(
-                actor.id(),
-                branchId,
-                bookingId,
-                "PLAN_DEPOSIT_PAYMENT",
-                Map.of("amount", amount)
-            );
-        }
-        if (request == null) {
-            result.put("status", "NONE");
-            return result;
-        }
-        var account = db.queryForMap(
-            "SELECT bank_name,bank_account_number,account_holder FROM gcmb.financial_account WHERE id=?",
-            request.get("account_id")
-        );
-        boolean expired =
-            !((Timestamp) request.get("expires_at")).toInstant().isAfter(Instant.now()) ||
-            ((BigDecimal) request.get("expected_amount")).compareTo(amount) != 0;
-        result.put("status", expired ? "EXPIRED" : request.get("status"));
-        result.put("amount", request.get("expected_amount"));
-        result.put("expiresAt", ((Timestamp) request.get("expires_at")).toInstant());
-        result.put("reference", request.get("reference_code"));
-        result.put("bank", account.get("bank_name"));
-        result.put("account", account.get("bank_account_number"));
-        result.put("holder", account.get("account_holder"));
-        if (!expired) result.put(
-            "qrUrl",
-            "https://qr.sepay.vn/img?acc=" +
-                encode(result.get("account")) +
-                "&bank=" +
-                encode(result.get("bank")) +
-                "&amount=" +
-                result.get("amount") +
-                "&des=" +
-                encode(result.get("reference"))
-        );
+        result.put("status", received.signum() > 0 ? "SETTLED" : "AWAITING_CONFIRMATION");
         return result;
+    }
+
+    // HuyDV: lễ tân xác nhận cọc chuyển khoản ngoài hệ thống, giữ mức cọc 30%.
+    @Transactional
+    public Map<String, Object> confirmDeposit(Identity actor, UUID bookingId, String reference, BigDecimal reviewedAmount) {
+        UUID branchId = branch(actor);
+        lockBooking(bookingId, branchId);
+        repository.requireActiveBranch(branchId);
+        var booking = repository.booking(bookingId, branchId);
+        if (repository.depositReceivedAmount(bookingId).signum() > 0) {
+            return depositStatus(actor, bookingId);
+        }
+        if (!"CONFIRMED".equals(booking.status())) throw fail(409, "Chỉ xác nhận cọc cho booking chưa nhận phòng.");
+        String content = reference == null ? "" : reference.trim();
+        if (content.isEmpty() || content.length() > 120) throw fail(400, "Nhập nội dung chuyển khoản, tối đa 120 ký tự.");
+        BigDecimal amount = BookingPricingService.depositFor(repository.activeChargeTotal(bookingId));
+        if (amount.signum() <= 0 || reviewedAmount == null || amount.compareTo(reviewedAmount) != 0) {
+            throw fail(409, "Số tiền cọc đã thay đổi. Vui lòng tải lại trước khi xác nhận.");
+        }
+        var accounts = db.queryForList("SELECT id FROM gcmb.financial_account WHERE kind='BANK' AND active AND (branch_id IS NULL OR branch_id=?) ORDER BY code", UUID.class, branchId);
+        if (accounts.size() != 1) throw fail(409, "Cần cấu hình đúng một tài khoản ngân hàng nhận tiền cho cơ sở.");
+        java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        db.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", day.withDayOfMonth(1));
+        var period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE month=? FOR SHARE", day.withDayOfMonth(1));
+        if (!"OPEN".equals(period.get("status"))) throw fail(409, "Kỳ tài chính đã đóng, chưa thể ghi nhận cọc.");
+        db.update("UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')", bookingId);
+        repository.receiveDeposit(branchId, bookingId, actor.id(), amount, "MANUAL_TRANSFER", content);
+        UUID paymentId = db.queryForObject("SELECT p.id FROM gcmb.payment p WHERE p.booking_id=? AND p.purpose='DEPOSIT' ORDER BY p.created_at DESC LIMIT 1", UUID.class, bookingId);
+        UUID transaction = UUID.randomUUID();
+        db.update("INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,payment_id,reason,created_by,idempotency_key) VALUES (?,?,?,CURRENT_TIMESTAMP,'PAYMENT',?,?,?,?)", transaction, period.get("id"), day, paymentId, content, actor.id(), "MANUAL-DEPOSIT-"+paymentId);
+        db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)", transaction, accounts.get(0), branchId, amount);
+        repository.event(bookingId, actor.id(), "CONFIRM_MANUAL_DEPOSIT", null, Map.of("amount", amount, "reference", content));
+        return depositStatus(actor, bookingId);
     }
 
     public Map<String, Object> preview(Identity actor, UUID bookingId) {
@@ -784,18 +732,7 @@ public class CheckoutService {
             !occurred.isAfter(((Timestamp) request.get("expires_at")).toInstant());
         boolean deposit = "DEPOSIT".equals(request.get("purpose"));
         if (deposit) {
-            var booking = repository.booking(
-                (UUID) request.get("booking_id"),
-                (UUID) request.get("branch_id")
-            );
-            matches =
-                matches &&
-                booking != null &&
-                "CONFIRMED".equals(booking.status()) &&
-                repository.depositReceivedAmount(booking.id()).signum() == 0 &&
-                BookingPricingService.depositFor(
-                    repository.activeChargeTotal(booking.id())
-                ).compareTo((BigDecimal) request.get("expected_amount")) == 0;
+            matches = false; // HuyDV: cọc chuyển khoản phải do lễ tân xác nhận.
         }
         if (!matches) {
             db.update(

@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import ShiftSchedulePage from './ShiftSchedulePage';
 import AttendancePage from './AttendancePage';
+import BranchPayrollPage from './BranchPayrollPage';
 import '../styles/attendance.css';
 
 export default function WorkforcePage(props) {
@@ -19,6 +20,7 @@ export default function WorkforcePage(props) {
           ['schedule', 'Lịch ca tuần'],
           ['daily', 'Chấm công ngày / ca'],
           ['month', 'Bảng công tháng'],
+          ['payroll', 'Đơn giá và chốt lương'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -32,6 +34,8 @@ export default function WorkforcePage(props) {
       </nav>
       {tab === 'schedule' ? (
         <ShiftSchedulePage {...props} />
+      ) : tab === 'payroll' ? (
+        <BranchPayrollPage {...props} key={props.branchScope} />
       ) : (
         <AttendancePage
           {...props}

@@ -1,0 +1,226 @@
+/* Author: HuyDV. UC-91..101: giao diện quỹ/lương, nút gọn và bảng cuộn trên màn nhỏ. */
+.finance-page {
+  color: #20243c;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.finance-page h1 {
+  font-size: 26px;
+  margin: 0 0 8px;
+}
+.finance-page h2 {
+  font-size: 17px;
+  margin: 0 0 24px;
+}
+.finance-muted,
+.finance-page small {
+  color: #78859e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.finance-page small {
+  display: block;
+}
+.finance-tabs,
+.finance-toolbar,
+.finance-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.finance-actions {
+  justify-content: flex-end;
+}
+.finance-actions h2 {
+  margin-right: auto;
+}
+.finance-page button {
+  background: white;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: #52617b;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  min-height: 38px;
+  width: auto;
+}
+.finance-page button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.finance-page button:focus-visible,
+.finance-page input:focus-visible,
+.finance-page select:focus-visible,
+.finance-page textarea:focus-visible {
+  outline: 2px solid #078ba9;
+  outline-offset: 2px;
+}
+.finance-page .finance-primary {
+  background: #ee1193;
+  border-color: #ee1193;
+  color: white;
+  font-weight: 600;
+}
+.finance-tabs button[aria-current='page'] {
+  color: #cb0879;
+  background: #fcebf5;
+  border-color: #fcebf5;
+}
+.finance-toolbar {
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  align-items: end;
+}
+.finance-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 24px;
+}
+.finance-card {
+  padding: 24px;
+  background: white;
+  border-radius: 14px;
+  min-width: 0;
+  margin-bottom: 20px;
+}
+.finance-page fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.finance-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  color: #586781;
+  margin-bottom: 18px;
+}
+.finance-toolbar label {
+  margin: 0;
+  flex: 1;
+  min-width: 150px;
+}
+.finance-page input:not([type='checkbox']),
+.finance-page select,
+.finance-page textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d8e0ed;
+  border-radius: 8px;
+  background: white;
+  color: #222c45;
+  padding: 10px 12px;
+  font: inherit;
+}
+.finance-page textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.finance-page .finance-check {
+  flex-direction: row;
+  align-items: center;
+}
+.finance-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid #edf0f5;
+  font-size: 13px;
+}
+.finance-info,
+.finance-success,
+.finance-warning,
+.finance-error {
+  border-radius: 9px;
+  padding: 16px;
+  margin: 20px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.finance-info {
+  background: #e8f8fc;
+  color: #05829b;
+}
+.finance-success {
+  background: #e8f8ef;
+  color: #09875b;
+}
+.finance-warning {
+  background: #fff5e5;
+  color: #a76a0d;
+}
+.finance-error {
+  background: #fff0f3;
+  color: #ba2948;
+}
+.finance-total {
+  display: block;
+  font-size: 24px;
+  margin-top: 6px;
+}
+.finance-table-wrap {
+  overflow-x: auto;
+}
+.finance-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.finance-page th {
+  background: #f7f9fc;
+  color: #66748d;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+.finance-page th,
+.finance-page td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #eef1f6;
+  vertical-align: middle;
+}
+.finance-page td:not(:first-child) {
+  white-space: nowrap;
+}
+.finance-page tr:nth-child(even) {
+  background: #fbfcfe;
+}
+.finance-page details {
+  margin: 20px 0;
+}
+.finance-page summary {
+  cursor: pointer;
+  color: #bd0872;
+  padding: 10px 0;
+}
+.finance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+}
+.finance-selection {
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 12px;
+  background: #f8fafd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1000px) {
+  .finance-columns {
+    grid-template-columns: 1fr;
+  }
+  .finance-card {
+    padding: 18px;
+  }
+}

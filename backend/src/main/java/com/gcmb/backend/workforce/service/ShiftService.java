@@ -70,10 +70,38 @@ public class ShiftService {
         return date;
     }
 
-    @Transactional(readOnly = true)
     public Map<String, Object> weekly(Identity actor, LocalDate date) {
         var branch = scope(actor, false, false);
-        return weekly(actor, week(date, branch), branch);
+        LocalDate target = week(date, branch);
+        if ("ACTIVE".equals(branch.get("status")) && target.equals(currentWeek(branch).plusWeeks(1))) {
+            branch = scope(actor, true, false);
+            ensureNextWeek(actor, target, branch);
+        }
+        return weekly(actor, target, branch);
+    }
+
+    // HuyDV / UC-83–85: tự tạo đủ ca tuần tới khi lịch được mở lần đầu.
+    private void ensureNextWeek(Identity actor, LocalDate week, Map<String, Object> branch) {
+        ZoneId zone = ZoneId.of((String) branch.get("timezone"));
+        for (var template : repo.templates()) {
+            UUID templateId = (UUID) template.get("id");
+            int start = ((Number) template.get("startMinute")).intValue();
+            int end = ((Number) template.get("endMinute")).intValue();
+            for (int offset = 0; offset < 7; offset++) {
+                LocalDate day = week.plusDays(offset);
+                if (repo.slot(actor.branchId(), templateId, day) != null || repo.closedPeriod(actor.branchId(), day)) continue;
+                ZonedDateTime midnight = day.atStartOfDay(zone);
+                repo.publish(actor.branchId(), templateId, day, midnight.plusMinutes(start).toInstant(),
+                    midnight.plusMinutes(end).toInstant(), 2, "OPEN", actor.id(), null);
+            }
+        }
+    }
+
+    private boolean registrationOpen(LocalDate week, Map<String, Object> branch) {
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of((String) branch.get("timezone")));
+        LocalDate monday = now.toLocalDate().with(DayOfWeek.MONDAY);
+        return week.equals(monday.plusWeeks(1)) &&
+            now.isBefore(monday.plusDays(6).atTime(22, 0).atZone(now.getZone()));
     }
 
     private Map<String, Object> weekly(Identity actor, LocalDate week, Map<String, Object> branch) {
@@ -85,6 +113,7 @@ public class ShiftService {
         result.put("week", week.toString());
         result.put("currentWeek", currentWeek(branch).toString());
         result.put("nextWeek", currentWeek(branch).plusWeeks(1).toString());
+        result.put("registrationOpen", registrationOpen(week, branch));
         result.put("branchName", branch.get("name"));
         var templates = repo.templates();
         var shifts = repo.shifts(actor.branchId(), week);
@@ -95,7 +124,7 @@ public class ShiftService {
         if (
             manager &&
             "ACTIVE".equals(branch.get("status")) &&
-            (week.equals(currentWeek(branch)) || week.equals(currentWeek(branch).plusWeeks(1)))
+            week.equals(currentWeek(branch))
         ) {
             var closed = repo.closedMonths(actor.branchId(), week);
             var zone = ZoneId.of((String) branch.get("timezone"));
@@ -145,8 +174,8 @@ public class ShiftService {
             "Vui lòng bổ sung ngày và ca làm việc hợp lệ."
         );
         LocalDate targetWeek = first.date().with(DayOfWeek.MONDAY);
-        if (!targetWeek.equals(current) && !targetWeek.equals(current.plusWeeks(1))) {
-            throw bad("slots", "Chỉ mở hoặc chỉnh ca trong tuần hiện tại và tuần tới.");
+        if (!targetWeek.equals(current)) {
+            throw bad("slots", "Chỉ chỉnh ca trong tuần hiện tại.");
         }
         Map<UUID, Map<String, Object>> templates = new HashMap<>();
         for (var t : repo.templates()) templates.put((UUID) t.get("id"), t);
@@ -250,9 +279,9 @@ public class ShiftService {
         // UC-83, BR-54, BR-57 (Business Rules.docx), BR-55 / MSG84.
         if (row == null || !"OPEN".equals(row.get("status"))) throw registration();
         LocalDate date = ((java.sql.Date) row.get("work_date")).toLocalDate();
-        // UC-83 mở rộng theo yêu cầu: ca chưa bắt đầu trong tuần hiện tại hoặc tuần tới.
-        LocalDate current = currentWeek(branch);
-        if (date.isBefore(current) || !date.isBefore(current.plusWeeks(2))) throw registration();
+        if (!registrationOpen(date.with(DayOfWeek.MONDAY), branch)) {
+            throw bad("form", "Chỉ đăng ký ca tuần tới trước 22:00 Chủ nhật.");
+        }
         UUID employee = repo.linkedEmployee(actor.id());
         Instant start = time(row, "starts_at"),
             end = time(row, "ends_at");
@@ -290,6 +319,31 @@ public class ShiftService {
             "REGISTER_FOR_SHIFT",
             Map.of("assignmentId", assignment, "employeeId", employee)
         );
+        return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
+    }
+
+    // HuyDV / UC-86: quản lý bổ sung người cho ca đang trống.
+    public Map<String, Object> assignEmpty(Identity actor, UUID shift, UUID employee) {
+        var branch = scope(actor, true, true);
+        var row = repo.shift(shift, actor.branchId());
+        if (row == null || "CANCELLED".equals(row.get("status"))) throw stale();
+        LocalDate date = ((java.sql.Date) row.get("work_date")).toLocalDate();
+        Instant start = time(row, "starts_at");
+        Instant end = time(row, "ends_at");
+        Instant now = Instant.now();
+        if (!end.isAfter(now) || repo.closedPeriod(actor.branchId(), date) || repo.hasAttendance(shift)) {
+            throw locked();
+        }
+        if (repo.registered(shift) != 0) throw stale();
+        if (employee == null || !repo.belongs(employee, actor.branchId(), start.isAfter(now) ? start : now, end)) {
+            throw bad("employeeId", "Vui lòng chọn lễ tân đang hoạt động tại cơ sở của ca.");
+        }
+        if (repo.overlap(employee, shift, start, end)) {
+            throw bad("employeeId", "Nhân viên đã có ca trùng thời gian.");
+        }
+        UUID assignment = repo.assign(shift, employee, actor.id(), "MANAGER", "Phân công ca trống");
+        repo.audit(actor.id(), actor.branchId(), shift, "ASSIGN_EMPTY_SHIFT",
+            Map.of("assignmentId", assignment, "employeeId", employee));
         return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
     }
 

@@ -101,7 +101,8 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
       setErrors(found);
       return;
     }
-    if (!review && type !== 'register') {
+    if (type === 'detail' && (!canReplace || participants.length || !employeeId)) return;
+    if (!review && type !== 'register' && type !== 'detail') {
       setReview(true);
       return;
     }
@@ -121,14 +122,18 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                 { employeeId, reason, version: shift.version },
                 scope
               )
-            : await shiftApi.register(shift.id);
+            : type === 'detail'
+              ? await shiftApi.assign(shift.id, employeeId, scope)
+              : await shiftApi.register(shift.id);
       onSaved(
         result,
         type === 'register'
           ? 'Đã xác nhận đăng ký ca.'
           : type === 'replace'
             ? 'Đã cập nhật nhân viên làm thay ca.'
-            : 'Đã cập nhật lịch mở ca trong tuần.'
+            : type === 'detail'
+              ? 'Đã phân công nhân viên vào ca.'
+              : 'Đã cập nhật lịch mở ca trong tuần.'
       ); // MSG11/12
     } catch (e) {
       setErrors(apiErrors(e));
@@ -208,7 +213,23 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                     ))}
                   </ul>
                 ) : (
-                  <p>Chưa có nhân viên đăng ký ca này.</p>
+                  <>
+                    <p>Chưa có nhân viên đăng ký ca này.</p>
+                    {canReplace && shift.status !== 'CANCELLED' && (
+                      <div className="shift-empty-assignment">
+                        <label>
+                          Nhân viên phân công
+                          <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+                            <option value="">Chọn nhân viên</option>
+                            {candidates.map((employee) => (
+                              <option key={employee.id} value={employee.id}>{employee.fullName} · {employee.code}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <button type="submit" disabled={!employeeId}>Phân công</button>
+                      </div>
+                    )}
+                  </>
                 )}
                 {data.history.some((h) => h.shiftId === shift.id) && (
                   <>

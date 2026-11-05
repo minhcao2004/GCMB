@@ -4,6 +4,7 @@
  * Created: 27/10/2026
  * Description: UC-127/BR-125 đã thống nhất lại: lễ tân gửi yêu cầu, kế toán cập nhật tiến độ xử lý bên ngoài.
  */
+import CheckoutReceipt from '../components/CheckoutReceipt';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authApi, apiErrors } from '../../auth/services/authApi';
@@ -310,6 +311,25 @@ export default function TaxInvoicePage({ accounting = false }) {
           detail && (
             <section className="staff-card">
               <h2>{detail.bookingCode}</h2>
+              <details className="staff-card">
+                <summary>
+                  Hóa đơn thanh toán{detail.bill ? ` · ${detail.bill.number}` : ''}
+                </summary>
+                {detail.bill ? (
+                  <>
+                    <CheckoutReceipt data={detail.bill} />
+                    {!accounting && (
+                      <button type="button" onClick={() => navigate(`/le-tan/bills/${detail.bill.id}`)}>
+                        Mở hóa đơn thanh toán
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p>{detail.bill === null
+                    ? 'Booking chưa có hóa đơn thanh toán.'
+                    : 'Máy chủ chưa trả thông tin hóa đơn. Vui lòng tải lại sau khi cập nhật backend.'}</p>
+                )}
+              </details>
               {detail.request && (
                 <>
                   <h3>Thông tin đã lưu</h3>

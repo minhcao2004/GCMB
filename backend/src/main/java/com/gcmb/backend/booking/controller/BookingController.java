@@ -32,13 +32,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookingController {
     private final BookingService bookings;
     private final DepositManagementService deposits;
+    private final com.gcmb.backend.booking.service.CheckoutService checkout;
 
     // Service chịu trách nhiệm quy tắc nghiệp vụ và phạm vi chi nhánh.
     private final MutationAudit audit;
-    public BookingController(BookingService bookings, DepositManagementService deposits, MutationAudit audit) {
+    public BookingController(BookingService bookings, DepositManagementService deposits, MutationAudit audit,
+            com.gcmb.backend.booking.service.CheckoutService checkout) {
         this.bookings = bookings;
         this.deposits = deposits;
         this.audit = audit;
+        this.checkout = checkout;
     }
     @GetMapping("/deposits")
     // GET: danh sách tiền cọc, tổng hợp và bộ lọc trong phạm vi chi nhánh lễ tân.
@@ -192,10 +195,20 @@ public class BookingController {
     }
 
     @PostMapping("/bookings")
+    @org.springframework.transaction.annotation.Transactional
     // POST: tạo booking và các khoản thu đã xác nhận.
     public BookingDtos.BookingDetail create(@AuthenticationPrincipal Identity identity,
             @RequestBody BookingDtos.CreateBookingRequest request) {
-        return audit.record("BOOKING_CREATED","BOOKING",null,()->bookings.create(identity, request),result->result.booking().id());
+        return audit.record("BOOKING_CREATED","BOOKING",null,()-> {
+            var created = bookings.create(identity, request);
+            if (request.depositAmount() != null && request.depositAmount().signum() > 0 &&
+                    "BANK_TRANSFER".equalsIgnoreCase(request.paymentMethod())) {
+                checkout.confirmDeposit(identity, created.booking().id(),
+                    request.paymentReference(), request.depositAmount());
+                return bookings.detail(identity, created.booking().id());
+            }
+            return created;
+        }, result->result.booking().id());
     }
 
     @PatchMapping("/bookings/{bookingId}")

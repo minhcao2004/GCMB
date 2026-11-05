@@ -11,7 +11,6 @@ import {
   hoursLabel,
   localInput,
   initialAttendanceTime,
-  attendanceClockTime,
   dateTimeLabel,
   previewMinutes,
 } from '../services/attendanceApi';
@@ -29,7 +28,7 @@ export default function AttendanceDialog({
   const ref = useRef(null);
   const sending = useRef(false);
   const [assignmentId, setAssignmentId] = useState(dialog.row?.assignmentId || '');
-  const [status, setStatus] = useState(dialog.row?.status || 'WORKED');
+  const [status, setStatus] = useState(dialog.row?.status || '');
   const [actualIn, setActualIn] = useState(
     initialAttendanceTime(dialog.row, 'actualIn', data.timezone)
   );
@@ -47,14 +46,14 @@ export default function AttendanceDialog({
   const row = data.rows.find((r) => r.assignmentId === assignmentId);
   const issues = data.issues.filter((i) => i.assignmentId === assignmentId);
   const minutes = previewMinutes(status, actualIn, actualOut);
-  const dateHint = (value) => {
-    const date = value.slice(0, 10);
-    const days =
-      (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${row?.workDate}T00:00:00Z`)) / 86400000;
-    if (days === 0) return 'Cùng ngày của ca';
-    if (days === -1) return 'Ngày hôm trước';
-    if (days === 1) return 'Ngày hôm sau';
-    return `Ngày ${dateLabel(date)}`;
+  const shiftPay = status === 'ABSENT' ? 0 : row?.hourlyRate == null || minutes == null
+    ? null : Math.round((Number(row.hourlyRate) + Number(row.nightPremium)) * minutes / 60);
+  const markAttendance = (value) => {
+    setStatus(value);
+    setActualIn(value === 'WORKED' && row ? localInput(row.startsAt, data.timezone) : '');
+    setActualOut(value === 'WORKED' && row ? localInput(row.endsAt, data.timezone) : '');
+    setReview(false);
+    setErrors({});
   };
   const closing = dialog.type === 'close';
   const employee = dialog.type === 'employee';
@@ -82,7 +81,7 @@ export default function AttendanceDialog({
   const select = (id) => {
     const current = data.rows.find((r) => r.assignmentId === id);
     setAssignmentId(id);
-    setStatus(current?.status || 'WORKED');
+    setStatus(current?.status || '');
     setActualIn(initialAttendanceTime(current, 'actualIn', data.timezone));
     setActualOut(initialAttendanceTime(current, 'actualOut', data.timezone));
     setNote(current?.note || '');
@@ -101,7 +100,8 @@ export default function AttendanceDialog({
         found.confirmedCorrect = 'Vui lòng xác nhận không còn bản ghi chấm công chưa đúng.';
     } else {
       if (!row) found.assignmentId = 'Vui lòng bổ sung nhân viên và phân ca.'; // MSG02.
-      if (status === 'WORKED' && (!actualIn || !actualOut))
+      if (!status) found.form = 'Vui lòng tích Đi làm hoặc Vắng mặt.';
+      else if (status === 'WORKED' && (!actualIn || !actualOut))
         found.actualOut = 'Vui lòng bổ sung ngày giờ vào và ra thực tế.'; // BR-204 / MSG02.
       else if (minutes === null) found.actualOut = 'Giờ ra thực tế phải sau Giờ vào thực tế.'; // BR-195 / MSG07.
       if (resolved.length && !resolution.trim())
@@ -297,72 +297,23 @@ export default function AttendanceDialog({
                   </p>
                 )}
                 <div className="attendance-form-grid">
-                  <label>
-                    Tình trạng *
-                    <select
-                      aria-label="Tình trạng"
-                      value={status}
-                      onChange={(e) => {
-                        setStatus(e.target.value);
-                        if (e.target.value === 'WORKED' && row) {
-                          if (!actualIn) setActualIn(localInput(row.startsAt, data.timezone));
-                          if (!actualOut) setActualOut(localInput(row.endsAt, data.timezone));
-                        }
-                      }}
-                    >
-                      <option value="WORKED">Đi làm</option>
-                      <option value="ABSENT">Vắng mặt</option>
-                    </select>
-                  </label>
-                  <label>
-                    Giờ thực tế
-                    <input
-                      aria-label="Giờ công thực tế"
-                      readOnly
-                      value={minutes === null ? 'Chưa đủ thông tin' : hoursLabel(minutes)}
-                    />
-                  </label>
+                  <fieldset className="attendance-status-options">
+                    <legend>Tình trạng chấm công *</legend>
+                    <label>
+                      <input type="radio" name="attendance-status" checked={status === 'WORKED'}
+                        disabled={!row} onChange={() => markAttendance('WORKED')} /> Đi làm
+                    </label>
+                    <label>
+                      <input type="radio" name="attendance-status" checked={status === 'ABSENT'}
+                        disabled={!row} onChange={() => markAttendance('ABSENT')} /> Vắng mặt
+                    </label>
+                  </fieldset>
                   {status === 'WORKED' && (
-                    <>
-                      <label>
-                        Vào thực tế *
-                        <input
-                          type="time"
-                          step="60"
-                          aria-label="Vào thực tế"
-                          value={actualIn.slice(11)}
-                          disabled={!row}
-                          aria-invalid={!!errors.actualIn}
-                          onChange={(e) =>
-                            setActualIn(
-                              attendanceClockTime(row, 'actualIn', e.target.value, data.timezone)
-                            )
-                          }
-                        />
-                        {actualIn && (
-                          <small className="attendance-help">{dateHint(actualIn)}</small>
-                        )}
-                      </label>
-                      <label>
-                        Ra thực tế *
-                        <input
-                          type="time"
-                          step="60"
-                          aria-label="Ra thực tế"
-                          value={actualOut.slice(11)}
-                          disabled={!row}
-                          aria-invalid={!!errors.actualOut}
-                          onChange={(e) =>
-                            setActualOut(
-                              attendanceClockTime(row, 'actualOut', e.target.value, data.timezone)
-                            )
-                          }
-                        />
-                        {actualOut && (
-                          <small className="attendance-help">{dateHint(actualOut)}</small>
-                        )}
-                      </label>
-                    </>
+                    <div className="attendance-shift-pay" role="status">
+                      <strong>Tiền công ca tạm tính</strong>
+                      <p>{shiftPay == null ? 'Chưa có đơn giá áp dụng' : shiftPay.toLocaleString('vi-VN') + ' đ'}</p>
+                      <small>{hoursLabel(minutes || 0)}{status === 'WORKED' && row?.nightPremium ? ' · Phụ cấp ca đêm 3.000 đ/giờ' : ''}</small>
+                    </div>
                   )}
                 </div>
                 <label>
@@ -418,8 +369,8 @@ export default function AttendanceDialog({
                 )}
               </fieldset>
               <p className="attendance-alert">
-                Giờ được điền sẵn theo ca. Hãy sửa nếu có đi muộn hoặc về sớm và kiểm tra trước khi
-                lưu. Vắng mặt tính 0 giờ.
+                Đi làm tính đủ giờ của ca. Vắng mặt tính 0 giờ. Đi muộn hoặc về sớm ghi vào
+                ghi chú để QLCS xem xét cuối tháng.
               </p>
               {review && (
                 <div className="attendance-summary" role="status">

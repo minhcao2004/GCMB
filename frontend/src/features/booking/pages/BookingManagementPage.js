@@ -8,7 +8,6 @@ import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
-import BookingDepositQr from '../components/BookingDepositQr';
 import BookingEditDialog from './BookingEditDialog';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
@@ -24,9 +23,9 @@ const accountingNavigation = [
   ['Tổng quan', 'overview'],
   ['Thu & cấp quỹ', 'payments', true],
   ['Chi & hoàn ứng', 'plus', true],
-  ['Đối soát chốt quỹ', 'calendar', true],
+  ['Đối soát chốt quỹ', 'calendar'],
   ['Hoàn tiền cọc', 'deposit'],
-  ['Lương nhân viên', 'booking', true],
+  ['Lương nhân viên', 'booking'],
   ['Báo cáo tài chính', 'orders', true],
   ['Danh mục chi phí', 'inventory', true],
 ];
@@ -181,6 +180,9 @@ export function AppShell({
                     title={unavailable ? 'Đang phát triển' : label}
                     onClick={() => {
                       if (unavailable) return;
+                      // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
+                      if (icon === 'calendar') navigate('/ke-toan/chot-quy');
+                      if (icon === 'booking') navigate('/ke-toan/luong');
                       if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
                       if (icon === 'overview') navigate('/ke-toan');
                       if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
@@ -313,10 +315,9 @@ export function AppShell({
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 // Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
-function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, onEdit, onCancel, onNoShow, onDepositClose }) {
+function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, onEdit, onCancel, onNoShow }) {
   const navigate = useNavigate();
   const panelRef = useRef(null);
-  const [qrBookingId, setQrBookingId] = useState(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -374,8 +375,6 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
         <div><span>Tiền cọc đã nhận</span><strong>{formatVnd(depositReceived)}</strong></div>
         <div><span className="booking-deposit-status">{depositStatus}</span>{depositDisposition && <small>{depositDisposition}</small>}</div>
       </section>
-      {canCheckIn && depositReceived === 0 && <button type="button" className="booking-button booking-button-secondary" onClick={() => setQrBookingId(booking.id)}>QR cọc 30%</button>}
-      {qrBookingId === booking.id && <BookingDepositQr bookingId={booking.id} onBack={() => { setQrBookingId(null); onDepositClose(); }} />}
       <div className="booking-detail-divider" />
       <dl className="booking-detail-list">
         <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
@@ -843,20 +842,11 @@ export default function BookingManagementPage() {
       setSearch('');
       setReload((value) => value + 1);
       const requestedDeposit = Number(payload.depositAmount || 0);
-      if (requestedDeposit > 0 && payload.paymentMethod === 'BANK_TRANSFER') {
-        setNoticeKind('success');
-        // MSG22: chờ xác nhận chuyển khoản cọc cho booking vừa tạo.
-        const amount = formatVnd(requestedDeposit).replace(/đ$/, '');
-        setNotice(
-          `Đang chờ xác nhận chuyển khoản ${amount} đ cho booking ${booking.code}.`
-        );
-        return { ok: true, booking };
-      }
       clearBookingDraft(user);
       const recordedDeposit = Number(result.deposit?.balance ?? booking.depositBalance ?? 0);
       if (requestedDeposit > 0 && recordedDeposit < requestedDeposit) {
         setNoticeKind('warning');
-        setNotice(`Booking ${booking.code} đã được tạo nhưng API chưa ghi nhận đủ tiền cọc (${formatVnd(recordedDeposit)} / ${formatVnd(requestedDeposit)}). Không tạo booking khác; cần đối chiếu khoản thu trước khi xác nhận lại.`);
+        setNotice(`Booking ${booking.code} chưa ghi nhận đủ tiền cọc (${formatVnd(recordedDeposit)} / ${formatVnd(requestedDeposit)}). Vui lòng kiểm tra khoản thu tại mục Tiền cọc.`);
       } else if (recordedDeposit > 0) {
         setNoticeKind('success');
         setNotice(`Đã tạo booking ${booking.code} và ghi nhận tiền cọc ${formatVnd(recordedDeposit)}.`);
@@ -1008,7 +998,6 @@ export default function BookingManagementPage() {
       </section>
       {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
         <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}
-          onDepositClose={() => setReload((value) => value + 1)}
           onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit}
           onCancel={(booking) => { setDetailsOpen(false); setCancelError(''); setCancelTarget(booking); }}
           onNoShow={(booking) => { setDetailsOpen(false); setNoShowError(''); setNoShowTarget(booking); }} />

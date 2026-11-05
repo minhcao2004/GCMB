@@ -107,6 +107,13 @@ public class AttendanceService {
             "Không tìm thấy phân ca tại cơ sở đang quản lý."
         );
         LocalDate date = LocalDate.parse((String) row.get("workDate"));
+        // HuyDV / UC-87: cho tích đủ công ca từ giờ bắt đầu, kể cả ca đang diễn ra.
+        Instant now = Instant.now();
+        Instant scheduledStart = time(row, "startsAt");
+        Instant scheduledEnd = time(row, "endsAt");
+        if (scheduledStart.isAfter(now)) {
+            throw bad("form", "Chưa đến giờ bắt đầu ca, chưa thể chấm công.");
+        }
         var period = repo.ensurePeriod(actor.branchId(), date.withDayOfMonth(1));
         requireOpen(period, date);
         if (
@@ -122,13 +129,10 @@ public class AttendanceService {
         Instant in = null;
         Instant out = null;
         int minutes = 0;
-        // BR-193/194/195/204: dùng đầy đủ ngày giờ, không trừ nghỉ; vắng = 0 phút.
+        // HuyDV / UC-87: tích Đi làm nhận đủ công theo ca, muộn/về sớm ghi chú để xét phạt.
         if ("WORKED".equals(input.status())) {
-            if (input.actualIn() == null || input.actualOut() == null) {
-                throw bad("actualOut", "Vui lòng bổ sung ngày giờ vào và ra thực tế."); // MSG02.
-            }
-            in = localTime(input.actualIn(), zone, "actualIn");
-            out = localTime(input.actualOut(), zone, "actualOut");
+            in = scheduledStart;
+            out = scheduledEnd;
             if (!out.isAfter(in)) {
                 throw bad("actualOut", "Giờ ra thực tế phải sau Giờ vào thực tế."); // MSG07.
             }
@@ -138,10 +142,6 @@ public class AttendanceService {
                 "Khoảng thời gian chấm công quá lớn."
             );
             minutes = (int) duration;
-            if (out.isAfter(Instant.now())) throw bad(
-                "actualOut",
-                "Giờ ra thực tế không được ở tương lai."
-            );
         }
         if (date.isAfter(LocalDate.now(zone))) throw bad(
             "form",
@@ -378,12 +378,17 @@ public class AttendanceService {
             row.get("actualOut") == null
         ) return false;
         long seconds = Duration.between(time(row, "actualIn"), time(row, "actualOut")).getSeconds();
+        Instant now = Instant.now();
+        boolean markedScheduledShift =
+            !time(row, "startsAt").isAfter(now) &&
+            time(row, "actualIn").equals(time(row, "startsAt")) &&
+            time(row, "actualOut").equals(time(row, "endsAt"));
         return (
             seconds > 0 &&
             seconds % 60 == 0 &&
             number(row, "breakMinutes") == 0 &&
             seconds / 60 == number(row, "workedMinutes") &&
-            !time(row, "actualOut").isAfter(Instant.now())
+            (!time(row, "actualOut").isAfter(now) || markedScheduledShift)
         );
     }
 
@@ -414,17 +419,6 @@ public class AttendanceService {
 
     private void validateDate(LocalDate date) {
         if (date.getYear() < 1 || date.getYear() > 9998) throw bad("date", "Ngày không hợp lệ.");
-    }
-
-    private Instant localTime(LocalDateTime value, ZoneId zone, String field) {
-        if (value.getSecond() != 0 || value.getNano() != 0) throw bad(
-            field,
-            "Vui lòng nhập ngày giờ chính xác đến phút."
-        );
-        validateDate(value.toLocalDate());
-        var offsets = zone.getRules().getValidOffsets(value);
-        if (offsets.size() != 1) throw bad(field, "Ngày giờ thực tế không hợp lệ tại cơ sở.");
-        return value.toInstant(offsets.get(0));
     }
 
     private void requireOpen(Map<String, Object> period, LocalDate date) {

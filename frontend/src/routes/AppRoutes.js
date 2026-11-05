@@ -18,6 +18,7 @@ import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
+import FinancePage from '../features/finance/pages/FinancePage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
@@ -47,6 +48,9 @@ export default function AppRoutes() {
     <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
+    {/* HuyDV / UC-91..101 */}
+    <Route path="/ke-toan/luong" element={<FinancePage payroll />} />
+    <Route path="/ke-toan/chot-quy" element={<FinancePage />} />
     <Route path="/ke-toan" element={<AccountantRefundPage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />

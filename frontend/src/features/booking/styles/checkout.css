@@ -50,8 +50,13 @@
 @media(max-width:900px) { .co-grid { grid-template-columns: 1fr; } .co-summary { position: static; } }
 @media(max-width:550px) { .co-time-grid, .co-transfer { grid-template-columns: 1fr; } .co-fee { grid-template-columns: 1fr; } .co-heading h1 { font-size: 21px; } }
 @media print {
-  .manager-sidebar, .manager-topbar, .checkout-page > .co-heading, .co-amount-banner, .co-grid > section, .co-error { display: none !important; }
-  .co-grid { display: block; }
-  .co-print { position: static; width: 100%; }
-  .booking-main { padding: 0; }
+  body:has(.checkout-page .co-print) .manager-sidebar,
+  body:has(.checkout-page .co-print) .manager-topbar,
+  .checkout-page:has(.co-print) > :not(.co-grid),
+  .checkout-page .co-grid:has(.co-print) > :not(.co-print) {
+    display: none !important;
+  }
+  .checkout-page .co-grid:has(.co-print) { display: block; }
+  .checkout-page .co-print { position: static; width: 100%; box-sizing: border-box; }
+  body:has(.checkout-page .co-print) .booking-main { padding: 0; }
 }

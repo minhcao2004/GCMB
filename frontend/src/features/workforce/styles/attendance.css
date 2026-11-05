@@ -181,11 +181,64 @@
   background: #f7f8fb;
   color: #7d899e;
 }
+.branch-payroll-page {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 24px 28px 32px;
+}
+.branch-payroll-page > .workforce-tabs {
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+@media (max-width: 650px) {
+  .branch-payroll-page {
+    padding: 20px 16px 28px;
+  }
+}
+
+.branch-payroll-legend {
+  margin-bottom: 16px;
+}
+
 .attendance-form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   margin: 20px 0;
+}
+.attendance-status-options {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.attendance-status-options legend {
+  padding: 0;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.attendance-status-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.attendance-status-options input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  margin: 0;
+  accent-color: #ed138a;
+}
+.attendance-shift-pay {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f7f8fb;
+}
+.attendance-shift-pay p {
+  margin: 8px 0 4px;
 }
 .attendance-alert {
   background: #fff5e4;

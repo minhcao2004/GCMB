@@ -5,6 +5,7 @@
  * Description: Kiểm tra phòng, chốt bill và thanh toán tiền mặt/SePay/kết hợp.
  * Updated: 15/10/2026 - Hiển thị cọc đã áp dụng và phần tiền còn phải thu.
  */
+import CheckoutReceipt, { Info, Lines, Summary } from '../components/CheckoutReceipt';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
@@ -771,113 +772,11 @@ export default function CheckoutPage() {
                   </>
                 )}
               </section>
-              <aside className="co-card co-summary co-print">
-                <h2 className="co-invoice-title">
-                  Hóa đơn
-                  <small>Mã hóa đơn: {data.number}</small>
-                </h2>
-                <p>
-                  {data.room} · {data.customer}
-                </p>
-                <p>
-                  Check-in:
-                  {dateTime(data.checkin)}
-                  <br />
-                  Chốt sử dụng:
-                  {dateTime(data.checkoutAt)}
-                </p>
-                <Lines lines={data.lines} />
-                <Summary
-                  lines={data.lines}
-                  amount={amount}
-                  depositAmount={depositAmount}
-                  paid={Number(data.paid || 0)}
-                  paymentDue={paymentDue}
-                />
-                <small>
-                  {settled ? 'Đã hoàn tất thanh toán' : 'Hóa đơn đang chờ hoàn tất thanh toán'}
-                </small>
-              </aside>
+              <CheckoutReceipt data={data} className="co-card co-summary co-print" />
             </div>
           </>
         )}
       </section>
     </AppShell>
-  );
-}
-function Info({ label, value }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-function Lines({ lines }) {
-  return lines?.length ? (
-    <table className="co-lines">
-      <thead>
-        <tr>
-          <th>Nội dung</th>
-          <th>SL</th>
-          <th>Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody>
-        {lines.map((line, index) => (
-          <tr key={index}>
-            <td>{line.description}</td>
-            <td>{Number(line.quantity)}</td>
-            <td>{formatVnd(line.amount)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  ) : (
-    <p>Không có khoản phát sinh.</p>
-  );
-}
-function Summary({
-  lines,
-  extra = 0,
-  amount,
-  depositAmount,
-  paid = 0,
-  paymentDue,
-  preview = false,
-}) {
-  return (
-    <>
-      <dl className="co-totals">
-        {[
-          ['ROOM', 'Tiền phòng'],
-          ['FNB', 'F&B'],
-          ['SURCHARGE', 'Phụ phí'],
-        ].map(([category, label]) => (
-          <Info
-            key={category}
-            label={label}
-            value={formatVnd(
-              lines
-                .filter((line) => line.category === category)
-                .reduce(
-                  (sum, line) => sum + Number(line.amount),
-                  category === 'SURCHARGE' ? extra : 0
-                )
-            )}
-          />
-        ))}
-        <Info label="Tổng hóa đơn (gồm phụ phí)" value={formatVnd(amount)} />
-        <Info
-          label={preview ? 'Tiền cọc sẽ áp dụng' : 'Tiền cọc đã áp dụng'}
-          value={depositAmount > 0 ? `−${formatVnd(depositAmount)}` : formatVnd(0)}
-        />
-        {paid > 0 && <Info label="Trừ khoản đã thanh toán" value={`−${formatVnd(paid)}`} />}
-      </dl>
-      <div className="co-total">
-        <small>CÒN PHẢI THANH TOÁN</small>
-        <strong>{formatVnd(paymentDue)}</strong>
-      </div>
-    </>
   );
 }

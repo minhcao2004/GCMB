@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 public class CheckoutController {
 
     private final CheckoutService service;
-
     public CheckoutController(CheckoutService service) {
         this.service = service;
     }
@@ -26,22 +25,6 @@ public class CheckoutController {
     @GetMapping("/api/v1/reception/bills")
     public java.util.List<Map<String, Object>> list(@AuthenticationPrincipal Identity actor) {
         return service.list(actor);
-    }
-
-    @PostMapping("/api/v1/reception/bookings/{id}/deposit-payment")
-    public Map<String, Object> planDeposit(
-        @AuthenticationPrincipal Identity actor,
-        @PathVariable UUID id
-    ) {
-        return service.depositPayment(actor, id, true);
-    }
-
-    @GetMapping("/api/v1/reception/bookings/{id}/deposit-payment")
-    public Map<String, Object> depositPayment(
-        @AuthenticationPrincipal Identity actor,
-        @PathVariable UUID id
-    ) {
-        return service.depositPayment(actor, id, false);
     }
 
     @GetMapping("/api/v1/reception/bookings/{id}/checkout")

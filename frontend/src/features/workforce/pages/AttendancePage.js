@@ -331,15 +331,6 @@ export default function AttendancePage({
             </div>
             {monthly && (
               <>
-                <div className="attendance-summary" role="status">
-                  <strong>Tổng công đã ghi nhận: {hoursLabel(data.workedMinutes)}</strong>
-                  <span>
-                    {data.assignmentCount} phân ca · {data.employees.length} nhân viên ·{' '}
-                    {data.missing} ca chưa ghi nhận · {data.invalid} bản ghi chưa đúng ·{' '}
-                    {data.openIssues} phản ánh chưa xử lý
-                  </span>
-                  <span>Dữ liệu đã chốt được khóa để kế toán sử dụng tính lương.</span>
-                </div>
                 {!closed && !data.monthEnded && (
                   <p className="attendance-help">
                     Chỉ chốt khi tháng và các ca cuối tháng đã kết thúc.

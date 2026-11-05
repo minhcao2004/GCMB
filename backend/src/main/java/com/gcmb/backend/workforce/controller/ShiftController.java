@@ -46,6 +46,17 @@ public class ShiftController {
         return service.register(actor, id);
     }
 
+    public record EmptyAssignment(UUID employeeId) {}
+
+    @PostMapping("/api/v1/branch-management/shifts/{id}/assign")
+    public Map<String, Object> assignEmpty(
+        @AuthenticationPrincipal Identity actor,
+        @PathVariable UUID id,
+        @RequestBody EmptyAssignment input
+    ) {
+        return service.assignEmpty(actor, id, input.employeeId());
+    }
+
     @PostMapping("/api/v1/branch-management/shifts/assignments/{id}/replacement")
     public Map<String, Object> replace(
         @AuthenticationPrincipal Identity actor,
