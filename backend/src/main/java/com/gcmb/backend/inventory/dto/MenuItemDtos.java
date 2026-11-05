@@ -32,7 +32,7 @@ public final class MenuItemDtos {
                                   BigDecimal salePrice, Boolean active, String description,
                                   Boolean removeImage) {}
 
-    public record InventoryOption(UUID id, String sku, String name, String unitName, boolean active) {}
+    public record InventoryOption(UUID id, String sku, String name, String category, String unitName, boolean active) {}
 
     public record PublicMenuItemView(UUID id, String name, String category, String kind,
                                      BigDecimal salePrice, boolean available, String stockStatus,

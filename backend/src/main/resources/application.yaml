@@ -26,5 +26,13 @@ gcmb:
     frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
     mail-from: ${SMTP_FROM:}
   attachments:
-    # Configure a persistent shared directory for deployed or multi-instance environments.
+    # The directory remains available for files uploaded before cloud storage was enabled.
     storage-dir: ${GCMB_ATTACHMENT_STORAGE_DIR:./data/attachments}
+    s3:
+      # Configure a private bucket and AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in the backend environment.
+      # For Cloudflare R2: region=auto, endpoint=https://<account-id>.r2.cloudflarestorage.com, path-style=true.
+      # A blank bucket disables new uploads; existing local files remain readable.
+      bucket: ${GCMB_S3_BUCKET:}
+      region: ${GCMB_S3_REGION:us-east-1}
+      endpoint: ${GCMB_S3_ENDPOINT:}
+      path-style: ${GCMB_S3_PATH_STYLE:false}
