@@ -152,7 +152,7 @@ public class BookingService {
         if (allocation == null || !"OCCUPIED".equals(allocation.state()))
             throw new BookingFailure(409, "roomId", "Không tìm thấy chặng phòng đang được sử dụng");
         Instant now = Instant.now();
-        List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId, true)
+        List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId)
             .stream().filter(room -> !room.id().equals(allocation.roomId()) && room.capacity() >= booking.guestCount())
             .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
         List<BookingDtos.ComboOption> combos = repository.combos(allocation.roomTypeId()).stream()
@@ -472,8 +472,7 @@ public class BookingService {
 
         RoomRow room = lockUsableRoom(request.roomId(), branch);
         if (room == null) throw new BookingFailure(409, "roomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
-        // BR-03, BR-04: lịch đặt trước có thể nối sau lượt hiện tại; khách vãng lai cần phòng trống ngay.
-        if (repository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null, "WALK_IN".equals(channel)))
+        if (repository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null))
             throw roomConflict(room.code());
         int guestCount = request.guestCount() == null ? 1 : request.guestCount();
         if (guestCount < 1)
@@ -525,6 +524,20 @@ public class BookingService {
             "depositReceived", "BANK_TRANSFER".equals(paymentMethod) ? BigDecimal.ZERO : depositAmount,
             "depositRequested", depositAmount, "depositMethod", paymentMethod));
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
+    }
+
+    @Transactional
+    // BR-01, BR-02, BR-03, BR-05, BR-128, BR-155: tạo booking và nhận phòng trong cùng giao dịch.
+    public BookingDtos.BookingDetail openWalkIn(Identity identity, BookingDtos.WalkInRequest request) {
+        if (request == null || request.durationMinutes() == null || request.durationMinutes() <= 0)
+            throw new BookingFailure(400, "form", "Vui lòng chọn thời lượng sử dụng hợp lệ.");
+        Instant start = Instant.now();
+        var createRequest = new BookingDtos.CreateBookingRequest(request.roomId(), start,
+            start.plus(Duration.ofMinutes(request.durationMinutes())), request.pricingMode(), request.comboId(),
+            request.contactName(), request.contactPhone(), "WALK_IN", request.note(), request.guestCount(),
+            BigDecimal.ZERO, null, null);
+        var created = create(identity, createRequest);
+        return checkIn(identity, created.booking().id());
     }
 
     @Transactional
@@ -711,7 +724,7 @@ public class BookingService {
                 throw new BookingFailure(400, "roomId", "Combo " + comboName + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             }
             repository.releaseAllocation(current.id(), "Thay đổi lịch đặt");
-            if (repository.hasRoomOverlap(roomId, start, end, bookingId, false)) throw roomConflict(targetRoom.code());
+            if (repository.hasRoomOverlap(roomId, start, end, bookingId)) throw roomConflict(targetRoom.code());
         }
         String contactName = request.contactName() == null ? booking.contactName() : required(request.contactName(), "contactName", "Tên khách", 200);
         String contactPhone = request.contactPhone() == null ? booking.contactPhone() : contactPhone(request.contactPhone());

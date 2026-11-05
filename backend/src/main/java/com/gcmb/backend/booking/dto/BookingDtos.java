@@ -72,6 +72,8 @@ public final class BookingDtos {
                                        String pricingMode, UUID comboId, String contactName,
                                        String contactPhone, String channel, String note, Integer guestCount,
                                        BigDecimal depositAmount, String paymentMethod, String paymentReference) {}
+    public record WalkInRequest(UUID roomId, Integer durationMinutes, String pricingMode, UUID comboId,
+                                String contactName, String contactPhone, String note, Integer guestCount) {}
     // Các trường có thể sửa trước giờ bắt đầu booking.
     public record UpdateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd, String pricingMode, UUID comboId,
                                        String contactName, String contactPhone, String note) {}

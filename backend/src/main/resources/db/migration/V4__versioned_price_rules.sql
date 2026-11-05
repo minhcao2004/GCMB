@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ *
+ * Author: TrongNV
+ * Created: 12/10/2026
+ * Description: Bổ sung phiên bản và thời hạn áp dụng cho quy tắc giá.
+ */
+
 -- Effective-dated, versioned global room price rules.
 ALTER TABLE gcmb.price_rule ADD COLUMN code varchar(60);
 ALTER TABLE gcmb.price_rule ADD COLUMN version integer NOT NULL DEFAULT 1;
