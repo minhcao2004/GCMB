@@ -190,6 +190,26 @@ public class ShiftRepository {
         );
     }
 
+    // HuyDV / UC-83/86: tính theo ngày của ca, trên toàn bộ các cơ sở của nhân viên.
+    public boolean withinDailyLimit(UUID employee, UUID shift) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT (SELECT count(*) FROM gcmb.shift_assignment a
+                    JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
+                    WHERE a.employee_id=? AND a.status='CONFIRMED' AND s.status<>'CANCELLED'
+                      AND s.work_date=target.work_date AND s.id<>target.id) + 1
+                <= CASE WHEN template.start_minute=0 OR EXISTS (
+                    SELECT 1 FROM gcmb.shift_assignment a
+                    JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
+                    JOIN gcmb.shift_template t ON t.id=s.template_id
+                    WHERE a.employee_id=? AND a.status='CONFIRMED' AND s.status<>'CANCELLED'
+                      AND s.work_date=target.work_date AND t.start_minute=0
+                ) THEN 2 ELSE 3 END
+            FROM gcmb.scheduled_shift target
+            JOIN gcmb.shift_template template ON template.id=target.template_id
+            WHERE target.id=?
+            """, Boolean.class, employee, employee, shift));
+    }
+
     public boolean overlap(UUID employee, UUID shift, Instant start, Instant end) {
         return Boolean.TRUE.equals(
             db.queryForObject(

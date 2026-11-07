@@ -311,6 +311,7 @@ public class ShiftService {
             "form",
             "Nhân viên đã có ca trùng thời gian."
         );
+        requireDailyLimit(employee, shift);
         UUID assignment = repo.assign(shift, employee, actor.id(), "SELF", null);
         repo.audit(
             actor.id(),
@@ -341,6 +342,7 @@ public class ShiftService {
         if (repo.overlap(employee, shift, start, end)) {
             throw bad("employeeId", "Nhân viên đã có ca trùng thời gian.");
         }
+        requireDailyLimit(employee, shift);
         UUID assignment = repo.assign(shift, employee, actor.id(), "MANAGER", "Phân công ca trống");
         repo.audit(actor.id(), actor.branchId(), shift, "ASSIGN_EMPTY_SHIFT",
             Map.of("assignmentId", assignment, "employeeId", employee));
@@ -399,6 +401,7 @@ public class ShiftService {
             "form",
             "Số người trong ca đang vượt sức chứa. Vui lòng kiểm tra lại."
         );
+        requireDailyLimit(input.employeeId(), shift);
         repo.cancel(assignment, reason);
         UUID replacement = repo.assign(shift, input.employeeId(), actor.id(), "MANAGER", reason);
         repo.audit(
@@ -420,6 +423,13 @@ public class ShiftService {
             )
         );
         return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
+    }
+
+    private void requireDailyLimit(UUID employee, UUID shift) {
+        if (!repo.withinDailyLimit(employee, shift)) {
+            throw bad("employeeId",
+                "Mỗi ngày tối đa 3 ca. Nếu có ca 00:00–07:00 thì chỉ được làm tối đa 2 ca trong ngày.");
+        }
     }
 
     private static Instant time(Map<String, Object> row, String key) {
