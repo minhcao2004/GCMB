@@ -19,12 +19,12 @@ import DepositManagementPage from '../features/booking/pages/DepositManagementPa
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
+import HomePage from '../features/landing/pages/HomePage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
   const [recovery, setRecovery] = useState(null);
   return <BrowserRouter><Routes>
-    {/*<Route path="/" element={<HomePage />} />*/}
     <Route path="/" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="/dang-nhap" element={<AuthPage key="login" mode="login" recovery={recovery} onRecovery={setRecovery} />} />
     <Route path="/quen-mat-khau" element={<AuthPage key="forgot" mode="forgot" recovery={recovery} onRecovery={setRecovery} />} />
@@ -32,7 +32,8 @@ export default function AppRoutes() {
     <Route path="/quan-ly-he-thong" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-he-thong/phong-bang-gia" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-chi-nhanh" element={<RoleHomePage role="BRANCH_MANAGER" />} />
-    <Route path="/mr/:mrCode" element={<GuestRoomOrderPage />} />
+    <Route path="/mr/:mrCode" element={<HomePage />} />
+    <Route path="/mr/:mrCode/menu" element={<GuestRoomOrderPage />} />
     <Route path="/le-tan/bookings/new" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/edit" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/check-in" element={<BookingManagementPage />} />

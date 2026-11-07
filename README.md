@@ -222,10 +222,11 @@ GCMB/
 | `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
-| `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. |
+| `branch` | Branches, manager assignments, rooms, room operating status, per-room QR display/open/print in manager room details, and branch-manager dashboard navigation restored from the URL. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
 | `booking` | Reservations, walk-in reception and room check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
-| `inventory` | F&B catalog, selection of existing inventory items when creating packaged menu goods, guest QR menu and cart persistence across reloads, room/staff order processing, room-screen QR-order dialogs and service-order pending checks, service assignment, polled arrival alerts and room bell indicators, inventory item management, stock receipts, adjustments, and movement history. |
+| `landing` (frontend) | Public service introduction using the existing marketing content. Room QR links open `/mr/:mrCode`; the room-specific menu is at `/mr/:mrCode/menu`, with navigation back to services. Marketing remains accessible without an active stay; ordering still requires a valid in-house room session (BR-27). |
+| `inventory` | F&B catalog, selection of existing inventory items when creating packaged menu goods, guest QR menu and cart persistence across reloads, room/staff order processing, room-screen QR-order dialogs and service-order pending checks, service-order name search (with or without Vietnamese accents) and food/drink category filtering that retain selected quantities, service assignment, polled arrival alerts and room bell indicators, inventory item management, stock receipts with per-line package-to-stock-unit conversion, adjustments, and movement history. |
 | `workforce` | Staff records, branch assignments/transfers, shift schedules, and attendance. Payroll remains planned. |
 | `dashboard` | Read-only chain and authorized branch performance summaries from completed bills and paid expenses; current branch room and incident counts. |
 | `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |

@@ -29,6 +29,9 @@
 .mr-order-header { display: flex; min-height: 74px; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e6e3dc; padding: 0 max(22px, calc((100vw - 1180px) / 2)); background: #fff; }
 .mr-brand { color: var(--food-ink); font-size: 18px; font-weight: 800; letter-spacing: -.04em; text-decoration: none; }
 .mr-brand span { margin-left: 5px; color: var(--food-pink); font-size: 11px; letter-spacing: .09em; }
+.mr-order-brand { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; padding: 10px 0; }
+.mr-services-link { color: var(--food-cyan); font-size: 13px; font-weight: 650; text-underline-offset: 4px; }
+.mr-services-link:focus-visible { outline: 3px solid var(--food-cyan); outline-offset: 4px; }
 .mr-order-header p { margin: 0; color: var(--food-copy); font-size: 13px; }
 .mr-order-header p span { margin: 0 6px; color: var(--food-cyan); }
 .mr-order-content { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 36px 0 54px; }

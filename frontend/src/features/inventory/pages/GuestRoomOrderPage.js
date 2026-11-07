@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { apiAssetUrl } from '../../../api/client';
 import { formatVnd } from '../../booking/data/bookingData';
 import { foodOrderApi } from '../services/foodOrderApi';
@@ -132,6 +132,7 @@ export default function GuestRoomOrderPage() {
     setError('');
     setMessage('');
     try {
+      // BR-27: gửi mã MR của phòng hiện tại để server gắn món với đúng booking đang sử dụng.
       const result = await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
         idempotencyKey: pendingKey.current,
         items: cartLines.map((item) => ({ menuItemId: item.id, quantity: cart[item.id] })),
@@ -149,7 +150,7 @@ export default function GuestRoomOrderPage() {
 
   return <main className="mr-order-page">
     <header className="mr-order-header">
-      <span className="mr-brand" aria-label="GenZ Cinema & Music Box">GENZ <span>F&amp;B</span></span>
+      <div className="mr-order-brand"><span className="mr-brand" aria-label="GenZ Cinema & Music Box">GENZ <span>F&amp;B</span></span><Link className="mr-services-link" to={`/mr/${encodeURIComponent(normalizedCode)}`}>Khám phá dịch vụ</Link></div>
       {room && <p>{room.roomName} <span>·</span> {room.branchName}</p>}
     </header>
     <div className="mr-order-content">
@@ -157,7 +158,7 @@ export default function GuestRoomOrderPage() {
         <div><h1>Thực đơn tại phòng</h1><p>Chọn món bạn muốn dùng. Yêu cầu sẽ được lễ tân xác nhận trước khi tính phí.</p></div>
         {room && <div className="mr-room-tag"><span>Mã phòng</span><strong>{room.roomCode}</strong></div>}
       </section>
-      {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Quét lại mã MR</button></div>}
+      {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Tải lại thực đơn</button></div>}
       {message && <div className="food-alert food-alert--success" role="status">{message}</div>}
       {loading ? <div className="food-loading" role="status">Đang tải thực đơn phòng…</div> : room && <>
         {items.length === 0 ? <div className="food-empty"><h2>Chưa có món đang bán</h2><p>Vui lòng gọi lễ tân nếu bạn cần hỗ trợ.</p></div> : <>

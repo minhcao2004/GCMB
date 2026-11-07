@@ -155,18 +155,33 @@
 @media (max-width: 520px) { .walk-in-dialog { padding: 18px; } .walk-in-fields { grid-template-columns: 1fr; } .walk-in-note { grid-column: auto; } .walk-in-actions button { flex: 1; } }
 .room-checkout:disabled { opacity: .55; cursor: not-allowed; }
 .room-checkout-note { display: block; margin-top: 8px; color: #697687; font-size: 10px; line-height: 1.45; }
-.room-order-dialog { width: min(600px, calc(100vw - 28px)); max-width: none; max-height: min(84dvh, 760px); overflow: auto; border: 0; border-radius: 16px; padding: 22px; color: #202638; background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
+.room-order-dialog { box-sizing: border-box; width: min(600px, calc(100vw - 28px)); max-width: none; max-height: min(84dvh, 760px); overflow: auto; border: 0; border-radius: 16px; padding: 22px; color: #202638; background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
 .room-order-dialog::backdrop { background: rgb(26 38 56 / 42%); }
 .room-order-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .room-order-dialog h2 { margin: 0; font-size: 19px; }
 .room-order-dialog header p { margin: 5px 0 0; color: #697687; font-size: 11px; }
 .room-order-dialog header button { width: 34px; height: 34px; flex: 0 0 auto; border: 0; border-radius: 8px; color: #586579; background: #f1f3f7; font: inherit; font-size: 22px; cursor: pointer; }
-.room-order-dialog button:focus-visible,.room-order-dialog select:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
+.room-order-dialog button:focus-visible,.room-order-dialog select:focus-visible,.room-order-dialog input:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 .room-order-guidance { margin: 0 0 14px; color: #647185; font-size: 12px; line-height: 1.5; }
 .room-order-error { margin: 0 0 12px; border-radius: 9px; padding: 11px 13px; color: #8e2e44; background: #fff1f3; font-size: 12px; }
 .room-order-empty { display: grid; min-height: 110px; place-items: center; border-radius: 10px; padding: 18px; color: #687286; background: #f5f7fa; font-size: 12px; text-align: center; }
 .room-order-employee { display: grid; gap: 6px; margin-bottom: 14px; color: #566275; font-size: 12px; font-weight: 700; }
 .room-order-employee select { width: 100%; min-height: 40px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 10px; color: #202638; background: #fff; font: inherit; font-size: 12px; }
+.room-order-filters { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 12px; }
+.room-order-filters > label { display: grid; min-width: 0; gap: 6px; color: #566275; font-size: 12px; font-weight: 700; }
+.room-order-search > span { position: relative; display: flex; align-items: center; }
+.room-order-search svg { position: absolute; left: 11px; width: 16px; height: 16px; fill: none; stroke: #647185; stroke-width: 1.8; stroke-linecap: round; pointer-events: none; }
+.room-order-search input,.room-order-category select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 10px; color: #202638; background: #fff; font: inherit; font-size: 12px; font-weight: 400; }
+.room-order-search input { padding-left: 35px; }
+.room-order-search input::placeholder { color: #647185; opacity: 1; }
+.room-order-search input:hover:not(:disabled),.room-order-category select:hover:not(:disabled) { border-color: #8d9bad; }
+.room-order-search input:disabled,.room-order-category select:disabled { background: #f1f3f7; cursor: not-allowed; }
+.room-order-result-count { margin: 10px 0; color: #647185; font-size: 11px; }
+.room-order-no-results { display: grid; justify-items: center; gap: 10px; padding: 22px 14px; color: #647185; font-size: 12px; text-align: center; }
+.room-order-no-results p { margin: 0; line-height: 1.5; }
+.room-order-no-results button { min-height: 36px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 12px; color: #087f93; background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.room-order-no-results button:hover:not(:disabled) { background: #eef8fa; }
+.room-order-no-results button:disabled { opacity: .55; cursor: not-allowed; }
 .room-order-items { display: grid; max-height: 340px; overflow: auto; border-top: 1px solid #e2e7ec; }
 .room-order-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #e2e7ec; padding: 12px 2px; }
 .room-order-item > div:first-child { display: grid; gap: 4px; min-width: 0; }
@@ -190,7 +205,7 @@
 @media (max-width: 620px) { .room-page-heading-actions { width: 100%; align-items: stretch; margin-top: 10px; } .room-page-heading-actions > span { max-width: none; text-align: left; } }
 @media (max-width: 420px) { .room-pending-orders { grid-template-columns: 28px minmax(0,1fr); } .room-pending-orders button { grid-column: 1 / -1; } }
 @media (max-width: 420px) { .room-grid { grid-template-columns: 1fr; } }
-@media (max-width: 560px) { .room-order-dialog { padding: 17px; } .room-order-item { gap: 8px; } .room-order-footer { align-items: stretch; flex-direction: column; } }
+@media (max-width: 560px) { .room-order-dialog { padding: 17px; } .room-order-filters { grid-template-columns: minmax(0, 1fr); } .room-order-item { gap: 8px; } .room-order-footer { align-items: stretch; flex-direction: column; } }
 @keyframes room-overdue-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .42; } }
 @media (prefers-reduced-motion: reduce) { .room-overdue-indicator { animation: none; } }
 @media (max-width: 850px) {

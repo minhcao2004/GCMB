@@ -17,6 +17,11 @@ function errorText(error) {
   return errors.form || Object.values(errors)[0] || 'Không tải được dữ liệu phòng.';
 }
 
+function normalizeOrderSearch(value) {
+  return String(value || '').trim().toLocaleLowerCase('vi-VN')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+}
+
 function clockTime(date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
@@ -106,6 +111,8 @@ export default function RoomOverviewPage() {
   const orderDialogRef = useRef(null);
   const orderRequestKey = useRef('');
   const [orderMenu, setOrderMenu] = useState([]);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderCategory, setOrderCategory] = useState('all');
   const [orderEmployees, setOrderEmployees] = useState([]);
   const [pendingRoomOrders, setPendingRoomOrders] = useState([]);
   const [incomingOrders, setIncomingOrders] = useState([]);
@@ -378,6 +385,14 @@ export default function RoomOverviewPage() {
   const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
   const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
+  const visibleOrderMenu = useMemo(() => {
+    const keyword = normalizeOrderSearch(orderSearch);
+    return orderMenu.filter((item) => (
+      (orderCategory === 'all' || normalizeOrderSearch(item.category) === normalizeOrderSearch(orderCategory))
+      && (!keyword || normalizeOrderSearch(item.name).includes(keyword))
+    ));
+  }, [orderMenu, orderSearch, orderCategory]);
+  // BR-117: chỉ gửi món có số lượng dương; tìm kiếm/lọc không loại bỏ món đã chọn.
   const orderLines = orderMenu.filter((item) => orderQuantities[item.id] > 0);
   const orderTotal = orderLines.reduce((total, item) => total + Number(item.salePrice || 0) * orderQuantities[item.id], 0);
   const pendingOrdersByRoomCode = useMemo(() => {
@@ -445,6 +460,8 @@ export default function RoomOverviewPage() {
     setOrderError('');
     setOrderMenu([]);
     setOrderQuantities({});
+    setOrderSearch('');
+    setOrderCategory('all');
     try {
       const [items, employees] = await Promise.all([
         foodOrderApi.staffMenu(), foodOrderApi.servingEmployees(),
@@ -649,8 +666,22 @@ export default function RoomOverviewPage() {
       <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay.</p>
       {orderError && <div className="room-order-error" role="alert">{orderError}</div>}
       {orderLoading ? <p className="room-order-empty" role="status">Đang tải thực đơn…</p> : orderMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form onSubmit={submitServiceOrder}>
+        {/* BR-123: danh sách phân công chỉ gồm lễ tân đang làm ca tại cơ sở của booking. */}
         <label className="room-order-employee">Nhân viên phụ trách<select value={orderEmployeeId} onChange={(event) => setOrderEmployeeId(event.target.value)} required disabled={orderEmployees.length === 0 || orderSubmitting}><option value="">Chọn lễ tân đang trong ca</option>{orderEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
-        <div className="room-order-items">{orderMenu.map((item) => {
+        <div className="room-order-filters">
+          <label className="room-order-search">Tìm món
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" placeholder="Nhập tên món…" value={orderSearch} disabled={orderSubmitting} aria-controls="room-order-items" onChange={(event) => setOrderSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></span>
+          </label>
+          <label className="room-order-category">Danh mục
+            <select value={orderCategory} disabled={orderSubmitting} aria-controls="room-order-items" onChange={(event) => setOrderCategory(event.target.value)}><option value="all">Tất cả</option><option value="Đồ ăn">Đồ ăn</option><option value="Đồ uống">Đồ uống</option></select>
+          </label>
+        </div>
+        <p className="room-order-result-count" role="status">Hiển thị {visibleOrderMenu.length}/{orderMenu.length} món · Đã chọn {orderLines.length} món</p>
+        <div className="room-order-items" id="room-order-items">{visibleOrderMenu.length === 0 ? <div className="room-order-no-results">
+          {/* MSG01: thông báo khi không có món khớp từ khóa và bộ lọc. */}
+          <p>Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
+          <button type="button" disabled={orderSubmitting} onClick={() => { setOrderSearch(''); setOrderCategory('all'); }}>Đặt lại bộ lọc</button>
+        </div> : visibleOrderMenu.map((item) => {
           const quantity = orderQuantities[item.id] || 0;
           return <article className="room-order-item" key={item.id}>
             <div><strong>{item.name}</strong><span>{formatVnd(item.salePrice)}</span></div>
