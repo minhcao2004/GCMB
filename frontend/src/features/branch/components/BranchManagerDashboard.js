@@ -18,9 +18,9 @@ import MenuItemsPage from '../../inventory/pages/MenuItemsPage';
 import InventoryPage from '../../inventory/pages/InventoryPage';
 import WorkforcePage from '../../workforce/pages/WorkforcePage';
 import StaffPage from '../../workforce/pages/StaffPage';
-
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
-
+// HuyDV / UC-98/100: chốt quỹ theo cơ sở đang chọn.
+import CashClosingPage from '../../finance/pages/CashClosingPage';
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
@@ -121,6 +121,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
         {switching ? <p role="status">Đang chuyển cơ sở…</p>
+          : active === 'Chốt quỹ' ? <CashClosingPage user={user} readOnly={readOnly} />
           : active === 'Tài khoản' ? <AccountsPage actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} />
             : active === 'Nhân sự' ? <StaffPage user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} />
               : active === 'Ca làm & chấm công' ? <WorkforcePage user={user} branchScope={user.branchId} readOnly={readOnly} />

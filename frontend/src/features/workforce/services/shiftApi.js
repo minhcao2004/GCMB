@@ -17,6 +17,7 @@ export const shiftApi = {
     (await api.get(base(scope), { params: { week }, headers: headers(scope) })).data,
   publish: (slots, scope) => write(`${base(scope)}/availability`, { slots }, scope, 'put'),
   register: (id) => write(`${base()}/${id}/register`, {}),
+  assign: (id, employeeId, scope) => write(`${base(scope)}/${id}/assign`, { employeeId }, scope),
   replace: (id, body, scope) => write(`${base(scope)}/assignments/${id}/replacement`, body, scope),
 };
 export const addDays = (date, days) => {
@@ -45,5 +46,5 @@ export const dateLabel = (date) => date?.split('-').reverse().join('/') || '—'
 export const clock = (minutes) =>
   `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 export const shiftLabel = (template) =>
-  `${clock(template.startMinute)}–${clock(template.endMinute)}${template.endMinute === 1440 ? ' (+1 ngày)' : ''}`;
+  `${clock(template.startMinute)}–${clock(template.endMinute)}`;
 export const slotKey = (date, templateId) => `${date}/${templateId}`;

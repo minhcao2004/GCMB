@@ -60,7 +60,7 @@ public class AccountProfileRepository {
     public void update(UUID id, String fullName, String phone, String email, boolean emailChanged) {
         db.update("UPDATE gcmb.user_account SET email=? WHERE id=?", email, id);
         db.update(
-            "UPDATE gcmb.employee SET full_name=?,phone=? WHERE user_id=?",
+            "UPDATE gcmb.employee SET full_name=?,phone=?,version=version+1 WHERE user_id=?",
             fullName,
             phone,
             id

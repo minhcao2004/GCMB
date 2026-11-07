@@ -3,7 +3,6 @@ import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
 import TimeInput from '../components/TimeInput';
-import BookingDepositQr from '../components/BookingDepositQr';
 import { formatDate, formatMoneyInput, formatVnd, isValidTimeInput } from '../data/bookingData';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
@@ -32,7 +31,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
     contactName: '', contactPhone: '', channel: 'PHONE', date: initialDate, time: initialTime,
     guestCount: '2', roomTypeId: '', roomId: '', pricingMode: 'COMBO', comboId: '',
     durationHours: '2', note: '', depositEnabled: false,
-    paymentMethod: 'BANK_TRANSFER', transaction: '', createdBookingId: '',
+    paymentMethod: 'BANK_TRANSFER', transaction: '',
     ...savedDraft.current?.form,
   }));
   const [availability, setAvailability] = useState(null);
@@ -92,7 +91,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
     ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
 
-const paymentReferenceRequired = form.depositEnabled && depositAmountValid && !cashPayment && paymentMethod !== 'BANK_TRANSFER';
+const paymentReferenceRequired = form.depositEnabled && depositAmountValid && !cashPayment;
 const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transaction.trim());
   const bookingBlockers = [];
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
@@ -147,7 +146,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   }, [selectedType, form.comboId]);
 
   useEffect(() => {
-    if (form.createdBookingId || !selectedType || !plannedStart || !plannedEnd || plannedStart <= new Date() || plannedEnd <= plannedStart) {
+    if (!selectedType || !plannedStart || !plannedEnd || plannedStart <= new Date() || plannedEnd <= plannedStart) {
       setAvailability(null);
       setLoadingAvailability(false);
       setAvailabilityError(plannedStart && plannedStart <= new Date() ? 'Thời gian nhận phòng cần ở tương lai.' : '');
@@ -176,7 +175,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
       }
     }).finally(() => { if (active) setLoadingAvailability(false); });
     return () => { active = false; };
-  }, [selectedType, selectedCombo, plannedStart, plannedEnd, form.pricingMode, form.createdBookingId]);
+  }, [selectedType, selectedCombo, plannedStart, plannedEnd, form.pricingMode ]);
 
   useEffect(() => {
     if (!availability) return;
@@ -220,15 +219,13 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         contactName: form.contactName.trim(),
         contactPhone: form.contactPhone.trim(),
         channel: form.channel,
-        note: form.note.trim() || null,
+        note: null,
         guestCount: Number(form.guestCount),
         depositAmount: form.depositEnabled ? depositAmount : 0,
         paymentMethod: form.depositEnabled && depositAmount > 0 ? paymentMethod : null,
         paymentReference: form.depositEnabled && depositAmount > 0 ? form.transaction.trim() || null : null,
       });
-      if (result?.ok && form.depositEnabled && paymentMethod === 'BANK_TRANSFER') {
-        setForm((current) => ({ ...current, createdBookingId: result.booking.id }));
-      } else if (result?.ok) clearBookingDraft(user);
+      if (result?.ok) clearBookingDraft(user);
       if (result?.error) setFormError(result.error);
     } catch (error) {
       const errors = apiErrors(error);
@@ -236,7 +233,6 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     } finally { setSubmitting(false); }
   };
 
-  if (form.createdBookingId) return <BookingDepositQr bookingId={form.createdBookingId} onBack={cancelDraft} />;
 
   return <div className="booking-create-page">
     <div className="booking-page-heading">
@@ -321,12 +317,11 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
           </Field>
           <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></Field>
           <Field label={`Mã giao dịch / ghi chú${paymentReferenceRequired ? ' *' : ''}`} className={paymentReferenceFieldError ? 'is-invalid' : ''}>
-            <input ref={paymentReferenceInput} name="transaction" value={form.transaction} onChange={change} onBlur={() => markTouched('transaction')} disabled={!form.depositEnabled || !cashPayment} required={paymentReferenceRequired} maxLength={120} placeholder="Ghi chú thu tiền mặt (nếu có)" aria-invalid={paymentReferenceFieldError} aria-describedby={paymentReferenceFieldError ? 'booking-deposit-reference-error' : undefined} />
+            <input ref={paymentReferenceInput} name="transaction" value={form.transaction} onChange={change} onBlur={() => markTouched('transaction')} disabled={!form.depositEnabled} required={paymentReferenceRequired} maxLength={120} placeholder="Mã giao dịch / ghi chú" aria-invalid={paymentReferenceFieldError} aria-describedby={paymentReferenceFieldError ? 'booking-deposit-reference-error' : undefined} />
             {paymentReferenceFieldError && <small id="booking-deposit-reference-error" className="booking-field-error" aria-live="polite">{paymentReferenceFieldErrorText}</small>}
           </Field>
         </div>
-        <p className="booking-feature-note">Cọc tự tính bằng 30% giá booking. Chuyển khoản: tạo booking để hiển thị QR, chỉ ghi nhận đã thu khi ngân hàng xác nhận. Tiền mặt: chỉ tạo booking sau khi đã thực sự nhận cọc.</p>
-        <Field label="Ghi chú booking" className="booking-note-field"><textarea name="note" rows="2" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></Field>
+        <p className="booking-feature-note">Cọc tự tính bằng 30% giá booking. Lễ tân kiểm tra đã nhận đủ tiền cọc trước khi bấm Tạo booking. Chuyển khoản nhập mã giao dịch / ghi chú.</p>
       </section>
 
       <aside className="booking-summary-card">
@@ -354,7 +349,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         <div className="booking-summary-money booking-deposit-money"><span>{cashPayment ? 'Tiền cọc đã nhận' : 'Tiền cọc cần chuyển'}</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
         <div className="booking-summary-total"><strong>Còn lại sau khi thu cọc</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
         <div className="booking-summary-hint">Booking giữ phòng theo ngày/giờ đã chọn.<br />Giá cuối có thể thay đổi khi checkout.</div>
-        <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || !bookingReady}>{submitting ? 'Đang tạo booking…' : form.depositEnabled && !cashPayment ? 'Tạo booking & lấy QR cọc' : 'Tạo booking'}</button>
+        <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || !bookingReady}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>
         <button className="booking-summary-cancel" type="button" onClick={cancelDraft}>Hủy</button>
       </aside>
     </form>}

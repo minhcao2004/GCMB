@@ -116,6 +116,24 @@
   min-width: 0;
 }
 
+.shift-empty-assignment {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.shift-empty-assignment label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.shift-empty-assignment select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.shift-empty-assignment button {
+  justify-self: end;
+}
+
 .shift-stats {
   display: flex;
   flex-wrap: wrap;

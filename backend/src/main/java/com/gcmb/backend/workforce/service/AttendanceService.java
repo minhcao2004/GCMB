@@ -1,7 +1,7 @@
 /**
  * Author: HuyDV
  * Created: 27/10/2026
- * Description: UC-87..89, công thực tế, xử lý phản ánh và chốt công tháng đúng cơ sở.
+ * Description: UC-87..90, công thực tế, chốt công tháng và xem công cá nhân đúng phạm vi.
  */
 package com.gcmb.backend.workforce.service;
 
@@ -62,6 +62,42 @@ public class AttendanceService {
         return summary(actor.branchId(), branch, month(month, branch));
     }
 
+    // UC-90 / BR-60/61/177: chỉ đọc công của hồ sơ gắn với phiên; giữ lịch sử khi điều chuyển.
+    @Transactional(readOnly = true)
+    public Map<String, Object> personal(Identity actor, String value) {
+        if (actor == null || !"RECEPTIONIST".equals(actor.role())) throw new AuthFailure(
+            403,
+            "form",
+            "Bạn không có quyền xem đối với công cá nhân."
+        ); // MSG24
+        var branch = shiftService.scope(actor, false, false);
+        UUID employee = shifts.linkedEmployee(actor.id());
+        if (employee == null) throw new AuthFailure(
+            403,
+            "form",
+            "Bạn không có quyền xem đối với công cá nhân."
+        );
+        YearMonth month = month(value, branch);
+        var rows = decorate(repo.personalRows(employee, month.atDay(1), month.plusMonths(1).atDay(1)));
+        var result = base(branch);
+        result.put("month", month.toString());
+        result.put("rows", rows);
+        result.put(
+            "workedMinutes",
+            rows.stream()
+                .filter(row -> Boolean.TRUE.equals(row.get("valid")))
+                .mapToLong(row -> number(row, "workedMinutes"))
+                .sum()
+        );
+        result.put(
+            "missing",
+            rows.stream().filter(row -> row.get("attendanceId") == null).count()
+        );
+        result.put("assignmentCount", rows.size());
+        result.put("readOnly", true);
+        return result;
+    }
+
     public Map<String, Object> record(Identity actor, UUID assignment, RecordCommand input) {
         var branch = shiftService.scope(actor, true, true); // BR-177 / MSG43, khóa chung với lịch ca.
         var row = repo.row(actor.branchId(), assignment);
@@ -71,6 +107,13 @@ public class AttendanceService {
             "Không tìm thấy phân ca tại cơ sở đang quản lý."
         );
         LocalDate date = LocalDate.parse((String) row.get("workDate"));
+        // HuyDV / UC-87: cho tích đủ công ca từ giờ bắt đầu, kể cả ca đang diễn ra.
+        Instant now = Instant.now();
+        Instant scheduledStart = time(row, "startsAt");
+        Instant scheduledEnd = time(row, "endsAt");
+        if (scheduledStart.isAfter(now)) {
+            throw bad("form", "Chưa đến giờ bắt đầu ca, chưa thể chấm công.");
+        }
         var period = repo.ensurePeriod(actor.branchId(), date.withDayOfMonth(1));
         requireOpen(period, date);
         if (
@@ -86,13 +129,10 @@ public class AttendanceService {
         Instant in = null;
         Instant out = null;
         int minutes = 0;
-        // BR-193/194/195/204: dùng đầy đủ ngày giờ, không trừ nghỉ; vắng = 0 phút.
+        // HuyDV / UC-87: tích Đi làm nhận đủ công theo ca, muộn/về sớm ghi chú để xét phạt.
         if ("WORKED".equals(input.status())) {
-            if (input.actualIn() == null || input.actualOut() == null) {
-                throw bad("actualOut", "Vui lòng bổ sung ngày giờ vào và ra thực tế."); // MSG02.
-            }
-            in = localTime(input.actualIn(), zone, "actualIn");
-            out = localTime(input.actualOut(), zone, "actualOut");
+            in = scheduledStart;
+            out = scheduledEnd;
             if (!out.isAfter(in)) {
                 throw bad("actualOut", "Giờ ra thực tế phải sau Giờ vào thực tế."); // MSG07.
             }
@@ -102,17 +142,13 @@ public class AttendanceService {
                 "Khoảng thời gian chấm công quá lớn."
             );
             minutes = (int) duration;
-            if (out.isAfter(Instant.now())) throw bad(
-                "actualOut",
-                "Giờ ra thực tế không được ở tương lai."
-            );
         }
         if (date.isAfter(LocalDate.now(zone))) throw bad(
             "form",
             "Chưa thể chấm công cho ngày làm việc trong tương lai."
         );
         String note = input.note() == null ? "" : input.note().trim();
-        if (note.length() > 2000) throw bad("note", "Ghi chú không được dài quá 2000 ký tự.");
+        if (note.length() > 2000) throw bad("note", "Ghi chú chỉ được chứa tối đa 2000 ký tự."); // MSG03
         var selected =
             input.resolvedIssueIds() == null
                 ? Set.<UUID>of()
@@ -342,12 +378,17 @@ public class AttendanceService {
             row.get("actualOut") == null
         ) return false;
         long seconds = Duration.between(time(row, "actualIn"), time(row, "actualOut")).getSeconds();
+        Instant now = Instant.now();
+        boolean markedScheduledShift =
+            !time(row, "startsAt").isAfter(now) &&
+            time(row, "actualIn").equals(time(row, "startsAt")) &&
+            time(row, "actualOut").equals(time(row, "endsAt"));
         return (
             seconds > 0 &&
             seconds % 60 == 0 &&
             number(row, "breakMinutes") == 0 &&
             seconds / 60 == number(row, "workedMinutes") &&
-            !time(row, "actualOut").isAfter(Instant.now())
+            (!time(row, "actualOut").isAfter(now) || markedScheduledShift)
         );
     }
 
@@ -378,17 +419,6 @@ public class AttendanceService {
 
     private void validateDate(LocalDate date) {
         if (date.getYear() < 1 || date.getYear() > 9998) throw bad("date", "Ngày không hợp lệ.");
-    }
-
-    private Instant localTime(LocalDateTime value, ZoneId zone, String field) {
-        if (value.getSecond() != 0 || value.getNano() != 0) throw bad(
-            field,
-            "Vui lòng nhập ngày giờ chính xác đến phút."
-        );
-        validateDate(value.toLocalDate());
-        var offsets = zone.getRules().getValidOffsets(value);
-        if (offsets.size() != 1) throw bad(field, "Ngày giờ thực tế không hợp lệ tại cơ sở.");
-        return value.toInstant(offsets.get(0));
     }
 
     private void requireOpen(Map<String, Object> period, LocalDate date) {

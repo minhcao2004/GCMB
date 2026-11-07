@@ -15,7 +15,10 @@ import {
   slotKey,
 } from '../services/shiftApi';
 import ShiftDialog from '../components/ShiftDialog';
+import AttendanceDialog from '../components/AttendanceDialog';
+import { attendanceApi } from '../services/attendanceApi';
 import '../styles/shifts.css';
+import '../styles/attendance.css';
 export default function ShiftSchedulePage({ user, branchScope, readOnly = false }) {
   const manager = !!branchScope;
   const [week, setWeek] = useState(() => addDays(monday(today()), manager ? 0 : 7));
@@ -29,6 +32,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     [dialog, setDialog] = useState(null),
     [preparing, setPreparing] = useState(false);
   const modal = useRef(null);
+  const attendanceRequest = useRef(0);
+  useEffect(() => {
+    attendanceRequest.current += 1;
+    setDialog(null);
+    return () => { attendanceRequest.current += 1; };
+  }, [branchScope, week]);
   modal.current = dialog;
   useEffect(() => {
     let active = true,
@@ -86,6 +95,32 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
   );
   const open = (type, shift, assignment) =>
     setDialog({ type, data: { ...data, readOnly: readonly }, shift, assignment });
+  async function openAttendance(shift) {
+    if (!manager || !shift || modal.current) return;
+    const request = ++attendanceRequest.current;
+    setDialog({ type: 'attendanceLoading', shift });
+    setError('');
+    try {
+      const daily = await attendanceApi.daily(shift.date, branchScope);
+      if (request !== attendanceRequest.current) return;
+      const rows = daily.rows.filter((row) => row.shiftId === shift.id);
+      if (!rows.length) {
+        setDialog({ type: 'detail', data: { ...data, readOnly: readonly }, shift });
+        return;
+      }
+      setDialog({
+        type: 'attendance',
+        shift,
+        data: { ...daily, rows },
+        row: rows[0],
+      });
+    } catch (error) {
+      if (request === attendanceRequest.current) {
+        setDialog(null);
+        setError(Object.values(apiErrors(error)).join(' '));
+      }
+    }
+  }
   const published = Array.from(slots.values());
   const matchesSlot = (s, people) => {
     if (
@@ -113,19 +148,10 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           <h1 id="shift-title">{manager ? 'Lịch ca tuần' : 'Đăng ký ca làm'}</h1>
           {!manager && (
             <p>
-              Đăng ký ca chưa bắt đầu trong tuần này hoặc tuần tới tại cơ sở của bạn. Đăng ký hợp lệ được xác nhận tự động.
+              Đăng ký ca tuần tới tại cơ sở của bạn từ thứ Hai đến trước 22:00 Chủ nhật.
             </p>
           )}
         </div>
-        {manager && (
-          <button
-            className="shift-primary"
-            disabled={readonly || !data || preparing || loading}
-            onClick={() => publish(data.nextWeek)}
-          >
-            {preparing ? 'Đang tải…' : 'Mở / chỉnh ca tuần tới'}
-          </button>
-        )}
       </header>
       {notice && (
         <div className="shift-message success" role="status">
@@ -169,14 +195,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
               disabled={readonly || loading || preparing || !data?.editableSlots?.length}
               onClick={() => publish(week)}
             >
-              Mở / chỉnh ca tuần đang xem
+              Chỉnh tuần hiện tại
             </button>
           )}
-          {!manager && (
-            <button onClick={() => setWeek(data?.nextWeek || addDays(monday(today()), 7))}>
-              Tuần đăng ký
-            </button>
-          )}
+          <button onClick={() => setWeek(data?.nextWeek || addDays(monday(today()), 7))}>
+            {manager ? 'Xem tuần tới' : 'Tuần đăng ký'}
+          </button>
         </div>
         <div className="shift-filters">
           {manager && (
@@ -217,9 +241,9 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
               </span>
               <span className="shift-help">Bốn khung giờ cố định · Giờ Việt Nam</span>
             </div>
-            {!manager && ![data.currentWeek, data.nextWeek].includes(data.week) && (
+            {!manager && !data.registrationOpen && (
               <p className="shift-message">
-                Chỉ có thể đăng ký ca chưa bắt đầu trong tuần hiện tại hoặc tuần tới.
+                Đăng ký tuần tới mở từ thứ Hai và chốt lúc 22:00 Chủ nhật.
               </p>
             )}
             {!published.length && (
@@ -275,6 +299,18 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                             <article
                               className={`shift-slot ${!s ? 'unpublished' : full ? 'full' : 'short'}`}
                               aria-label={`${dateLabel(date)} ca ${index + 1}`}
+                              tabIndex={manager && s ? 0 : undefined}
+                              onKeyDown={manager && s ? (event) => {
+                                if (event.target === event.currentTarget &&
+                                    (event.key === 'Enter' || event.key === ' ')) {
+                                  event.preventDefault();
+                                  openAttendance(s);
+                                }
+                              } : undefined}
+                              style={manager && s ? { cursor: 'pointer' } : undefined}
+                              onClick={manager && s ? (event) => {
+                                if (!event.target.closest('button')) openAttendance(s);
+                              } : undefined}
                             >
                               {s ? (
                                 <>
@@ -288,7 +324,9 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     </span>
                                   </div>
                                   <small className="shift-slot-status">
-                                    {s.status === 'OPEN' ? 'Mở đăng ký' : 'Đóng đăng ký'}
+                                    {s.status === 'OPEN' && data.registrationOpen
+                                      ? 'Mở đăng ký'
+                                      : 'Đóng đăng ký'}
                                   </small>
                                   {manager ? (
                                     <ul>
@@ -309,6 +347,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     </p>
                                   )}
                                   {manager ? (
+                                    <>
                                     <button
                                       type="button"
                                       className="shift-slot-action"
@@ -316,6 +355,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     >
                                       Chi tiết / làm thay
                                     </button>
+                                    </>
                                   ) : (
                                     <button
                                       type="button"
@@ -325,7 +365,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                         people.length > 0 ||
                                         full ||
                                         s.status !== 'OPEN' ||
-                                        ![data.currentWeek, data.nextWeek].includes(data.week) ||
+                                        !data.registrationOpen ||
                                         started
                                       }
                                       onClick={() => open('register', s)}
@@ -378,7 +418,27 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           </>
         )
       )}
-      {dialog && (
+      {dialog?.type === 'attendanceLoading' && (
+        <p className="shift-message" role="status">Đang tải chấm công của ca…</p>
+      )}
+      {dialog?.type === 'attendance' && (
+        <AttendanceDialog
+          key={dialog.shift.id}
+          dialog={{ type: 'record', row: dialog.row }}
+          data={dialog.data}
+          scope={branchScope}
+          readOnly={readonly || dialog.data.readOnly || dialog.data.period.status === 'CLOSED' ||
+            new Date(dialog.shift.startsAt).getTime() > Date.now()}
+          onClose={() => { setDialog(null); setRevision((v) => v + 1); }}
+          onReload={() => { setDialog(null); setRevision((v) => v + 1); }}
+          onSaved={() => {
+            setDialog(null);
+            setRevision((v) => v + 1);
+            setNotice('Đã cập nhật chấm công của ca.');
+          }}
+        />
+      )}
+      {dialog && !['attendance', 'attendanceLoading'].includes(dialog.type) && (
         <ShiftDialog
           key={`${dialog.type}/${dialog.assignment?.id || dialog.shift?.id || dialog.data.week}`}
           dialog={{

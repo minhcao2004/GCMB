@@ -127,6 +127,29 @@ public class TaxInvoiceService {
         var result = new LinkedHashMap<String, Object>();
         result.put("bookingId", id);
         result.put("bookingCode", b.get("code"));
+        // UC-127: the booking already uniquely identifies its checkout bill.
+        var bills = db.queryForList("""
+            SELECT b.id,b.number,b.status,b.net_amount AS amount,b.checkout_at AS "checkoutAt",
+                k.contact_name AS customer,k.actual_checkin AS checkin,
+                COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
+                    WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
+                COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
+                COALESCE((SELECT sum(p.amount) FROM gcmb.payment p WHERE p.bill_id=b.id
+                    AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)),0) AS paid
+            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id WHERE b.booking_id=?
+            """, id);
+        result.put("bill", null);
+        if (!bills.isEmpty()) {
+            var bill = bills.get(0);
+            bill.put("lines", db.queryForList("""
+                SELECT l.description,l.quantity,l.amount,
+                    CASE WHEN l.order_line_id IS NOT NULL THEN 'FNB'
+                        WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category
+                FROM gcmb.bill_line l LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
+                WHERE l.bill_id=? ORDER BY l.created_at,l.id
+                """, bill.get("id")));
+            result.put("bill", bill);
+        }
         result.put("request", rows.isEmpty() ? null : rows.get(0));
         result.put(
             "history",
