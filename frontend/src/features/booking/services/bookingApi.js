@@ -1,4 +1,5 @@
 import api from '../../../api/client';
+import { foodOrderApi } from '../../inventory/services/foodOrderApi';
 
 // Lấy CSRF mới trước mỗi yêu cầu ghi và gửi cookie phiên kèm theo.
 async function mutate(method, path, body) {
@@ -30,6 +31,8 @@ export const bookingApi = {
   list: async (params) => (await api.get('/reception/bookings', { params })).data,
   listAll,
   detail: async (id) => (await api.get(`/reception/bookings/${id}`)).data,
+  comboGiftRequirements: async (id) => (await api.get(`/reception/bookings/${id}/combo-gift-requirements`)).data,
+  comboGiftMenu: foodOrderApi.comboGiftMenu,
   // Thao tác trong thời gian khách đang ở phòng.
   stayOptions: async (id) => (await api.get(`/reception/bookings/${id}/stay-options`)).data,
   roomChangeQuote: async (id, params) => (await api.get(`/reception/bookings/${id}/room-change-quote`, { params })).data,
@@ -42,7 +45,7 @@ export const bookingApi = {
   planDeposit: (id) => mutate('post', `/reception/bookings/${id}/deposit-payment`, {}),
   depositPayment: async (id) => (await api.get(`/reception/bookings/${id}/deposit-payment`)).data,
   update: (id, body) => mutate('patch', `/reception/bookings/${id}`, body),
-  checkIn: (id) => mutate('post', `/reception/bookings/${id}/check-in`, {}),
+  checkIn: (id, body = {}) => mutate('post', `/reception/bookings/${id}/check-in`, body),
   changeRoom: (id, body) => mutate('post', `/reception/bookings/${id}/change-room`, body),
   extendStay: (id, body) => mutate('post', `/reception/bookings/${id}/extend`, body),
   startHourlyMeter: (id) => mutate('post', `/reception/bookings/${id}/hourly-meter/start`, {}),

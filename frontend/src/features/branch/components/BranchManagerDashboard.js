@@ -101,12 +101,6 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
         </button>)}
       </nav>
-      <div className="manager-sidebar-footer">
-        <strong>GenZ Cinema &amp; Music Box</strong>
-        <p>Cơ sở {user.branchName || 'được phân quyền'}</p>
-        <p>Quản lý cơ sở · {user.username}</p>
-        <button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
-      </div>
     </aside>
     <div className="manager-workspace">
       <DashboardTopbar role="QUẢN LÝ CƠ SỞ" page={active} user={user} busy={busy || switching} onProfile={onProfile} onLogout={onLogout}

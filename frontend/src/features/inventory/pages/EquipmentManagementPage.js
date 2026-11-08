@@ -18,7 +18,7 @@ export default function EquipmentManagementPage({ user, headOffice = false }) {
   return <div className="equipment-management">
     <nav className="em-tabs" aria-label="Quản lý thiết bị">
       <button className={section === 'assets' ? 'active' : ''} onClick={() => setSection('assets')}>Danh sách thiết bị</button>
-      <button className={section === 'categories' ? 'active' : ''} onClick={() => setSection('categories')}>Nhóm thiết bị</button>
+      {headOffice && <button className={section === 'categories' ? 'active' : ''} onClick={() => setSection('categories')}>Nhóm thiết bị</button>}
       <button className={section === 'incidents' ? 'active' : ''} onClick={() => setSection('incidents')}>Sự cố thiết bị</button>
       <button className={section === 'transfers' ? 'active' : ''} onClick={() => setSection('transfers')}>Điều chuyển</button>
     </nav>

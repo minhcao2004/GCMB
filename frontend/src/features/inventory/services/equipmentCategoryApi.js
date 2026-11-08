@@ -5,12 +5,10 @@
  */
 import apiClient from '../../../api/client';
 
-// Scope: chọn endpoint đúng vai trò để quản lý cơ sở không thể truyền đổi cơ sở tùy ý.
+// Danh mục nhóm thiết bị là toàn chuỗi, do quản lý cấp cao sở hữu.
 const root = (headOffice) => `/${headOffice ? 'head-office' : 'branch-management'}/equipment-categories`;
-// Scope: chỉ quản lý cấp cao gửi branchId; quản lý cơ sở dùng chi nhánh từ phiên đăng nhập.
-const params = (headOffice, branchId, extra = {}) => ({ ...(headOffice ? { branchId } : {}), ...extra });
-// Scope: đính kèm cơ sở hiện chọn cho quản lý cơ sở và lấy CSRF mới cho mỗi thao tác ghi.
-const headers = (headOffice, branchId) => (headOffice ? {} : { 'X-GCMB-Branch-Id': branchId });
+const params = (_headOffice, _branchId, extra = {}) => extra;
+const headers = (headOffice, branchId) => (headOffice || !branchId ? {} : { 'X-GCMB-Branch-Id': branchId });
 // BR-111: Mọi request thay đổi dữ liệu phải mang token CSRF do backend cấp.
 async function mutate(headOffice, branchId, method, url, data) {
   const { data: csrf } = await apiClient.get('/auth/csrf');
@@ -23,7 +21,7 @@ export const equipmentCategoryApi = {
   list: (headOffice, branchId, filters) => apiClient.get(root(headOffice), {
     params: params(headOffice, branchId, filters), headers: headers(headOffice, branchId),
   }).then((r) => r.data),
-  // UC-60: Tạo danh mục; backend áp dụng BR-111 và kiểm tra mã duy nhất theo cơ sở.
+  // UC-60: Tạo danh mục dùng chung, không yêu cầu branchId.
   create: async (headOffice, branchId, body) => (await mutate(headOffice, branchId, 'post', root(headOffice), body)).data,
   // UC-62: Cập nhật thông tin nhóm trong phạm vi cơ sở.
   update: async (headOffice, branchId, id, body) => (await mutate(headOffice, branchId, 'put', `${root(headOffice)}/${id}`, body)).data,

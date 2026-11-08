@@ -2,6 +2,8 @@
 
 React frontend cho hệ thống GenZ Cinema & Music Box. Landing page được chuyển từ website tĩnh sang React component, giữ nguyên thiết kế, dữ liệu phòng, bảng giá, chi nhánh và các tương tác chính.
 
+Dashboard quản lý cơ sở không hiển thị khối thông tin người dùng và nút đăng xuất ở cuối thanh điều hướng; các thao tác tài khoản vẫn nằm trên thanh đầu trang.
+
 ## Chạy dự án
 
 ```powershell

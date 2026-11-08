@@ -2,11 +2,11 @@
 
 ## Phạm vi
 
-UC65–UC69 hỗ trợ tạo, xem/tìm kiếm/lọc, cập nhật, ngừng/kích hoạt sử dụng và xóa tài sản thiết bị. Hồ sơ gồm mã, tên, nhóm, phòng/vị trí, serial, ngày mua, giá mua, hạn bảo hành, tình trạng vận hành và ảnh/chứng từ tùy chọn. Danh sách hiển thị nhóm, vị trí, hạn bảo hành, tình trạng và trạng thái sử dụng; hồ sơ xem thêm sự cố mới nhất.
+UC65–UC69 hỗ trợ tạo, xem/tìm kiếm/lọc, cập nhật, ngừng/kích hoạt sử dụng và xóa tài sản thiết bị. Quản lý cấp cao quản lý danh sách thiết bị toàn chuỗi theo cơ sở chọn; quản lý cơ sở được CRUD thiết bị thuộc cơ sở mình. Quản lý cơ sở không được sửa danh mục nhóm. Hồ sơ gồm mã, tên, nhóm, phòng/vị trí, serial, ngày mua, giá mua, hạn bảo hành, tình trạng vận hành và ảnh/chứng từ tùy chọn. Danh sách hiển thị nhóm, vị trí, hạn bảo hành, tình trạng và trạng thái sử dụng; hồ sơ xem thêm sự cố mới nhất.
 
 ## Quy tắc nghiệp vụ
 
-- BR-202: Mã, tên, nhóm và vị trí là bắt buộc; mã tài sản duy nhất toàn chuỗi.
+- BR-202: Mã, tên, nhóm và vị trí là bắt buộc; mã tài sản duy nhất toàn chuỗi. Mã mới theo mẫu `ASSET-{MÃ_CƠ_SỞ}-{SỐ_TĂNG_DẦN}`, ví dụ `ASSET-HN01-0001`. Quản lý cơ sở chọn nhóm đang hoạt động từ danh mục toàn chuỗi do quản lý cấp cao duy trì.
 - BR-110: Hồ sơ tài sản luôn gắn với cơ sở/vị trí hiện hành. Cập nhật hồ sơ không thể đổi cơ sở; chuyển cơ sở cần quy trình xác nhận UC74–UC76.
 - BR-115/BR-116: Ảnh/chứng từ phải khớp nội dung với loại JPEG, PNG, WebP, HEIC, HEIF hoặc PDF, kích thước lớn hơn 0 và không vượt 20 MB.
 - UC-68 dùng cờ hoạt động riêng với tình trạng vận hành (đang dùng, hỏng, sửa, đang chuyển, ngừng sử dụng).

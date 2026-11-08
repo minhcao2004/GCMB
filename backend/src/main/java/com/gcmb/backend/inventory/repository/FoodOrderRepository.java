@@ -1,6 +1,7 @@
 package com.gcmb.backend.inventory.repository;
 
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ActiveBooking;
+import com.gcmb.backend.inventory.dto.FoodOrderDtos.ComboGiftOption;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderItem;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderView;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServingEmployee;
@@ -62,6 +63,43 @@ public class FoodOrderRepository {
                 rs.getObject("booking_id", UUID.class), rs.getString("booking_code"),
                 rs.getObject("allocation_id", UUID.class)), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public ActiveRoom lockGiftBooking(UUID bookingId, UUID branchId) {
+        List<ActiveRoom> rows = db.query("""
+            SELECT r.id AS room_id,r.code AS room_code,r.name AS room_name,
+                   b.id AS branch_id,b.name AS branch_name,
+                   bk.id AS booking_id,bk.code AS booking_code,a.id AS allocation_id
+            FROM gcmb.booking bk JOIN gcmb.branch b ON b.id=bk.branch_id AND b.status='ACTIVE'
+            JOIN gcmb.room_allocation a ON a.booking_id=bk.id AND a.state IN ('RESERVED','OCCUPIED')
+            JOIN gcmb.room r ON r.id=a.room_id
+            WHERE bk.id=? AND bk.branch_id=? AND bk.status IN ('CONFIRMED','IN_HOUSE')
+            ORDER BY a.created_at DESC LIMIT 2 FOR UPDATE OF bk,a,r
+            """, (rs,row) -> new ActiveRoom(rs.getObject("room_id",UUID.class),rs.getString("room_code"),
+                rs.getString("room_name"),rs.getObject("branch_id",UUID.class),rs.getString("branch_name"),
+                rs.getObject("booking_id",UUID.class),rs.getString("booking_code"),rs.getObject("allocation_id",UUID.class)),bookingId,branchId);
+        if (rows.size() > 1) throw new IllegalStateException("Booking có nhiều lịch phòng đang hoạt động.");
+        return rows.isEmpty()?null:rows.get(0);
+    }
+
+    public List<ComboGiftOption> comboGiftMenu(UUID branchId) {
+        return db.query("""
+            SELECT m.id,m.name,m.category,m.sale_price,COALESCE(sb.quantity,0) AS stock_quantity,u.name AS unit_name
+            FROM gcmb.menu_item m JOIN gcmb.branch b ON b.id=m.branch_id AND b.status='ACTIVE'
+            JOIN gcmb.inventory_item i ON i.id=m.inventory_item_id AND i.branch_id=m.branch_id
+            JOIN gcmb.unit u ON u.id=i.unit_id LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=i.id
+            WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true AND m.kind='PACKAGED'
+              AND i.active=true AND i.tracking_mode='AUTO_ON_SALE'
+            ORDER BY lower(m.category),lower(m.name),m.code
+            """,(rs,n)->new ComboGiftOption(rs.getObject("id",UUID.class),rs.getString("name"),rs.getString("category"),
+                rs.getBigDecimal("sale_price"),rs.getBigDecimal("stock_quantity"),rs.getString("unit_name")),branchId);
+    }
+
+    public UUID insertGiftAllowance(UUID bookingId, UUID menuItemId, String name, BigDecimal quantity) {
+        return db.queryForObject("""
+            INSERT INTO gcmb.booking_combo_item(booking_id,menu_item_id,item_name_snapshot,included_quantity)
+            VALUES (?,?,?,?) RETURNING id
+            """,UUID.class,bookingId,menuItemId,name,quantity);
     }
 
     public RoomQrSession validSession(String mrCode, String tokenHash) {
@@ -250,6 +288,46 @@ public class FoodOrderRepository {
             "SALE-" + orderLineId);
     }
 
+    public List<SaleMovement> comboGiftSales(UUID branchId, UUID bookingId) {
+        return db.query("""
+            SELECT sm.id,sm.inventory_item_id,-sm.quantity_delta AS quantity
+            FROM gcmb.stock_movement sm
+            JOIN gcmb.order_line l ON l.id=sm.order_line_id
+            JOIN gcmb.fb_order o ON o.id=l.order_id AND o.booking_id=? AND o.branch_id=?
+              AND o.idempotency_key='COMBO-GIFT-'||?::text
+            WHERE sm.kind='SALE' AND NOT EXISTS (
+              SELECT 1 FROM gcmb.stock_movement reversal WHERE reversal.kind='RETURN' AND reversal.reverses_id=sm.id)
+            ORDER BY sm.inventory_item_id,sm.id FOR UPDATE OF sm
+            """,(rs,n)->new SaleMovement(rs.getObject("id",UUID.class),rs.getObject("inventory_item_id",UUID.class),
+                rs.getBigDecimal("quantity")),bookingId,branchId,bookingId);
+    }
+
+    public UUID comboGiftOrderId(UUID branchId, UUID bookingId) {
+        List<UUID> ids = db.query("""
+            SELECT id FROM gcmb.fb_order
+            WHERE branch_id=? AND booking_id=? AND idempotency_key='COMBO-GIFT-'||?::text
+              AND status IN ('ACCEPTED','SERVED')
+            """,(rs,n)->rs.getObject("id",UUID.class),branchId,bookingId,bookingId);
+        return ids.isEmpty()?null:ids.get(0);
+    }
+
+    public void insertReturn(UUID inventoryItemId, UUID saleMovementId, BigDecimal quantity, BigDecimal before,
+                             UUID actorId, String reason) {
+        db.update("""
+            INSERT INTO gcmb.stock_movement(inventory_item_id,kind,quantity_delta,quantity_before,quantity_after,
+                reverses_id,reason,actor_id,idempotency_key)
+            VALUES (?,'RETURN',?,?,?,?,?,?,?) ON CONFLICT(idempotency_key) DO NOTHING
+            """,inventoryItemId,quantity,before,before.add(quantity),saleMovementId,reason,actorId,"RETURN-"+saleMovementId);
+    }
+
+    public void cancelComboGiftOrder(UUID branchId, UUID bookingId) {
+        db.update("""
+            UPDATE gcmb.fb_order SET status='CANCELLED'
+            WHERE branch_id=? AND booking_id=? AND idempotency_key='COMBO-GIFT-'||?::text
+              AND status IN ('ACCEPTED','SERVED')
+            """,branchId,bookingId,bookingId);
+    }
+
     public OrderLock lockOrder(UUID orderId, UUID branchId) {
         List<OrderLock> rows = db.query("""
             SELECT o.id,o.branch_id,o.booking_id,o.allocation_id,o.channel,o.qr_session_id,o.status,
@@ -383,6 +461,7 @@ public class FoodOrderRepository {
     public record ExistingOrder(UUID id, UUID branchId, UUID bookingId, String channel, UUID qrSessionId) {}
     public record PendingLine(UUID id, UUID menuItemId, String name, BigDecimal quantity, BigDecimal unitPrice) {}
     public record ComboAllowance(UUID id, BigDecimal includedQuantity, BigDecimal usedQuantity) {}
+    public record SaleMovement(UUID id, UUID inventoryItemId, BigDecimal quantity) {}
     public record SellableItem(UUID id, String name, String kind, UUID inventoryItemId,
                                BigDecimal salePrice, String trackingMode, String unitName, BigDecimal stockQuantity) {}
     public record OrderLock(UUID id, UUID branchId, UUID bookingId, UUID allocationId, String channel,

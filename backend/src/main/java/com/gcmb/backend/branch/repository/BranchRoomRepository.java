@@ -29,6 +29,12 @@ public class BranchRoomRepository {
         if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE", UUID.class, branch).isEmpty())
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
     }
+    public boolean codeExists(UUID branch, String code, UUID exceptRoomId) {
+        return Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.room WHERE branch_id=? AND upper(code)=upper(?) AND (?::uuid IS NULL OR id<>?))", Boolean.class, branch, code.trim(), exceptRoomId, exceptRoomId));
+    }
+    public String branchName(UUID branch) {
+        return db.queryForObject("SELECT name FROM gcmb.branch WHERE id=?", String.class, branch);
+    }
     private RoomView map(ResultSet r, int n) throws SQLException {
         Timestamp ready = r.getTimestamp("expected_ready_at");
         return new RoomView(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"),

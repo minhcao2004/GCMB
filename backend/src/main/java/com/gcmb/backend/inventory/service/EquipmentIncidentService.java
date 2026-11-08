@@ -32,7 +32,7 @@ public class EquipmentIncidentService {
             if(actor.branchId()==null || (requested!=null && !actor.branchId().equals(requested))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Không có quyền truy cập cơ sở này");
             return actor.branchId();
         }
-        if("HEAD_OFFICE_MANAGER".equals(actor.role()) && requested!=null) return requested;
+        if("HEAD_OFFICE_MANAGER".equals(actor.role())) return requested;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Không có quyền truy cập sự cố thiết bị");
     }
 
@@ -43,9 +43,39 @@ public class EquipmentIncidentService {
     // UC-70/BR-111: Tạo báo cáo đủ mô tả, trong đúng chi nhánh và gắn với tài sản đang hoạt động.
     @Transactional public UUID create(Identity actor, UUID requested, IncidentCommand c, MultipartFile evidence) {
         UUID branch=branch(actor,requested);
-        if(c==null || c.assetId()==null || c.description()==null || c.description().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Thiết bị và mô tả sự cố là bắt buộc");
-        try { UUID id=repository.createIncident(branch,actor.id(),c); if(id==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng"); if(evidence!=null&&!evidence.isEmpty()) { var file=fileStorage.store(evidence); try { repository.saveEvidence(file,actor.id()); if(!repository.setIncidentEvidence(branch,id,file.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy báo cáo sự cố"); } catch(RuntimeException e) { fileStorage.deleteQuietly(file.objectKey()); throw e; } } return id; }
+        if(c==null || c.assetId()==null || c.description()==null || c.description().isBlank() || c.severity()==null || !Set.of("LOW","MEDIUM","HIGH","CRITICAL").contains(c.severity()) || c.priority()==null || !Set.of("LOW","NORMAL","HIGH","URGENT").contains(c.priority()) || c.expectedCompletionOn()==null || c.handlingPlan()==null || !Set.of("REPAIR","REPLACE").contains(c.handlingPlan()) || c.serviceProvider()==null || c.serviceProvider().isBlank() || c.serviceProvider().trim().length()>200 || (c.estimatedCost()!=null && c.estimatedCost().signum()<0) || ("REPLACE".equals(c.handlingPlan()) && (c.replacementDetails()==null || c.replacementDetails().isBlank()))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Thiết bị, severity, priority, phương án, đơn vị sửa chữa/thay thế và ngày dự kiến là bắt buộc; chi phí dự kiến không được âm, phương án thay thế cần mô tả thiết bị thay thế");
+        if(!Set.of("RECEPTIONIST","BRANCH_MANAGER").contains(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Chỉ lễ tân hoặc quản lý cơ sở được báo cáo sự cố");
+        try { UUID id=repository.createIncident(branch,actor.id(),actor.role(),c); if(id==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng"); if("BRANCH_MANAGER".equals(actor.role())) repository.updateAssetForPlan(branch,id,c.handlingPlan()); if(evidence!=null&&!evidence.isEmpty()) { var file=fileStorage.store(evidence); try { repository.saveEvidence(file,actor.id()); if(!repository.setIncidentEvidence(branch,id,file.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy báo cáo sự cố"); } catch(RuntimeException e) { fileStorage.deleteQuietly(file.objectKey()); throw e; } } return id; }
         catch(org.springframework.dao.EmptyResultDataAccessException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng");}
+    }
+    public List<ProgressView> progress(Identity actor, UUID requested, UUID id) { return repository.progress(branch(actor,requested),id); }
+    public com.gcmb.backend.inventory.dto.EquipmentAssetDtos.ImageContent repairAttachment(Identity actor, UUID id, String kind) {
+        if (!Set.of("invoice","transfer-proof").contains(kind)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy chứng từ");
+        var metadata=repository.repairAttachment(branch(actor,null),id,"invoice".equals(kind)?"invoice":"transfer");
+        if(metadata==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Chưa có chứng từ này");
+        try { return new com.gcmb.backend.inventory.dto.EquipmentAssetDtos.ImageContent(metadata.originalName(),metadata.mimeType(),fileStorage.read(metadata.objectKey())); }
+        catch(java.io.IOException e) { throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy file chứng từ"); }
+    }
+    @Transactional public void review(Identity actor, UUID requested, UUID id, ReviewCommand c) {
+        UUID b=branch(actor,requested); manager(actor);
+        if(c==null || c.note()==null || c.note().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Ghi chú duyệt hoặc từ chối là bắt buộc");
+        if(!repository.review(b,actor.id(),id,c)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sự cố không còn chờ duyệt hoặc không thuộc cơ sở này");
+        if(c.approved()) repository.updateAssetForPlan(b,id,"REPAIR".equals(repository.incidentPlan(b,id))?"REPAIR":"REPLACE");
+    }
+    @Transactional public void suggest(Identity actor, UUID requested, UUID id, String solution) {
+        UUID b=branch(actor,requested);
+        if(!"RECEPTIONIST".equals(actor.role()) || solution==null || solution.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhân viên cần nhập phương án đề xuất");
+        if(!repository.suggest(b,actor.id(),id,solution)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy sự cố đang mở");
+    }
+    @Transactional public void progress(Identity actor, UUID requested, UUID id, ProgressCommand c) {
+        UUID b=branch(actor,requested); manager(actor);
+        if(c==null || c.note()==null || c.note().isBlank() || c.status()==null || !Set.of("ASSESSED","IN_PROGRESS").contains(c.status())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhập tiến trình và trạng thái hợp lệ; nghiệm thu chỉ thực hiện qua kết quả sửa chữa");
+        if(!repository.progress(b,actor.id(),id,c)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể cập nhật sự cố đã đóng hoặc không tồn tại");
+    }
+    @Transactional public void close(Identity actor, UUID requested, UUID id, String note) {
+        UUID b=branch(actor,requested); manager(actor);
+        if(note==null || note.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhập ghi chú đóng sự cố");
+        if(!repository.close(b,actor.id(),id,note)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Chỉ đóng sự cố đã hoàn tất và nghiệm thu");
     }
     // UC-73/BR-42/BR-44: Chỉ quản lý cơ sở được ghi kế hoạch sửa chữa hoặc thay thế.
     @Transactional public void assess(Identity actor, UUID requested, UUID id, AssessmentCommand c) {
@@ -57,12 +87,13 @@ public class EquipmentIncidentService {
         repository.markRoomMaintenance(b,actor.id(),id,c.note().trim());
     }
     // UC-71/BR-45/BR-46/BR-205: Chỉ xác nhận sửa chữa khi đủ kết quả, chi phí, ngày hoàn tất và tình trạng.
-    @Transactional public void repair(Identity actor, UUID requested, UUID id, RepairCommand c, MultipartFile evidence) {
+    @Transactional public void repair(Identity actor, UUID requested, UUID id, RepairCommand c, MultipartFile invoice, MultipartFile transferProof) {
         UUID b=branch(actor,requested); manager(actor);
-        if(c==null || c.vendorName()==null || c.vendorName().isBlank() || c.outcome()==null || c.outcome().isBlank() || c.actualCost()==null || c.actualCost().signum()<0 || c.completedOn()==null || c.assetCondition()==null || !Set.of("IN_USE","BROKEN","REPAIRING").contains(c.assetCondition()) || evidence==null || evidence.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhập đơn vị sửa, kết quả, chi phí, ngày hoàn tất, tình trạng và chứng từ sửa chữa");
+        if(c==null || c.vendorName()==null || c.vendorName().isBlank() || c.outcome()==null || c.outcome().isBlank() || c.actualCost()==null || c.actualCost().signum()<0 || c.completedOn()==null || c.assetCondition()==null || !Set.of("IN_USE","BROKEN","REPAIRING").contains(c.assetCondition()) || invoice==null || invoice.isEmpty() || transferProof==null || transferProof.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhập đủ kết quả sửa chữa, hóa đơn, chứng từ chuyển khoản, chi phí và ngày hoàn tất");
         if(repository.repair(b,id,actor.id(),c)==0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sự cố chưa được đánh giá sửa chữa hoặc không thuộc cơ sở này");
-        var file=fileStorage.store(evidence); try { repository.saveEvidence(file,actor.id()); if(!repository.setRepairEvidence(b,id,file.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy kết quả sửa chữa"); } catch(RuntimeException e) { fileStorage.deleteQuietly(file.objectKey()); throw e; }
+        var invoiceFile=fileStorage.store(invoice); var transferFile=fileStorage.store(transferProof); try { repository.saveEvidence(invoiceFile,actor.id()); repository.saveEvidence(transferFile,actor.id()); if(!repository.setRepairEvidence(b,id,invoiceFile.id(),transferFile.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy kết quả sửa chữa"); } catch(RuntimeException e) { fileStorage.deleteQuietly(invoiceFile.objectKey()); fileStorage.deleteQuietly(transferFile.objectKey()); throw e; }
         repository.updateAssetCondition(b,id,c.assetCondition());
+        repository.logProgress(actor.id(),id,"VERIFIED",c.outcome().trim(),c.completedOn());
     }
     // BR-42: Trạng thái sửa chữa/đánh giá chỉ do Branch Manager điều chỉnh.
     private void manager(Identity actor) { if(actor==null || !"BRANCH_MANAGER".equals(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Chỉ quản lý cơ sở được xử lý sự cố"); }

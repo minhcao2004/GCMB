@@ -152,6 +152,8 @@ GCMB/
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
+Head Office Managers configure shared room combos with included complimentary food and drink quantities, without branch-specific F&B names. At check-in, receptionists select the gifts from the branch menu; the system records a zero-priced order. AUTO_ON_SALE stock is deducted when the booking bill is fully paid. See [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md).
+
 Within a backend feature, create `controller/`, `service/`, `repository/`, `entity/`, and `dto/` as needed. Within a frontend feature, use `pages/`, `components/`, `services/`, `hooks/`, and `styles/` as needed.
 
 Backend package reorganization (24/10/2026): the former `backoffice/` directory and `com.gcmb.backend.administration.*` declarations are replaced by the six peer packages above. All existing classes are retained. `branch`, `pricing`, and `booking` keep their existing responsibilities; this change does not extract a `rooms` module or change API routes, database schema, or business behavior. Tests follow the same package hierarchy.
@@ -367,6 +369,7 @@ The detailed project references are:
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.
 - GenZ Cinema AS-IS / TO-BE workflows.
+- [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.
 

@@ -270,6 +270,12 @@
 .booking-package-choice.is-selected { border: 1.5px solid #70cddd; background: #f1fbfd; }
 .booking-package-choice strong { font-size: 10px; }
 .booking-package-choice b { color: var(--booking-blue); font-size: 10px; }
+.booking-package-choice small { color: #267588; font-size: 10px; }
+.booking-checkin-gifts > p { margin: 0 0 10px; color: #69768a; font-size: 11px; }
+.booking-checkin-gift-group { display: grid; gap: 9px; margin-top: 12px; }
+.booking-checkin-gift-group > strong { color: #25283d; font-size: 12px; }
+.booking-checkin-gift-group label { display: grid; gap: 5px; color: #4f5d71; font-size: 11px; font-weight: 650; }
+.booking-checkin-gift-group select { min-height: 40px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 10px; background: white; color: #25283d; font: inherit; }
 .booking-deposit-heading { margin-bottom: 9px; }
 .booking-deposit-heading h3 { font-size: 15px; }
 .booking-toggle { display: inline-flex; align-items: center; gap: 9px; color: var(--booking-cyan); font-size: 10px; font-weight: 700; cursor: pointer; }

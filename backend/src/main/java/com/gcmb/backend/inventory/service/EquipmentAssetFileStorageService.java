@@ -49,11 +49,14 @@ public class EquipmentAssetFileStorageService {
             Files.createDirectories(storageRoot);
             Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không lưu được ảnh thiết bị", e); }
-        String sourceName = file.getOriginalFilename() == null ? "anh-thiet-bi" : file.getOriginalFilename().replace('\\', '/');
-        sourceName = sourceName.substring(sourceName.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "").trim();
-        if (sourceName.isEmpty()) sourceName = "anh-thiet-bi";
-        if (sourceName.length() > 200) sourceName = sourceName.substring(0, 200);
+        String sourceName = sourceName(file);
         return new StoredFile(id, objectKey, sourceName, type.mime, bytes.length, sha256(bytes), bytes);
+    }
+
+    private String sourceName(MultipartFile file) {
+        String name=file.getOriginalFilename()==null?"chung-tu":file.getOriginalFilename().replace('\\','/');
+        name=name.substring(name.lastIndexOf('/')+1).replaceAll("[\\p{Cntrl}]","").trim();
+        if(name.isEmpty()) name="chung-tu"; return name.length()>200?name.substring(0,200):name;
     }
 
     // BR-115: Chỉ đọc file theo khóa lưu nội bộ, không nhận đường dẫn tùy ý từ request.

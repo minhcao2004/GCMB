@@ -27,6 +27,8 @@ const blankCombo = {
   minuteFrom: 0,
   minuteTo: 1440,
   price: '',
+  includedFnbQuantity: 0,
+  includedFoodQuantity: 0,
   serviceType: 'CINEMA'
 };
 const blankRule = {
@@ -170,6 +172,8 @@ export default function RoomCatalogPage() {
       minuteFrom: item.minuteFrom,
       minuteTo: item.minuteTo,
       price: item.price,
+      includedFnbQuantity: item.includedFnbQuantity || 0,
+      includedFoodQuantity: item.includedFoodQuantity || 0,
       roomTypeId: item.roomTypeId,
       serviceType: room?.serviceType || 'CINEMA'
     } : {
@@ -214,7 +218,9 @@ export default function RoomCatalogPage() {
           durationMinutes: Number(form.durationMinutes),
           minuteFrom: Number(form.minuteFrom),
           minuteTo: Number(form.minuteTo),
-          price: Number(form.price)
+          price: Number(form.price),
+          includedFnbQuantity: Number(form.includedFnbQuantity || 0),
+          includedFoodQuantity: Number(form.includedFoodQuantity || 0)
         };
         if (editor.item) await roomCatalogApi.updatePrice('COMBO', editor.item.id, payload);else await roomCatalogApi.createCombo(form.roomTypeId, payload);
         successMessage = editor.item ? 'Sửa combo thành công.' : 'Thêm combo thành công.';
@@ -671,6 +677,14 @@ Giá combo
                 })} />
               </label>
               <label>
+Số đồ uống tặng kèm
+<input required min="0" max="20" step="1" type="number" value={form.includedFnbQuantity || 0} onChange={e => setForm({ ...form, includedFnbQuantity: e.target.value })} />
+              </label>
+              <label>
+Số đồ ăn tặng kèm
+<input required min="0" max="20" step="1" type="number" value={form.includedFoodQuantity || 0} onChange={e => setForm({ ...form, includedFoodQuantity: e.target.value })} />
+              </label>
+              <label>
 Bắt đầu
 <select value={form.minuteFrom} onChange={e => setForm({
                   ...form,
@@ -704,7 +718,7 @@ Kết thúc
             <b className="catalog-preview-price">{money(form.price)}</b>
             <div className="catalog-info-box">
               <strong>Cấu hình combo</strong>
-              <span>Combo mới áp dụng cho booking mới. Hóa đơn đã chốt giữ nguyên dữ liệu lịch sử.</span>
+              <span>Combo áp dụng tại mọi cơ sở. Món F&amp;B được ghép giữa các cơ sở theo cùng tên và danh mục; mỗi nơi trừ kho món tương ứng. Hóa đơn đã chốt giữ nguyên dữ liệu lịch sử.</span>
             </div>
           </aside>
         </div>}</div>

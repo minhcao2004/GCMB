@@ -24,6 +24,7 @@ export default function ReceptionOrdersPage() {
   const [employeeId, setEmployeeId] = useState('');
   const [menuItemId, setMenuItemId] = useState('');
   const [draft, setDraft] = useState({});
+  const [draftPrices, setDraftPrices] = useState({});
   const [quantities, setQuantities] = useState({});
   const [assignments, setAssignments] = useState({});
   const [loading, setLoading] = useState(true);
@@ -170,10 +171,12 @@ export default function ReceptionOrdersPage() {
   };
 
   const draftLines = useMemo(() => menu.filter((item) => draft[item.id] > 0), [menu, draft]);
-  const draftTotal = draftLines.reduce((sum, item) => sum + Number(item.salePrice || 0) * draft[item.id], 0);
+  const draftTotal = draftLines.reduce((sum, item) => sum + Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id], 0);
   const draftAddItem = () => {
     if (!menuItemId) return;
     setDraft((current) => ({ ...current, [menuItemId]: (current[menuItemId] || 0) + 1 }));
+    const item = menu.find((candidate) => candidate.id === menuItemId);
+    setDraftPrices((current) => ({ ...current, [menuItemId]: current[menuItemId] ?? Number(item?.salePrice || 0) }));
   };
   const changeDraft = (itemId, amount) => setDraft((current) => {
     const next = { ...current };
@@ -208,11 +211,12 @@ export default function ReceptionOrdersPage() {
         bookingId,
         assignedEmployeeId: employeeId,
         idempotencyKey: newKey(),
-        items: draftLines.map((item) => ({ menuItemId: item.id, quantity: draft[item.id] })),
+        items: draftLines.map((item) => ({ menuItemId: item.id, quantity: draft[item.id], unitPrice: Number(draftPrices[item.id] ?? item.salePrice) })),
       });
       setDraft({});
+      setDraftPrices({});
       await loadOrders(status);
-      setNotice('Đã thêm món vào booking và ghi nhận phí.');
+      setNotice('Đã thêm món vào booking và cập nhật tồn kho.');
     } catch (actionError) { setError(errorText(actionError)); }
     finally { setBusy(false); }
   };
@@ -236,7 +240,7 @@ export default function ReceptionOrdersPage() {
       {incomingOrderAlert && <div className="food-alert food-alert--incoming" role="alert" aria-live="assertive"><div><strong>Khách vừa gửi {incomingOrderAlert.count} yêu cầu món mới.</strong><span>{incomingOrderAlert.roomCodes.length > 0 ? `Phòng ${incomingOrderAlert.roomCodes.slice(0, 3).join(', ')}${incomingOrderAlert.roomCodes.length > 3 ? ` và ${incomingOrderAlert.roomCodes.length - 3} phòng khác` : ''}.` : 'Vui lòng kiểm tra danh sách chờ xác nhận.'}</span></div><button type="button" onClick={() => { setIncomingOrderAlert(null); setStatus('PENDING'); document.getElementById('food-staff-order-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem yêu cầu</button></div>}
 
       <section className="food-staff-add">
-        <div className="food-section-title"><div><h2>Thêm món vào booking</h2><p>Đơn do lễ tân tạo được ghi nhận ngay và trừ kho theo thiết lập món.</p></div></div>
+        <div className="food-section-title"><div><h2>Thêm món vào booking</h2><p>Đơn do lễ tân tạo được ghi nhận ngay và trừ kho theo thiết lập món. Với món tặng kèm combo, đặt giá áp dụng là 0 đ.</p></div></div>
         {bookings.length === 0 ? <div className="food-empty-inline">Hiện không có booking đang ở phòng tại cơ sở này.</div> : employees.length === 0 ? <div className="food-empty-inline">Chưa có lễ tân được xác nhận trong ca hiện tại. Chọn ca đang mở trong lịch phân ca rồi tải lại.</div> : <form onSubmit={addOrder}>
           <div className="food-form-row">
             <label>Booking đang sử dụng<select value={bookingId} onChange={(event) => setBookingId(event.target.value)} required>{bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.code} · {booking.roomCode} · {booking.customerName}</option>)}</select></label>
@@ -244,7 +248,7 @@ export default function ReceptionOrdersPage() {
             <label>Chọn món<select value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)}>{menu.filter((item) => item.available).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatVnd(item.salePrice)}</option>)}</select></label>
             <button type="button" className="food-secondary" disabled={!menuItemId} onClick={draftAddItem}>Thêm món</button>
           </div>
-          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><strong>{formatVnd(Number(item.salePrice || 0) * draft[item.id])}</strong></div>)}</div>}
+          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<input aria-label={`Giá ${item.name}`} type="number" min="0" step="1" value={draftPrices[item.id] ?? item.salePrice ?? 0} onChange={(event) => setDraftPrices((current) => ({ ...current, [item.id]: event.target.value }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
           <footer className="food-add-footer"><span>Tạm tính <strong>{formatVnd(draftTotal)}</strong></span><button className="food-primary" disabled={busy || draftLines.length === 0}>{busy ? 'Đang lưu…' : 'Ghi nhận order'}</button></footer>
         </form>}
       </section>

@@ -90,6 +90,8 @@ public class EquipmentAssetService {
     public View create(Identity actor, UUID branchId, Command input) {
         UUID authorizedBranch = scope(actor, branchId);
         Command command = validate(input, authorizedBranch, null);
+        if (!command.code().matches("ASSET-[A-Z0-9]{2,10}-[0-9]{4,}"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mã thiết bị theo mẫu ASSET-{MÃ_CƠ_SỞ}-{SỐ_TĂNG_DẦN 4 CHỮ SỐ}, ví dụ ASSET-HN01-0001");
         if ("IN_TRANSIT".equals(command.status()) || "RETIRED".equals(command.status()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiết bị mới phải được tạo trước khi chuyển hoặc ngừng sử dụng");
         try { return repository.create(authorizedBranch, command); }
