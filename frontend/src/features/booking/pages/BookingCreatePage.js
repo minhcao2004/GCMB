@@ -164,10 +164,10 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     setLoadingAvailability(true);
     setAvailability(null);
     setAvailabilityError('');
-    Promise.all([bookingApi.availability(params), bookingApi.listAll({ status: 'IN_HOUSE' })]).then(([result, inHouse]) => {
+    // BR-04: backend kiểm tra toàn bộ khoảng đặt, kể cả lịch sau giờ trả của khách hiện tại.
+    bookingApi.availability(params).then((result) => {
       if (!active) return;
-      const occupiedRoomIds = new Set(inHouse.map((booking) => booking.roomId));
-      setAvailability({ ...result, rooms: (result.rooms || []).filter((room) => !occupiedRoomIds.has(room.id)) });
+      setAvailability(result);
     }).catch((error) => {
       if (active) {
         setAvailability(null);
@@ -210,12 +210,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
 
     setSubmitting(true);
     try {
-      const inHouse = await bookingApi.listAll({ status: 'IN_HOUSE' });
-      if (inHouse.some((booking) => booking.roomId === chosenRoom.id)) {
-        setFormError('Phòng vẫn đang được sử dụng. Vui lòng chọn phòng khác hoặc chờ checkout.');
-        setAvailability((current) => current ? { ...current, rooms: current.rooms.filter((room) => room.id !== chosenRoom.id) } : null);
-        return;
-      }
+      // BR-03: backend khóa phòng và kiểm tra lại khoảng đặt trong giao dịch tạo booking.
       const result = await onCreate({
         roomId: chosenRoom.id,
         plannedStart: dateTimeIso(form.date, form.time),
@@ -305,7 +300,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
           </div>
           {form.pricingMode === 'COMBO' ? <div className={`booking-package-grid${showComboError ? ' is-invalid' : ''}`}>
             {combos.map((combo) => <button key={combo.id} type="button" className={`booking-package-choice${form.comboId === combo.id ? ' is-selected' : ''}`} onClick={() => { markTouched('comboId'); setFormError(''); setForm((current) => ({ ...current, comboId: combo.id })); }}>
-              <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>
+              <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>{(combo.includedFnbQuantity > 0 || combo.includedFoodQuantity > 0) && <small>Tặng {combo.includedFnbQuantity || 0} đồ uống · {combo.includedFoodQuantity || 0} đồ ăn (chọn lúc check-in)</small>}
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
           </div> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>

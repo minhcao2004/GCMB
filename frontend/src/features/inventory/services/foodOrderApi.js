@@ -23,6 +23,7 @@ export const foodOrderApi = {
   activeBookings: async () => (await api.get('/reception/orders/active-bookings')).data,
   servingEmployees: async () => (await api.get('/reception/orders/serving-employees')).data,
   staffMenu: async () => (await api.get('/reception/orders/menu')).data,
+  comboGiftMenu: async () => (await api.get('/reception/orders/combo-gift-menu')).data,
   addStaffOrder: (body) => mutate('post', '/reception/orders', body),
   confirmRoomOrder: (orderId, body) => mutate('post', `/reception/orders/${orderId}/confirm`, body),
   rejectRoomOrder: (orderId) => mutate('post', `/reception/orders/${orderId}/reject`, {}),

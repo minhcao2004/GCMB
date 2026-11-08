@@ -38,7 +38,7 @@ public class AccountAccessService {
         this.branches = branches;
     }
 
-    private AccountView editable(UUID id, UUID actor) {
+    private AccountView editable(UUID id, UUID actor, String action) {
         if (id.equals(actor)) {
             throw new AuthFailure(
                 400,
@@ -47,7 +47,7 @@ public class AccountAccessService {
             );
         }
         if (!access.lockManagement(actor)) {
-            throw new AuthFailure(403, "form", "Bạn không còn quyền quản lý tài khoản");
+            throw new AuthFailure(403, "form", "Bạn không có quyền " + action + " đối với tài khoản.");
         }
         if (!access.lockAccount(id)) {
             throw new AuthFailure(404, "form", "Tài khoản không tồn tại");
@@ -61,7 +61,7 @@ public class AccountAccessService {
 
     @Transactional
     public AccountView setRole(UUID id, SetRole input, UUID actor) {
-        AccountView before = editable(id, actor);
+        AccountView before = editable(id, actor, "phân quyền");
         UUID roleId = input.role() == null ? null : accounts.roleId(input.role());
         if (roleId == null) {
             throw new AuthFailure(400, "role", "Vui lòng chọn vai trò hợp lệ");
@@ -83,14 +83,17 @@ public class AccountAccessService {
         if (chain && input.branchId() != null) {
             throw new AuthFailure(400, "branchId", "Vai trò này có phạm vi toàn chuỗi");
         }
-        if (!chain && (primaryBranch == null || !accounts.activeBranch(primaryBranch))) {
-            throw new AuthFailure(400, "branchId", "Vui lòng chọn cơ sở đang hoạt động");
-        }
+        if (!chain && primaryBranch == null) throw new AuthFailure(400, "branchId", "Vui lòng bổ sung Cơ sở.");
+        if (!chain && !accounts.activeBranch(primaryBranch)) throw new AuthFailure(
+            400, "branchId", "Cơ sở " + accounts.branchName(primaryBranch) +
+                " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công."
+        );
         if (managed != null) for (UUID branch : managed) {
             if (!accounts.activeBranch(branch)) throw new AuthFailure(
                 400,
                 "branchIds",
-                "Chỉ chọn các cơ sở đang hoạt động"
+                "Cơ sở " + accounts.branchName(branch) +
+                    " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công."
             );
         }
         if (
@@ -119,7 +122,7 @@ public class AccountAccessService {
             1000,
             true
         );
-        AccountView before = editable(id, actor);
+        AccountView before = editable(id, actor, "đổi trạng thái");
         access.deactivate(id);
         branches.syncAccountManager(id, actor);
         access.revokeTokens(id);
@@ -140,7 +143,7 @@ public class AccountAccessService {
             if (!access.lockManagement(actor.id())) throw new AuthFailure(
                 403,
                 "form",
-                "Bạn không có quyền quản lý tài khoản."
+                "Bạn không có quyền đổi trạng thái đối với tài khoản."
             );
         } else if (
             !"BRANCH_MANAGER".equals(actor.role()) ||
@@ -150,7 +153,7 @@ public class AccountAccessService {
             throw new AuthFailure(
                 403,
                 "form",
-                "Bạn không có quyền đổi trạng thái tài khoản đối với cơ sở này."
+                "Bạn không có quyền đổi trạng thái đối với tài khoản."
             );
         }
         if (!access.lockAccount(id)) throw new AuthFailure(404, "form", "Tài khoản không tồn tại.");
@@ -161,7 +164,7 @@ public class AccountAccessService {
         ) throw new AuthFailure(
             403,
             "form",
-            "Bạn chỉ được đổi trạng thái tài khoản Lễ tân thuộc cơ sở đang quản lý."
+            "Bạn không có quyền đổi trạng thái đối với tài khoản."
         );
         if (
             (activate && "ACTIVE".equals(before.status())) ||

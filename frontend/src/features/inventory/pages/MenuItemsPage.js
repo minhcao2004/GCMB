@@ -18,12 +18,13 @@ const kindLabels = {
 
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)}đ`;
 const groupPriceDigits = (value) => String(value ?? '').replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-const saleStatusLabel = (item) => {
-  if (!item.active) return 'Ngừng bán';
-  if (item.stockStatus === 'LOW_STOCK') return 'Sắp hết';
-  if (item.stockStatus === 'OUT_OF_STOCK') return 'Hết hàng';
-  return 'Sẵn bán';
-};
+function MenuSaleStatus({ item }) {
+  let status = { label: 'Sẵn bán', tone: 'active' };
+  if (!item.active) status = { label: 'Ngừng bán', tone: 'inactive' };
+  else if (item.stockStatus === 'LOW_STOCK') status = { label: 'Sắp hết', tone: 'low-stock' };
+  else if (item.stockStatus === 'OUT_OF_STOCK') status = { label: 'Hết hàng', tone: 'out-of-stock' };
+  return <span className={`menu-sale-status ${status.tone}`}>{status.label}</span>;
+}
 const quantity = (value) => value == null ? 'Chưa ghi nhận' : new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(value);
 const displayError = (error) => error.response?.data?.message || error.response?.data?.detail || error.message || 'Không thể hoàn tất thao tác.';
 
@@ -490,7 +491,7 @@ export default function MenuItemsPage({ user }) {
               <td>{item.category}</td>
               <td className="menu-price">{money(item.salePrice)}</td>
               <td className="menu-inventory-quantity">{item.inventoryItemId ? `${quantity(item.stockQuantity)} ${item.unitName || ''}`.trim() : 'Không theo dõi'}</td>
-              <td className="menu-list-status">{saleStatusLabel(item)}</td>
+              <td className="menu-list-status"><MenuSaleStatus item={item} /></td>
               <td className="menu-row-actions">
                 <div className="menu-row-action-group">
                   <button type="button" className="menu-row-action" data-menu-focus-key={`edit-row-${item.id}`}

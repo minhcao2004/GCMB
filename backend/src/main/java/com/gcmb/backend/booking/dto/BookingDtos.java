@@ -20,7 +20,11 @@ public final class BookingDtos {
     public record RoomTypeOption(UUID id, String code, String name, String mode, int capacity, List<ComboOption> combos) {}
     // Phiên bản và thời hạn của một combo dùng để báo giá.
     public record ComboOption(UUID id, String code, int version, String name, int durationMinutes,
-                              BigDecimal price, BigDecimal depositRequired, Instant validFrom, Instant validTo) {}
+                              BigDecimal price, BigDecimal depositRequired, Instant validFrom, Instant validTo,
+                              int includedFnbQuantity, int includedFoodQuantity) {}
+    public record ComboGiftItem(UUID menuItemId, int quantity) {}
+    public record CheckInRequest(List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {}
+    public record ComboGiftRequirements(int drinkQuantity, int foodQuantity) {}
     // Phòng còn phù hợp với khoảng giờ và sức chứa yêu cầu.
     public record AvailableRoom(UUID id, String code, String name, int capacity, String operatingStatus) {}
     // Dòng phí chuẩn bị lưu kèm snapshot giải thích giá.
@@ -73,7 +77,8 @@ public final class BookingDtos {
                                        String contactPhone, String channel, String note, Integer guestCount,
                                        BigDecimal depositAmount, String paymentMethod, String paymentReference) {}
     public record WalkInRequest(UUID roomId, String pricingMode, UUID comboId, Integer durationMinutes,
-                                String contactName, String contactPhone, String note, Integer guestCount) {}
+                                String contactName, String contactPhone, String note, Integer guestCount,
+                                List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {}
     // Các trường có thể sửa trước giờ bắt đầu booking.
     public record UpdateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd, String pricingMode, UUID comboId,
                                        String contactName, String contactPhone, String note) {}

@@ -283,14 +283,14 @@ export default function AccountsPage({
 
 function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView }) {
   const dialog = useRef(null);
-  const [form, setForm] = useState({ employeeId: '', username: '', password: '' });
+  const [form, setForm] = useState({ employeeId: '', username: '', password: '', email: '', role: branchScope ? 'RECEPTIONIST' : '', branchId: branchScope || '' });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
   const [created, setCreated] = useState(null);
   const employee = options.employees.find((item) => item.id === form.employeeId);
-  const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(employee?.role);
-  const ready = employee && roles[employee.role] && employee.email && (chain || employee.branchId);
+  const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(form.role);
+  const ready = employee && form.email.trim() && form.role && (chain || form.branchId);
   useEffect(() => {
     dialog.current.showModal();
     const previous = document.body.style.overflow;
@@ -300,8 +300,19 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
     };
   }, []);
   const change = (key, value) => {
-    setForm((old) => ({ ...old, [key]: value }));
-    setErrors((old) => ({ ...old, [key]: '', form: '' }));
+    setForm((old) => {
+      const next = { ...old, [key]: value };
+      if (key === 'employeeId') {
+        const selected = options.employees.find((item) => item.id === value);
+        next.email = selected?.email || '';
+        next.role = branchScope ? 'RECEPTIONIST' :
+          options.roles.some((item) => item.id === selected?.role) ? selected.role : '';
+        next.branchId = branchScope || (options.branches.some((item) => item.id === selected?.branchId) ? selected.branchId : '');
+      }
+      if (['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(next.role)) next.branchId = '';
+      return next;
+    });
+    setErrors((old) => ({ ...old, [key]: '', ...(key === 'employeeId' ? { email: '', role: '', branchId: '' } : {}), form: '' }));
   };
   const submit = async (event) => {
     event.preventDefault();
@@ -315,7 +326,7 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
     setErrors({});
     try {
       const account = await accountApi.create(
-        { employeeId: form.employeeId, username: form.username, password: form.password },
+        { ...form, branchId: chain ? null : form.branchId || null },
         branchScope
       );
       setForm((old) => ({ ...old, password: '' }));
@@ -450,37 +461,35 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
             )}
             {field(
               'email',
-              'Email từ hồ sơ',
+              'Email',
               <input
-                id="account-email"
-                readOnly
-                value={employee?.email || ''}
-                placeholder="Chưa có email trong hồ sơ"
+                {...attrs('email')}
+                type="email"
+                maxLength={254}
+                autoComplete="off"
               />
             )}
             {field(
               'role',
-              'Vai trò từ hồ sơ',
-              <input
-                id="account-role"
-                readOnly
-                value={roles[employee?.role]?.[1] || 'Chưa có vai trò cấp tài khoản'}
-              />
+              'Vai trò',
+              <select {...attrs('role')}>
+                <option value="">Chọn vai trò</option>
+                {options.roles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
             )}
-            {field(
+            {!chain && field(
               'branchId',
-              'Phạm vi từ hồ sơ',
-              <input
-                id="account-branchId"
-                readOnly
-                value={chain ? 'Toàn chuỗi' : employee?.branchName || 'Chưa gán cơ sở'}
-              />
+              'Cơ sở',
+              <select {...attrs('branchId')} disabled={!!branchScope}>
+                <option value="">Chọn cơ sở</option>
+                {options.branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
             )}
             <div className="account-access-note">
               <strong>Thông tin truy cập</strong>
               <p>
-                Vai trò, cơ sở và email lấy từ hồ sơ nhân viên. Nếu thiếu thông tin, hãy cập nhật hồ
-                sơ trước. Sau khi tạo, thay đổi quyền tại chức năng phân quyền.
+                Kiểm tra email, vai trò và cơ sở trước khi tạo tài khoản.
+                {chain && ' Vai trò đã chọn có phạm vi toàn chuỗi.'}
               </p>
             </div>
           </fieldset>

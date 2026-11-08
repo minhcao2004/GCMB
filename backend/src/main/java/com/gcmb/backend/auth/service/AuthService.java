@@ -49,11 +49,6 @@ public class AuthService {
     // Chặn tài khoản đã khóa hoặc ngừng hoạt động trước mọi thao tác xác thực.
     private void active(Account account) {
         // BR-131; MSG33.
-        if ("LOCKED".equals(account.status())) throw new AuthFailure(
-            403,
-            "form",
-            "Tài khoản đã bị khóa. Vui lòng liên hệ quản lý"
-        );
         if (!"ACTIVE".equals(account.status())) throw new AuthFailure(
             403,
             "form",
@@ -76,7 +71,7 @@ public class AuthService {
             throw new AuthFailure(
                 403,
                 "form",
-                "Tài khoản quản lý cơ sở chưa được gán cơ sở. Vui lòng liên hệ quản lý cấp cao"
+                "Bạn không có quyền đăng nhập đối với tài khoản."
             );
         }
         Instant now = Instant.now();

@@ -125,13 +125,82 @@ public class FoodOrderService {
         return menuItems.publicList(branch(actor), null, null);
     }
 
+    @Transactional(readOnly = true)
+    public List<ComboGiftOption> comboGiftMenu(Identity actor) {
+        return orders.comboGiftMenu(branch(actor));
+    }
+
+    @Transactional
+    public void createComboGiftOrder(Identity actor, UUID bookingId, UUID allocationId,
+                                     List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> drinks,
+                                     List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> food) {
+        UUID branchId = branch(actor);
+        List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> choices = new java.util.ArrayList<>();
+        if (drinks != null) choices.addAll(drinks);
+        if (food != null) choices.addAll(food);
+        if (choices.isEmpty()) return;
+        LinkedHashMap<UUID,Integer> quantities = new LinkedHashMap<>();
+        for (var choice : choices) {
+            if (choice == null || choice.menuItemId() == null || choice.quantity() < 1)
+                throw bad("Chọn đủ số lượng đồ uống tặng kèm combo.");
+            quantities.merge(choice.menuItemId(),choice.quantity(),Integer::sum);
+        }
+        ActiveRoom active = orders.lockGiftBooking(bookingId,branchId);
+        if (active == null || !active.allocationId().equals(allocationId))
+            throw conflict("Booking không còn lịch phòng hợp lệ để thêm đồ uống combo.");
+        Map<UUID,SellableItem> sellable = requireSellableItems(branchId,quantities.keySet());
+        for (SellableItem item : sellable.values()) {
+            if (!"PACKAGED".equals(item.kind()) || !"AUTO_ON_SALE".equals(item.trackingMode()))
+                throw bad("Đồ uống combo phải là hàng đóng gói có liên kết kho tự trừ tồn.");
+        }
+        UUID orderId = orders.createOrder(branchId,bookingId,allocationId,"STAFF",actor.id(),null,
+            "ACCEPTED",actor.id(),null,"COMBO-GIFT-"+bookingId);
+        if (orderId == null) throw conflict("Order quà combo đã được tạo trước đó; hãy tải lại booking.");
+        for (var entry : quantities.entrySet()) {
+            SellableItem item = sellable.get(entry.getKey());
+            UUID allowanceId = orders.insertGiftAllowance(bookingId,item.id(),item.name(),BigDecimal.valueOf(entry.getValue()));
+            orders.insertLine(orderId,branchId,bookingId,item.id(),allowanceId,item.name(),
+                BigDecimal.valueOf(entry.getValue()),ZERO);
+        }
+        orders.serve(orderId,branchId);
+    }
+
+    @Transactional
+    public void deductComboGiftStock(Identity actor, UUID bookingId) {
+        UUID branchId = branch(actor);
+        UUID orderId = orders.comboGiftOrderId(branchId,bookingId);
+        if (orderId == null) return;
+        deductAutomaticStock(orderId,branchId,actor.id(),"Xuất kho đồ ăn, đồ uống combo khi thanh toán bill booking");
+    }
+
+    @Transactional
+    public void returnComboGiftStock(Identity actor, UUID bookingId) {
+        UUID branchId = branch(actor);
+        var movements = orders.comboGiftSales(branchId,bookingId);
+        for (var sale : movements) {
+            BigDecimal before = orders.lockStock(sale.inventoryItemId());
+            orders.insertReturn(sale.inventoryItemId(),sale.id(),sale.quantity(),before,actor.id(),
+                "Hoàn kho đồ uống combo do hủy booking " + bookingId);
+        }
+        orders.cancelComboGiftOrder(branchId,bookingId);
+    }
+
     @Transactional
     // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: tính phí đơn booking và phân công lễ tân ca hiện tại.
     public OrderView addItems(Identity actor, StaffOrderRequest request) {
         UUID branchId = branch(actor);
         if (request == null || request.bookingId() == null) throw bad("Vui lòng chọn booking đang sử dụng.");
         if (request.assignedEmployeeId() == null) throw bad("Vui lòng chọn lễ tân đang làm ca để phụ trách đơn.");
-        LinkedHashMap<UUID, Integer> quantities = quantities(request.items(), false);
+        if (request.items() == null || request.items().isEmpty()) throw bad("Chọn ít nhất một món.");
+        LinkedHashMap<UUID, Integer> quantities = new LinkedHashMap<>();
+        Map<UUID,BigDecimal> requestedPrices = new LinkedHashMap<>();
+        for (var line : request.items()) {
+            if (line == null || line.menuItemId() == null || line.quantity() == null || line.quantity() < 1)
+                throw bad("Số lượng phải là số nguyên lớn hơn 0.");
+            if (quantities.putIfAbsent(line.menuItemId(), line.quantity()) != null)
+                throw bad("Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.");
+            requestedPrices.put(line.menuItemId(), line.unitPrice());
+        }
         String key = idempotencyKey(request.idempotencyKey());
         ExistingOrder existing = orders.existingByKey(key);
         if (existing != null) return existingStaffOrder(existing, branchId, request.bookingId());
@@ -141,6 +210,13 @@ public class FoodOrderService {
         requireOnShift(request.assignedEmployeeId(), branchId);
         Map<UUID, SellableItem> sellable = requireSellableItems(branchId, quantities.keySet());
         requireAvailableItems(sellable);
+        for (var entry : requestedPrices.entrySet()) {
+            BigDecimal price = entry.getValue();
+            BigDecimal catalogPrice = sellable.get(entry.getKey()).salePrice();
+            if (price != null && (price.signum() < 0 || price.stripTrailingZeros().scale() > 0
+                    || (price.signum() != 0 && price.compareTo(catalogPrice) != 0)))
+                throw bad("Giá món chỉ được giữ nguyên giá bán hoặc đặt 0 đ cho món tặng kèm.");
+        }
         UUID orderId = orders.createOrder(branchId, booking.bookingId(), booking.allocationId(), "STAFF",
             actor.id(), null, "ACCEPTED", actor.id(), request.assignedEmployeeId(), key);
         if (orderId == null) {
@@ -152,7 +228,8 @@ public class FoodOrderService {
         quantities.forEach((menuItemId, quantity) -> {
             SellableItem item = sellable.get(menuItemId);
             orders.insertLine(orderId, branchId, booking.bookingId(), menuItemId, null,
-                item.name(), BigDecimal.valueOf(quantity), item.salePrice());
+                item.name(), BigDecimal.valueOf(quantity), requestedPrices.get(menuItemId) == null
+                    ? item.salePrice() : requestedPrices.get(menuItemId));
         });
         allocateComboInclusions(booking.bookingId(), branchId, orderId);
         deductAutomaticStock(orderId, branchId, actor.id(), "Bán món do lễ tân thêm vào booking");
@@ -260,6 +337,12 @@ public class FoodOrderService {
         LinkedHashSet<UUID> itemIds = lines.stream().map(PendingLine::menuItemId)
             .collect(Collectors.toCollection(LinkedHashSet::new));
         Map<UUID, SellableItem> items = requireSellableItems(branchId, itemIds);
+        deductAutomaticStock(orderId, branchId, actorId, reason, items);
+    }
+
+    private void deductAutomaticStock(UUID orderId, UUID branchId, UUID actorId, String reason,
+                                     Map<UUID, SellableItem> items) {
+        List<PendingLine> lines = orders.pendingLines(orderId);
         Map<UUID, BigDecimal> requiredByInventory = new LinkedHashMap<>();
         Map<UUID, String> nameByInventory = new HashMap<>();
         Map<UUID, String> unitByInventory = new HashMap<>();

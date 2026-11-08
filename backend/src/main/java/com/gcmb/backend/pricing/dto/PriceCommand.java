@@ -13,4 +13,16 @@ import java.util.UUID;
 
 public record PriceCommand(UUID roomTypeId, String code, String name, String description,
                            Integer durationMinutes, Integer minuteFrom,
-                           Integer minuteTo, BigDecimal price) {}
+                           Integer minuteTo, BigDecimal price, Integer includedFnbQuantity,
+                           Integer includedFoodQuantity) {
+    public PriceCommand(UUID roomTypeId, String code, String name, String description,
+                        Integer durationMinutes, Integer minuteFrom, Integer minuteTo, BigDecimal price) {
+        this(roomTypeId, code, name, description, durationMinutes, minuteFrom, minuteTo, price, 0, 0);
+    }
+    public PriceCommand(UUID roomTypeId, String code, String name, String description,
+                        Integer durationMinutes, Integer minuteFrom, Integer minuteTo, BigDecimal price,
+                        Integer includedFnbQuantity) {
+        this(roomTypeId, code, name, description, durationMinutes, minuteFrom, minuteTo, price,
+            includedFnbQuantity, 0);
+    }
+}

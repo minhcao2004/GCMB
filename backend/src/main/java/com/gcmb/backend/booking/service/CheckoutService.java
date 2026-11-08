@@ -11,6 +11,7 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -38,19 +39,22 @@ public class CheckoutService {
     private final BookingService bookings;
     private final SePaySettings sepay;
     private final ObjectMapper json;
+    private final FoodOrderService foodOrders;
 
     public CheckoutService(
         JdbcTemplate db,
         BookingRepository repository,
         BookingService bookings,
         SePaySettings sepay,
-        ObjectMapper json
+        ObjectMapper json,
+        FoodOrderService foodOrders
     ) {
         this.db = db;
         this.repository = repository;
         this.bookings = bookings;
         this.sepay = sepay;
         this.json = json;
+        this.foodOrders = foodOrders;
     }
 
     @Transactional
@@ -221,7 +225,7 @@ public class CheckoutService {
         );
         if (input.inspectionNote() != null && input.inspectionNote().length() > 2000) throw fail(
             400,
-            "Ghi chú kiểm tra tối đa 2000 ký tự."
+            "Ghi chú kiểm tra phòng chỉ được chứa tối đa 2000 ký tự."
         );
         UUID deposit = repository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(
@@ -277,13 +281,17 @@ public class CheckoutService {
                 if (
                     fee == null ||
                     fee.reason() == null ||
-                    fee.reason().isBlank() ||
-                    fee.reason().length() > 180
+                    fee.reason().isBlank()
                 ) {
-                    throw fail(400, "Mỗi phụ phí cần lý do tối đa 180 ký tự.");
+                    throw fail(400, "Vui lòng bổ sung lý do phụ phí.");
                 }
-                money(fee.amount());
-                if (fee.amount().signum() <= 0) throw fail(400, "Phụ phí phải lớn hơn 0.");
+                if (fee.reason().length() > 180) throw fail(
+                    400, "Lý do phụ phí chỉ được chứa tối đa 180 ký tự."
+                );
+                if (fee.amount() != null && fee.amount().signum() <= 0) throw fail(
+                    400, "Phụ phí phải lớn hơn 0 đ."
+                );
+                money(fee.amount(), "Phụ phí");
                 db.update(
                     """
                     INSERT INTO gcmb.booking_charge(booking_id,kind,description,quantity,unit_price,amount,pricing_snapshot,status)
@@ -492,7 +500,8 @@ public class CheckoutService {
             ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0))
         ) throw fail(
             400,
-            "Phần thanh toán bằng tiền mặt phải lớn hơn 0 đ và nhỏ hơn số tiền còn phải thanh toán. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt."
+            "Phần thanh toán bằng tiền mặt phải lớn hơn 0 đ và nhỏ hơn " +
+                amount.toPlainString() + " đ. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt."
         );
         BigDecimal bank = amount.subtract(cash);
         if (bank.signum() > 0 && !sepay.ready()) throw fail(
@@ -503,7 +512,7 @@ public class CheckoutService {
         UUID branch = branch(actor);
         BigDecimal tendered = BigDecimal.ZERO;
         if (cash.signum() > 0) {
-            money(input.cashTendered());
+            money(input.cashTendered(), "Tiền khách đưa");
             if (input.cashTendered().compareTo(cash) < 0) throw fail(
                 400,
                 "Tiền khách đưa chưa đủ. Cần thu ít nhất " + cash.toPlainString() + " đ."
@@ -561,6 +570,8 @@ public class CheckoutService {
             409,
             "Không có phiên sử dụng đang hoạt động."
         );
+        // Quà combo đã được khách chọn lúc check-in; chỉ xuất kho khi bill được thanh toán đủ.
+        foodOrders.deductComboGiftStock(actor, bookingId);
         // Tiền mặt chỉ thành khoản thu chính thức cùng giao dịch hoàn tất bill.
         if (cash.signum() > 0) {
             BigDecimal tendered = decimal(bill, "plannedCashTendered");
@@ -1000,7 +1011,7 @@ public class CheckoutService {
         if (actor == null || !"RECEPTIONIST".equals(actor.role()))
             throw fail(403, "Bạn không có quyền checkout đối với booking.");
         var scope = repository.branchScope(actor.id());
-        if (scope == null) throw fail(403, "Bạn không có quyền truy cập đối với tiền cọc.");
+        if (scope == null) throw fail(403, "Bạn không có quyền checkout đối với booking.");
         return scope.id();
     }
 
@@ -1046,6 +1057,13 @@ public class CheckoutService {
     }
 
     private static void money(BigDecimal value) {
+        money(value, null);
+    }
+
+    private static void money(BigDecimal value, String field) {
+        if (field != null && value != null && value.stripTrailingZeros().scale() > 0) throw fail(
+            400, field + " phải là số tiền nguyên đồng, không có phần thập phân."
+        );
         if (
             value == null ||
             value.signum() < 0 ||

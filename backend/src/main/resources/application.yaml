@@ -15,10 +15,11 @@ spring:
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
+  # Copyright (c) 2026 SEP490-G12. Author: TrongNV. Created: 28/10. Description: Cho phép tải ảnh thiết bị theo BR-115/BR-116.
   servlet:
     multipart:
       max-file-size: 20MB
-      max-request-size: 21MB
+      max-request-size: 42MB
 
 gcmb:
   auth:
@@ -36,3 +37,6 @@ gcmb:
       region: ${GCMB_S3_REGION:us-east-1}
       endpoint: ${GCMB_S3_ENDPOINT:}
       path-style: ${GCMB_S3_PATH_STYLE:false}
+  google-drive:
+    credentials-file: ${GOOGLE_DRIVE_CREDENTIALS_FILE:}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}

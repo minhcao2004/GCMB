@@ -46,6 +46,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/don-mon" element={<ReceptionOrdersPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
+    <Route path="/le-tan/su-co" element={<BookingManagementPage />} />
     <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />

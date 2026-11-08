@@ -154,12 +154,16 @@
   .inv-inline-confirm .inv-button { width: 100%; }
 }
 
-/* Match the inventory reference screens at the 1440 × 900 desktop size. */
-.branch-manager-dashboard.has-inventory { height: calc(100svh - 8px); min-height: 0; overflow: hidden; }
+/* Keep the viewport shell and the inventory content on separate scroll paths. */
+body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
+.branch-manager-dashboard.has-inventory { height: 100%; min-height: 0; overflow: hidden; }
+.branch-manager-dashboard.has-inventory .manager-sidebar { min-height: 0; overflow-y: auto; scrollbar-width: none; }
 .branch-manager-dashboard.has-inventory .manager-workspace { height: 100%; min-height: 0; overflow: hidden; padding-left: 0; }
 .branch-manager-dashboard.has-inventory .manager-topbar { min-height: 62px; padding: 8px 28px; }
 .branch-manager-dashboard.has-inventory .branch-manager-content { display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
-.branch-manager-dashboard.has-inventory .inventory-page { flex: 1 1 0%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #c5ceda transparent; scrollbar-width: thin; }
+.branch-manager-dashboard.has-inventory .inventory-page { min-height: 0; flex: 1 1 0%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+/* Preserve full table/form height so the page can scroll to every row and action. */
+.inventory-page > * { flex-shrink: 0; }
 .inventory-page { gap: 18px; padding: 26px 30px 20px; font-size: 14px; }
 .inv-heading { align-items: center; justify-content: space-between; gap: 20px; }
 .inv-heading h1 { font-size: clamp(28px, 2.1vw, 36px); letter-spacing: -.035em; line-height: 1.2; }
@@ -385,6 +389,11 @@
   .inv-history-filters,
   .inv-item-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inv-search { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .branch-manager-dashboard.has-inventory .manager-workspace { height: auto; }
+  .branch-manager-dashboard.has-inventory .manager-topbar { padding: 12px 16px; }
 }
 
 @media (max-width: 640px) {

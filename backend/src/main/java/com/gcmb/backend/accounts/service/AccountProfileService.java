@@ -35,7 +35,7 @@ public class AccountProfileService {
         try {
             Profile profile = repository.find(actor);
             if (!"ACTIVE".equals(profile.account().status())) {
-                throw new AuthFailure(403, "form", "Tài khoản không còn hoạt động");
+                throw new AuthFailure(403, "form", "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
             }
             return profile;
         } catch (EmptyResultDataAccessException exception) {
@@ -89,7 +89,7 @@ public class AccountProfileService {
                 throw new AuthFailure(
                     409,
                     "email",
-                    "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
+                    "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác."
                 );
             }
         }
@@ -103,7 +103,7 @@ public class AccountProfileService {
         try {
             repository.update(actor, fullName, phone, email, emailChanged);
         } catch (DuplicateKeyException exception) {
-            throw new AuthFailure(409, "email", "Email vừa được sử dụng bởi tài khoản khác");
+            throw new AuthFailure(409, "email", "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
         }
         Profile after = repository.find(actor);
         repository.audit(before, after);

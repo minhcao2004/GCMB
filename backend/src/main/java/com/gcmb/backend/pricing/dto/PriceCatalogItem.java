@@ -14,4 +14,27 @@ import java.util.UUID;
 public record PriceCatalogItem(UUID id, String kind, String code, UUID roomTypeId,
                                String roomTypeName, String name, String description,
                                Integer durationMinutes, Integer minuteFrom, Integer minuteTo,
-                               BigDecimal price, boolean active) {}
+                               BigDecimal price, boolean active, UUID branchId, Integer includedFnbQuantity,
+                               Integer includedFoodQuantity) {
+    public PriceCatalogItem(UUID id, String kind, String code, UUID roomTypeId,
+                            String roomTypeName, String name, String description,
+                            Integer durationMinutes, Integer minuteFrom, Integer minuteTo,
+                            BigDecimal price, boolean active) {
+        this(id, kind, code, roomTypeId, roomTypeName, name, description, durationMinutes,
+            minuteFrom, minuteTo, price, active, null, 0, 0);
+    }
+    public PriceCatalogItem(UUID id, String kind, String code, UUID roomTypeId,
+                            String roomTypeName, String name, String description,
+                            Integer durationMinutes, Integer minuteFrom, Integer minuteTo,
+                            BigDecimal price, boolean active, UUID branchId) {
+        this(id,kind,code,roomTypeId,roomTypeName,name,description,durationMinutes,minuteFrom,minuteTo,
+            price,active,branchId,0,0);
+    }
+    public PriceCatalogItem(UUID id, String kind, String code, UUID roomTypeId,
+                            String roomTypeName, String name, String description,
+                            Integer durationMinutes, Integer minuteFrom, Integer minuteTo,
+                            BigDecimal price, boolean active, UUID branchId, Integer includedFnbQuantity) {
+        this(id,kind,code,roomTypeId,roomTypeName,name,description,durationMinutes,minuteFrom,minuteTo,
+            price,active,branchId,includedFnbQuantity,0);
+    }
+}

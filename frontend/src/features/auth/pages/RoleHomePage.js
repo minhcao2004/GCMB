@@ -74,6 +74,7 @@ export default function RoleHomePage({ role }) {
       setBusy(false);
     }
   };
+
   return (
     <main
       className={`dashboard-page${user && ['HEAD_OFFICE_MANAGER', 'BRANCH_MANAGER'].includes(role) ? ' dashboard-page-manager' : ''}`}
@@ -121,4 +122,5 @@ export default function RoleHomePage({ role }) {
       )}
     </main>
   );
+
 }

@@ -12,6 +12,7 @@ import BookingDepositQr from '../components/BookingDepositQr';
 import BookingEditDialog from './BookingEditDialog';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
+import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
 
 const navigation = [
   ['Ca làm việc', 'shifts'],
@@ -237,6 +238,8 @@ export function AppShell({
       navigate('/le-tan/thanh-toan');
     } else if (icon === 'deposit') {
       navigate('/le-tan/deposits');
+    } else if (icon === 'issues') {
+      navigate('/le-tan/su-co');
     }
   }
 
@@ -255,7 +258,7 @@ export function AppShell({
                   aria-label={label}
                   title={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts', 'issues'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>
@@ -403,10 +406,41 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
 // Xác nhận phòng và thời lượng trước khi gửi thao tác check-in.
 function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, error }) {
   const [now, setNow] = useState(() => new Date());
+  const [giftRequirements, setGiftRequirements] = useState(null);
+  const [giftMenu, setGiftMenu] = useState([]);
+  const [giftLoading, setGiftLoading] = useState(false);
+  const [giftError, setGiftError] = useState('');
+  const [giftRequirementsError, setGiftRequirementsError] = useState('');
+  const [drinkSelections, setDrinkSelections] = useState([]);
+  const [foodSelections, setFoodSelections] = useState([]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    let active = true;
+    setGiftRequirements(null);
+    setDrinkSelections([]);
+    setFoodSelections([]);
+    setGiftError('');
+    setGiftRequirementsError('');
+    setGiftMenu([]);
+    if (!booking?.id || booking.status !== 'CONFIRMED') return () => { active = false; };
+    setGiftLoading(true);
+    Promise.all([
+      bookingApi.comboGiftRequirements(booking.id).then((requirements) => {
+        if (!active) return;
+        setGiftRequirements(requirements);
+        setDrinkSelections(Array.from({ length: requirements.drinkQuantity || 0 }, () => ''));
+        setFoodSelections(Array.from({ length: requirements.foodQuantity || 0 }, () => ''));
+      }).catch((requestError) => {
+        if (active) { const errors = apiErrors(requestError); setGiftRequirementsError(errors.form || Object.values(errors)[0] || 'Không tải được định mức quà combo.'); }
+      }),
+      bookingApi.comboGiftMenu().then((menu) => { if (active) setGiftMenu(menu); })
+        .catch((requestError) => { if (active) { const errors = apiErrors(requestError); setGiftError(errors.form || Object.values(errors)[0] || 'Không tải được danh sách món F&B.'); } }),
+    ]).finally(() => { if (active) setGiftLoading(false); });
+    return () => { active = false; };
+  }, [booking?.id, booking?.status]);
   const actualTime = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
   const recordedCheckIn = detail?.booking?.id === booking?.id
     ? detail.booking.actualCheckin || booking?.actualCheckin
@@ -429,6 +463,19 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const earlyCheckIn = Boolean(booking) && now.getTime() < plannedStartMs;
   const shiftedCheckout = earlyCheckIn ? new Date(now.getTime() + (plannedEndMs - plannedStartMs)) : null;
   const checkInTimeValid = booking && plannedEndMs > now.getTime();
+  const giftMenuRequired = (giftRequirements?.drinkQuantity || 0) + (giftRequirements?.foodQuantity || 0) > 0;
+  const giftSelectionsValid = giftRequirements && drinkSelections.length === giftRequirements.drinkQuantity
+    && foodSelections.length === giftRequirements.foodQuantity && drinkSelections.every(Boolean) && foodSelections.every(Boolean);
+  const giftSelectionBlocked = booking?.status === 'CONFIRMED'
+    && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
+      || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
+  const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
+    const slots = [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
+      ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))];
+    const usedElsewhere = slots.filter((slot) => slot.key !== `${prefix}-${index}` && slot.id)
+      .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
+    return <label key={`${prefix}-${index}`}><span>{label} {index + 1}</span><select required value={selectedId} onChange={(event) => setSelections((current) => current.map((id, i) => i === index ? event.target.value : id))}><option value="">Chọn {label.toLowerCase()}</option>{giftMenu.map((item) => <option key={item.id} value={item.id} disabled={Number(item.stockQuantity || 0) <= (usedElsewhere[item.id] || 0)}>{item.name} · tồn {item.stockQuantity} {item.unitName}</option>)}</select></label>;
+  });
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
   if (!booking) return <div className="booking-checkin-overlay"><button className="booking-overlay-dismiss" type="button" onClick={onClose} aria-label="Đóng" /><aside className="booking-checkin-panel"><button className="booking-panel-close" type="button" onClick={onClose}>×</button><p role="status">Đang tải thông tin booking…</p></aside></div>;
@@ -442,6 +489,14 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
           <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{booking.roomCode ? `${booking.roomCode} · ${booking.roomName || ''}` : 'Chưa gán'}</strong></div>
         </div></section>
+        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Chọn mặt hàng của cơ sở; kho sẽ trừ khi xác nhận check-in.</p>
+          {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
+          {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
+          {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
+          {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng đóng gói liên kết kho tự trừ.</small>}
+          {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
+          {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
+        </section>}
         <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
           <strong>{checkInRoomTitle(booking, roomReady)}</strong>
           <p>{checkInRoomHint(booking, roomReady)}</p>
@@ -456,7 +511,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
       </div>
       <div className="booking-checkin-footer">
         {error && <p className="booking-inline-error" role="alert">{error}</p>}
-        <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking)} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || busy}>{checkInButtonLabel}</button>
+        <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
   </div>;
@@ -644,6 +699,7 @@ export default function BookingManagementPage() {
   const location = useLocation();
   const { bookingId } = useParams();
   const createMode = location.pathname.endsWith('/new');
+  const incidentsMode = location.pathname === '/le-tan/su-co';
   const checkinMode = location.pathname.endsWith('/check-in');
   const editMode = location.pathname.endsWith('/edit');
   const [user, setUser] = useState(null);
@@ -918,11 +974,11 @@ export default function BookingManagementPage() {
   };
 
   // Ghi check-in rồi tải lại booking để hiển thị giờ thực tế.
-  const confirmCheckIn = async (booking) => {
+  const confirmCheckIn = async (booking, gifts) => {
     setBusy(true);
     setCheckInError('');
     try {
-      const result = await bookingApi.checkIn(booking.id);
+      const result = await bookingApi.checkIn(booking.id, gifts);
       setSelectedId(booking.id);
       setSelectedDate(toLocalDateInput(new Date(result.booking.plannedStart)));
       setNoticeKind('success');
@@ -976,7 +1032,7 @@ export default function BookingManagementPage() {
   };
   // Quay về danh sách khi đóng bảng check-in.
   const closeCheckIn = () => navigate('/le-tan/bookings');
-  const mainContent = createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
+  const mainContent = incidentsMode ? <EquipmentIncidentsPage user={user} /> : createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
       <div><h1>Booking</h1><p>Theo dõi lịch đặt và check-in khách trong ca</p></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
@@ -1032,7 +1088,7 @@ export default function BookingManagementPage() {
     </div>
   </>;
 
-  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={createMode ? 'Booking / Tạo booking' : editMode ? 'Booking / Sửa booking' : 'Booking'} search={search} onSearchChange={setSearch} fitViewport={!createMode}>
+  return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb={incidentsMode ? 'Báo sự cố' : createMode ? 'Booking / Tạo booking' : editMode ? 'Booking / Sửa booking' : 'Booking'} activeTab={incidentsMode ? 'issues' : 'booking'} hideSearch={incidentsMode} search={search} onSearchChange={setSearch} fitViewport={!createMode}>
     {mainContent}
     {editMode && <BookingEditDialog bookingId={bookingId} timezone={timezone} onClose={() => navigate('/le-tan/bookings')} onUpdate={updateBooking} />}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} busy={busy} error={checkInError} />}
