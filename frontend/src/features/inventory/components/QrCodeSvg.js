@@ -127,14 +127,14 @@ function encodeMatrix(value) {
   return matrix;
 }
 
-export default function QrCodeSvg({ value, title = 'Mã QR' }) {
+export default function QrCodeSvg({ value, title = 'Mã QR', className = '' }) {
   const matrix = useMemo(() => {
     try { return encodeMatrix(value); } catch { return null; }
   }, [value]);
   if (!matrix) return <span className="mr-qr-error">Không thể tạo mã QR cho đường dẫn này.</span>;
   const modules = [];
   matrix.forEach((row, y) => row.forEach((dark, x) => { if (dark) modules.push(`M${x + 4},${y + 4}h1v1h-1z`); }));
-  return <svg className="mr-qr-code" viewBox="0 0 45 45" role="img" aria-label={title} shapeRendering="crispEdges">
+  return <svg className={`mr-qr-code ${className}`.trim()} viewBox="0 0 45 45" role="img" aria-label={title} shapeRendering="crispEdges">
     <rect width="45" height="45" fill="#fff" />
     <path d={modules.join('')} fill="#131416" />
   </svg>;

@@ -6,6 +6,7 @@ import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.AllocationRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.UUID;
@@ -25,7 +26,8 @@ class BookingServiceCheckInTest {
     @Test
     void rejectsRegularCheckInWhenRoomIsStillOccupied() {
         BookingRepository repository = mock(BookingRepository.class);
-        BookingService service = new BookingService(repository, mock(BookingPricingService.class), mock(ObjectMapper.class));
+        BookingService service = new BookingService(repository, mock(BookingPricingService.class), mock(ObjectMapper.class),
+            mock(FoodOrderService.class));
         UUID actorId = UUID.randomUUID();
         UUID branchId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();
@@ -41,11 +43,13 @@ class BookingServiceCheckInTest {
         when(repository.lockBookingId(bookingId, branchId)).thenReturn(bookingId);
         when(repository.booking(bookingId, branchId)).thenReturn(booking);
         when(repository.currentAllocationForUpdate(bookingId)).thenReturn(allocation);
+        when(repository.comboGiftRequirements(bookingId, branchId)).thenReturn(new BookingRepository.ComboGiftRequirements(0, 0));
         when(repository.hasRoomOverlap(eq(roomId), any(Instant.class), any(Instant.class), eq(bookingId))).thenReturn(true);
 
         BookingFailure failure = assertThrows(BookingFailure.class,
             () -> service.checkIn(new Identity(
-                actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId));
+                actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId,
+                new com.gcmb.backend.booking.dto.BookingDtos.CheckInRequest(java.util.List.of(), java.util.List.of())));
 
         assertEquals(409, failure.status());
         verify(repository, never()).checkInBooking(any(), any(), any());

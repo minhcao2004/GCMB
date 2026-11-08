@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { apiAssetUrl } from '../../../api/client';
 import { formatVnd } from '../../booking/data/bookingData';
 import { foodOrderApi } from '../services/foodOrderApi';
@@ -22,6 +22,7 @@ const statusText = {
   SERVED: 'Đã phục vụ', REJECTED: 'Không thể phục vụ yêu cầu này', CANCELLED: 'Đã hủy',
 };
 const newKey = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const categoryKey = (value) => value?.trim().toLocaleLowerCase('vi-VN');
 
 function MenuItemImage({ item }) {
   const src = apiAssetUrl(item.imageUrl);
@@ -116,8 +117,10 @@ export default function GuestRoomOrderPage() {
     return () => window.clearInterval(timer);
   }, [room, refreshOrders]);
 
-  const categories = useMemo(() => ['Tất cả', ...new Set(items.map((item) => item.category).filter(Boolean))], [items]);
-  const visibleItems = useMemo(() => items.filter((item) => category === 'Tất cả' || item.category === category), [items, category]);
+  const categories = useMemo(() => ['Tất cả', ...new Map(items.map(({ category: name }) =>
+    [categoryKey(name), name?.trim().replace(/^./u, (letter) => letter.toLocaleUpperCase('vi-VN'))]
+  ).filter(([key]) => key)).values()], [items]);
+  const visibleItems = useMemo(() => items.filter((item) => category === 'Tất cả' || categoryKey(item.category) === categoryKey(category)), [items, category]);
   const cartLines = useMemo(() => items.filter((item) => cart[item.id] > 0), [items, cart]);
   const cartTotal = cartLines.reduce((sum, item) => sum + Number(item.salePrice || 0) * cart[item.id], 0);
   const setQuantity = (id, amount) => setCart((current) => {
@@ -132,6 +135,7 @@ export default function GuestRoomOrderPage() {
     setError('');
     setMessage('');
     try {
+      // BR-27: gửi mã MR của phòng hiện tại để server gắn món với đúng booking đang sử dụng.
       const result = await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
         idempotencyKey: pendingKey.current,
         items: cartLines.map((item) => ({ menuItemId: item.id, quantity: cart[item.id] })),
@@ -149,7 +153,7 @@ export default function GuestRoomOrderPage() {
 
   return <main className="mr-order-page">
     <header className="mr-order-header">
-      <span className="mr-brand" aria-label="GenZ Cinema & Music Box">GENZ <span>F&amp;B</span></span>
+      <div className="mr-order-brand"><span className="mr-brand" aria-label="GenZ Cinema & Music Box">GENZ <span>F&amp;B</span></span><Link className="mr-services-link" to={`/mr/${encodeURIComponent(normalizedCode)}`}>Khám phá dịch vụ</Link></div>
       {room && <p>{room.roomName} <span>·</span> {room.branchName}</p>}
     </header>
     <div className="mr-order-content">
@@ -157,7 +161,7 @@ export default function GuestRoomOrderPage() {
         <div><h1>Thực đơn tại phòng</h1><p>Chọn món bạn muốn dùng. Yêu cầu sẽ được lễ tân xác nhận trước khi tính phí.</p></div>
         {room && <div className="mr-room-tag"><span>Mã phòng</span><strong>{room.roomCode}</strong></div>}
       </section>
-      {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Quét lại mã MR</button></div>}
+      {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Tải lại thực đơn</button></div>}
       {message && <div className="food-alert food-alert--success" role="status">{message}</div>}
       {loading ? <div className="food-loading" role="status">Đang tải thực đơn phòng…</div> : room && <>
         {items.length === 0 ? <div className="food-empty"><h2>Chưa có món đang bán</h2><p>Vui lòng gọi lễ tân nếu bạn cần hỗ trợ.</p></div> : <>

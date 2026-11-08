@@ -190,8 +190,22 @@ public class BookingController {
 
     @PostMapping("/bookings/{bookingId}/check-in")
     // POST: ghi nhận khách vào phòng.
-    public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return audit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookings.checkIn(identity, bookingId),null);
+    public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
+            @RequestBody(required = false) BookingDtos.CheckInRequest request) {
+        return audit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookings.checkIn(identity, bookingId, request),null);
+    }
+
+    @GetMapping("/bookings/{bookingId}/combo-gift-requirements")
+    public BookingDtos.ComboGiftRequirements comboGiftRequirements(@AuthenticationPrincipal Identity identity,
+            @PathVariable UUID bookingId) {
+        return bookings.comboGiftRequirements(identity, bookingId);
+    }
+
+    @PostMapping("/bookings/walk-in")
+    public BookingDtos.BookingDetail openWalkIn(@AuthenticationPrincipal Identity identity,
+            @RequestBody BookingDtos.WalkInRequest request) {
+        return audit.record("WALK_IN_CHECKED_IN", "BOOKING", null,
+            () -> bookings.openWalkIn(identity, request), result -> result.booking().id());
     }
 
     @PostMapping("/bookings")

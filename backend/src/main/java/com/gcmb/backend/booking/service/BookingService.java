@@ -16,6 +16,7 @@ import com.gcmb.backend.booking.repository.BookingRepository.RoomRow;
 import com.gcmb.backend.booking.repository.BookingRepository.RoomTypeRow;
 import com.gcmb.backend.booking.repository.BookingRepository.MeterRow;
 import com.gcmb.backend.booking.repository.BookingRepository.PricingRule;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -42,10 +43,12 @@ public class BookingService {
     private final BookingRepository repository;
     private final BookingPricingService pricing;
     private final ObjectMapper json;
+    private final FoodOrderService foodOrders;
 
     // Kết hợp truy vấn, tính giá và snapshot JSON trong các giao dịch booking.
-    public BookingService(BookingRepository repository, BookingPricingService pricing, ObjectMapper json) {
-        this.repository = repository; this.pricing = pricing; this.json = json;
+    public BookingService(BookingRepository repository, BookingPricingService pricing, ObjectMapper json,
+                          FoodOrderService foodOrders) {
+        this.repository = repository; this.pricing = pricing; this.json = json; this.foodOrders = foodOrders;
     }
 
     @Transactional(readOnly = true)
@@ -54,7 +57,7 @@ public class BookingService {
         BranchScope branch = branch(identity);
         List<BookingDtos.RoomTypeOption> roomTypes = repository.roomTypes().stream().map(type ->
             new BookingDtos.RoomTypeOption(type.id(), type.code(), type.name(), type.mode(), type.capacity(),
-                repository.combos(type.id()).stream().map(BookingService::comboOption).toList())).toList();
+                repository.combos(type.id(), branch.id()).stream().map(BookingService::comboOption).toList())).toList();
         return new BookingDtos.BookingOptions(branch.id(), branch.name(), branch.timezone().getId(), roomTypes);
     }
 
@@ -102,7 +105,7 @@ public class BookingService {
             .filter(room -> room.capacity() >= booking.guestCount()
                 && (!comboBooking || room.roomTypeId().equals(current.roomTypeId())))
             .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
-        List<BookingDtos.ComboOption> combos = repository.combos(current.roomTypeId()).stream()
+        List<BookingDtos.ComboOption> combos = repository.combos(current.roomTypeId(), branch.id()).stream()
             .map(BookingService::comboOption).toList();
         return new BookingDtos.BookingEditOptions(rooms, combos, quote);
     }
@@ -155,7 +158,7 @@ public class BookingService {
         List<BookingDtos.AvailableRoom> available = !booking.plannedEnd().isAfter(now) ? List.of() : repository.availableRoomsForEdit(branch.id(), now, booking.plannedEnd(), bookingId)
             .stream().filter(room -> !room.id().equals(allocation.roomId()) && room.capacity() >= booking.guestCount())
             .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
-        List<BookingDtos.ComboOption> combos = repository.combos(allocation.roomTypeId()).stream()
+        List<BookingDtos.ComboOption> combos = repository.combos(allocation.roomTypeId(), branch.id()).stream()
             .filter(combo -> extensionComboAvailableAt(combo, booking.plannedEnd(), branch.timezone()))
             .map(BookingService::comboOption).toList();
         String currentComboName = repository.activeChargesForAllocation(allocation.id()).stream()
@@ -483,6 +486,7 @@ public class BookingService {
             validateHourlyRental(request.plannedStart(), request.plannedEnd());
         BookingDtos.PriceQuote quote = pricing.quote(room.roomTypeId(), branch.id(), branch.timezone(),
             request.plannedStart(), request.plannedEnd(), request.pricingMode(), request.comboId());
+        ComboRow selectedCombo = "COMBO".equals(quote.pricingMode()) ? repository.combo(request.comboId(),branch.id()) : null;
         String contactName = required(request.contactName(), "contactName", "Tên khách", 200);
         String contactPhone = contactPhone(request.contactPhone());
         String note = nullable(request.note(), "note", 2000);
@@ -507,6 +511,8 @@ public class BookingService {
             UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         UUID bookingId = repository.insertBooking(branch.id(), code, contactName, contactPhone, guestCount, channel,
             request.plannedStart(), request.plannedEnd(), REFUND_CUTOFF_MINUTES, actorId, note);
+        repository.setComboGiftQuantities(bookingId, selectedCombo == null ? 0 : selectedCombo.includedFnbQuantity(),
+            selectedCombo == null ? 0 : selectedCombo.includedFoodQuantity());
         UUID allocationId = insertAllocation(branch, bookingId, room.id(), room.code(), request.plannedStart(), request.plannedEnd(), actorId);
         repository.createDepositAccount(bookingId);
         // Chỉ ghi sổ khi thực sự có tiền đã thu; yêu cầu cọc của combo không tự tạo khoản thu.
@@ -526,6 +532,15 @@ public class BookingService {
         return detail(branch.id(), repository.booking(bookingId, branch.id()));
     }
 
+    @Transactional(readOnly = true)
+    // Đọc số món quà đã được chụp theo combo tại lúc tạo/sửa booking.
+    public BookingDtos.ComboGiftRequirements comboGiftRequirements(Identity identity, UUID bookingId) {
+        BranchScope branch = branch(identity);
+        var requirements = repository.comboGiftRequirements(bookingId, branch.id());
+        if (requirements == null) throw notFound();
+        return new BookingDtos.ComboGiftRequirements(requirements.drinkQuantity(), requirements.foodQuantity());
+    }
+
     @Transactional
     // BR-01, BR-02, BR-03, BR-05, BR-128, BR-155: tạo booking và nhận phòng trong cùng giao dịch.
     public BookingDtos.BookingDetail openWalkIn(Identity identity, BookingDtos.WalkInRequest request) {
@@ -537,12 +552,14 @@ public class BookingService {
             request.contactName(), request.contactPhone(), "WALK_IN", request.note(), request.guestCount(),
             BigDecimal.ZERO, null, null);
         var created = create(identity, createRequest);
-        return checkIn(identity, created.booking().id());
+        // Quà combo được chọn và ghi nhận trong cùng giao dịch nhận khách tại quầy.
+        return checkIn(identity, created.booking().id(),
+            new BookingDtos.CheckInRequest(request.drinkItems(), request.foodItems()));
     }
 
     @Transactional
     // BR-01, BR-05, BR-155: chỉ check-in booking còn hợp lệ và phòng sẵn sàng sử dụng.
-    public BookingDtos.BookingDetail checkIn(Identity identity, UUID bookingId) {
+    public BookingDtos.BookingDetail checkIn(Identity identity, UUID bookingId, BookingDtos.CheckInRequest request) {
         BranchScope branch = branch(identity);
         UUID actorId = identity.id();
         lockBooking(bookingId, branch.id(), "check-in");
@@ -566,6 +583,13 @@ public class BookingService {
             throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
         if (!"AVAILABLE".equals(allocation.operatingStatus()))
             throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
+
+        var giftRequirements = repository.comboGiftRequirements(bookingId, branch.id());
+        List<BookingDtos.ComboGiftItem> drinks = request == null || request.drinkItems() == null ? List.of() : request.drinkItems();
+        List<BookingDtos.ComboGiftItem> food = request == null || request.foodItems() == null ? List.of() : request.foodItems();
+        validateGiftChoices(drinks, giftRequirements.drinkQuantity(), "đồ uống");
+        validateGiftChoices(food, giftRequirements.foodQuantity(), "đồ ăn");
+        foodOrders.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
 
         // Giữ plannedStart làm giờ hẹn gốc; chỉ dời allocation và plannedEnd khi khách đến sớm.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
@@ -645,7 +669,7 @@ public class BookingService {
             if (packageMinutes <= 0 || packagePrice == null || overtimeRate == null)
                 throw new BookingFailure(409, "comboId", "Giá combo đã chốt thiếu dữ liệu để tính lại");
         } else {
-            ComboRow combo = repository.combo(comboId);
+            ComboRow combo = repository.combo(comboId, branch.id());
             if (combo == null || !current.roomTypeId().equals(combo.roomTypeId()))
                 throw new BookingFailure(400, "comboId", "Combo không áp dụng cho hạng phòng của booking");
             packageMinutes = combo.durationMinutes();
@@ -719,7 +743,7 @@ public class BookingService {
             if (booking.guestCount() > targetRoom.capacity())
                 throw new BookingFailure(400, "roomId", "Phòng " + targetRoom.code() + " chỉ phù hợp tối đa " + targetRoom.capacity() + " khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.");
             if ("COMBO".equals(quote.pricingMode()) && !targetRoom.roomTypeId().equals(current.roomTypeId())) {
-                ComboRow combo = request.comboId() == null ? null : repository.combo(request.comboId());
+                ComboRow combo = request.comboId() == null ? null : repository.combo(request.comboId(), branch.id());
                 String comboName = combo == null ? "đã chọn" : combo.name();
                 throw new BookingFailure(400, "roomId", "Combo " + comboName + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             }
@@ -738,6 +762,11 @@ public class BookingService {
         if (chargesChanged) {
             previousCharges.forEach(charge -> repository.supersedeCharge(charge.id()));
             quote.charges().forEach(charge -> repository.insertCharge(bookingId, allocationId, charge));
+            UUID selectedComboId = quote.charges().stream().map(BookingDtos.ChargeLine::comboId)
+                .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+            ComboRow selectedCombo = selectedComboId == null ? null : repository.combo(selectedComboId, branch.id());
+            repository.setComboGiftQuantities(bookingId, selectedCombo == null ? 0 : selectedCombo.includedFnbQuantity(),
+                selectedCombo == null ? 0 : selectedCombo.includedFoodQuantity());
         }
         repository.event(bookingId, actorId, "BOOKING_UPDATED", null, detailsMap(
             "previousRoomId", current.roomId(), "roomId", roomId,
@@ -766,6 +795,7 @@ public class BookingService {
         if (allocation == null || !"RESERVED".equals(allocation.state()))
             throw new BookingFailure(409, "form", "Booking không còn lịch giữ phòng để hủy");
         if (request == null) throw new BookingFailure(400, "form", "Vui lòng nhập thông tin hủy booking");
+        foodOrders.returnComboGiftStock(identity,bookingId);
         String reason = required(request.reason(), "reason", "Lý do hủy", 1000);
         UUID depositId = repository.lockDeposit(bookingId);
         BigDecimal deposit = repository.depositBalance(bookingId);
@@ -821,6 +851,8 @@ public class BookingService {
         if (deposit.signum() > 0)
             repository.forfeitDeposit(bookingId, actorId, deposit, "Tịch thu cọc do khách không đến (no-show)", UUID.randomUUID().toString());
 
+        // Quà combo đã được trừ kho khi tạo booking; khách no-show chưa nhận đồ nên hoàn kho.
+        foodOrders.returnComboGiftStock(identity, bookingId);
         repository.releaseAllocation(allocation.id(), "Booking no-show");
         if (repository.markNoShow(bookingId) != 1)
             throw new BookingFailure(409, "form", "Booking đã được cập nhật bởi thao tác khác");
@@ -890,7 +922,7 @@ public class BookingService {
         Instant endsAt;
         if ("COMBO".equals(mode)) {
             if (request.comboId() == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo gia hạn");
-            ComboRow combo = repository.combo(request.comboId());
+            ComboRow combo = repository.combo(request.comboId(), branch.id());
             if (combo == null || !current.roomTypeId().equals(combo.roomTypeId()))
                 throw new BookingFailure(400, "comboId", "Combo " + (combo == null ? "đã chọn" : combo.name()) + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             if (!extensionComboAvailableAt(combo, startsAt, branch.timezone()))
@@ -989,12 +1021,12 @@ public class BookingService {
             }
 
             // Khách yêu cầu: dùng combo tương đương ở phòng mới, nếu thiếu thì báo giá theo giờ.
-            ComboRow sourceCombo = charge.comboId() == null ? null : repository.combo(charge.comboId());
+            ComboRow sourceCombo = charge.comboId() == null ? null : repository.combo(charge.comboId(), branch.id());
             String sourceComboName = sourceCombo == null ? snapshotString(sourceSnapshot, "name") : sourceCombo.name();
             int sourceDuration = sourceCombo == null
                 ? snapshotInteger(sourceSnapshot, "durationMinutes", 0) : sourceCombo.durationMinutes();
             ComboRow equivalent = packageCharge
-                ? equivalentCombo(sourceComboName, sourceDuration, target.roomTypeId()) : null;
+                ? equivalentCombo(sourceComboName, sourceDuration, target.roomTypeId(), branch.id()) : null;
             if (equivalent != null) {
                 int packageMinutes = snapshotInteger(sourceSnapshot, "packageDurationMinutes",
                     sourceDuration);
@@ -1030,10 +1062,11 @@ public class BookingService {
     }
 
     // Tìm combo tương ứng ở hạng phòng mới với cùng tên gói và thời lượng.
-    private ComboRow equivalentCombo(String sourceComboName, int sourceDurationMinutes, UUID targetRoomTypeId) {
+    private ComboRow equivalentCombo(String sourceComboName, int sourceDurationMinutes, UUID targetRoomTypeId,
+                                     UUID branchId) {
         if (sourceComboName == null || sourceComboName.isBlank() || sourceDurationMinutes <= 0) return null;
         String sourceName = normalizeComboName(sourceComboName);
-        return repository.combos(targetRoomTypeId).stream()
+        return repository.combos(targetRoomTypeId, branchId).stream()
             .filter(combo -> combo.durationMinutes() == sourceDurationMinutes)
             .filter(combo -> normalizeComboName(combo.name()).equals(sourceName))
             .findFirst().orElse(null);
@@ -1202,7 +1235,19 @@ public class BookingService {
     // Chuyển combo trong database sang lựa chọn trả cho giao diện.
     private static BookingDtos.ComboOption comboOption(ComboRow combo) {
         return new BookingDtos.ComboOption(combo.id(), combo.code(), combo.version(), combo.name(), combo.durationMinutes(),
-            combo.price(), combo.depositRequired(), combo.validFrom(), combo.validTo());
+            combo.price(), combo.depositRequired(), combo.validFrom(), combo.validTo(), combo.includedFnbQuantity(),
+            combo.includedFoodQuantity());
+    }
+
+    private static void validateGiftChoices(List<BookingDtos.ComboGiftItem> choices, int expected, String label) {
+        long quantity = 0;
+        for (BookingDtos.ComboGiftItem choice : choices) {
+            if (choice == null || choice.menuItemId() == null || choice.quantity() < 1)
+                throw new BookingFailure(400,"comboGiftItems","Mỗi lựa chọn " + label + " phải có mặt hàng và số lượng nguyên dương.");
+            quantity += choice.quantity();
+        }
+        if (quantity != expected)
+            throw new BookingFailure(400,"comboGiftItems","Vui lòng chọn đúng " + expected + " " + label + " tặng kèm combo.");
     }
 
     // Chuẩn hóa và kiểm tra kênh tiếp nhận booking.

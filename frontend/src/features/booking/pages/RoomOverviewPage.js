@@ -6,6 +6,7 @@ import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
 import BookingStayDialog from './BookingStayDialog';
+import WalkInDialog from './WalkInDialog';
 import { foodOrderApi } from '../../inventory/services/foodOrderApi';
 import IncomingRoomOrderDialog from '../../inventory/components/IncomingRoomOrderDialog';
 import '../styles/booking.css';
@@ -14,6 +15,11 @@ import '../styles/rooms.css';
 function errorText(error) {
   const errors = apiErrors(error);
   return errors.form || Object.values(errors)[0] || 'Không tải được dữ liệu phòng.';
+}
+
+function normalizeOrderSearch(value) {
+  return String(value || '').trim().toLocaleLowerCase('vi-VN')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 }
 
 function clockTime(date) {
@@ -98,12 +104,15 @@ export default function RoomOverviewPage() {
   const [hourlyMetersByBookingId, setHourlyMetersByBookingId] = useState({});
   const meterDetailsRequestedRef = useRef(new Set());
   const [stayMode, setStayMode] = useState(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const scheduleDialogRef = useRef(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const orderDialogRef = useRef(null);
   const orderRequestKey = useRef('');
   const [orderMenu, setOrderMenu] = useState([]);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderCategory, setOrderCategory] = useState('all');
   const [orderEmployees, setOrderEmployees] = useState([]);
   const [pendingRoomOrders, setPendingRoomOrders] = useState([]);
   const [incomingOrders, setIncomingOrders] = useState([]);
@@ -341,13 +350,13 @@ export default function RoomOverviewPage() {
   }, [orderDialogOpen]);
 
   const floors = [...new Set(rooms.map((room) => floorOf(room.code)).filter(Boolean))].sort();
-  const visible = rooms.filter((room) => {
+  const visible = useMemo(() => rooms.filter((room) => {
     const keyword = search.trim().toLocaleLowerCase('vi-VN');
     return (floor === 'all' || floorOf(room.code) === floor)
       && (status === 'all' || room.status === status)
       && (tier === 'all' || room.roomTypeName === tier)
       && (!keyword || [room.code, room.name, room.booking?.contactName, room.booking?.code].some((part) => String(part || '').toLocaleLowerCase('vi-VN').includes(keyword)));
-  });
+  }), [rooms, floor, status, tier, search]);
   const counts = Object.fromEntries(['vacant', 'reserved', 'occupied', 'maintenance', 'inactive'].map((key) => [key, rooms.filter((room) => room.status === key).length]));
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
   const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
@@ -376,6 +385,14 @@ export default function RoomOverviewPage() {
   const clockEndMs = Number.isFinite(plannedEndMs) ? Math.min(now, plannedEndMs) : now;
   const elapsedSeconds = Number.isFinite(checkinMs) ? Math.max(0, Math.floor((clockEndMs - checkinMs) / 1000)) : null;
   const elapsedText = elapsedSeconds == null ? '—' : [Math.floor(elapsedSeconds / 3600), Math.floor(elapsedSeconds % 3600 / 60), elapsedSeconds % 60].map((part) => String(part).padStart(2, '0')).join(':');
+  const visibleOrderMenu = useMemo(() => {
+    const keyword = normalizeOrderSearch(orderSearch);
+    return orderMenu.filter((item) => (
+      (orderCategory === 'all' || normalizeOrderSearch(item.category) === normalizeOrderSearch(orderCategory))
+      && (!keyword || normalizeOrderSearch(item.name).includes(keyword))
+    ));
+  }, [orderMenu, orderSearch, orderCategory]);
+  // BR-117: chỉ gửi món có số lượng dương; tìm kiếm/lọc không loại bỏ món đã chọn.
   const orderLines = orderMenu.filter((item) => orderQuantities[item.id] > 0);
   const orderTotal = orderLines.reduce((total, item) => total + Number(item.salePrice || 0) * orderQuantities[item.id], 0);
   const pendingOrdersByRoomCode = useMemo(() => {
@@ -443,6 +460,8 @@ export default function RoomOverviewPage() {
     setOrderError('');
     setOrderMenu([]);
     setOrderQuantities({});
+    setOrderSearch('');
+    setOrderCategory('all');
     try {
       const [items, employees] = await Promise.all([
         foodOrderApi.staffMenu(), foodOrderApi.servingEmployees(),
@@ -624,13 +643,15 @@ export default function RoomOverviewPage() {
             <button type="button" onClick={openSelectedRoomOrders}>Xử lý tại đây</button>
           </section>}
           {meter && <p className="room-meter-note">Giờ lẻ: {meter.status === 'RUNNING' ? 'đang chạy' : `đã chốt ${meter.billedMinutes} phút`}</p>}
-          {selected.status !== 'reserved' && <>
+          {selected.status === 'vacant' && <><h3>Thao tác</h3><button type="button" className="room-checkout room-open-button" disabled={loading || Boolean(loadError) || date !== dateInputInZone(now, timezone)} onClick={() => setWalkInOpen(true)}>Mở phòng</button><small className="room-checkout-note">{date === dateInputInZone(now, timezone) ? 'Nhập thông tin khách và xác nhận nhận phòng.' : 'Chọn ngày hôm nay để nhận khách tại quầy.'}</small></>}
+          {selected.status !== 'reserved' && selected.status !== 'vacant' && <>
             <h3>Thao tác</h3><div className="room-actions"><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !currentBooking?.id || !detailReady || busy || checkingRoomOrders} onClick={openServiceOrder}>{checkingRoomOrders ? 'Đang kiểm tra order…' : '+ Order dịch vụ'}</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady} onClick={() => setStayMode('extend')}>+ Thêm giờ/combo</button><button type="button" className="is-available" disabled={selected.status !== 'occupied' || !detailReady || Boolean(meter)} onClick={() => setStayMode('change')}>Đổi phòng</button><button type="button" disabled>Báo sự cố</button></div><button type="button" className="room-checkout" disabled={selected.status !== 'occupied' || !currentBooking?.id} onClick={() => navigate(`/le-tan/bookings/${currentBooking.id}/checkout`)}>Checkout &amp; lập bill</button><small className="room-checkout-note">Kiểm tra phòng và chốt bill trước khi thanh toán.</small>
           </>}
         </> : <p className="room-empty">Chọn một phòng để xem thông tin.</p>}
         </div>
       </aside>
     </div>
+    {walkInOpen && selected && <WalkInDialog room={selected} options={options} onClose={() => { setWalkInOpen(false); setReload((value) => value + 1); }} onOpened={(booking) => { setWalkInOpen(false); setNotice(`Đã check-in booking ${booking.code}.`); setReload((value) => value + 1); }} />}
     <dialog ref={scheduleDialogRef} className="room-schedule-dialog" aria-labelledby="room-schedule-title" onClose={() => setScheduleOpen(false)}>
       <header><div><h2 id="room-schedule-title">Lịch phòng {selected?.code}</h2><p>{dateInputText(date)} · các booking trong ngày</p></div><button type="button" aria-label="Đóng lịch phòng" onClick={() => setScheduleOpen(false)}>×</button></header>
       {selectedRoomBookings.length ? <ol className="room-schedule-list">{selectedRoomBookings.map((booking) => <li key={booking.id}>
@@ -645,8 +666,22 @@ export default function RoomOverviewPage() {
       <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay.</p>
       {orderError && <div className="room-order-error" role="alert">{orderError}</div>}
       {orderLoading ? <p className="room-order-empty" role="status">Đang tải thực đơn…</p> : orderMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form onSubmit={submitServiceOrder}>
+        {/* BR-123: danh sách phân công chỉ gồm lễ tân đang làm ca tại cơ sở của booking. */}
         <label className="room-order-employee">Nhân viên phụ trách<select value={orderEmployeeId} onChange={(event) => setOrderEmployeeId(event.target.value)} required disabled={orderEmployees.length === 0 || orderSubmitting}><option value="">Chọn lễ tân đang trong ca</option>{orderEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
-        <div className="room-order-items">{orderMenu.map((item) => {
+        <div className="room-order-filters">
+          <label className="room-order-search">Tìm món
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" placeholder="Nhập tên món…" value={orderSearch} disabled={orderSubmitting} aria-controls="room-order-items" onChange={(event) => setOrderSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></span>
+          </label>
+          <label className="room-order-category">Danh mục
+            <select value={orderCategory} disabled={orderSubmitting} aria-controls="room-order-items" onChange={(event) => setOrderCategory(event.target.value)}><option value="all">Tất cả</option><option value="Đồ ăn">Đồ ăn</option><option value="Đồ uống">Đồ uống</option></select>
+          </label>
+        </div>
+        <p className="room-order-result-count" role="status">Hiển thị {visibleOrderMenu.length}/{orderMenu.length} món · Đã chọn {orderLines.length} món</p>
+        <div className="room-order-items" id="room-order-items">{visibleOrderMenu.length === 0 ? <div className="room-order-no-results">
+          {/* MSG01: thông báo khi không có món khớp từ khóa và bộ lọc. */}
+          <p>Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
+          <button type="button" disabled={orderSubmitting} onClick={() => { setOrderSearch(''); setOrderCategory('all'); }}>Đặt lại bộ lọc</button>
+        </div> : visibleOrderMenu.map((item) => {
           const quantity = orderQuantities[item.id] || 0;
           return <article className="room-order-item" key={item.id}>
             <div><strong>{item.name}</strong><span>{formatVnd(item.salePrice)}</span></div>

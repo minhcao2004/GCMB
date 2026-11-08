@@ -57,11 +57,11 @@ public class MenuItemRepository {
 
     public List<InventoryOption> inventoryOptions(UUID branchId) {
         return db.query("""
-            SELECT i.id,i.sku,i.name,u.name AS unit_name,i.active
+            SELECT i.id,i.sku,i.name,i.category,u.name AS unit_name,i.active
             FROM gcmb.inventory_item i JOIN gcmb.unit u ON u.id=i.unit_id
             WHERE i.branch_id=? ORDER BY i.active DESC,lower(i.name),i.sku
             """, (rs, row) -> new InventoryOption(rs.getObject("id", UUID.class), rs.getString("sku"),
-                rs.getString("name"), rs.getString("unit_name"), rs.getBoolean("active")), branchId);
+                rs.getString("name"), rs.getString("category"), rs.getString("unit_name"), rs.getBoolean("active")), branchId);
     }
 
     public boolean activeInventory(UUID branchId, UUID inventoryItemId) {

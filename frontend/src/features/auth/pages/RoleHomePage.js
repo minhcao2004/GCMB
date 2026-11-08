@@ -15,7 +15,6 @@ import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
-import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
 
 const names = {
   HEAD_OFFICE_MANAGER: 'Quản lý cấp cao',
@@ -123,20 +122,5 @@ export default function RoleHomePage({ role }) {
       )}
     </main>
   );
-
-  return <main className={`dashboard-page${user && ['HEAD_OFFICE_MANAGER','BRANCH_MANAGER'].includes(role) ? ' dashboard-page-manager' : ''}`}>
-    {user && role === 'HEAD_OFFICE_MANAGER' ? <HeadOfficeDashboard user={user} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : user ? <>
-      {role === 'BRANCH_MANAGER' ? <BranchManagerDashboard user={user} onBranchChange={setUser} busy={busy} onLogout={logout} onProfile={() => setProfileOpen(true)} /> : <>
-      <header className="dashboard-header">
-        <h1>Dashboard — {names[role]}</h1>
-        <button onClick={() => setProfileOpen(true)}>Thông tin tài khoản</button>
-        <button disabled={busy} onClick={logout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
-      </header>
-      {role === 'RECEPTIONIST' ? <EquipmentIncidentsPage user={user} /> : <p>Xin chào, <strong>{user.username}</strong> — {names[role]}.</p>}
-      </>}
-    </> : !error && <p role="status">Đang kiểm tra phiên đăng nhập…</p>}
-    {user && profileOpen && <AccountProfileDialog onClose={() => setProfileOpen(false)} />}
-    {error && <p className="dashboard-error" role="alert">{error} <button onClick={() => setRetry((value) => value + 1)}>Thử lại</button></p>}
-  </main>;
 
 }

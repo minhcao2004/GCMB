@@ -1,30 +1,56 @@
 package com.gcmb.backend.booking.service;
 
 import com.gcmb.backend.booking.exception.BookingFailure;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 @Component
 public class RefundEvidenceStorageService {
     // BR-115, BR-116: chỉ lưu tệp minh chứng đúng định dạng, tối đa 20.000.000 byte.
     private static final long MAX_FILE_SIZE = 20_000_000L;
+    private static final String CLOUD_PREFIX = "s3/";
+    private static final Logger log = LoggerFactory.getLogger(RefundEvidenceStorageService.class);
 
     private final Path storageRoot;
+    private final String bucket;
+    private final String region;
+    private final String endpoint;
+    private final boolean pathStyle;
+    private volatile S3Client client;
 
     public RefundEvidenceStorageService(
-            @Value("${gcmb.attachments.storage-dir:./data/attachments}") String storageDirectory) {
+            @Value("${gcmb.attachments.storage-dir:./data/attachments}") String storageDirectory,
+            @Value("${gcmb.attachments.s3.bucket:}") String bucket,
+            @Value("${gcmb.attachments.s3.region:us-east-1}") String region,
+            @Value("${gcmb.attachments.s3.endpoint:}") String endpoint,
+            @Value("${gcmb.attachments.s3.path-style:false}") boolean pathStyle) {
         storageRoot = Path.of(storageDirectory).toAbsolutePath().normalize();
+        this.bucket = bucket.trim();
+        this.region = region.trim();
+        this.endpoint = endpoint.trim();
+        this.pathStyle = pathStyle;
     }
 
     public StoredEvidence store(MultipartFile file) {
@@ -56,28 +82,82 @@ public class RefundEvidenceStorageService {
         }
 
         UUID id = UUID.randomUUID();
-        String objectKey = id + "." + type.extension();
+        String objectKey = CLOUD_PREFIX + id + "." + type.extension();
         String originalName = originalName(file.getOriginalFilename());
         try {
-            Files.createDirectories(storageRoot);
-            Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Không thể lưu ảnh chứng minh hoàn cọc.", exception);
+            s3().putObject(request -> request.bucket(bucket).key(objectKey).contentType(type.mimeType()),
+                RequestBody.fromBytes(bytes));
+        } catch (SdkException exception) {
+            throw unavailable(exception);
         }
         return new StoredEvidence(id, objectKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
     }
 
     public byte[] read(String objectKey) throws IOException {
-        return Files.readAllBytes(resolve(objectKey));
+        if (!objectKey.startsWith(CLOUD_PREFIX)) return Files.readAllBytes(resolve(objectKey));
+        try {
+            return s3().getObjectAsBytes(request -> request.bucket(bucket).key(objectKey)).asByteArray();
+        } catch (NoSuchKeyException exception) {
+            throw new IOException("Attachment not found", exception);
+        } catch (S3Exception exception) {
+            if (exception.statusCode() == 404) throw new IOException("Attachment not found", exception);
+            throw unavailable(exception);
+        } catch (SdkException exception) {
+            throw unavailable(exception);
+        }
     }
 
     public void deleteQuietly(String objectKey) {
         try {
-            Files.deleteIfExists(resolve(objectKey));
-        } catch (IOException ignored) {
-            // Metadata rolls back with the refund transaction; cleanup is best effort.
+            if (objectKey.startsWith(CLOUD_PREFIX)) {
+                s3().deleteObject(request -> request.bucket(bucket).key(objectKey));
+            } else {
+                Files.deleteIfExists(resolve(objectKey));
+            }
+        } catch (IOException | RuntimeException exception) {
+            // Metadata may already have rolled back or committed; cleanup is best effort.
+            log.warn("Could not remove attachment {}", objectKey, exception);
         }
+    }
+
+    private S3Client s3() {
+        if (bucket.isEmpty() || region.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Chưa cấu hình dịch vụ lưu trữ tệp. Vui lòng liên hệ quản trị viên.");
+        }
+        S3Client current = client;
+        if (current != null) return current;
+        synchronized (this) {
+            if (client == null) {
+                S3ClientBuilder builder = S3Client.builder().region(Region.of(region))
+                    .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(pathStyle)
+                        .chunkedEncodingEnabled(false).build());
+                if (!endpoint.isEmpty()) {
+                    URI uri = URI.create(endpoint);
+                    boolean localHttp = "http".equalsIgnoreCase(uri.getScheme())
+                        && ("localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost())
+                            || "::1".equals(uri.getHost()));
+                    if (!"https".equalsIgnoreCase(uri.getScheme()) && !localHttp) {
+                        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "Cấu hình dịch vụ lưu trữ tệp không hợp lệ. Vui lòng liên hệ quản trị viên.");
+                    }
+                    builder.endpointOverride(uri);
+                }
+                client = builder.build();
+            }
+            return client;
+        }
+    }
+
+    private ResponseStatusException unavailable(Exception exception) {
+        log.error("Cloud attachment storage failed", exception);
+        return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+            "Không thể kết nối dịch vụ lưu trữ tệp. Vui lòng thử lại sau.", exception);
+    }
+
+    @PreDestroy
+    public void close() {
+        if (client != null) client.close();
     }
 
     private Path resolve(String objectKey) {

@@ -296,7 +296,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
           </div>
           {form.pricingMode === 'COMBO' ? <div className={`booking-package-grid${showComboError ? ' is-invalid' : ''}`}>
             {combos.map((combo) => <button key={combo.id} type="button" className={`booking-package-choice${form.comboId === combo.id ? ' is-selected' : ''}`} onClick={() => { markTouched('comboId'); setFormError(''); setForm((current) => ({ ...current, comboId: combo.id })); }}>
-              <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>
+              <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>{(combo.includedFnbQuantity > 0 || combo.includedFoodQuantity > 0) && <small>Tặng {combo.includedFnbQuantity || 0} đồ uống · {combo.includedFoodQuantity || 0} đồ ăn (chọn lúc check-in)</small>}
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
           </div> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>

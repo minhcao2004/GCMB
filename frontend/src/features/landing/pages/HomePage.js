@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import PublicLayout from '../../../layouts/PublicLayout';
 import { BookingDialog, RoomDialog } from '../components/Dialogs';
 import Hero from '../components/Hero';
@@ -10,6 +11,8 @@ import { useLandingEffects } from '../hooks/useLandingEffects';
 
 // Kết hợp các khu vực giới thiệu và hộp thoại chọn chi nhánh/phòng.
 export default function HomePage() {
+  const { mrCode } = useParams();
+  const roomMenuPath = mrCode ? `/mr/${encodeURIComponent(mrCode.toUpperCase())}/menu` : '';
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [branchIndex, setBranchIndex] = useState(0);
@@ -20,6 +23,6 @@ export default function HomePage() {
   const closeBooking = useCallback(() => setBookingOpen(false), []);
   // Đóng hộp thoại chi tiết phòng.
   const closeRoom = useCallback(() => setSelectedRoom(null), []);
-  return <PublicLayout onBook={openBooking}><main id="main"><Hero /><IntroSection /><SpacesSection onSelectRoom={setSelectedRoom} /><ExperienceSection onBook={openBooking} /><PricingSection onBook={openBooking} /><LocationsSection onBook={openBooking} /><FaqSection /><FinalCta onBook={openBooking} /></main><RoomDialog room={selectedRoom} onClose={closeRoom} onBook={openBooking} /><BookingDialog isOpen={bookingOpen} branchIndex={branchIndex} onBranchChange={setBranchIndex} onClose={closeBooking} /></PublicLayout>;
+  return <PublicLayout onBook={openBooking} roomMenuPath={roomMenuPath}><main id="main"><Hero roomMenuPath={roomMenuPath} /><IntroSection /><SpacesSection onSelectRoom={setSelectedRoom} /><ExperienceSection onBook={openBooking} /><PricingSection onBook={openBooking} /><LocationsSection onBook={openBooking} /><FaqSection /><FinalCta onBook={openBooking} /></main><RoomDialog room={selectedRoom} onClose={closeRoom} onBook={openBooking} /><BookingDialog isOpen={bookingOpen} branchIndex={branchIndex} onBranchChange={setBranchIndex} onClose={closeBooking} /></PublicLayout>;
 }
 

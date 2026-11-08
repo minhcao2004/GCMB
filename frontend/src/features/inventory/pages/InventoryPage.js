@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import inventoryApi from '../services/inventoryApi';
+import { newReceiptLine, RECEIVING_UNITS, receiptAmount, receiptQuantity, receivingUnitName } from '../utils/receiptQuantity';
 import './inventory.css';
 
 const formatQuantity = (value) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(Number(value || 0));
-const formatVnd = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value || 0))}₫`;
+const formatVnd = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(typeof value === 'bigint' ? value : Number(value || 0))}₫`;
 const displayError = (error) => error.response?.data?.message || error.response?.data?.detail || error.message || 'Không thể hoàn tất thao tác.';
 const makeLocalDateTime = () => {
   const now = new Date();
@@ -139,12 +140,13 @@ export default function InventoryPage({ user }) {
   const receiptLines = useMemo(() => receiptDraft?.items || EMPTY_LINES, [receiptDraft]);
   const receiptSummary = useMemo(() => receiptLines.map((line) => {
     const item = items.find((row) => row.id === line.inventoryItemId);
-    const quantity = Number(line.quantity || 0);
+    const conversion = receiptQuantity(line);
+    const quantity = Number(conversion.value || 0);
     const unitCost = Number(line.unitCost || 0);
-    return { ...line, item, quantity, unitCost, amount: quantity * unitCost };
+    // BR-33: đơn giá theo đơn vị tồn kho, thành tiền theo số lượng đã quy đổi.
+    return { ...line, item, receivedQuantity: line.quantity, quantity, unitCost, conversion, amount: receiptAmount(conversion.value || '0', line.unitCost) ?? 0n };
   }).filter((line) => line.item), [receiptLines, items]);
-  const receiptTotalQuantity = receiptSummary.reduce((total, line) => total + line.quantity, 0);
-  const receiptTotalValue = receiptSummary.reduce((total, line) => total + line.amount, 0);
+  const receiptTotalValue = receiptSummary.reduce((total, line) => total + line.amount, 0n);
   const actualQuantityInput = String(adjustDraft?.actualQuantity ?? '').trim();
   const adjustActual = actualQuantityInput === '' ? null : Number(actualQuantityInput);
   // BR-35, BR-189: chỉ tính chênh lệch sau khi nhập số kiểm đếm hợp lệ; để trống không phải là 0.
@@ -189,7 +191,7 @@ export default function InventoryPage({ user }) {
   };
 
   const openReceipt = () => {
-    setReceiptDraft({ receivedAt: makeLocalDateTime(), supplierName: '', supplierInvoice: '', items: [{ id: newId(), inventoryItemId: '', quantity: '', unitCost: '' }] });
+    setReceiptDraft({ receivedAt: makeLocalDateTime(), supplierName: '', supplierInvoice: '', items: [newReceiptLine(newId())] });
     setEvidence(null);
     setError('');
     setScreen('receipt');
@@ -246,11 +248,17 @@ export default function InventoryPage({ user }) {
   };
 
   const updateReceiptLine = (id, key, value) => {
-    setReceiptDraft((draft) => ({ ...draft, items: draft.items.map((line) => line.id === id ? { ...line, [key]: value } : line) }));
+    setReceiptDraft((draft) => ({ ...draft, items: draft.items.map((line) => {
+      if (line.id !== id) return line;
+      // Đổi mặt hàng phải nhập lại quy cách và giá, tránh dùng nhầm quy cách của mặt hàng trước.
+      if (key === 'inventoryItemId') return { ...newReceiptLine(id), inventoryItemId: value };
+      if (key === 'receivingUnit') return { ...line, receivingUnit: value, quantity: '', unitsPerPack: '', customUnit: '' };
+      return { ...line, [key]: value };
+    }) }));
   };
 
   const addReceiptLine = () => setReceiptDraft((draft) => ({
-    ...draft, items: [...draft.items, { id: newId(), inventoryItemId: '', quantity: '', unitCost: '' }],
+    ...draft, items: [...draft.items, newReceiptLine(newId())],
   }));
 
   const removeReceiptLine = (id) => setReceiptDraft((draft) => ({
@@ -259,6 +267,21 @@ export default function InventoryPage({ user }) {
 
   const submitReceipt = async (event) => {
     event.preventDefault();
+    // BR-111, MSG02: từ chối tên nhà cung cấp chỉ chứa khoảng trắng.
+    if (!receiptDraft.supplierName.trim()) {
+      setError('Vui lòng bổ sung nhà cung cấp.');
+      return;
+    }
+    const invalidLine = receiptDraft.items.findIndex((line) => receiptQuantity(line).error);
+    if (invalidLine !== -1) {
+      setError(`Dòng ${invalidLine + 1}: ${receiptQuantity(receiptDraft.items[invalidLine]).error}`);
+      return;
+    }
+    const invalidPriceLine = receiptDraft.items.findIndex((line) => receiptAmount(receiptQuantity(line).value, line.unitCost) === null);
+    if (invalidPriceLine !== -1) {
+      setError(`Dòng ${invalidPriceLine + 1}: Đơn giá phải là số nguyên VND không âm, tối đa 18 chữ số.`);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -266,15 +289,17 @@ export default function InventoryPage({ user }) {
         receivedAt: new Date(receiptDraft.receivedAt).toISOString(),
         supplierName: receiptDraft.supplierName,
         supplierInvoice: receiptDraft.supplierInvoice,
-        items: receiptDraft.items.map(({ inventoryItemId, quantity, unitCost }) => ({
-          inventoryItemId, quantity: Number(quantity), unitCost: Number(unitCost),
+        // BR-32: API nhận số lượng theo đơn vị tồn kho; không cộng số thùng/lốc trực tiếp vào kho.
+        items: receiptDraft.items.map((line) => ({
+          inventoryItemId: line.inventoryItemId, quantity: receiptQuantity(line).value, unitCost: line.unitCost,
         })),
       };
       const result = await inventoryApi.receive(command, evidence);
       await reload();
       setEvidence(null);
       setScreen('stock');
-      setToastMessage(`Đã ghi nhận phiếu ${result.code}; tồn kho đã được cập nhật.`);
+      // MSG10: thông báo tạo phiếu nhập thành công.
+      setToastMessage(`Đã tạo phiếu nhập ${result.code}.`);
     } catch (submitError) {
       setError(displayError(submitError));
     } finally {
@@ -494,14 +519,34 @@ export default function InventoryPage({ user }) {
           <div className="inv-receipt-lines">
             {receiptLines.map((line) => {
               const item = items.find((row) => row.id === line.inventoryItemId);
+              const unitName = receivingUnitName(line, item);
+              const conversion = receiptQuantity(line);
+              const quantity = Number(conversion.value || 0);
+              const conversionStarted = line.quantity !== '' && (!line.receivingUnit || line.unitsPerPack !== '');
               return <div className="inv-receipt-line" key={line.id}>
                 <label className="inv-field inv-line-product"><span>Mặt hàng *</span><select required value={line.inventoryItemId} onChange={(event) => updateReceiptLine(line.id, 'inventoryItemId', event.target.value)}>
                   <option value="">Chọn mặt hàng</option>{activeItems.filter((option) => !receiptLines.some((other) => other.id !== line.id && other.inventoryItemId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.sku} · {option.name}</option>)}
-                </select><small>{item ? `${item.sku} · ${item.unitName}` : 'Chọn mặt hàng kho đang sử dụng'}</small></label>
-                <label className="inv-field"><span>SL nhận *</span><input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /></label>
-                <label className="inv-field"><span>Đơn giá *</span><input required type="number" min="0" step="1" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value)} /></label>
-                <div className="inv-line-total"><span>Thành tiền</span><strong>{formatVnd(Number(line.quantity || 0) * Number(line.unitCost || 0))}</strong></div>
+                </select><small>{item ? `Đơn vị tồn kho: ${item.unitName}` : 'Chọn mặt hàng kho đang sử dụng'}</small></label>
                 <button type="button" className="inv-remove-line" aria-label={`Bỏ dòng ${item?.name || 'mặt hàng'}`} disabled={receiptLines.length === 1} onClick={() => removeReceiptLine(line.id)}>Bỏ</button>
+                <label className="inv-field inv-line-quantity"><span>SL nhận *</span><input required disabled={!item || busy} type="number" min={line.receivingUnit ? '1' : '0.001'} max="999999999999999.999" step={line.receivingUnit ? '1' : '0.001'} value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /></label>
+                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
+                  <option value="">{item?.unitName || 'Đơn vị gốc'}</option>
+                  {RECEIVING_UNITS.filter((unit) => unit.toLocaleLowerCase('vi-VN') !== item?.unitName.toLocaleLowerCase('vi-VN')).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  <option value="CUSTOM">Khác…</option>
+                </select></label>
+                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><input required disabled={!item || busy} type="number" min="0" max="999999999999999999" step="1" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value)} /></label>
+                {line.receivingUnit === 'CUSTOM' && <label className="inv-field inv-line-custom-unit"><span>Tên đơn vị nhận *</span><input required disabled={busy} maxLength="30" value={line.customUnit} onChange={(event) => updateReceiptLine(line.id, 'customUnit', event.target.value)} placeholder="Ví dụ: Kiện, can…" /></label>}
+                {line.receivingUnit && <label className="inv-field inv-line-conversion"><span>Quy cách *</span>
+                  <span className="inv-pack-size"><span>1 {unitName || 'đơn vị nhận'} =</span><input required disabled={busy} aria-label={`Số ${item?.unitName || 'đơn vị gốc'} trong 1 ${unitName || 'đơn vị nhận'}`} type="number" min="0.001" max="999999999999999.999" step="0.001" value={line.unitsPerPack} onChange={(event) => updateReceiptLine(line.id, 'unitsPerPack', event.target.value)} /><span>{item?.unitName}</span></span>
+                  <small>Nhập quy cách thực tế của mặt hàng. Đơn giá ở trên tính cho 1 {item?.unitName}.</small>
+                </label>}
+                <div className="inv-line-result" aria-live="polite">
+                  <div className="inv-line-stock"><span>Số lượng nhập kho</span><strong>{!item || conversion.error ? '—' : `${formatQuantity(quantity)} ${item.unitName}`}</strong>
+                    {item && line.receivingUnit && !conversion.error && <small>{formatQuantity(line.quantity)} {unitName.toLocaleLowerCase('vi-VN')} × {formatQuantity(line.unitsPerPack)} {item.unitName}</small>}
+                    {conversionStarted && conversion.error && <small className="inv-danger-text">{conversion.error}</small>}
+                  </div>
+                  <div className="inv-line-total"><span>Thành tiền</span><strong>{formatVnd(receiptAmount(conversion.value || '0', line.unitCost) ?? 0n)}</strong></div>
+                </div>
               </div>;
             })}
           </div>
@@ -510,8 +555,12 @@ export default function InventoryPage({ user }) {
         <div className="inv-alert inv-alert-info">Chỉ ghi nhận hàng đã nhận thực tế. Không tự thanh toán nhà cung cấp khi nhập kho.</div>
       </form>
       <aside className="inv-summary inv-action-summary"><h2>Tóm tắt nhập kho</h2>
-        <p>{receiptSummary.length} mặt hàng · {formatQuantity(receiptTotalQuantity)} đơn vị</p>
-        <ul className="inv-summary-lines">{receiptSummary.map((line) => <li key={line.id}><span>{line.item.name}: {formatQuantity(line.quantity)} × {formatVnd(line.unitCost)}</span><strong>{formatVnd(line.amount)}</strong><small>Tồn sau: {formatQuantity(Number(line.item.quantity) + line.quantity)} {line.item.unitName}</small></li>)}</ul>
+        <p>{receiptSummary.length} mặt hàng · Số lượng theo đơn vị tồn kho của từng mặt hàng</p>
+        <ul className="inv-summary-lines">{receiptSummary.map((line) => <li key={line.id}><span>{line.item.name}</span>
+          {line.conversion.error ? <small>Chưa đủ số lượng hoặc quy cách hợp lệ</small> : <><span>{formatQuantity(line.quantity)} {line.item.unitName} × {formatVnd(line.unitCost)} / {line.item.unitName}</span>
+            {line.receivingUnit && <small>Nhận {formatQuantity(line.receivedQuantity)} {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} · 1 {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} = {formatQuantity(line.unitsPerPack)} {line.item.unitName}</small>}
+            <strong>{formatVnd(line.amount)}</strong><small>Tồn sau: {formatQuantity(Number(line.item.quantity) + line.quantity)} {line.item.unitName}</small></>}
+        </li>)}</ul>
         <div className="inv-summary-total"><span>Tổng giá trị</span><strong>{formatVnd(receiptTotalValue)}</strong></div>
         <div className="inv-alert inv-alert-info">Xác nhận phiếu mới tăng số tồn. Chi phí được xử lý qua đề nghị riêng.</div>
         <div className="inv-summary-actions"><button type="submit" form="inventory-receipt-form" className="inv-button inv-button-primary" disabled={busy || !receiptLines.length}>{busy ? 'Đang ghi nhận…' : 'Xác nhận nhập kho'}</button>

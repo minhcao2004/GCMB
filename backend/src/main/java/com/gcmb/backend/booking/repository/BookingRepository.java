@@ -56,7 +56,9 @@ public class BookingRepository {
     public record RoomTypeRow(UUID id, String code, String name, String mode, int capacity) {}
     public record ComboRow(UUID id, String code, int version, UUID roomTypeId, String name,
                            int durationMinutes, BigDecimal price, BigDecimal depositRequired,
-                           BigDecimal overtimeHourlyPrice, Instant validFrom, Instant validTo) {}
+                           BigDecimal overtimeHourlyPrice, Instant validFrom, Instant validTo,
+                           int includedFnbQuantity, int includedFoodQuantity) {}
+    public record ComboGiftRequirements(int drinkQuantity, int foodQuantity) {}
     public record RoomRow(UUID id, String code, String name, int capacity, String operatingStatus,
                           UUID roomTypeId, String roomTypeName) {}
     public record PricingRule(UUID id, String name, UUID branchId, LocalDate validFrom, LocalDate validTo,
@@ -114,22 +116,30 @@ public class BookingRepository {
 
     // Lấy combo hiện hành của hạng phòng.
     public List<ComboRow> combos(UUID roomTypeId) {
+        return combos(roomTypeId, null);
+    }
+
+    public List<ComboRow> combos(UUID roomTypeId, UUID branchId) {
         return db.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to
-            FROM gcmb.combo
-            WHERE active=true AND room_type_id=? AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+            FROM gcmb.combo c
+            WHERE active=true AND room_type_id=? AND (branch_id IS NULL OR branch_id=?) AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
             ORDER BY name,version DESC
-            """, (rs, rowNum) -> combo(rs), roomTypeId);
+            """, (rs, rowNum) -> combo(rs), roomTypeId, branchId);
     }
 
     // Tìm combo đang áp dụng để xác thực lựa chọn của client.
     public ComboRow combo(UUID id) {
+        return combo(id, null);
+    }
+
+    public ComboRow combo(UUID id, UUID branchId) {
         List<ComboRow> rows = db.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to
-            FROM gcmb.combo WHERE id=? AND active=true
-            """, (rs, rowNum) -> combo(rs), id);
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+            FROM gcmb.combo c WHERE id=? AND active=true AND (branch_id IS NULL OR branch_id=?)
+            """, (rs, rowNum) -> combo(rs), id, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -138,7 +148,8 @@ public class BookingRepository {
         return new ComboRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getInt("version"),
             rs.getObject("room_type_id", UUID.class), rs.getString("name"), rs.getInt("duration_minutes"),
             rs.getBigDecimal("price"), rs.getBigDecimal("deposit_required"), rs.getBigDecimal("overtime_hourly_price"),
-            instant(rs, "valid_from"), instant(rs, "valid_to"));
+            instant(rs, "valid_from"), instant(rs, "valid_to"), rs.getInt("included_fnb_quantity"),
+            rs.getInt("included_food_quantity"));
     }
 
     // Lấy các rule giá có thể bao phủ khoảng ngày cần báo giá.
@@ -294,6 +305,20 @@ public class BookingRepository {
                                      status,refund_cutoff_minutes,created_by,note)
             VALUES (?,?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
             """, UUID.class, branchId, code, contactName, contactPhone, guestCount, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
+    }
+
+    public void setComboGiftQuantities(UUID bookingId, int drinks, int food) {
+        db.update("UPDATE gcmb.booking SET combo_included_drink_quantity=?,combo_included_food_quantity=? WHERE id=?",
+            drinks, food, bookingId);
+    }
+
+    public ComboGiftRequirements comboGiftRequirements(UUID bookingId, UUID branchId) {
+        List<ComboGiftRequirements> rows = db.query("""
+            SELECT combo_included_drink_quantity,combo_included_food_quantity
+            FROM gcmb.booking WHERE id=? AND branch_id=?
+            """,(rs,n)->new ComboGiftRequirements(rs.getInt("combo_included_drink_quantity"),
+                rs.getInt("combo_included_food_quantity")),bookingId,branchId);
+        return rows.isEmpty()?null:rows.get(0);
     }
 
     // Cập nhật dữ liệu liên hệ và giờ hẹn của booking.

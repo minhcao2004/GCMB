@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -152,6 +154,13 @@ public class DepositManagementService {
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
 
         RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? evidenceStorage.store(image) : null;
+        if (evidence != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) evidenceStorage.deleteQuietly(evidence.objectKey());
+                }
+            });
+        }
         try {
             if (evidence != null) {
                 deposits.insertAttachment(evidence.id(), evidence.objectKey(), evidence.originalName(),
@@ -161,7 +170,9 @@ public class DepositManagementService {
                     evidence == null ? null : evidence.id()))
                 throw refundAlreadyProcessed();
         } catch (RuntimeException exception) {
-            if (evidence != null) evidenceStorage.deleteQuietly(evidence.objectKey());
+            if (evidence != null && !TransactionSynchronizationManager.isSynchronizationActive()) {
+                evidenceStorage.deleteQuietly(evidence.objectKey());
+            }
             throw exception;
         }
         return new DepositDtos.RefundCompletionResult(locked.id(), locked.bookingId(), locked.amount(), "PAID");

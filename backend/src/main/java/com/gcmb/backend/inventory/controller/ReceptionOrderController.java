@@ -4,6 +4,7 @@ import com.gcmb.backend.audit.service.MutationAudit;
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ActiveBooking;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ConfirmRequest;
+import com.gcmb.backend.inventory.dto.FoodOrderDtos.ComboGiftOption;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderView;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServiceStatusCommand;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServingEmployee;
@@ -52,6 +53,11 @@ public class ReceptionOrderController {
     @GetMapping("/menu")
     public List<PublicMenuItemView> menu(@AuthenticationPrincipal Identity actor) {
         return service.receptionMenu(actor);
+    }
+
+    @GetMapping("/combo-gift-menu")
+    public List<ComboGiftOption> comboGiftMenu(@AuthenticationPrincipal Identity actor) {
+        return service.comboGiftMenu(actor);
     }
 
     @PostMapping

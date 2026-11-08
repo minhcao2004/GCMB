@@ -36,7 +36,7 @@ public class BookingPricingService {
             throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu.");
         String normalizedMode = mode == null || mode.isBlank() ? "HOURLY" : mode.trim().toUpperCase();
         if ("COMBO".equals(normalizedMode)) {
-            var result = comboQuote(roomTypeId, start, end, comboId);
+            var result = comboQuote(roomTypeId, branchId, start, end, comboId);
             return new BookingDtos.PriceQuote(result.pricingMode(), result.expectedAmount(), depositFor(result.expectedAmount()), result.charges());
         }
         if (!"HOURLY".equals(normalizedMode)) throw new BookingFailure(400, "pricingMode", "Hình thức tính giá không hợp lệ");
@@ -64,9 +64,9 @@ public class BookingPricingService {
     }
 
     // BR-13: lưu giá và điều khoản combo hiện hành vào snapshot của booking.
-    private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, Instant start, Instant end, UUID comboId) {
+    private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, UUID branchId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
-        ComboRow combo = repository.combo(comboId);
+        ComboRow combo = repository.combo(comboId, branchId);
         if (combo == null) throw new BookingFailure(400, "comboId", "Vui lòng bổ sung combo phù hợp.");
         if (!roomTypeId.equals(combo.roomTypeId()))
             throw new BookingFailure(400, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");

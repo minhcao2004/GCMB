@@ -65,7 +65,7 @@ public class EquipmentAssetRepository {
     public Options options(UUID branchId, UUID assetId) {
         List<CategoryOption> categories = db.query("""
             SELECT id,code,name,active FROM gcmb.asset_category
-            WHERE branch_id=? AND (active OR id=(SELECT category_id FROM gcmb.asset WHERE id=? AND branch_id=?))
+            WHERE (branch_id IS NULL OR branch_id=?) AND (active OR id=(SELECT category_id FROM gcmb.asset WHERE id=? AND branch_id=?))
             ORDER BY active DESC,code
             """, (r,n) -> new CategoryOption(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"), r.getBoolean("active")),
             branchId, assetId, branchId);
@@ -88,7 +88,7 @@ public class EquipmentAssetRepository {
     public boolean categoryAvailable(UUID branchId, UUID categoryId, UUID assetId) {
         Integer count = db.queryForObject("""
             SELECT count(*) FROM gcmb.asset_category c
-            WHERE c.id=? AND ((c.branch_id=? AND c.active) OR EXISTS
+            WHERE c.id=? AND (((c.branch_id IS NULL OR c.branch_id=?) AND c.active) OR EXISTS
               (SELECT 1 FROM gcmb.asset a WHERE a.id=? AND a.branch_id=? AND a.category_id=c.id))
             """, Integer.class, categoryId, branchId, assetId, branchId);
         return count != null && count > 0;

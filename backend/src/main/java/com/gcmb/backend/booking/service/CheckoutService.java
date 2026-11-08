@@ -11,6 +11,7 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -38,19 +39,22 @@ public class CheckoutService {
     private final BookingService bookings;
     private final SePaySettings sepay;
     private final ObjectMapper json;
+    private final FoodOrderService foodOrders;
 
     public CheckoutService(
         JdbcTemplate db,
         BookingRepository repository,
         BookingService bookings,
         SePaySettings sepay,
-        ObjectMapper json
+        ObjectMapper json,
+        FoodOrderService foodOrders
     ) {
         this.db = db;
         this.repository = repository;
         this.bookings = bookings;
         this.sepay = sepay;
         this.json = json;
+        this.foodOrders = foodOrders;
     }
 
     private Map<String, Object> depositStatus(Identity actor, UUID bookingId) {
@@ -514,6 +518,8 @@ public class CheckoutService {
             409,
             "Không có phiên sử dụng đang hoạt động."
         );
+        // Quà combo đã được khách chọn lúc check-in; chỉ xuất kho khi bill được thanh toán đủ.
+        foodOrders.deductComboGiftStock(actor, bookingId);
         // Tiền mặt chỉ thành khoản thu chính thức cùng giao dịch hoàn tất bill.
         if (cash.signum() > 0) {
             BigDecimal tendered = decimal(bill, "plannedCashTendered");

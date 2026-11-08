@@ -305,8 +305,9 @@ export default function MenuItemsPage({ user }) {
       setError('Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.');
       return;
     }
+    // BR-111, MSG02: hàng hóa phải chọn mặt hàng kho đã có.
     if (draft.kind === 'PACKAGED' && !draft.inventoryItemId) {
-      setError('Hàng hóa cần liên kết với một mặt hàng kho.');
+      setError('Vui lòng bổ sung mặt hàng kho.');
       return;
     }
     if (draft.description.length > 1000) {
@@ -617,6 +618,13 @@ function MenuItemInfo({ item, branchName, titleId, onClose, closeDisabled = fals
 function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions, imageFile, imagePreview,
   reviewing, saving, onChange, onImage, onRemoveImage, onReview, onConfirm, onBackToEdit, onBack }) {
   const [priceFocused, setPriceFocused] = useState(false);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const categoryOptions = [draft.category, ...categories, ...inventoryOptions.map((item) => item.category)]
+    .filter((value, index, values) => {
+      if (!value || !value.trim()) return false;
+      const key = value.trim().toLocaleLowerCase('vi-VN');
+      return values.findIndex((candidate) => candidate && candidate.trim().toLocaleLowerCase('vi-VN') === key) === index;
+    });
   const previewUrl = imagePreview || apiAssetUrl(draft.imageUrl);
   const previewName = imageFile?.name || draft.imageOriginalName;
   const previewMime = imageFile?.type || draft.imageMimeType;
@@ -644,17 +652,6 @@ function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions,
     </header>
     <form className="menu-editor-form" onSubmit={onReview}>
       {!reviewing ? <fieldset className="menu-editor-fields" disabled={saving}>
-        <label className="menu-editor-field" htmlFor="menu-item-name">Tên món *
-          <input id="menu-item-name" value={draft.name} onChange={(event) => onChange('name', event.target.value)}
-            maxLength={200} autoComplete="off" required />
-        </label>
-
-        <label className="menu-editor-field" htmlFor="menu-item-category">Danh mục
-          <input id="menu-item-category" list="menu-category-options" value={draft.category}
-            onChange={(event) => onChange('category', event.target.value)} maxLength={200} required />
-        </label>
-        <datalist id="menu-category-options">{categories.map((value) => <option key={value} value={value} />)}</datalist>
-
         <label className="menu-editor-field" htmlFor="menu-item-kind">Loại
           <select id="menu-item-kind" value={draft.kind} onChange={(event) => {
             onChange('kind', event.target.value);
@@ -666,6 +663,49 @@ function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions,
           </select>
         </label>
 
+        {draft.kind === 'PACKAGED' && <>
+          <label className="menu-editor-field" htmlFor="menu-item-inventory">Mặt hàng kho *
+            <select id="menu-item-inventory" value={draft.inventoryItemId} onChange={(event) => {
+              const id = event.target.value;
+              onChange('inventoryItemId', id);
+              const chosen = inventoryOptions.find((item) => item.id === id);
+              if (mode === 'create' && chosen) {
+                onChange('name', chosen.name);
+                onChange('category', chosen.category);
+              }
+            }} required>
+              <option value="">Chọn mặt hàng đã tạo trong kho</option>
+              {inventoryOptions.map((item) => <option key={item.id} value={item.id}
+                disabled={!item.active && item.id !== draft.inventoryItemId}>
+                {item.sku} · {item.name} · {item.unitName}{item.active ? '' : ' · Ngừng dùng'}
+              </option>)}
+            </select>
+          </label>
+          {mode === 'create' && <p className="menu-inventory-note" role="note">
+            Chọn mặt hàng đã tạo trong kho để điền tên và danh mục. Nếu chưa có, hãy tạo mặt hàng tại Quản lý kho trước.
+          </p>}
+        </>}
+
+        <label className="menu-editor-field" htmlFor="menu-item-name">Tên món *
+          <input id="menu-item-name" value={draft.name} onChange={(event) => onChange('name', event.target.value)}
+            maxLength={200} autoComplete="off" required />
+        </label>
+
+        <div className="menu-editor-field">
+          <label htmlFor="menu-item-category">Danh mục *</label>
+          {addingCategory ? <input id="menu-item-category" value={draft.category}
+            onChange={(event) => onChange('category', event.target.value)} maxLength={200} required
+            placeholder="Nhập danh mục mới" /> :
+            <select id="menu-item-category" value={draft.category} onChange={(event) => onChange('category', event.target.value)} required>
+              <option value="">Chọn danh mục</option>
+              {categoryOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>}
+          <button type="button" className="menu-category-toggle" onClick={() => {
+            if (!addingCategory) onChange('category', '');
+            setAddingCategory((current) => !current);
+          }}>{addingCategory ? 'Chọn danh mục có sẵn' : 'Thêm danh mục mới'}</button>
+        </div>
+
         <label className="menu-editor-field" htmlFor="menu-item-price">Giá bán *
           <div className="menu-price-input">
             <input id="menu-item-price" type="text" inputMode="numeric" maxLength={23}
@@ -675,19 +715,6 @@ function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions,
             <span aria-hidden="true">đ</span>
           </div>
         </label>
-
-        {draft.kind === 'PACKAGED' && <>
-          <label className="menu-editor-field" htmlFor="menu-item-inventory">Liên kết kho
-            <select id="menu-item-inventory" value={draft.inventoryItemId}
-              onChange={(event) => onChange('inventoryItemId', event.target.value)} required>
-              <option value="">Chọn mặt hàng kho</option>
-              {inventoryOptions.map((item) => <option key={item.id} value={item.id}
-                disabled={!item.active && item.id !== draft.inventoryItemId}>
-                {item.sku} · {item.name} · {item.unitName}{item.active ? '' : ' · Ngừng dùng'}
-              </option>)}
-            </select>
-          </label>
-        </>}
 
         <label className="menu-editor-field" htmlFor="menu-item-active">Tình trạng bán
           <select id="menu-item-active" value={String(draft.active)}

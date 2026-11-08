@@ -73,7 +73,7 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. The current backend contains eight peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, and `workforce`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `dashboard`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +82,7 @@ The backend is deployed as one application. The current backend contains eight p
 
 ## Project Structure
 
-The tree below reflects the current repository structure. Inventory and workforce are active backend features; finance remains planned.
+The tree below reflects the current repository structure. Inventory, workforce, and dashboard are active backend features. Payroll and cash closing are active; other finance workflows remain planned.
 
 ```text
 GCMB/
@@ -94,6 +94,7 @@ GCMB/
 │   │   ├── branch/
 │   │   ├── pricing/
 │   │   ├── booking/
+│   │   ├── dashboard/
 │   │   ├── inventory/
 │   │   ├── workforce/
 │   │   └── BackendApplication.java
@@ -115,6 +116,8 @@ GCMB/
 │   │   │   ├── backoffice/
 │   │   │   ├── booking/
 │   │   │   ├── branch/
+│   │   │   ├── dashboard/
+│   │   │   ├── finance/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
 │   │   │   ├── landing/
@@ -145,10 +148,11 @@ GCMB/
 | `audit` | Mutation audit recording and audit-history lookup. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
-| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, and movement history. |
-| `workforce` | Staff records, branch assignments and transfers, shift schedules, and attendance. Payroll remains planned. |
-| `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
+| `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
+| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
+| `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
+| `dashboard` | Chain and branch performance summaries; accountant financial reports and period operations. |
+| `finance` (frontend) | Payroll and cash-closing screens. Funds, expenses, and reimbursements remain planned. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 

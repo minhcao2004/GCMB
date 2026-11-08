@@ -6,6 +6,7 @@
  * Description: Dashboard, điều hướng, đồng hồ và hồ sơ quản lý cơ sở.
  */
 
+import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -43,7 +44,10 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
   const [searchParams, setSearchParams] = useSearchParams();
   const contentRef = useRef(null);
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
-  const active = branchNav[activeIndex] || 'Phòng';
+  const active = branchNav[activeIndex] || 'Tổng quan';
+  useLayoutEffect(() => {
+    if (active === 'Thực đơn F&B' || active === 'Kho hàng') window.scrollTo(0, 0);
+  }, [active]);
   const [search, setSearch] = useState('');
   const [accountSearch, setAccountSearch] = useState('');
   const [branches, setBranches] = useState([]);
@@ -101,12 +105,6 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
         </button>)}
       </nav>
-      <div className="manager-sidebar-footer">
-        <strong>GenZ Cinema &amp; Music Box</strong>
-        <p>Cơ sở {user.branchName || 'được phân quyền'}</p>
-        <p>Quản lý cơ sở · {user.username}</p>
-        <button disabled={busy} onClick={onLogout}>{busy ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
-      </div>
     </aside>
     <div className="manager-workspace">
       <DashboardTopbar role="QUẢN LÝ CƠ SỞ" page={active} user={user} busy={busy || switching} onProfile={onProfile} onLogout={onLogout}
@@ -121,6 +119,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
         {switching ? <p role="status">Đang chuyển cơ sở…</p>
+          : active === 'Tổng quan' ? <PerformanceDashboard user={user} onNavigate={selectScreen} />
           : active === 'Chốt quỹ' ? <CashClosingPage user={user} readOnly={readOnly} />
           : active === 'Tài khoản' ? <AccountsPage actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} />
             : active === 'Nhân sự' ? <StaffPage user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} />
