@@ -29,3 +29,6 @@ gcmb:
   attachments:
     # Configure a persistent shared directory for deployed or multi-instance environments.
     storage-dir: ${GCMB_ATTACHMENT_STORAGE_DIR:./data/attachments}
+  google-drive:
+    credentials-file: ${GOOGLE_DRIVE_CREDENTIALS_FILE:}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}

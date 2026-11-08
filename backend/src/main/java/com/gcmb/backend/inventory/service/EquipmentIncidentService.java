@@ -90,8 +90,20 @@ public class EquipmentIncidentService {
     @Transactional public void repair(Identity actor, UUID requested, UUID id, RepairCommand c, MultipartFile invoice, MultipartFile transferProof) {
         UUID b=branch(actor,requested); manager(actor);
         if(c==null || c.vendorName()==null || c.vendorName().isBlank() || c.outcome()==null || c.outcome().isBlank() || c.actualCost()==null || c.actualCost().signum()<0 || c.completedOn()==null || c.assetCondition()==null || !Set.of("IN_USE","BROKEN","REPAIRING").contains(c.assetCondition()) || invoice==null || invoice.isEmpty() || transferProof==null || transferProof.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Nhập đủ kết quả sửa chữa, hóa đơn, chứng từ chuyển khoản, chi phí và ngày hoàn tất");
+        fileStorage.requireDriveConfigured();
         if(repository.repair(b,id,actor.id(),c)==0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sự cố chưa được đánh giá sửa chữa hoặc không thuộc cơ sở này");
-        var invoiceFile=fileStorage.store(invoice); var transferFile=fileStorage.store(transferProof); try { repository.saveEvidence(invoiceFile,actor.id()); repository.saveEvidence(transferFile,actor.id()); if(!repository.setRepairEvidence(b,id,invoiceFile.id(),transferFile.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy kết quả sửa chữa"); } catch(RuntimeException e) { fileStorage.deleteQuietly(invoiceFile.objectKey()); fileStorage.deleteQuietly(transferFile.objectKey()); throw e; }
+        EquipmentAssetFileStorageService.StoredFile invoiceFile=null, transferFile=null;
+        try {
+            invoiceFile=fileStorage.storeInDrive(invoice);
+            transferFile=fileStorage.storeInDrive(transferProof);
+            repository.saveEvidence(invoiceFile,actor.id());
+            repository.saveEvidence(transferFile,actor.id());
+            if(!repository.setRepairEvidence(b,id,invoiceFile.id(),transferFile.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy kết quả sửa chữa");
+        } catch(RuntimeException e) {
+            if(invoiceFile!=null) fileStorage.deleteQuietly(invoiceFile.objectKey());
+            if(transferFile!=null) fileStorage.deleteQuietly(transferFile.objectKey());
+            throw e;
+        }
         repository.updateAssetCondition(b,id,c.assetCondition());
         repository.logProgress(actor.id(),id,"VERIFIED",c.outcome().trim(),c.completedOn());
     }

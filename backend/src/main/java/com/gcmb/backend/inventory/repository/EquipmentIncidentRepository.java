@@ -121,7 +121,7 @@ public class EquipmentIncidentRepository {
 
     // UC-71/BR-45: Chỉ cho lưu nghiệm thu từ luồng sửa chữa đã được đánh giá.
     public int repair(UUID branch, UUID id, UUID actor, RepairCommand c) {
-        return db.update("WITH target AS (SELECT i.id,i.asset_id FROM gcmb.asset_incident i WHERE i.id=? AND i.branch_id=? AND i.status='IN_PROGRESS' AND i.handling_plan IN ('REPAIR','REPLACE') FOR UPDATE), ins AS (INSERT INTO gcmb.asset_repair(incident_id,vendor_name,actual_cost,finished_at,outcome,verified_by,verified_at) SELECT id,?,?,?::date::timestamptz,?, ?,CURRENT_TIMESTAMP FROM target RETURNING incident_id) UPDATE gcmb.asset_incident i SET status='VERIFIED' FROM ins WHERE i.id=ins.incident_id",id,branch,c.vendorName().trim(),c.actualCost(),c.completedOn(),c.outcome().trim(),actor);
+        return db.update("WITH target AS (SELECT i.id,COALESCE((SELECT MIN(p.created_at) FROM gcmb.asset_incident_progress p WHERE p.incident_id=i.id AND p.status='IN_PROGRESS'),i.created_at) started_at FROM gcmb.asset_incident i WHERE i.id=? AND i.branch_id=? AND i.status='IN_PROGRESS' AND i.handling_plan IN ('REPAIR','REPLACE') FOR UPDATE), ins AS (INSERT INTO gcmb.asset_repair(incident_id,vendor_name,actual_cost,started_at,finished_at,outcome,verified_by,verified_at) SELECT id,?,?,started_at,?::date::timestamptz,?, ?,CURRENT_TIMESTAMP FROM target RETURNING incident_id) UPDATE gcmb.asset_incident i SET status='VERIFIED' FROM ins WHERE i.id=ins.incident_id",id,branch,c.vendorName().trim(),c.actualCost(),c.completedOn(),c.outcome().trim(),actor);
     }
 
     // UC-71: Cập nhật tình trạng tài sản sau khi ghi nhận kết quả đã nghiệm thu.

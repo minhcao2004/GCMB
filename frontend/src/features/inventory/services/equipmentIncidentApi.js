@@ -20,6 +20,7 @@ export const equipmentIncidentApi={
  progress:(id,body)=>mutate('put',`${root('BRANCH_MANAGER')}/${id}/progress`,body),
  close:(id,note)=>mutate('put',`${root('BRANCH_MANAGER')}/${id}/close`,{note}),
  history:(id,role)=>apiClient.get(`${root(role)}/${id}/progress`).then(r=>r.data),
+ document:(id,kind,role)=>apiClient.get(`${root(role)}/${id}/repair-documents/${kind}`,{responseType:'blob'}),
  transfers:(headOffice,branchId)=>apiClient.get(`/${headOffice?'head-office':'branch-management'}/equipment-transfers`,{params:headOffice?{branchId}:{}}).then(r=>r.data),
  createTransfer:(body)=>mutate('post','/head-office/equipment-transfers',body).then(r=>r.data),
  handover:(id)=>mutate('put',`/branch-management/equipment-transfers/${id}/handover`,{}),

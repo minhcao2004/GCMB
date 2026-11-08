@@ -26,15 +26,30 @@ import org.springframework.web.server.ResponseStatusException;
 @Component
 public class EquipmentAssetFileStorageService {
     private static final long MAX_BYTES = 20_000_000L;
+    private static final String DRIVE_PREFIX = "gdrive:";
     private final Path storageRoot;
+    private final GoogleDriveFileStorageService driveStorage;
 
     // BR-116: Tất cả chứng từ tài sản dùng cùng thư mục quản lý file đã cấu hình cho ứng dụng.
-    public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory) {
+    public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory,
+            GoogleDriveFileStorageService driveStorage) {
         storageRoot = Path.of(directory).toAbsolutePath().normalize();
+        this.driveStorage = driveStorage;
     }
 
     // BR-115/BR-116: Chỉ nhận file hợp lệ có nội dung nhận diện được và kích thước từ 1 đến 20 MB.
     public StoredFile store(MultipartFile file) {
+        return store(file, false);
+    }
+
+    public StoredFile storeInDrive(MultipartFile file) {
+        driveStorage.requireConfigured();
+        return store(file, true);
+    }
+
+    public void requireDriveConfigured() { driveStorage.requireConfigured(); }
+
+    private StoredFile store(MultipartFile file, boolean useDrive) {
         if (file == null || file.isEmpty()) throw invalid("Vui lòng chọn ảnh thiết bị");
         if (file.getSize() > MAX_BYTES) throw invalid("Ảnh thiết bị không được vượt quá 20 MB");
         byte[] bytes;
@@ -44,12 +59,18 @@ public class EquipmentAssetFileStorageService {
         FileType type = FileType.detect(bytes);
         if (type == null) throw invalid("Chỉ nhận JPEG, PNG, WebP, HEIC, HEIF hoặc PDF đúng định dạng");
         UUID id = UUID.randomUUID();
-        String objectKey = id + "." + type.extension;
-        try {
-            Files.createDirectories(storageRoot);
-            Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không lưu được ảnh thiết bị", e); }
         String sourceName = sourceName(file);
+        String objectKey;
+        if (useDrive) {
+            String driveId = driveStorage.upload("GCMB-"+id+"-"+sourceName, type.mime, bytes);
+            objectKey = DRIVE_PREFIX+driveId;
+        } else {
+            objectKey = id + "." + type.extension;
+            try {
+                Files.createDirectories(storageRoot);
+                Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không lưu được ảnh thiết bị", e); }
+        }
         return new StoredFile(id, objectKey, sourceName, type.mime, bytes.length, sha256(bytes), bytes);
     }
 
@@ -60,10 +81,16 @@ public class EquipmentAssetFileStorageService {
     }
 
     // BR-115: Chỉ đọc file theo khóa lưu nội bộ, không nhận đường dẫn tùy ý từ request.
-    public byte[] read(String objectKey) throws IOException { return Files.readAllBytes(resolve(objectKey)); }
+    public byte[] read(String objectKey) throws IOException {
+        if (objectKey != null && objectKey.startsWith(DRIVE_PREFIX)) return driveStorage.download(objectKey.substring(DRIVE_PREFIX.length()));
+        return Files.readAllBytes(resolve(objectKey));
+    }
 
     // BR-118: Dọn file mới tải lên nếu giao dịch ghi metadata hoặc liên kết tài sản thất bại.
-    public void deleteQuietly(String objectKey) { try { Files.deleteIfExists(resolve(objectKey)); } catch (IOException ignored) { /* cleanup best effort */ } }
+    public void deleteQuietly(String objectKey) {
+        if (objectKey != null && objectKey.startsWith(DRIVE_PREFIX)) { driveStorage.deleteQuietly(objectKey.substring(DRIVE_PREFIX.length())); return; }
+        try { Files.deleteIfExists(resolve(objectKey)); } catch (IOException ignored) { /* cleanup best effort */ }
+    }
 
     // BR-115: Chặn object key thoát khỏi thư mục file đã cấu hình.
     private Path resolve(String key) {
