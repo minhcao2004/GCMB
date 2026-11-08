@@ -9,6 +9,7 @@
  */
 
 import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -70,6 +71,8 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
       {activeTab === 'Tổng quan' ? (
         <PerformanceDashboard user={user} isChain />
+      ) : activeTab === 'Báo cáo kinh doanh' ? (
+        <AccountantFinancePage reportsOnly />
       ) : activeTab === 'Cơ sở' ? (
         <BranchManagementPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Phòng & bảng giá' ? (

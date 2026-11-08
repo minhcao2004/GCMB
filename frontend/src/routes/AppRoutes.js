@@ -17,6 +17,7 @@ import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
+import AccountantFinancePage from '../features/dashboard/AccountantFinancePage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
 import HomePage from '../features/landing/pages/HomePage';
@@ -48,7 +49,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
-    <Route path="/ke-toan" element={<AccountantRefundPage />} />
+    <Route path="/ke-toan" element={<AccountantFinancePage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="*" element={<Navigate to="/" replace />} />
