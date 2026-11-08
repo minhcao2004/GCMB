@@ -62,6 +62,7 @@ public class DashboardController {
         // BR-102, BR-211: bill hoàn tất, theo thời điểm hoàn tất tại múi giờ của cơ sở; tiền cọc chưa dùng không phải doanh thu.
         // BR-103, BR-107: cộng OPEX, lương và ứng lương đã trả; tách CAPEX, loại chuyển quỹ khỏi chi phí vận hành.
         // BR-104, BR-105: lợi nhuận trừ chi vận hành và lương; biên chỉ tính khi thu > 0.
+        // BR-106: dòng tiền thuần lấy tổng bút toán thu vào trừ bút toán thu ra trong sổ tiền.
         return db.queryForList("""
             SELECT b.id, b.code, b.name, b.address, b.status, b.timezone,
                 COALESCE(revenue.amount,0) AS revenue, COALESCE(revenue.bills,0) AS "billCount",

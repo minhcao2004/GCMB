@@ -58,6 +58,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     finally { setBusy(false); }
   }
 
+  // BR-100/101: xác nhận điều chỉnh được ghi riêng, liên kết giao dịch gốc và không sửa giao dịch gốc.
   async function submitAdjustment(event) {
     event.preventDefault(); setBusy(true); setError('');
     try {
