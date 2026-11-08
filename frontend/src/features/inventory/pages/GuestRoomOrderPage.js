@@ -22,6 +22,7 @@ const statusText = {
   SERVED: 'Đã phục vụ', REJECTED: 'Không thể phục vụ yêu cầu này', CANCELLED: 'Đã hủy',
 };
 const newKey = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const categoryKey = (value) => value?.trim().toLocaleLowerCase('vi-VN');
 
 function MenuItemImage({ item }) {
   const src = apiAssetUrl(item.imageUrl);
@@ -116,8 +117,10 @@ export default function GuestRoomOrderPage() {
     return () => window.clearInterval(timer);
   }, [room, refreshOrders]);
 
-  const categories = useMemo(() => ['Tất cả', ...new Set(items.map((item) => item.category).filter(Boolean))], [items]);
-  const visibleItems = useMemo(() => items.filter((item) => category === 'Tất cả' || item.category === category), [items, category]);
+  const categories = useMemo(() => ['Tất cả', ...new Map(items.map(({ category: name }) =>
+    [categoryKey(name), name?.trim().replace(/^./u, (letter) => letter.toLocaleUpperCase('vi-VN'))]
+  ).filter(([key]) => key)).values()], [items]);
+  const visibleItems = useMemo(() => items.filter((item) => category === 'Tất cả' || categoryKey(item.category) === categoryKey(category)), [items, category]);
   const cartLines = useMemo(() => items.filter((item) => cart[item.id] > 0), [items, cart]);
   const cartTotal = cartLines.reduce((sum, item) => sum + Number(item.salePrice || 0) * cart[item.id], 0);
   const setQuantity = (id, amount) => setCart((current) => {

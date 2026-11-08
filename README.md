@@ -228,8 +228,8 @@ GCMB/
 | `landing` (frontend) | Public service introduction using the existing marketing content. Room QR links open `/mr/:mrCode`; the room-specific menu is at `/mr/:mrCode/menu`, with navigation back to services. Marketing remains accessible without an active stay; ordering still requires a valid in-house room session (BR-27). |
 | `inventory` | F&B catalog, selection of existing inventory items when creating packaged menu goods, guest QR menu and cart persistence across reloads, room/staff order processing, room-screen QR-order dialogs and service-order pending checks, service-order name search (with or without Vietnamese accents) and food/drink category filtering that retain selected quantities, service assignment, polled arrival alerts and room bell indicators, inventory item management, stock receipts with per-line package-to-stock-unit conversion, adjustments, and movement history. |
 | `workforce` | Staff records, branch assignments/transfers, shift schedules, and attendance. Payroll remains planned. |
-| `dashboard` | Read-only chain and authorized branch performance summaries from completed bills and paid expenses; current branch room and incident counts. |
-| `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
+| `dashboard` | Chain and authorized branch performance summaries; accountant monthly and expense reports, financial-period closing, transaction adjustments, and tax-data export. |
+| `finance` (planned) | Fund management, expense approvals and payments, reimbursements, and daily cash closing and reconciliation. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
