@@ -8,12 +8,20 @@
 
 import api from '../../../../api/client';
 
-const path = '/head-office/accounts';
+// UC-04/05: phạm vi vẫn được kiểm tra lại tại server.
+const path = (scope) => (scope ? '/branch-management/accounts' : '/head-office/accounts');
+const headers = (scope) => (scope ? { 'X-GCMB-Branch-Id': scope } : {});
 export const accountApi = {
-  list: async (params) => (await api.get(path, { params })).data,
-  options: async () => (await api.get(`${path}/options`)).data,
-  create: async (body) => {
+  list: async (params, scope) =>
+    (await api.get(path(scope), { params, headers: headers(scope) })).data,
+  options: async (scope) =>
+    (await api.get(`${path(scope)}/options`, { headers: headers(scope) })).data,
+  create: async (body, scope) => {
     const { data: csrf } = await api.get('/auth/csrf');
-    return (await api.post(path, body, { headers: { [csrf.headerName]: csrf.token } })).data;
+    return (
+      await api.post(path(scope), body, {
+        headers: { ...headers(scope), [csrf.headerName]: csrf.token },
+      })
+    ).data;
   },
 };

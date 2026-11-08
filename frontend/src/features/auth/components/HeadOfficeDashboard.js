@@ -8,14 +8,21 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
+import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+
+import StaffPage from '../../workforce/pages/StaffPage';
+
+import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
+
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
@@ -34,19 +41,20 @@ const icons = [
 
 // Trang tổng quan cho vai trò quản lý cấp cao.
 export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile }) {
-  const [activeTab, setActiveTab] = useState('Tổng quan');
   const location = useLocation();
   const navigate = useNavigate();
-  useEffect(() => {
-    // Giữ mục vừa chọn khi rời trang bảng giá về đường dẫn dashboard chung.
-    setActiveTab((current) => location.pathname === catalogPath
-      ? 'Phòng & bảng giá'
-      : current === 'Phòng & bảng giá' ? 'Tổng quan' : current);
-  }, [location.pathname]);
+  const requestedTab = new URLSearchParams(location.search).get('screen');
+  const [accountSearch, setAccountSearch] = useState('');
+  const activeTab = location.pathname === catalogPath
+    ? 'Phòng & bảng giá'
+    : tabs.includes(requestedTab) && requestedTab !== 'Phòng & bảng giá' ? requestedTab : 'Tổng quan';
   const selectTab = (tab) => {
-    setActiveTab(tab);
-    if (tab === 'Phòng & bảng giá') navigate(catalogPath);
-    else if (location.pathname !== dashboardPath) navigate(dashboardPath);
+    const params = new URLSearchParams(location.search);
+    if (tab === 'Tổng quan' || tab === 'Phòng & bảng giá') params.delete('screen');
+    else params.set('screen', tab);
+    const targetPath = tab === 'Phòng & bảng giá' ? catalogPath : dashboardPath;
+    const search = params.toString();
+    navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
   return <div className="head-office-dashboard">
     <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
@@ -65,16 +73,31 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     </aside>
     <div className="manager-workspace">
       <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
-      {activeTab === 'Cơ sở' ? (
-        <BranchManagementPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+      {activeTab === 'Tổng quan' ? (
+        <PerformanceDashboard user={user} isChain />
+      ) : activeTab === 'Báo cáo kinh doanh' ? (
+        <AccountantFinancePage reportsOnly />
+      ) : activeTab === 'Cơ sở' ? (
+        <BranchManagementPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Phòng & bảng giá' ? (
         <section className="manager-content manager-content-catalog">
           <RoomCatalogPage />
         </section>
       ) : activeTab === 'Tài khoản & phân quyền' ? (
-        <AccountsPage actorId={user.id} onAudit={() => setActiveTab('Nhật ký hệ thống')} />
+        <AccountsPage actorId={user.id} initialSearch={accountSearch} onAudit={() => selectTab('Nhật ký hệ thống')} />
+      ) : activeTab === 'Nhân sự' ? (
+        <StaffPage
+          user={user}
+          onAccounts={(username) => {
+            setAccountSearch(username);
+            selectTab('Tài khoản & phân quyền');
+          }}
+          onBranches={() => selectTab('Cơ sở')}
+        />
       ) : activeTab === 'Nhật ký hệ thống' ? (
-        <AuditLogPage onAccounts={() => setActiveTab('Tài khoản & phân quyền')} />
+        <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
+      ) : activeTab === 'Thiết bị' ? (
+        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
     </div>
   </div>;

@@ -22,6 +22,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class AuditRepository {
+
     private final JdbcTemplate db;
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String FROM = """
@@ -50,33 +51,36 @@ public class AuditRepository {
 
     private static AuditEntry entry(ResultSet rs, int row) throws SQLException {
         return new AuditEntry(
-                rs.getObject("id", UUID.class),
-                rs.getTimestamp("created_at").toInstant(),
-                rs.getString("actor_name"),
-                rs.getString("actor_username"),
-                rs.getString("action"),
-                rs.getString("entity_type"),
-                rs.getObject("entity_id", UUID.class),
-                rs.getString("entity_name"),
-                rs.getString("branch_name"),
-                rs.getString("reason")
+            rs.getObject("id", UUID.class),
+            rs.getTimestamp("created_at").toInstant(),
+            rs.getString("actor_name"),
+            rs.getString("actor_username"),
+            rs.getString("action"),
+            rs.getString("entity_type"),
+            rs.getObject("entity_id", UUID.class),
+            rs.getString("entity_name"),
+            rs.getString("branch_name"),
+            rs.getString("reason")
         );
     }
 
     public AuditPage list(
-            String q,
-            String action,
-            UUID branchId,
-            LocalDate from,
-            LocalDate to,
-            int page,
-            int size) {
-        StringBuilder where = new StringBuilder("""
+        String q,
+        String action,
+        UUID branchId,
+        LocalDate from,
+        LocalDate to,
+        int page,
+        int size
+    ) {
+        StringBuilder where = new StringBuilder(
+            """
                 WHERE strpos(lower(concat_ws(' ',employee.full_name,actor.username,
                     target.username,target_employee.full_name,booking.contact_name,CAST(a.entity_id AS text),
                     a.after_data->>'fullName',a.before_data->>'fullName',a.after_data->>'contact_name',a.before_data->>'contact_name',
                     a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',a.before_data->>'code',a.before_data->>'name')),lower(?))>0
-                """);
+                """
+        );
         List<Object> args = new ArrayList<>();
         args.add(q);
         if (!action.isEmpty()) {
@@ -97,22 +101,25 @@ public class AuditRepository {
             args.add(Timestamp.from(to.plusDays(1).atStartOfDay(ZONE).toInstant()));
         }
         long total = db.queryForObject(
-                "SELECT count(*) " + FROM + where,
-                Long.class,
-                args.toArray()
+            "SELECT count(*) " + FROM + where,
+            Long.class,
+            args.toArray()
         );
         args.add(size);
         args.add((long) page * size);
         List<AuditEntry> items = db.query(
-                SELECT + FROM + where + " ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?",
-                AuditRepository::entry,
-                args.toArray()
+            SELECT + FROM + where + " ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?",
+            AuditRepository::entry,
+            args.toArray()
         );
         return new AuditPage(items, total, page, size);
     }
 
     public List<String> actions() {
-        return db.queryForList("SELECT DISTINCT action FROM gcmb.audit_event ORDER BY action", String.class);
+        return db.queryForList(
+            "SELECT DISTINCT action FROM gcmb.audit_event ORDER BY action",
+            String.class
+        );
     }
 
     public AuditDetail detail(UUID id) {
@@ -136,19 +143,33 @@ public class AuditRepository {
                 a.after_data->>'phone' AS after_phone
                 """;
         List<AuditDetail> result = db.query(
-                SELECT + snapshots + FROM + " WHERE a.id=?",
-                (rs, row) -> new AuditDetail(
-                        entry(rs, row),
-                        new Snapshot(rs.getString("before_username"), rs.getString("before_role"),
-                                rs.getString("before_branch"), rs.getString("before_status"),
-                                rs.getString("before_name"), rs.getString("before_email"), rs.getString("before_phone")),
-                        new Snapshot(rs.getString("after_username"), rs.getString("after_role"),
-                                rs.getString("after_branch"), rs.getString("after_status"),
-                                rs.getString("after_name"), rs.getString("after_email"), rs.getString("after_phone")),
-                        AuditSnapshots.read(rs.getString("before_values")), AuditSnapshots.read(rs.getString("after_values")),
-                        rs.getString("actor_role")
+            SELECT + snapshots + FROM + " WHERE a.id=?",
+            (rs, row) ->
+                new AuditDetail(
+                    entry(rs, row),
+                    new Snapshot(
+                        rs.getString("before_username"),
+                        rs.getString("before_role"),
+                        rs.getString("before_branch"),
+                        rs.getString("before_status"),
+                        rs.getString("before_name"),
+                        rs.getString("before_email"),
+                        rs.getString("before_phone")
+                    ),
+                    new Snapshot(
+                        rs.getString("after_username"),
+                        rs.getString("after_role"),
+                        rs.getString("after_branch"),
+                        rs.getString("after_status"),
+                        rs.getString("after_name"),
+                        rs.getString("after_email"),
+                        rs.getString("after_phone")
+                    ),
+                    AuditSnapshots.read(rs.getString("before_values")),
+                    AuditSnapshots.read(rs.getString("after_values")),
+                    rs.getString("actor_role")
                 ),
-                id
+            id
         );
         return result.isEmpty() ? null : result.get(0);
     }

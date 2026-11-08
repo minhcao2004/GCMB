@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -53,6 +54,11 @@ public class AuthErrors {
     // Trả lỗi tham số URL không đúng kiểu như ngày ISO không hợp lệ.
     ResponseEntity<?> invalidParameter() {
         return error(400, "Tham số yêu cầu không hợp lệ");
+    }
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    // Phương thức không được hỗ trợ là lỗi yêu cầu, không phải sự cố máy chủ 503.
+    ResponseEntity<?> unsupportedMethod() {
+        return error(405, "Máy chủ chưa hỗ trợ thao tác này. Vui lòng kiểm tra phiên bản máy chủ và thử lại.");
     }
     @ExceptionHandler(Exception.class)
     // Ghi stack trace phía server nhưng che chi tiết nội bộ khỏi client.

@@ -51,6 +51,7 @@ public class RoomCatalogService {
     }
 
     @Transactional
+    // BR-174: kiểm tra mã hạng phòng duy nhất trên toàn hệ thống trước khi tạo.
     public RoomTypeView createRoomType(RoomTypeCommand command) {
         validateRoomType(command);
         String code = command.code().trim().toUpperCase(java.util.Locale.ROOT);
@@ -58,7 +59,7 @@ public class RoomCatalogService {
             "SELECT COUNT(*) FROM gcmb.room_type WHERE upper(code)=?", Long.class, code);
         if (duplicate != null && duplicate > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Mã hạng phòng đã tồn tại. Vui lòng nhập mã khác.");
+                "Mã hạng phòng “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         UUID id = UUID.randomUUID();
         try {
@@ -69,12 +70,13 @@ public class RoomCatalogService {
                 command.description() == null ? "" : command.description().trim());
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Mã hạng phòng đã tồn tại hoặc dữ liệu không hợp lệ.");
+                "Mã hạng phòng “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         return roomType(id);
     }
 
     @Transactional
+    // BR-174: không cho đổi mã hạng phòng sang một mã đã được dùng.
     public RoomTypeView updateRoomType(UUID id, RoomTypeCommand command) {
         validateRoomType(command);
         // Mã định danh giữ nguyên khi sửa; không thay đổi giá đã xác nhận của booking.
@@ -103,6 +105,7 @@ public class RoomCatalogService {
     }
 
     @Transactional
+    // BR-118: không xóa hạng phòng đang được lịch sử booking, giá hoặc combo tham chiếu.
     public void deleteRoomType(UUID id) {
         // Khóa bản ghi trước khi kiểm tra; FK RESTRICT bảo vệ cả trường hợp ghi đồng thời.
         List<UUID> found = db.queryForList(
@@ -117,13 +120,13 @@ public class RoomCatalogService {
             """, Boolean.class, id, id, id);
         if (Boolean.TRUE.equals(used)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Không thể xóa hạng phòng đã có phòng, giá hoặc combo liên quan (kể cả đã ngừng). Hãy chọn Ngừng sử dụng để giữ lịch sử.");
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
         try {
             db.update("DELETE FROM gcmb.room_type WHERE id=?", id);
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Không thể xóa hạng phòng đang được dữ liệu khác sử dụng. Các dữ liệu liên quan vẫn được giữ nguyên.");
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
     }
 
@@ -186,7 +189,7 @@ public class RoomCatalogService {
               """)) {
                 statement.setObject(1,id);statement.setString(2,code);statement.setInt(3,version);statement.setObject(4,c.roomTypeId());
                 statement.setString(5,c.name().trim());statement.setObject(6,c.validFrom());statement.setObject(7,c.validTo());
-                statement.setInt(8,c.minuteFrom());statement.setInt(9,c.minuteTo());statement.setArray(10,weekdays);
+                statement.setInt(8,c.minuteFrom().equals(c.minuteTo())?0:c.minuteFrom());statement.setInt(9,c.minuteFrom().equals(c.minuteTo())?1440:(c.minuteTo()==0?1440:c.minuteTo()));statement.setArray(10,weekdays);
                 statement.setBigDecimal(11,c.hourlyPrice());statement.setBigDecimal(12,c.hourlyPrice());statement.executeUpdate();
             } finally { weekdays.free(); }
             return null;
@@ -210,7 +213,22 @@ public class RoomCatalogService {
     }
 
     private static void validatePriceRule(PriceRuleCommand c) {
-        if(c==null||c.code()==null||!PRICE_RULE_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.name().trim().length()>200||c.roomTypeId()==null||c.weekdays()==null||c.weekdays().isEmpty()||c.weekdays().stream().anyMatch(day->day==null||day<1||day>7)||c.validFrom()==null||(c.validTo()!=null&&!c.validTo().isAfter(c.validFrom()))||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo())||c.hourlyPrice()==null||c.hourlyPrice().signum()<0) throw bad("Thông tin quy tắc giá chưa hợp lệ.");
+        if (c == null) throw bad("Vui lòng bổ sung thông tin quy tắc giá.");
+        if (c.code() == null || c.code().isBlank()) throw bad("Vui lòng bổ sung Mã quy tắc giá.");
+        if (!PRICE_RULE_CODE.matcher(c.code().trim().toUpperCase(java.util.Locale.ROOT)).matches()) throw bad("Mã quy tắc giá phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
+        if (c.name() == null || c.name().isBlank()) throw bad("Vui lòng bổ sung Tên quy tắc giá.");
+        if (c.name().trim().length() > 200) throw bad("Tên quy tắc giá chỉ được chứa tối đa 200 ký tự.");
+        if (c.roomTypeId() == null) throw bad("Vui lòng bổ sung Hạng áp dụng.");
+        if (c.weekdays() == null || c.weekdays().isEmpty()) throw bad("Vui lòng chọn ít nhất một ngày áp dụng.");
+        if (c.weekdays().stream().anyMatch(day -> day == null || day < 1 || day > 7)) throw bad("Ngày áp dụng không hợp lệ.");
+        if (c.validFrom() == null) throw bad("Vui lòng bổ sung Ngày bắt đầu.");
+        if (c.validTo() != null && c.validTo().isBefore(c.validFrom())) throw bad("Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.");
+        if (c.minuteFrom() == null) throw bad("Vui lòng bổ sung Bắt đầu.");
+        if (c.minuteTo() == null) throw bad("Vui lòng bổ sung Kết thúc.");
+        if (c.minuteFrom() < 0 || c.minuteFrom() > 1439 || c.minuteTo() < 0 || c.minuteTo() > 1440) throw bad("Khung giờ áp dụng không hợp lệ.");
+        if (c.hourlyPrice() == null) throw bad("Vui lòng bổ sung Đơn giá.");
+        if (c.hourlyPrice().signum() < 0) throw bad("Đơn giá phải lớn hơn hoặc bằng 0.");
+        if (!isWholeVnd(c.hourlyPrice())) throw bad("Đơn giá phải là số tiền nguyên đồng, không có phần thập phân.");
     }
 
     public List<PriceCatalogItem> prices(String kind, UUID roomTypeId, boolean activeOnly) {
@@ -219,26 +237,28 @@ public class RoomCatalogService {
         String sql="""
             SELECT * FROM (
               SELECT p.id,'HOURLY' AS kind,'HOURLY_'||rt.code AS code,rt.id AS room_type_id,rt.name AS room_type_name,
-                p.name,'' AS description,NULL::integer AS duration_minutes,p.minute_from,p.minute_to,p.hourly_price AS price,p.active
+                NULL::uuid AS branch_id,
+                p.name,'' AS description,NULL::integer AS duration_minutes,p.minute_from,p.minute_to,p.hourly_price AS price,p.active,NULL::integer AS included_fnb_quantity,NULL::integer AS included_food_quantity
               FROM gcmb.price_rule p JOIN gcmb.room_type rt ON rt.id=p.room_type_id
               WHERE p.branch_id IS NULL AND p.day_kind='ALL' AND p.minute_from=0 AND p.minute_to=1440
               UNION ALL
-              SELECT c.id,'COMBO' AS kind,c.code,rt.id,rt.name,c.name,c.included_description,c.duration_minutes,
-                c.minute_from,c.minute_to,c.price,c.active
+              SELECT c.id,'COMBO' AS kind,c.code,rt.id,rt.name,c.branch_id,c.name,c.included_description,c.duration_minutes,
+                c.minute_from,c.minute_to,c.price,c.active,c.included_fnb_quantity,c.included_food_quantity
               FROM gcmb.combo c JOIN gcmb.room_type rt ON rt.id=c.room_type_id
-              WHERE c.branch_id IS NULL
             ) catalogue WHERE (CAST(? AS varchar) IS NULL OR kind=?)"""+filter+roomFilter+" ORDER BY room_type_name,kind,code";
         if(roomTypeId==null) return db.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
             rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),
-            (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active")),kind,kind);
+            (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active"),rs.getObject("branch_id",UUID.class),(Integer)rs.getObject("included_fnb_quantity"),(Integer)rs.getObject("included_food_quantity")),kind,kind);
         return db.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
             rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),
-            (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active")),kind,kind,roomTypeId);
+            (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active"),rs.getObject("branch_id",UUID.class),(Integer)rs.getObject("included_fnb_quantity"),(Integer)rs.getObject("included_food_quantity")),kind,kind,roomTypeId);
     }
 
     @Transactional
     public PriceCatalogItem createPrice(String kind, UUID roomTypeId, PriceCommand c) {
         validatePrice(kind,c);
+        if ("COMBO".equals(kind) && (roomTypeId == null || c.roomTypeId() == null)) throw bad("Vui lòng bổ sung Hạng áp dụng.");
+        if ("COMBO".equals(kind) && !roomTypeId.equals(c.roomTypeId())) throw bad("Hạng phòng và combo không khớp.");
         RoomTypeView room=roomType(roomTypeId);
         if("HOURLY".equals(kind)) {
             String name=room.name()+" · Giờ lẻ";
@@ -252,16 +272,18 @@ public class RoomCatalogService {
               """,id,roomTypeId,name,c.price(),c.price());
             return price(id,"HOURLY");
         }
+        // BR-176: mã combo chỉ được dùng một lần trong các combo đang hoạt động.
         Integer active=db.queryForObject("SELECT COUNT(*) FROM gcmb.combo WHERE code=? AND active=true",Integer.class,c.code());
-        if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã combo đã tồn tại và đang áp dụng.");
+        if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,
+            "Mã combo “" + c.code().trim().toUpperCase(java.util.Locale.ROOT) + "” đã tồn tại trong danh sách combo đang hoạt động. Vui lòng nhập mã khác.");
         Long version=db.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.combo WHERE code=?",Long.class,c.code());
         UUID id=UUID.randomUUID();
         db.update("""
           INSERT INTO gcmb.combo(id,code,version,room_type_id,mode,name,duration_minutes,price,deposit_required,
-            overtime_hourly_price,valid_from,active,branch_id,day_group,minute_from,minute_to,min_guests,
+            overtime_hourly_price,valid_from,active,branch_id,day_group,minute_from,minute_to,min_guests,included_fnb_quantity,included_food_quantity,
             included_description,priority)
-          VALUES(?,?,?,?,?,?,?,?,0,0,CURRENT_TIMESTAMP,true,NULL,'ALL',?,?,1,?,100)
-          """,id,c.code().trim().toUpperCase(),version,roomTypeId,room.serviceType(),c.name().trim(),c.durationMinutes(),c.price(),c.minuteFrom(),c.minuteTo(),c.description()==null?"":c.description().trim());
+          VALUES(?,?,?,?,?,?,?,?,0,0,CURRENT_TIMESTAMP,true,NULL,'ALL',?,?,1,?,?,?,100)
+          """,id,c.code().trim().toUpperCase(),version,roomTypeId,room.serviceType(),c.name().trim(),c.durationMinutes(),c.price(),c.minuteFrom().equals(c.minuteTo())?0:c.minuteFrom(),c.minuteFrom().equals(c.minuteTo())?1440:(c.minuteTo()==0?1440:c.minuteTo()),c.includedFnbQuantity()==null?0:c.includedFnbQuantity(),c.includedFoodQuantity()==null?0:c.includedFoodQuantity(),c.description()==null?"":c.description().trim());
         return price(id,"COMBO");
     }
 
@@ -276,7 +298,7 @@ public class RoomCatalogService {
         PriceCatalogItem old=price(id,"COMBO");
         db.update("UPDATE gcmb.combo SET active=false,valid_to=GREATEST(CURRENT_TIMESTAMP+interval '1 microsecond',valid_from+interval '1 microsecond') WHERE id=?",id);
         UUID targetRoomTypeId=c.roomTypeId()==null?old.roomTypeId():c.roomTypeId();
-        PriceCommand next=new PriceCommand(targetRoomTypeId,old.code(),c.name(),c.description(),c.durationMinutes(),c.minuteFrom(),c.minuteTo(),c.price());
+        PriceCommand next=new PriceCommand(targetRoomTypeId,old.code(),c.name(),c.description(),c.durationMinutes(),c.minuteFrom(),c.minuteTo(),c.price(),c.includedFnbQuantity(),c.includedFoodQuantity());
         return createPrice("COMBO",targetRoomTypeId,next);
     }
 
@@ -285,10 +307,12 @@ public class RoomCatalogService {
         if(!"COMBO".equals(kind)) throw bad("Chỉ hỗ trợ xóa combo tại chức năng này.");
         price(id,kind);
         try {
-            int deleted=db.update("DELETE FROM gcmb.combo WHERE id=? AND branch_id IS NULL",id);
+            db.update("DELETE FROM gcmb.combo_item ci WHERE ci.combo_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.booking_combo_item bci WHERE bci.combo_item_id=ci.id)",id);
+            int deleted=db.update("DELETE FROM gcmb.combo WHERE id=?",id);
             if(deleted==0) throw missing("Không tìm thấy combo.");
         } catch(DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể xóa combo vì đã được dùng trong hóa đơn hoặc có thành phần gắn với combo.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
     }
 
@@ -296,40 +320,64 @@ public class RoomCatalogService {
         List<PriceCatalogItem> found=db.query("""
           SELECT * FROM (
             SELECT p.id,'HOURLY' AS kind,'HOURLY_'||rt.code AS code,rt.id AS room_type_id,rt.name AS room_type_name,p.name,
-              '' AS description,NULL::integer AS duration_minutes,p.minute_from,p.minute_to,p.hourly_price AS price,p.active
+              '' AS description,NULL::integer AS duration_minutes,p.minute_from,p.minute_to,p.hourly_price AS price,p.active,NULL::uuid AS branch_id,NULL::integer AS included_fnb_quantity,NULL::integer AS included_food_quantity
             FROM gcmb.price_rule p JOIN gcmb.room_type rt ON rt.id=p.room_type_id WHERE p.id=? AND p.branch_id IS NULL
             UNION ALL
-            SELECT c.id,'COMBO',c.code,rt.id,rt.name,c.name,c.included_description,c.duration_minutes,c.minute_from,c.minute_to,c.price,c.active
-            FROM gcmb.combo c JOIN gcmb.room_type rt ON rt.id=c.room_type_id WHERE c.id=? AND c.branch_id IS NULL
+            SELECT c.id,'COMBO',c.code,rt.id,rt.name,c.name,c.included_description,c.duration_minutes,c.minute_from,c.minute_to,c.price,c.active,c.branch_id,c.included_fnb_quantity,c.included_food_quantity
+            FROM gcmb.combo c JOIN gcmb.room_type rt ON rt.id=c.room_type_id WHERE c.id=?
           ) entries WHERE kind=?
-          """,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),(Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active")),id,id,kind);
+          """,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),(Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active"),rs.getObject("branch_id",UUID.class),(Integer)rs.getObject("included_fnb_quantity"),(Integer)rs.getObject("included_food_quantity")),id,id,kind);
         if(found.isEmpty()) throw missing("Không tìm thấy mức giá.");
         return found.get(0);
     }
+
     private RoomTypeView roomType(UUID id) {
         List<RoomTypeView> found=db.query("SELECT id,code,name,mode,capacity,description,active FROM gcmb.room_type WHERE id=?",(rs,n)->new RoomTypeView(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("mode"),rs.getInt("capacity"),rs.getString("description"),rs.getBoolean("active")),id);
         if(found.isEmpty()) throw missing("Không tìm thấy hạng phòng.");
         return found.get(0);
     }
-    private static PriceCatalogItem priceItem(UUID id,String kind,String code,UUID roomId,String roomName,String name,String description,Integer duration,Integer from,Integer to,BigDecimal price,boolean active) {
-        return new PriceCatalogItem(id,kind,code,roomId,roomName,name,description,duration,from,to,price,active);
+    private static PriceCatalogItem priceItem(UUID id,String kind,String code,UUID roomId,String roomName,String name,String description,Integer duration,Integer from,Integer to,BigDecimal price,boolean active,UUID branchId,Integer includedFnbQuantity,Integer includedFoodQuantity) {
+        return new PriceCatalogItem(id,kind,code,roomId,roomName,name,description,duration,from,to,price,active,branchId,includedFnbQuantity,includedFoodQuantity);
     }
+    // BR-135, BR-138, BR-179: kiểm tra định dạng mã, sức chứa nguyên dương và độ dài tên.
     private static void validateRoomType(RoomTypeCommand command) {
-        if (command == null || command.code() == null
-                || !ROOM_CODE.matcher(command.code().trim().toUpperCase(java.util.Locale.ROOT)).matches()
-                || command.name() == null || command.name().isBlank()
-                || command.name().trim().length() > 200
-                || command.capacity() == null || command.capacity() < 1
-                || command.serviceType() == null
-                || !List.of("CINEMA", "MUSIC_BOX").contains(command.serviceType())) {
-            throw bad("Vui lòng nhập mã, tên (tối đa 200 ký tự), loại dịch vụ và sức chứa hợp lệ.");
-        }
+        if (command == null) throw bad("Vui lòng bổ sung Mã hạng phòng.");
+        if (command.code() == null || command.code().isBlank()) throw bad("Vui lòng bổ sung Mã hạng phòng.");
+        if (!ROOM_CODE.matcher(command.code().trim().toUpperCase(java.util.Locale.ROOT)).matches())
+            throw bad("Mã hạng phòng phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
+        if (command.name() == null || command.name().isBlank()) throw bad("Vui lòng bổ sung Tên hạng phòng.");
+        if (command.name().trim().length() > 200) throw bad("Tên hạng phòng chỉ được chứa tối đa 200 ký tự.");
+        if (command.capacity() == null || command.capacity() < 1)
+            throw bad("Sức chứa phải là số nguyên lớn hơn 0.");
+        if (command.serviceType() == null || !List.of("CINEMA", "MUSIC_BOX").contains(command.serviceType()))
+            throw bad("Loại dịch vụ không hợp lệ.");
     }
 
+    // BR-135, BR-140, BR-143, BR-179: kiểm tra giá không âm, mã combo, tên và thời lượng dương.
     private static void validatePrice(String kind,PriceCommand c) {
-        if(!List.of("HOURLY","COMBO").contains(kind)||c==null||c.price()==null||c.price().signum()<0) throw bad("Mức giá không hợp lệ.");
-        if("COMBO".equals(kind)&&(c.code()==null||!COMBO_CODE.matcher(c.code().trim().toUpperCase()).matches()||c.name()==null||c.name().isBlank()||c.durationMinutes()==null||c.durationMinutes()<1||c.minuteFrom()==null||c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()==null||c.minuteTo()<1||c.minuteTo()>1440||c.minuteFrom().equals(c.minuteTo()))) throw bad("Mã combo chỉ gồm chữ in hoa, số, dấu gạch ngang hoặc gạch dưới (2–60 ký tự); tên, thời lượng và khung giờ phải hợp lệ.");
+        if(!List.of("HOURLY","COMBO").contains(kind)||c==null) throw bad("Vui lòng bổ sung thông tin mức giá.");
+        if("COMBO".equals(kind)) {
+            if(c.code()==null||c.code().isBlank()) throw bad("Vui lòng bổ sung Mã combo.");
+            if(!COMBO_CODE.matcher(c.code().trim().toUpperCase()).matches())
+                throw bad("Mã combo phải có từ 2 đến 60 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu gạch dưới (_) hoặc dấu gạch nối (-).");
+            if(c.name()==null||c.name().isBlank()) throw bad("Vui lòng bổ sung Tên combo.");
+            if(c.name().trim().length()>200) throw bad("Tên combo chỉ được chứa tối đa 200 ký tự.");
+            if(c.roomTypeId()==null) throw bad("Vui lòng bổ sung Hạng áp dụng.");
+            if(c.durationMinutes()==null||c.durationMinutes()<1) throw bad("Thời lượng phải lớn hơn 0.");
+            if(c.minuteFrom()==null) throw bad("Vui lòng bổ sung Bắt đầu.");
+            if(c.minuteTo()==null) throw bad("Vui lòng bổ sung Kết thúc.");
+            if(c.minuteFrom()<0||c.minuteFrom()>1439||c.minuteTo()<0||c.minuteTo()>1440)
+                throw bad("Khung giờ áp dụng combo không hợp lệ.");
+            if(c.includedFnbQuantity()!=null && (c.includedFnbQuantity()<0 || c.includedFnbQuantity()>20))
+                throw bad("Số đồ uống tặng kèm phải từ 0 đến 20.");
+            if(c.includedFoodQuantity()!=null && (c.includedFoodQuantity()<0 || c.includedFoodQuantity()>20))
+                throw bad("Số đồ ăn tặng kèm phải từ 0 đến 20.");
+        }
+        if(c.price()==null) throw bad("COMBO".equals(kind)?"Vui lòng bổ sung Giá combo.":"Vui lòng bổ sung Đơn giá.");
+        if(c.price().signum()<0) throw bad("COMBO".equals(kind)?"Giá combo phải lớn hơn hoặc bằng 0.":"Đơn giá phải lớn hơn hoặc bằng 0.");
+        if(!isWholeVnd(c.price())) throw bad("COMBO".equals(kind)?"Giá combo phải là số tiền nguyên đồng, không có phần thập phân.":"Đơn giá phải là số tiền nguyên đồng, không có phần thập phân.");
     }
+    private static boolean isWholeVnd(BigDecimal amount) { return amount.stripTrailingZeros().scale() <= 0; }
     private static ResponseStatusException bad(String message){return new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
     private static ResponseStatusException missing(String message){return new ResponseStatusException(HttpStatus.NOT_FOUND,message);}
 }

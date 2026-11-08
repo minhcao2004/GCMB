@@ -12,15 +12,21 @@ import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
+import ReceptionShiftPage from '../features/workforce/pages/ReceptionShiftPage';
+import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
+import AccountantFinancePage from '../features/dashboard/AccountantFinancePage';
+import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
+import FinancePage from '../features/finance/pages/FinancePage';
+import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
+import HomePage from '../features/landing/pages/HomePage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
   const [recovery, setRecovery] = useState(null);
   return <BrowserRouter><Routes>
-    {/*<Route path="/" element={<HomePage />} />*/}
     <Route path="/" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="/dang-nhap" element={<AuthPage key="login" mode="login" recovery={recovery} onRecovery={setRecovery} />} />
     <Route path="/quen-mat-khau" element={<AuthPage key="forgot" mode="forgot" recovery={recovery} onRecovery={setRecovery} />} />
@@ -28,6 +34,8 @@ export default function AppRoutes() {
     <Route path="/quan-ly-he-thong" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-he-thong/phong-bang-gia" element={<RoleHomePage role="HEAD_OFFICE_MANAGER" />} />
     <Route path="/quan-ly-chi-nhanh" element={<RoleHomePage role="BRANCH_MANAGER" />} />
+    <Route path="/mr/:mrCode" element={<HomePage />} />
+    <Route path="/mr/:mrCode/menu" element={<GuestRoomOrderPage />} />
     <Route path="/le-tan/bookings/new" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/edit" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings/:bookingId/check-in" element={<BookingManagementPage />} />
@@ -36,9 +44,17 @@ export default function AppRoutes() {
     <Route path="/le-tan/bills/:billId" element={<CheckoutPage />} />
     <Route path="/le-tan/thanh-toan" element={<CheckoutPage />} />
     <Route path="/le-tan/deposits" element={<DepositManagementPage />} />
+    <Route path="/le-tan/don-mon" element={<ReceptionOrdersPage />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
-    <Route path="/ke-toan" element={<AccountantRefundPage />} />
+    <Route path="/le-tan/su-co" element={<BookingManagementPage />} />
+    <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
+    <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
+    <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
+    {/* HuyDV / UC-91..101 */}
+    <Route path="/ke-toan/luong" element={<FinancePage payroll />} />
+    <Route path="/ke-toan/chot-quy" element={<FinancePage />} />
+    <Route path="/ke-toan" element={<AccountantFinancePage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="*" element={<Navigate to="/" replace />} />

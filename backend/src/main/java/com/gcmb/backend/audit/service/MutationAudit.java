@@ -21,9 +21,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class MutationAudit {
-    private static final Map<String, String> TABLES = Map.of(
-        "ROOM", "room", "ROOM_TYPE", "room_type", "PRICE_RULE", "price_rule",
-        "COMBO", "combo", "BOOKING", "booking", "BRANCH", "branch");
+    private static final Map<String, String> TABLES = Map.ofEntries(
+        Map.entry("ROOM", "room"),
+        Map.entry("ROOM_TYPE", "room_type"),
+        Map.entry("PRICE_RULE", "price_rule"),
+        Map.entry("COMBO", "combo"),
+        Map.entry("BOOKING", "booking"),
+        Map.entry("BRANCH", "branch"),
+        Map.entry("MENU_ITEM", "menu_item"),
+        Map.entry("FB_ORDER", "fb_order"),
+        Map.entry("INVENTORY_ITEM", "inventory_item"),
+        Map.entry("ASSET_CATEGORY", "asset_category"),
+        Map.entry("ASSET", "asset"),
+        Map.entry("INCIDENT", "asset_incident"),
+        Map.entry("TRANSFER", "asset_transfer"));
+
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;
 
@@ -68,18 +80,30 @@ public class MutationAudit {
         if ("BOOKING".equals(type)) extra = " || jsonb_build_object('event',"
             + "(SELECT jsonb_build_object('type',event_type,'reason',reason,'details',details)"
             + " FROM gcmb.booking_event WHERE booking_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1))";
+        if ("ASSET_CATEGORY".equals(type)) extra = " || jsonb_build_object('assetCount',"
+            + "(SELECT count(*) FROM gcmb.asset a WHERE a.category_id=t.id))";
+        if ("ASSET".equals(type)) extra = " || jsonb_build_object('latestIncident',"
+            + "(SELECT jsonb_build_object('id',i.id,'status',i.status,'description',i.description) FROM gcmb.asset_incident i"
+            + " WHERE i.asset_id=t.id ORDER BY i.created_at DESC,i.id DESC LIMIT 1))";
         if ("ROOM_TYPE".equals(type)) extra = " || jsonb_build_object('combos',"
             + "(SELECT jsonb_agg(jsonb_build_object('id',id,'code',code,'name',name,'price',price)) FROM gcmb.combo WHERE room_type_id=t.id AND branch_id IS NULL),"
             + "'priceRules',(SELECT jsonb_agg(jsonb_build_object('id',id,'name',name,'hourly_price',hourly_price)) FROM gcmb.price_rule WHERE room_type_id=t.id AND branch_id IS NULL))";
+        if ("INVENTORY_ITEM".equals(type)) extra = " || jsonb_build_object('stockBalance',"
+            + "(SELECT jsonb_build_object('quantity',quantity,'minimum_quantity',minimum_quantity,'version',version)"
+            + " FROM gcmb.stock_balance WHERE inventory_item_id=t.id))";
         List<String> snapshots = db.queryForList("""
             SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
-                WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description',
+                WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description','category_id','room_id','location_note','serial_number','purchase_date','purchase_value','warranty_expiry','image_attachment_id',
                     'address','phone','notes','updated_at','closed_on','floor_number','operating_status','status_reason','expected_ready_at','active','version',
                     'valid_from','valid_to','minute_from','minute_to','weekdays','day_kind','specific_date',
                     'hourly_price','overtime_hourly_price','billing_step_minutes','priority','price',
                     'duration_minutes','deposit_required','day_group','min_guests','included_description',
                     'status','contact_name','contact_phone','guest_count','planned_start','planned_end',
-                    'actual_checkin','actual_checkout','note','channel','pricing_mode')),'{}'::jsonb)
+                    'actual_checkin','actual_checkout','note','channel','pricing_mode','category','kind',
+                    'inventory_item_id','sale_price','description','image_original_name','image_mime_type',
+                    'sku','unit_id','tracking_mode',
+                    'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
+                    'accepted_by','accepted_at','served_at')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
         return snapshots.isEmpty() ? null : snapshots.get(0);
     }

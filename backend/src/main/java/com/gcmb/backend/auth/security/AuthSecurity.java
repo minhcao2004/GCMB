@@ -18,6 +18,7 @@ import com.gcmb.backend.auth.service.AuthService;
 import com.gcmb.backend.auth.security.SessionFilter;
 
 import java.util.List;
+import org.springframework.http.HttpMethod;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.cors.CorsConfiguration;
 
 @Configuration
@@ -40,7 +42,7 @@ public class AuthSecurity {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(List.of(policy.frontendOrigin()));
 config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-                config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN"));
+                config.setAllowedHeaders(List.of("Content-Type", "X-XSRF-TOKEN", "X-GCMB-QR-SESSION", "X-GCMB-Branch-Id"));
                 config.setAllowCredentials(true); return config;
             }))
             .csrf(config -> config.csrfTokenRepository(csrf)
@@ -53,9 +55,12 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                 .requestMatchers("/api/v1/auth/csrf", "/api/v1/auth/health", "/api/v1/auth/login", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
                 .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/change-password", "/api/v1/account/profile").authenticated()
                 .requestMatchers("/api/v1/auth/branches", "/api/v1/auth/branch").hasRole("BRANCH_MANAGER")
+                .requestMatchers("/api/v1/public/mr/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/public/branches/*/menu-items/**").permitAll()
                 .requestMatchers("/api/v1/head-office/**").hasRole("HEAD_OFFICE_MANAGER")
                 .requestMatchers("/api/v1/branch-management/**").hasRole("BRANCH_MANAGER")
                 .requestMatchers("/api/v1/reception/**").hasRole("RECEPTIONIST")
+                .requestMatchers("/api/v1/accounting/reports/**").hasAnyRole("HEAD_OFFICE_MANAGER", "ACCOUNTANT")
                 .requestMatchers("/api/v1/accounting/**").hasRole("ACCOUNTANT")
                 .anyRequest().denyAll())
             .exceptionHandling(config -> config
@@ -65,7 +70,17 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                 })
                 .accessDeniedHandler((request, response, e) -> {
                     response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"message\":\"Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang\"}");
+                    String path = request.getServletPath();
+                    boolean accounts = path.equals("/api/v1/head-office/accounts") ||
+                        path.startsWith("/api/v1/head-office/accounts/") ||
+                        path.equals("/api/v1/branch-management/accounts") ||
+                        path.startsWith("/api/v1/branch-management/accounts/");
+                    if (accounts && !(e instanceof CsrfException)) {
+                        String action = path.endsWith("/role") ? "phân quyền" :
+                            path.endsWith("/deactivate") || path.endsWith("/reactivate") ? "đổi trạng thái" :
+                            "GET".equals(request.getMethod()) ? "xem" : "tạo";
+                        response.getWriter().write("{\"message\":\"Bạn không có quyền " + action + " đối với tài khoản.\"}");
+                    } else response.getWriter().write("{\"message\":\"Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang\"}");
                 }))
             .addFilterBefore(new SessionFilter(auth), UsernamePasswordAuthenticationFilter.class).build();
     }

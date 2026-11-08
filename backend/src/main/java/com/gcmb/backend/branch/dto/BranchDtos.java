@@ -8,9 +8,16 @@
 package com.gcmb.backend.branch.dto;
 
 public final class BranchDtos {
+
     private BranchDtos() {}
 
-    public record BranchCommand(String code, String name, String address, String phone, String notes) {}
+    public record BranchCommand(
+        String code,
+        String name,
+        String address,
+        String phone,
+        String notes
+    ) {}
 
     public record StatusCommand(String status, String reason) {}
 }

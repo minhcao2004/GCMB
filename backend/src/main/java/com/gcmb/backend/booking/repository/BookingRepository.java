@@ -56,7 +56,9 @@ public class BookingRepository {
     public record RoomTypeRow(UUID id, String code, String name, String mode, int capacity) {}
     public record ComboRow(UUID id, String code, int version, UUID roomTypeId, String name,
                            int durationMinutes, BigDecimal price, BigDecimal depositRequired,
-                           BigDecimal overtimeHourlyPrice, Instant validFrom, Instant validTo) {}
+                           BigDecimal overtimeHourlyPrice, Instant validFrom, Instant validTo,
+                           int includedFnbQuantity, int includedFoodQuantity) {}
+    public record ComboGiftRequirements(int drinkQuantity, int foodQuantity) {}
     public record RoomRow(UUID id, String code, String name, int capacity, String operatingStatus,
                           UUID roomTypeId, String roomTypeName) {}
     public record PricingRule(UUID id, String name, UUID branchId, LocalDate validFrom, LocalDate validTo,
@@ -92,7 +94,7 @@ public class BookingRepository {
               AND (ea.valid_to IS NULL OR ea.valid_to > CURRENT_TIMESTAMP)
             JOIN gcmb.branch b ON b.id=COALESCE(u.branch_id,ea.branch_id)
             WHERE u.id=? AND u.status='ACTIVE'
-              AND b.status='ACTIVE'
+              AND b.status IN ('ACTIVE','SUSPENDED')
             ORDER BY ea.valid_from DESC
             LIMIT 1
             """, (rs, rowNum) -> new BranchScope(rs.getObject("id", UUID.class), rs.getString("name"), ZoneId.of(rs.getString("timezone"))), userId);
@@ -114,22 +116,30 @@ public class BookingRepository {
 
     // Lấy combo hiện hành của hạng phòng.
     public List<ComboRow> combos(UUID roomTypeId) {
+        return combos(roomTypeId, null);
+    }
+
+    public List<ComboRow> combos(UUID roomTypeId, UUID branchId) {
         return db.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to
-            FROM gcmb.combo
-            WHERE active=true AND room_type_id=? AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+            FROM gcmb.combo c
+            WHERE active=true AND room_type_id=? AND (branch_id IS NULL OR branch_id=?) AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
             ORDER BY name,version DESC
-            """, (rs, rowNum) -> combo(rs), roomTypeId);
+            """, (rs, rowNum) -> combo(rs), roomTypeId, branchId);
     }
 
     // Tìm combo đang áp dụng để xác thực lựa chọn của client.
     public ComboRow combo(UUID id) {
+        return combo(id, null);
+    }
+
+    public ComboRow combo(UUID id, UUID branchId) {
         List<ComboRow> rows = db.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to
-            FROM gcmb.combo WHERE id=? AND active=true
-            """, (rs, rowNum) -> combo(rs), id);
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+            FROM gcmb.combo c WHERE id=? AND active=true AND (branch_id IS NULL OR branch_id=?)
+            """, (rs, rowNum) -> combo(rs), id, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -138,7 +148,8 @@ public class BookingRepository {
         return new ComboRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getInt("version"),
             rs.getObject("room_type_id", UUID.class), rs.getString("name"), rs.getInt("duration_minutes"),
             rs.getBigDecimal("price"), rs.getBigDecimal("deposit_required"), rs.getBigDecimal("overtime_hourly_price"),
-            instant(rs, "valid_from"), instant(rs, "valid_to"));
+            instant(rs, "valid_from"), instant(rs, "valid_to"), rs.getInt("included_fnb_quantity"),
+            rs.getInt("included_food_quantity"));
     }
 
     // Lấy các rule giá có thể bao phủ khoảng ngày cần báo giá.
@@ -172,7 +183,7 @@ public class BookingRepository {
                 rs.getString("room_type_name")), branchId);
     }
 
-    // Tìm phòng không trùng lịch trong khoảng yêu cầu.
+    // BR-03, BR-04: đặt trước theo khoảng lịch; khách hiện tại không chặn lịch sau giờ trả dự kiến.
     public List<RoomRow> availableRooms(UUID branchId, UUID roomTypeId, Instant start, Instant end) {
         return db.query("""
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
@@ -182,8 +193,7 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE')
-                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
-                       OR (a.starts_at < ? AND a.ends_at > ?))
+                  AND a.starts_at < ? AND a.ends_at > ?
               )
             ORDER BY r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
@@ -193,6 +203,12 @@ public class BookingRepository {
 
     // Tìm phòng trống nhưng bỏ qua allocation của booking đang sửa.
     public List<RoomRow> availableRoomsForEdit(UUID branchId, Instant start, Instant end, UUID excludeBookingId) {
+        return availableRoomsForEdit(branchId, start, end, excludeBookingId, false);
+    }
+
+    // BR-04, BR-07: sửa lịch xét khoảng đặt; đổi phòng ngay còn phải chặn khách chưa checkout.
+    public List<RoomRow> availableRoomsForEdit(UUID branchId, Instant start, Instant end, UUID excludeBookingId,
+                                              boolean requireVacantNow) {
         return db.query("""
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
@@ -201,13 +217,13 @@ public class BookingRepository {
                 SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
                 WHERE a.room_id=r.id AND a.state IN ('RESERVED','OCCUPIED')
                   AND b.status IN ('CONFIRMED','IN_HOUSE') AND b.id<>?
-                  AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                  AND (? AND a.state='OCCUPIED' AND b.status='IN_HOUSE'
                        OR (a.starts_at < ? AND a.ends_at > ?))
               )
             ORDER BY rt.name,r.code
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
                 rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), branchId, excludeBookingId, ts(end), ts(start));
+                rs.getString("room_type_name")), branchId, excludeBookingId, requireVacantNow, ts(end), ts(start));
     }
 
     // Khóa hàng phòng trước khi đổi để giảm tranh chấp đồng thời.
@@ -216,6 +232,19 @@ public class BookingRepository {
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE r.id=? AND r.branch_id=? AND r.operating_status='AVAILABLE' AND rt.active=true
+            FOR UPDATE OF r
+            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
+                rs.getString("room_type_name")), roomId, branchId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    // Read a room even when its operating state prevents assignment, so callers can report MSG55.
+    public RoomRow lockRoomForValidation(UUID roomId, UUID branchId) {
+        List<RoomRow> rows = db.query("""
+            SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
+            FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
+            WHERE r.id=? AND r.branch_id=? AND rt.active=true
             FOR UPDATE OF r
             """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
                 rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
@@ -237,14 +266,20 @@ public class BookingRepository {
 
     // Phòng đang OCCUPIED vẫn bị giữ sau ends_at dự kiến cho tới khi kết thúc lượt sử dụng.
     public boolean hasRoomOverlap(UUID roomId, Instant start, Instant end, UUID excludeBookingId) {
+        return hasRoomOverlap(roomId, start, end, excludeBookingId, true);
+    }
+
+    // BR-03, BR-07: đặt trước chỉ chặn khoảng trùng; nhận/đổi phòng ngay kiểm tra thêm khách đang sử dụng.
+    public boolean hasRoomOverlap(UUID roomId, Instant start, Instant end, UUID excludeBookingId,
+                                  boolean requireVacantNow) {
         String sql = """
             SELECT EXISTS (
               SELECT 1 FROM gcmb.room_allocation a JOIN gcmb.booking b ON b.id=a.booking_id
               WHERE a.room_id=? AND a.state IN ('RESERVED','OCCUPIED') AND b.status IN ('CONFIRMED','IN_HOUSE')
-                AND (a.state='OCCUPIED' AND b.status='IN_HOUSE'
+                AND (? AND a.state='OCCUPIED' AND b.status='IN_HOUSE'
                      OR (a.starts_at < ? AND a.ends_at > ?))
             """;
-        List<Object> params = new ArrayList<>(List.of(roomId, ts(end), ts(start)));
+        List<Object> params = new ArrayList<>(List.of(roomId, requireVacantNow, ts(end), ts(start)));
         if (excludeBookingId != null) { sql += " AND a.booking_id<>?"; params.add(excludeBookingId); }
         sql += ")";
         return Boolean.TRUE.equals(db.queryForObject(sql, Boolean.class, params.toArray()));
@@ -270,6 +305,20 @@ public class BookingRepository {
                                      status,refund_cutoff_minutes,created_by,note)
             VALUES (?,?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
             """, UUID.class, branchId, code, contactName, contactPhone, guestCount, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
+    }
+
+    public void setComboGiftQuantities(UUID bookingId, int drinks, int food) {
+        db.update("UPDATE gcmb.booking SET combo_included_drink_quantity=?,combo_included_food_quantity=? WHERE id=?",
+            drinks, food, bookingId);
+    }
+
+    public ComboGiftRequirements comboGiftRequirements(UUID bookingId, UUID branchId) {
+        List<ComboGiftRequirements> rows = db.query("""
+            SELECT combo_included_drink_quantity,combo_included_food_quantity
+            FROM gcmb.booking WHERE id=? AND branch_id=?
+            """,(rs,n)->new ComboGiftRequirements(rs.getInt("combo_included_drink_quantity"),
+                rs.getInt("combo_included_food_quantity")),bookingId,branchId);
+        return rows.isEmpty()?null:rows.get(0);
     }
 
     // Cập nhật dữ liệu liên hệ và giờ hẹn của booking.
@@ -432,9 +481,21 @@ public class BookingRepository {
 
     // Khóa booking thuộc chi nhánh để serialize các cập nhật đồng thời.
     public UUID lockBookingId(UUID bookingId, UUID branchId) {
+        requireActiveBranch(branchId);
         List<UUID> rows = db.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
             (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public boolean bookingExists(UUID bookingId) {
+        return Boolean.TRUE.equals(db.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM gcmb.booking WHERE id=?)", Boolean.class, bookingId));
+    }
+
+    // BR-177: khóa chia sẻ tới cuối transaction, tránh ghi đồng thời lúc cơ sở vừa bị tạm ngừng.
+    public void requireActiveBranch(UUID branchId) {
+        if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE", UUID.class, branchId).isEmpty())
+            throw new com.gcmb.backend.booking.exception.BookingFailure(403,"form","Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
     }
 
     // Đọc booking theo ID và chi nhánh, kể cả dữ liệu giờ được khôi phục từ lịch sử.
@@ -516,6 +577,14 @@ public class BookingRepository {
     // Tạo tài khoản cọc cho booking mới.
     public void createDepositAccount(UUID bookingId) {
         db.update("INSERT INTO gcmb.deposit(booking_id) VALUES (?) ON CONFLICT (booking_id) DO NOTHING", bookingId);
+    }
+
+    // BR-26, BR-27: invalidate pending QR requests whenever the quoted booking price changes.
+    public void cancelPendingDepositPaymentRequests(UUID bookingId) {
+        db.update("""
+            UPDATE gcmb.payment_request SET status='CANCELLED'
+            WHERE booking_id=? AND purpose='DEPOSIT' AND status='PENDING'
+            """, bookingId);
     }
 
     // Ghi thanh toán và bút toán nhận cọc trong cùng giao dịch.
@@ -652,6 +721,13 @@ public class BookingRepository {
     public void event(UUID bookingId, UUID actorId, String type, String reason, Map<String, Object> details) {
         db.update("INSERT INTO gcmb.booking_event(booking_id,actor_id,event_type,reason,details) VALUES (?,?,?, ?,CAST(? AS jsonb))",
             bookingId, actorId, type, reason, toJson(details));
+    }
+
+    public boolean hasEventIdempotencyKey(UUID bookingId, String eventType, String idempotencyKey) {
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.booking_event
+                WHERE booking_id=? AND event_type=? AND details ->> 'idempotencyKey'=?)
+            """, Boolean.class, bookingId, eventType, idempotencyKey));
     }
 
     // Truy vấn trang booking cùng bộ lọc và thông tin tổng hợp cho danh sách.

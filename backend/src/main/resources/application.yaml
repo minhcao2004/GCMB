@@ -15,10 +15,11 @@ spring:
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
+  # Copyright (c) 2026 SEP490-G12. Author: TrongNV. Created: 28/10. Description: Cho phép tải ảnh thiết bị theo BR-115/BR-116.
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 20MB
+      max-request-size: 42MB
 
 gcmb:
   auth:
@@ -26,5 +27,16 @@ gcmb:
     frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
     mail-from: ${SMTP_FROM:}
   attachments:
-    # Configure a persistent shared directory for deployed or multi-instance environments.
+    # The directory remains available for files uploaded before cloud storage was enabled.
     storage-dir: ${GCMB_ATTACHMENT_STORAGE_DIR:./data/attachments}
+    s3:
+      # Configure a private bucket and AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in the backend environment.
+      # For Cloudflare R2: region=auto, endpoint=https://<account-id>.r2.cloudflarestorage.com, path-style=true.
+      # A blank bucket disables new uploads; existing local files remain readable.
+      bucket: ${GCMB_S3_BUCKET:}
+      region: ${GCMB_S3_REGION:us-east-1}
+      endpoint: ${GCMB_S3_ENDPOINT:}
+      path-style: ${GCMB_S3_PATH_STYLE:false}
+  google-drive:
+    credentials-file: ${GOOGLE_DRIVE_CREDENTIALS_FILE:}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}

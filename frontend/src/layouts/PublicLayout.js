@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Brand from '../shared/components/Brand';
 
 // Thanh điều hướng công khai và nút mở luồng đặt phòng.
-function Header({ onBook }) {
+function Header({ onBook, roomMenuPath }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // Đóng menu trên màn hình nhỏ sau khi chọn mục.
   const closeMenu = () => setMenuOpen(false);
@@ -14,8 +14,10 @@ function Header({ onBook }) {
         <a href="#about" onClick={closeMenu}>Chất GenZ</a><a href="#spaces" onClick={closeMenu}>Không gian</a><a href="#pricing" onClick={closeMenu}>Bảng giá</a><a href="#locations" onClick={closeMenu}>Chi nhánh</a>
       </nav>
       <div className="header-actions">
-        <Link className="button small outline" to="/dang-nhap">Đăng nhập</Link>
-        <button className="button small pink" onClick={onBook}>Đặt phòng <span>↗</span></button>
+        {roomMenuPath ? <Link className="button small pink" to={roomMenuPath}>Gọi món tại phòng</Link> : <>
+          <Link className="button small outline" to="/dang-nhap">Đăng nhập</Link>
+          <button className="button small pink" onClick={onBook}>Đặt phòng <span>↗</span></button>
+        </>}
         <button id="menu-toggle" className="menu-toggle" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} aria-controls="navigation" onClick={() => setMenuOpen((value) => !value)}><span></span><span></span></button>
       </div>
     </header>
@@ -43,7 +45,7 @@ function SocialDock() {
 }
 
 // Ghép đầu trang, nội dung và chân trang công khai.
-export default function PublicLayout({ children, onBook }) {
-  return <div className="public-site"><a className="skip-link" href="#main">Đến nội dung chính</a><Header onBook={onBook} />{children}<Footer /><SocialDock /></div>;
+export default function PublicLayout({ children, onBook, roomMenuPath }) {
+  return <div className="public-site"><a className="skip-link" href="#main">Đến nội dung chính</a><Header onBook={onBook} roomMenuPath={roomMenuPath} />{children}<Footer /><SocialDock /></div>;
 }
 

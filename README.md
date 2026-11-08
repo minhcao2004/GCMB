@@ -73,7 +73,7 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. The current backend contains six peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, and `booking`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `dashboard`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +82,7 @@ The backend is deployed as one application. The current backend contains six pee
 
 ## Project Structure
 
-The current backend structure is shown below; the frontend portion remains a structural overview. Inventory, workforce, and finance describe planned scope and are not empty backend packages.
+The tree below reflects the current repository structure. Inventory, workforce, and dashboard are active backend features. Payroll and cash closing are active; other finance workflows remain planned.
 
 ```text
 GCMB/
@@ -94,9 +94,12 @@ GCMB/
 │   │   ├── branch/
 │   │   ├── pricing/
 │   │   ├── booking/
+│   │   ├── dashboard/
+│   │   ├── inventory/
+│   │   ├── workforce/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
-│   │   ├── application.yml
+│   │   ├── application.yaml
 │   │   ├── application-dev.yml
 │   │   ├── application-prod.yml
 │   │   └── db/migration/
@@ -109,14 +112,18 @@ GCMB/
 │   ├── public/
 │   ├── src/
 │   │   ├── features/
+│   │   │   ├── auth/
 │   │   │   ├── backoffice/
 │   │   │   ├── booking/
+│   │   │   ├── branch/
+│   │   │   ├── dashboard/
+│   │   │   ├── finance/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
-│   │   │   └── finance/
+│   │   │   ├── landing/
+│   │   │   └── pricing/
 │   │   ├── shared/
 │   │   │   ├── components/
-│   │   │   ├── hooks/
 │   │   │   └── utils/
 │   │   ├── layouts/
 │   │   ├── routes/
@@ -136,15 +143,16 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `auth` | Login/logout, sessions, password recovery/change, security configuration, and recovery email. |
+| `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
-| `branch` | Branches, manager assignments, rooms, and room operating status. |
+| `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, room sessions, deposits, checkout bills, and customer payments. |
-| `inventory` (planned) | F&B catalog and order processing, stock, equipment, incidents, and repairs. |
-| `workforce` (planned) | Staff, assignments, shifts, attendance, and payroll. |
-| `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
+| `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
+| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
+| `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
+| `dashboard` | Chain and branch performance summaries; accountant financial reports and period operations. |
+| `finance` (frontend) | Payroll and cash-closing screens. Funds, expenses, and reimbursements remain planned. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -256,6 +264,7 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
 | Backend cannot connect to PostgreSQL | Check the database service, port, database name, username, and password. |
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
+| Flyway reports more than one migration with the same version after a migration was renamed or renumbered | Preserve migration versions that have already been applied, then run `cd backend; .\\mvnw.cmd clean spring-boot:run` on Windows (or `./mvnw clean spring-boot:run` on macOS/Linux) to remove stale migration files from `target/classes` and rebuild. If the duplicate is still reported, check `src/main/resources/db/migration/` for duplicate version prefixes. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
 | `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
@@ -289,6 +298,8 @@ Keep database passwords and SePay, email, and cloud-storage credentials outside 
 ### Database migrations
 
 Store schema changes under `backend/src/main/resources/db/migration/`. For Flyway, use names such as `V1__create_initial_schema.sql` and `V2__add_booking_indexes.sql`.
+
+Migration ownership: V21 and V22 are the F&B menu migrations; V30 and V31 are the equipment category and asset migrations. V30/V31 use idempotent DDL because some development databases already contain those schema changes from the earlier V21/V22 numbering. For those existing databases, reconcile Flyway history before startup; do not reset the schema or change domain data. The `npm start` launcher removes only the generated `backend/target/classes/db/migration/` copy before Maven starts, so renamed source migrations cannot remain as stale duplicate files.
 
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
@@ -423,3 +434,10 @@ Hợp nhất giao diện (25/10/2026): `BookingManagementPage` giữ khung chi t
 - API preview checkout bổ sung `overtime: [{from,to,minutes,hourlyPrice,amount,priceRuleId}]` và `overtimeAmount`; `lines` và `amount` đã bao gồm các khoản này. Preview chỉ đọc, chưa ghi phí. Request lập bill bổ sung `overtimeConfirmed` và `overtimeAmount`. Backend tính lại bằng giờ máy chủ trong giao dịch có khóa booking; thiếu xác nhận hoặc số tiền thay đổi trả 409, không ghi phí/bill. Gửi lại booking đã có bill trả bill hiện hữu, không thu trùng.
 - Màn Checkout hiển thị từng khoảng giờ, đơn giá, tiền phát sinh và ô xác nhận bắt buộc; có nút **Cập nhật tiền phòng**. Khi lập bill gặp 409, tải lại preview và bỏ chọn xác nhận để lễ tân kiểm tra lại. Cần triển khai frontend/backend cùng nhau. Không thêm migration; không tính lại hóa đơn đã lập.
 - File ảnh hưởng: `CheckoutDtos.java`, `BookingService.java`, `CheckoutService.java`, `CheckoutPage.js`. Các file test tạo trong đợt sửa này đã được xóa theo yêu cầu; giữ nguyên các test có sẵn.
+
+### Tạo tài khoản và thông báo theo Expected UT (02/11/2026)
+
+- UC-04 tạo tài khoản từ các trường được quản lý xác nhận: `employeeId`, `username`, `email`, `password`, `role`, `branchId`. Form có email chỉnh sửa được và dropdown vai trò/cơ sở; chọn nhân viên chỉ gợi ý giá trị ban đầu, backend không ghi đè request bằng hồ sơ. Vai trò toàn chuỗi không nhận `branchId`; vai trò tại cơ sở bắt buộc chọn cơ sở ACTIVE. Giữ kiểm tra nhân viên ACTIVE chưa có tài khoản, email/username duy nhất và chính sách mật khẩu. Không thay dữ liệu tài khoản đã tạo hay thêm migration.
+- Quản lý cơ sở chỉ tạo tài khoản RECEPTIONIST cho nhân viên và cơ sở trong phạm vi đang quản lý; bộ lọc, dropdown hoặc sửa request không cấp thêm quyền. Các lỗi quyền tài khoản dùng MSG24 theo thao tác tạo/xem/phân quyền/đổi trạng thái. Lỗi CSRF giữ cách xử lý hiện có, không được coi là lỗi quyền nghiệp vụ.
+- Đồng bộ MSG35 cho email trùng, MSG36 cho username ngoài 3–100 ký tự/định dạng, MSG40 có tên cơ sở cho phân công vào cơ sở không hoạt động. Áp dụng cho DEF-UT-055/058/059/063/095/097–099/104–105/107–108 và luồng tạo tài khoản DEF-UT-068–075/088–092.
+- File ảnh hưởng: `AccountService`, `AccountAccessService`, `AccountProfileService`, `AccountRepository`, `AuthSecurity` và `AccountsPage.js`. Không thêm hoặc sửa file test; kiểm tra bổ sung trong bộ nhớ. Giữ nguyên DEF-UT-007/010/030/373 để thống nhất sau; không cập nhật sheet UT trong đợt này.
