@@ -378,11 +378,12 @@ public class BookingService {
             }).toList();
     }
 
-    // BR-13/215/216/218: chỉ tính lại dòng thuê giờ theo thời gian thực tế và ĐƠN GIÁ SNAPSHOT.
-    // Combo và phụ phí giữ nguyên; giới hạn từng chặng tránh thu trùng phần đã đổi phòng.
+    // BR-13: trả phòng trước giờ dự kiến vẫn giữ các dòng tiền thuê giờ đã xác nhận khi đặt/gia hạn/đổi phòng.
+    // BR-215/218: sau giờ dự kiến, tính từng chặng theo đơn giá snapshot, không thu trùng phần đổi phòng.
     public Map<UUID, BookingDtos.ChargeLine> checkoutHourlyCharges(Identity actor, UUID bookingId, Instant at) {
         BranchScope scope = branch(actor);
         BookingRow booking = requireInHouseBooking(bookingId, scope.id());
+        if (at.isBefore(booking.plannedEnd())) return Map.of();
         List<ChargeRow> charges = repository.charges(bookingId);
         var allocations = repository.allocations(bookingId);
         Map<UUID, BookingDtos.ChargeLine> result = new LinkedHashMap<>();
