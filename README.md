@@ -62,7 +62,7 @@ The current scope excludes a customer booking portal, hardware barcode-scanner i
 | Backend | Java 17, Spring Boot, Maven Wrapper |
 | Database | PostgreSQL with version-controlled SQL migration scripts |
 | Communication | REST API with JSON |
-| External integrations | SePay, email service, cloud storage |
+| External integrations | SePay, email service |
 | Version control | Git and GitHub |
 | Testing | JUnit and API testing tools such as Postman |
 | Deployment target | Docker on VPS/Cloud |
@@ -73,7 +73,7 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. The current backend contains eight peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, and `workforce`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `finance`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +82,7 @@ The backend is deployed as one application. The current backend contains eight p
 
 ## Project Structure
 
-The tree below reflects the current repository structure. Inventory and workforce are active backend features; finance remains planned.
+The tree below reflects the current repository structure. Inventory, workforce, and core funds/payment/reimbursement workflows are active backend features. Cash closing and financial reporting remain planned.
 
 ```text
 GCMB/
@@ -96,6 +96,7 @@ GCMB/
 │   │   ├── booking/
 │   │   ├── inventory/
 │   │   ├── workforce/
+│   │   ├── finance/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yaml
@@ -117,6 +118,7 @@ GCMB/
 │   │   │   ├── branch/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
+│   │   │   ├── finance/
 │   │   │   ├── landing/
 │   │   │   └── pricing/
 │   │   ├── shared/
@@ -148,7 +150,7 @@ GCMB/
 | `booking` | Reservations, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, and movement history. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, and attendance. Payroll remains planned. |
-| `finance` (planned) | Funds, expenses, reimbursements, cash reconciliation, and financial reporting. |
+| `finance` | Chain-wide accountant fund receipts, shared expense categories, branch payment/reimbursement requests, approval thresholds, payment history, and private evidence access. Cash closing and financial reporting remain planned. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -370,6 +372,7 @@ The detailed project references are:
 - GenZ Use Case List.
 - GenZ Cinema AS-IS / TO-BE workflows.
 - [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
+- [Finance Fund and Expense Workflow](docs/Finance%20Fund%20and%20Expense%20Workflow.md) — fund receipt confirmation, category maintenance, branch expense requests, approval thresholds, payment, reimbursement, and evidence access.
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.
 

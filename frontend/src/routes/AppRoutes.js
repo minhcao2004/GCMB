@@ -19,6 +19,7 @@ import DepositManagementPage from '../features/booking/pages/DepositManagementPa
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
+import AccountantFinancePage from '../features/finance/pages/AccountantFinancePage';
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
@@ -50,6 +51,7 @@ export default function AppRoutes() {
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
     <Route path="/ke-toan" element={<AccountantRefundPage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
+    <Route path="/ke-toan/chi-phi" element={<AccountantFinancePage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter>;

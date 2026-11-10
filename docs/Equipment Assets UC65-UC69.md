@@ -9,6 +9,7 @@ UC65–UC69 hỗ trợ tạo, xem/tìm kiếm/lọc, cập nhật, ngừng/kích
 - BR-202: Mã, tên, nhóm và vị trí là bắt buộc; mã tài sản duy nhất toàn chuỗi. Mã mới theo mẫu `ASSET-{MÃ_CƠ_SỞ}-{SỐ_TĂNG_DẦN}`, ví dụ `ASSET-HN01-0001`. Quản lý cơ sở chọn nhóm đang hoạt động từ danh mục toàn chuỗi do quản lý cấp cao duy trì.
 - BR-110: Hồ sơ tài sản luôn gắn với cơ sở/vị trí hiện hành. Cập nhật hồ sơ không thể đổi cơ sở; chuyển cơ sở cần quy trình xác nhận UC74–UC76.
 - BR-115/BR-116: Ảnh/chứng từ phải khớp nội dung với loại JPEG, PNG, WebP, HEIC, HEIF hoặc PDF, kích thước lớn hơn 0 và không vượt 20 MB.
+- Ảnh và chứng từ mới được lưu trên thư mục local của backend (`GCMB_ATTACHMENT_STORAGE_DIR`, mặc định `./data/attachments`) và được phân phối qua API có xác thực; người dùng chỉ xem được tài sản trong phạm vi vai trò/cơ sở của mình.
 - UC-68 dùng cờ hoạt động riêng với tình trạng vận hành (đang dùng, hỏng, sửa, đang chuyển, ngừng sử dụng).
 - BR-118: Chỉ xóa thiết bị chưa có sự cố hoặc điều chuyển; mọi asset được dùng trong lịch sử sự cố/điều chuyển được giữ nguyên.
 - Tài sản có liên kết chi phí mua, đang điều chuyển hoặc được tham chiếu trong lịch sử thay thế không thể xóa.
