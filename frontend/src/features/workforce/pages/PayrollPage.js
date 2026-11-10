@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
+import MoneyInput from '../../finance/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/accounting/payroll';
 const componentNames = {
-  BASE: 'Lương giờ thường',
+  BASE: 'Tiền công theo ca',
   OVERTIME: 'Ngoài giờ ngày thường',
   REST: 'Làm ngày nghỉ',
   HOLIDAY: 'Làm ngày lễ',
@@ -103,13 +104,10 @@ export default function PayrollPage() {
   const moneyInput = (key, label, state, setter) => (
     <label>
       {label}
-      <input
-        type="number"
-        min="0"
-        step="1"
+      <MoneyInput
         required
         value={state[key]}
-        onChange={(e) => setter({ ...state, [key]: e.target.value })}
+        onValueChange={(value) => setter({ ...state, [key]: value })}
       />
     </label>
   );
@@ -350,6 +348,7 @@ export default function PayrollPage() {
                             <h3>
                               {r.code} · {r.name} · {vnd(r.net_amount)}
                             </h3>
+                            <SalaryBankDetails entry={r} />
                             <ResultInputs
                               value={results[id]}
                               onChange={(v) => setResults({ ...results, [id]: v })}
@@ -380,6 +379,7 @@ export default function PayrollPage() {
                   <tr>
                     <th>Chọn</th>
                     <th>Nhân viên</th>
+                    <th>Tài khoản nhận lương</th>
                     <th>Tổng lương</th>
                     <th>Khấu trừ (gồm ứng)</th>
                     <th>Ứng đã trả</th>
@@ -405,6 +405,7 @@ export default function PayrollPage() {
                         <small>{r.name}</small>
                         {r.submitted_branch_name && <small>{r.submitted_branch_name}</small>}
                       </td>
+                      <td><SalaryBankDetails entry={r} /></td>
                       <td>{vnd(r.gross_amount)}</td>
                       <td>{vnd(r.deduction_amount)}</td>
                       <td>{vnd(r.advances)}</td>
@@ -433,6 +434,7 @@ export default function PayrollPage() {
                   <div className="finance-line" key={i}>
                     <span>
                       {componentNames[c.reason] || componentNames[c.kind]}
+                      {c.branch_name && <small>{c.branch_name}</small>}
                       {['ADDITION', 'DEDUCTION'].includes(c.kind) && <small>{c.reason}</small>}
                     </span>
                     <strong>{vnd(c.amount)}</strong>
@@ -443,10 +445,7 @@ export default function PayrollPage() {
                   <strong>−{vnd(detail.advances)}</strong>
                 </div>
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
-                <p>
-                  Ngân hàng: {detail.bank_name_snapshot || '—'} · Tài khoản:{' '}
-                  {detail.bank_account_snapshot || '—'} · {detail.bank_holder_snapshot || '—'}
-                </p>
+                <SalaryBankDetails entry={detail} />
                 {detail.payments.map((p, i) => (
                   <p key={i}>
                     {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
@@ -455,6 +454,10 @@ export default function PayrollPage() {
                 ))}
               </article>
             )}
+            {!!data.pendingBranches?.length && <details className="finance-card" open>
+              <summary>Chờ các cơ sở chốt đủ ({data.pendingBranches.length} phần lương đã gửi)</summary>
+              {data.pendingBranches.map((row, index) => <p key={index}>{row.code} · {row.name} — {row.branch_name} đã gửi</p>)}
+            </details>}
             <details className="finance-card">
               <summary>Lịch sử ứng lương ({data.advances.length})</summary>
               <div className="finance-table-wrap">
@@ -486,6 +489,21 @@ export default function PayrollPage() {
         )
       )}
     </section>
+  );
+}
+
+// HuyDV | UC-97: kế toán đối chiếu tài khoản do QLCS lưu trước khi chuyển tiền bên ngoài.
+function SalaryBankDetails({ entry }) {
+  const complete = entry.bank_name_snapshot && entry.bank_account_snapshot && entry.bank_holder_snapshot;
+  return (
+    <div className="payroll-bank-details">
+      <span>Ngân hàng: <strong>{entry.bank_name_snapshot || 'Chưa có'}</strong></span>
+      <span>Số tài khoản: <strong>{entry.bank_account_snapshot || 'Chưa có'}</strong></span>
+      <span>Chủ tài khoản: <strong>{entry.bank_holder_snapshot || 'Chưa có'}</strong></span>
+      {!complete && !entry.paid && <small>
+        Chưa đủ thông tin nhận lương. Liên hệ QLCS bổ sung, rồi bấm Tải lại trước khi chuyển khoản.
+      </small>}
+    </div>
   );
 }
 

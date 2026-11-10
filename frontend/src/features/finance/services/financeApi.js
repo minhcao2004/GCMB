@@ -11,6 +11,8 @@ export const financeApi = {
       await api.post(path, body, {
         headers: {
           [csrf.headerName]: csrf.token,
+          // HuyDV: để trình duyệt tạo multipart boundary khi gửi minh chứng chốt quỹ.
+          ...(body instanceof FormData ? { 'Content-Type': null } : {}),
           ...(branch ? { 'X-GCMB-Branch-Id': branch } : {}),
         },
       })

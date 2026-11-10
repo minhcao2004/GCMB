@@ -270,7 +270,7 @@ public class CashClosingService {
     var old = detail(actor, id);
     if ("RECONCILED".equals(old.get("status"))) throw conflict("Bản chốt quỹ đã được đối soát.");
     if (!input.resolved()) throw bad(
-      "Cần xác nhận đã kiểm tra và xử lý xong chênh lệch trước khi đối soát."
+      "Chưa thể xác nhận đã đối soát vì chênh lệch chưa được giải quyết. Vui lòng kiểm tra và ghi nhận kết luận xử lý."
     ); // BR-98.
     if (((BigDecimal) old.get("variance")).signum() != 0) text(
       (String) old.get("explanation"),

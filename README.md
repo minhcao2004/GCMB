@@ -305,6 +305,8 @@ The directory alone does not run migrations. If the team selects Flyway, configu
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
 
+Khắc phục checksum V5 (08/11/2026): khôi phục nguyên phần chú thích đầu `V5__branch_room_management.sql` từ commit `00c5414` để khớp checksum `-167495418` của bản đã áp dụng. Các câu lệnh SQL không đổi; không chạy lại V5, không sửa lịch sử Flyway hoặc dữ liệu nghiệp vụ. Flyway tính cả nội dung chú thích vào checksum, vì vậy không xóa hoặc chỉnh chú thích của migration đã phát hành. Nếu môi trường khác báo checksum khác, đối chiếu bản đã áp dụng trước khi xử lý.
+
 ## Usage
 
 Cơ sở tạm ngừng có thể mở lại bằng **Mở lại cơ sở** và xác nhận; hệ thống ghi nhật ký `REACTIVATE_BRANCH`, chuyển về ACTIVE và xóa lý do trạng thái hiện tại, giữ lịch sử tạm ngừng. API: `POST /api/v1/head-office/branches/{id}/reactivate` dành cho quản lý cấp cao, chỉ nhận cơ sở SUSPENDED (gọi lại với ACTIVE không đổi dữ liệu). Màn cơ sở không còn nút **Đóng cơ sở**; bản ghi CLOSED cũ vẫn được giữ để tra cứu. Lịch sử sửa thông tin không dùng lại lý do tạm ngừng; ghi chú vận hành và lý do trạng thái là hai thông tin riêng. Không cần migration.
@@ -334,7 +336,11 @@ V14 seed correction (24/10/2026): the six starter rooms per seeded branch are in
 
 ## Testing
 
+Lịch ca lễ tân (08/11/2026): màn Ca làm việc có vùng cuộn dọc cho cả Lịch ca / đăng ký và Công cá nhân trên desktop; bảng lịch cuộn ngang khi màn hình hẹp. Lễ tân dùng chung bố cục, kích thước ô, màu bốn khung ca, thanh chọn tuần, nhãn trạng thái và chú giải với lịch ca quản lý cơ sở trong `ShiftSchedulePage.js`, không dùng bộ CSS riêng. Nội dung và thao tác vẫn theo vai trò: lễ tân đăng ký/xem ca cá nhân; quản lý mở ca, phân công và chấm công. Không thay API hoặc quyền truy cập. File ảnh hưởng: `ShiftSchedulePage.js`, `shifts.css`.
+
 Run commands from the corresponding project directory.
+
+Thông báo lịch ca (08/11/2026): mở chi tiết/phân công, mở chấm công, mở chỉnh lịch hoặc đổi tuần/cơ sở sẽ xóa thông báo thành công của thao tác trước. Đóng hộp thoại không hiển thị thành công và không gọi API phân công. Thông báo mới chỉ được đặt sau khi API lưu thành công. File ảnh hưởng: `ShiftSchedulePage.js`. Không thêm file test theo yêu cầu; bốn kiểm tra hồi quy đã chạy đạt trước khi xóa file test tạm.
 
 | Check | Windows PowerShell | macOS/Linux |
 | --- | --- | --- |

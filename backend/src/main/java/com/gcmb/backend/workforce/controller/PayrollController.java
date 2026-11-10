@@ -26,6 +26,23 @@ public class PayrollController {
     service.branchHourly(actor, input);
   }
 
+  @GetMapping("/branch-management/payroll/{month}/employees")
+  public List<Map<String, Object>> settlementEmployees(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month) {
+    return service.settlementEmployees(actor, month);
+  }
+
+  @GetMapping("/branch-management/payroll/{month}/history")
+  public List<Map<String, Object>> branchHistory(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month) {
+    return service.branchHistory(actor, month);
+  }
+
+  @PostMapping("/branch-management/payroll/bank-details")
+  public void branchBank(@AuthenticationPrincipal Identity actor, @RequestBody BankDetails input) {
+    service.branchBank(actor, input);
+  }
+
   @PostMapping("/branch-management/payroll/{month}/{action:preview|submit}")
   public Map<String, Object> branchSettlement(@AuthenticationPrincipal Identity actor,
       @PathVariable String month, @PathVariable String action, @RequestBody BranchSettlement input) {

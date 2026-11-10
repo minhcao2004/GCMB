@@ -4,6 +4,19 @@
   max-width: 1600px;
   margin: 0 auto;
 }
+/* HuyDV: giữ nguyên chiều rộng chốt quỹ khi chuyển sang bước xác nhận. */
+.finance-page.cash-closing-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 24px 32px;
+}
+@media (max-width: 600px) {
+  .finance-page.cash-closing-page {
+    padding: 20px 16px;
+  }
+}
 .finance-page h1 {
   font-size: 26px;
   margin: 0 0 8px;
@@ -20,6 +33,18 @@
 }
 .finance-page small {
   display: block;
+}
+.payroll-bank-details {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  margin: 12px 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.payroll-bank-details strong {
+  font-variant-numeric: tabular-nums;
+  user-select: text;
 }
 .finance-tabs,
 .finance-toolbar,

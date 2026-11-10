@@ -36,6 +36,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
   useEffect(() => {
     attendanceRequest.current += 1;
     setDialog(null);
+    setNotice('');
     return () => { attendanceRequest.current += 1; };
   }, [branchScope, week]);
   modal.current = dialog;
@@ -75,6 +76,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     };
   }, [week, branchScope, revision]);
   async function publish(targetWeek, focusSlot = null) {
+    setNotice('');
     setPreparing(true);
     setError('');
     try {
@@ -93,10 +95,13 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
       .filter((s) => s.status !== 'CANCELLED')
       .map((s) => [slotKey(s.date, s.templateId), s])
   );
-  const open = (type, shift, assignment) =>
+  const open = (type, shift, assignment) => {
+    setNotice('');
     setDialog({ type, data: { ...data, readOnly: readonly }, shift, assignment });
+  };
   async function openAttendance(shift) {
     if (!manager || !shift || modal.current) return;
+    setNotice('');
     const request = ++attendanceRequest.current;
     setDialog({ type: 'attendanceLoading', shift });
     setError('');

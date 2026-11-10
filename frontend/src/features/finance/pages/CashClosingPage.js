@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
+import MoneyInput from '../components/MoneyInput';
 import '../styles/finance.css';
 
 const statusLabel = { SUBMITTED: 'Chờ đối soát', RECONCILED: 'Đã đối soát', DRAFT: 'Chưa gửi' };
@@ -118,7 +119,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
       .includes(search.toLowerCase()),
   );
   return (
-    <section className="finance-page">
+    <section className="finance-page cash-closing-page">
       <h1>
         {tab === 'create'
           ? 'Chốt quỹ cuối ngày'
@@ -262,15 +263,11 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
               <fieldset disabled={busy || readOnly}>
                 <label>
                   Tiền mặt đếm thực tế *
-                  <input
+                  <MoneyInput
                     required
-                    type="number"
-                    min="0"
-                    step="1"
-                    max="999999999999999"
                     value={actual}
-                    onChange={(e) => {
-                      setActual(e.target.value);
+                    onValueChange={(value) => {
+                      setActual(value);
                       setConfirm(false);
                     }}
                   />
