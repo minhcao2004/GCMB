@@ -55,36 +55,80 @@
 .finance-fund-form { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
 .finance-fund-form label { align-self:start; min-width:0; }
 .finance-fund-form input { box-sizing:border-box; max-width:100%; }
-.finance-fund-transfer-list { display:grid; max-height:min(62vh,620px); gap:12px; overflow:auto; padding:2px 6px 8px 2px; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scroll-snap-type:y proximity; }
-.finance-fund-transfer-card { display:grid; gap:16px; padding:17px 19px; border:1px solid #e6eaf0; border-radius:13px; background:#fff; scroll-snap-align:start; transition:border-color .16s ease,box-shadow .16s ease; }
-.finance-fund-transfer-card:hover { border-color:#d8dfea; box-shadow:0 5px 16px rgb(31 51 81 / 5%); }
-.finance-fund-transfer-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
-.finance-fund-transfer-card-head>div { display:grid; min-width:0; gap:5px; }
-.finance-fund-transfer-card-head>div strong { overflow-wrap:anywhere; color:#2d3c54; font-size:13px; letter-spacing:.01em; }
-.finance-fund-transfer-card-head small,.finance-fund-transfer-facts small { color:#8490a0; font-size:11px; }
-.finance-fund-transfer-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; padding:13px 0; border-top:1px solid #eef1f5; border-bottom:1px solid #eef1f5; }
-.finance-fund-transfer-facts>div { display:grid; align-content:start; min-width:0; gap:5px; }
-.finance-fund-transfer-facts span,.finance-fund-transfer-proof>span { color:#7b8798; font-size:10px; font-weight:700; }
-.finance-fund-transfer-facts strong { overflow-wrap:anywhere; color:#34425a; font-size:12px; font-variant-numeric:tabular-nums; }
-.finance-fund-transfer-facts>div:nth-child(2) strong { color:#167b5a; font-size:15px; }
-.finance-fund-transfer-proof { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
-.finance-fund-transfer-proof>span { padding-top:5px; white-space:nowrap; }
-.finance-fund-transfer-proof>.finance-files { flex:1; }
-.finance-fund-upload { display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0; }
-.finance-fund-upload input[type=file] { max-width:min(100%,310px); color:#64748b; font:inherit; font-size:11px; }
-.finance-fund-upload button { min-height:36px; color:#a51c68; border-color:#f0cfe0; background:#fff7fb; white-space:nowrap; }
-.finance-fund-transfer-list::-webkit-scrollbar { width:8px; }
-.finance-fund-transfer-list::-webkit-scrollbar-thumb { border:2px solid #fff; border-radius:8px; background:#cbd4e0; }
+.finance-table-wrap { max-height:min(62vh,620px); overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.finance-table-wrap table { border-collapse:separate; border-spacing:0; }
+.finance-table-wrap thead th { position:sticky; z-index:2; top:0; background:#f8f9fb; }
+.finance-table-wrap th { white-space:nowrap; }
+.finance-fund-grid-outer { width:100%; max-height:min(62vh,620px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; border:1px solid #edf0f4; border-radius:11px; }
+.finance-fund-grid-inner { min-width:0; }
+.finance-fund-fixed-head,.finance-fund-grid-row { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.8fr) minmax(0,.85fr) minmax(0,1.7fr) minmax(0,.95fr); width:100%; min-width:0; }
+.finance-fund-fixed-head { position:sticky; z-index:2; top:0; padding:0 14px; color:#778397; background:#f8f9fb; border-bottom:1px solid #e9edf2; }
+.finance-fund-fixed-head>span { min-width:0; padding:12px 10px; overflow:hidden; font-size:10px; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+.finance-fund-grid-scroll { overflow:visible; }
+.finance-fund-grid-row { align-items:center; padding:8px 14px; border-bottom:1px solid #eef0f4; }
+.finance-fund-grid-row:last-child { border-bottom:0; }
+.finance-fund-grid-cell { min-width:0; padding:7px 10px; overflow:hidden; color:#34425a; font-size:11px; line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
+.finance-fund-grid-cell strong { display:block; overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.finance-fund-grid-cell small { display:inline; margin-left:4px; color:#8490a0; font-size:10px; }
+.finance-fund-grid-amount strong { color:#167b5a; font-size:12px; font-variant-numeric:tabular-nums; }
+.finance-fund-grid-status { display:flex; align-items:center; gap:6px; }
+.finance-fund-grid-status .finance-status { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.finance-fund-grid-status button { flex:0 0 auto; min-height:28px; padding:0 8px; font-size:9px; }
+.finance-fund-sender strong,.finance-fund-reference { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.finance-fund-bill { display:flex; align-items:center; gap:6px; }
+.finance-fund-grid-cell .finance-files-compact { display:inline-flex; min-width:0; max-width:100%; overflow:hidden; }
+.finance-fund-grid-cell .finance-files-compact span { display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:100%; overflow:hidden; }
+.finance-fund-grid-cell .finance-files-compact a { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.finance-fund-grid-cell .finance-files-compact .finance-thumb-compact { flex:0 0 34px; width:34px; height:24px; border-radius:4px; }
+.finance-fund-grid-cell .finance-files-compact .finance-thumb-compact img { display:block; width:100%; height:100%; object-fit:cover; }
+.finance-fund-reference { flex:0 1 auto; min-width:0; max-width:42%; }
+.finance-fund-grid-scroll>.finance-empty { padding:22px; }
+.finance-fund-upload { display:flex; align-items:center; gap:5px; min-width:0; max-width:100%; margin:0; }
+.finance-fund-upload input[type=file] { flex:1 1 0; width:100%; min-width:0; max-width:100%; overflow:hidden; color:#64748b; font:inherit; font-size:9px; }
+.finance-fund-upload button { min-height:30px; padding:0 9px; color:#a51c68; border-color:#f0cfe0; background:#fff7fb; font-size:10px; white-space:nowrap; }
+.finance-page-head-office { padding-right:clamp(20px,1.8vw,32px); padding-left:clamp(20px,1.8vw,32px); }
+.finance-fund-panel { padding:clamp(26px,2.5vw,38px); }
+.finance-fund-summary { gap:16px; }
+.finance-fund-summary article { min-height:104px; padding:19px 21px; }
+.finance-fund-grid-outer { max-height:min(66vh,700px); }
+.finance-fund-fixed-head>span { padding-top:15px; padding-bottom:15px; font-size:11px; }
+.finance-fund-grid-row { padding-top:13px; padding-bottom:13px; }
+.finance-fund-grid-cell { font-size:12px; }
+.finance-fund-grid-cell strong { font-size:12px; }
+.finance-fund-grid-amount strong { font-size:14px; }
+.finance-fund-grid-status .finance-status { flex:0 1 auto; min-width:0; font-size:11px; }
+.finance-fund-grid-cell .finance-files-compact button { min-height:0; padding:0; border:0; border-radius:0; background:transparent; font:inherit; }
+.finance-fund-grid-cell .finance-files-compact .finance-thumb-compact { flex:0 0 42px; width:42px; height:30px; border:1px solid #e1e7ef; border-radius:5px; }
+.finance-fund-grid-cell .finance-files-compact .finance-attachment-link { min-width:0; overflow:hidden; color:#306d9b; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.finance-files .finance-thumb { min-height:0; padding:0; border:1px solid #e1e7ef; border-radius:6px; background:transparent; }
+.finance-files .finance-attachment-link { min-height:0; padding:0; border:0; border-radius:0; color:#306d9b; background:transparent; font:inherit; font-size:12px; text-align:left; }
+.finance-files .finance-attachment-link:hover:not(:disabled) { color:#a51c68; text-decoration:underline; }
+.finance-preview-error { display:block; margin-top:6px; color:#a72d25; }
+.finance-preview-backdrop { position:fixed; z-index:20000; inset:0; display:grid; place-items:center; padding:24px; background:rgb(18 27 42 / 76%); backdrop-filter:blur(3px); }
+.finance-preview-dialog { display:flex; flex-direction:column; width:min(1100px,96vw); max-height:92vh; overflow:hidden; border:1px solid #e3e8ef; border-radius:16px; background:#fff; box-shadow:0 24px 80px rgb(0 0 0 / 32%); }
+.finance-preview-dialog header,.finance-preview-dialog footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; }
+.finance-preview-dialog header { border-bottom:1px solid #edf0f4; }
+.finance-preview-dialog header strong { overflow:hidden; color:#34425a; text-overflow:ellipsis; white-space:nowrap; }
+.finance-preview-dialog .finance-preview-image { display:block; width:100%; height:min(72vh,760px); object-fit:contain; background:#f3f5f8; }
+.finance-preview-dialog iframe { width:100%; height:min(72vh,760px); border:0; }
+.finance-preview-dialog footer { justify-content:flex-end; border-top:1px solid #edf0f4; }
+.finance-preview-dialog footer a { margin-right:auto; color:#306d9b; text-decoration:none; }
+.finance-preview-dialog footer button { min-height:40px; }
 @media(max-width:760px) {
   .finance-fund-form { grid-template-columns:minmax(0,1fr); }
   .finance-fund-form .wide,.finance-fund-dialog-note,.finance-fund-form .finance-confirm-actions { grid-column:auto; }
-  .finance-fund-transfer-list { max-height:68vh; }
-  .finance-fund-transfer-card { padding:15px; gap:13px; }
-  .finance-fund-transfer-facts { grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px 10px; }
-  .finance-fund-transfer-proof { align-items:stretch; flex-direction:column; gap:9px; }
-  .finance-fund-upload { align-items:stretch; flex-direction:column; }
-  .finance-fund-upload input[type=file] { max-width:100%; }
-  .finance-fund-upload button { min-height:42px; }
+  .finance-fund-grid-outer { max-height:68vh; }
+  .finance-fund-fixed-head,.finance-fund-grid-row { grid-template-columns:minmax(0,1fr) minmax(0,.85fr) minmax(0,.8fr) minmax(0,1.4fr) minmax(0,.9fr); padding-right:6px; padding-left:6px; }
+  .finance-fund-fixed-head>span,.finance-fund-grid-cell { padding-right:3px; padding-left:3px; font-size:9px; }
+  .finance-fund-grid-status .finance-status { padding:3px 5px; font-size:8px; }
+  .finance-fund-upload { gap:2px; }
+  .finance-fund-upload button { padding:0 4px; font-size:8px; }
+  .finance-page-head-office { padding-right:14px; padding-left:14px; }
+  .finance-fund-panel { padding:20px 14px; }
+  .finance-fund-summary { gap:10px; }
+  .finance-fund-summary article { min-height:82px; padding:14px; }
+  .finance-fund-grid-row { padding-top:10px; padding-bottom:10px; }
+  .finance-preview-backdrop { padding:10px; }
 }
 @keyframes finance-confirm-in { from { opacity:0; transform:translateY(8px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media(max-width:760px) { .finance-page { padding:18px 14px 30px; }.finance-heading,.finance-balance { align-items:flex-start; flex-direction:column; }.finance-form,.finance-category-form,.finance-incoming-metrics { grid-template-columns:1fr; }.finance-form .wide { grid-column:auto; }.finance-category-form>button { justify-self:start; }.finance-tabs { width:100%; }.finance-section-heading { align-items:stretch; flex-wrap:wrap; }.finance-section-heading>div:first-child { flex-basis:100%; }.finance-mini-total { flex:1; }.finance-primary-action { justify-self:stretch!important; width:100%; }.finance-fund-summary { grid-template-columns:1fr; }.finance-fund-dialog-heading { padding:19px 18px 13px; }.finance-fund-dialog>p { padding:12px 18px 0; }.finance-fund-form { padding:16px 18px 20px; gap:13px; }.finance-fund-dialog-note,.finance-fund-form .finance-confirm-actions { grid-column:auto; }.finance-fund-form .finance-confirm-actions { justify-content:stretch; }.finance-fund-form .finance-confirm-actions button { flex:1; min-height:44px; } }

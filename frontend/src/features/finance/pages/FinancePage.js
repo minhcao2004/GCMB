@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiAssetUrl } from '../../../api/client';
+import { createPortal } from 'react-dom';
+import apiClient from '../../../api/client';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { financeApi } from '../services/financeApi';
 import '../styles/finance.css';
@@ -32,16 +33,36 @@ const localDateTime = (value) => {
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString('vi-VN');
 };
-const fileUrl = (id) => apiAssetUrl(`/finance/attachments/${id}`);
 const message = (error) => { const errors=apiErrors(error); return errors.form || Object.values(errors)[0] || 'Không thể hoàn tất thao tác. Vui lòng thử lại.'; };
 const fileAccept = 'image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf';
 
-function Attachments({ rows=[] }) {
+function Attachments({ rows=[], compact=false }) {
+  const [preview,setPreview]=useState(null);
+  const [opening,setOpening]=useState(false);
+  const [previewError,setPreviewError]=useState('');
+  useEffect(()=>{if(!preview)return undefined;return()=>URL.revokeObjectURL(preview.url);},[preview]);
   if (!rows.length) return <small>Chưa có chứng từ đính kèm</small>;
-  return <div className="finance-files">{rows.map((item)=><span key={item.id}>
-    {item.mime_type?.startsWith('image/')&&<a className="finance-thumb" href={fileUrl(item.id)} target="_blank" rel="noreferrer"><img src={fileUrl(item.id)} alt={item.original_name}/></a>}
-    <a href={fileUrl(item.id)} target="_blank" rel="noreferrer">{item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_PROOF'?'Bill thanh toán':'Bill chuyển khoản'} · {item.original_name}</a>
-  </span>)}</div>;
+  async function openAttachment(item) {
+    setOpening(true);setPreviewError('');
+    try { const response=await apiClient.get(`/finance/attachments/${item.id}`,{responseType:'blob'});setPreview({url:URL.createObjectURL(response.data),name:item.original_name,mimeType:response.data.type||item.mime_type}); }
+    catch { setPreviewError('Không tải được chứng từ. Vui lòng làm mới trang và thử lại.'); }
+    finally { setOpening(false); }
+  }
+  const kindLabel=(item)=>item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_PROOF'?'Bill thanh toán':'Bill chuyển khoản';
+  return <>
+    <div className={`finance-files${compact?' finance-files-compact':''}`}>{rows.map((item)=><span key={item.id}>
+      {item.mime_type?.startsWith('image/')&&<button type="button" className={`finance-thumb${compact?' finance-thumb-compact':''}`} aria-label={`Xem ảnh ${item.original_name}`} onClick={()=>openAttachment(item)} disabled={opening}><img src={apiClient.getUri({url:`/finance/attachments/${item.id}`})} alt={item.original_name}/></button>}
+      <button type="button" className="finance-attachment-link" onClick={()=>openAttachment(item)} disabled={opening}>{opening?'Đang tải…':`${kindLabel(item)} · ${item.original_name}`}</button>
+    </span>)}</div>
+    {previewError&&<small className="finance-preview-error" role="alert">{previewError}</small>}
+    {preview&&createPortal(<div className="finance-preview-backdrop" role="presentation" onMouseDown={(event)=>event.target===event.currentTarget&&setPreview(null)}>
+      <section className="finance-preview-dialog" role="dialog" aria-modal="true" aria-label={`Xem chứng từ ${preview.name}`}>
+        <header><strong>{preview.name}</strong><button type="button" onClick={()=>setPreview(null)} aria-label="Đóng ảnh">×</button></header>
+        {preview.mimeType?.startsWith('image/')?<img className="finance-preview-image" src={preview.url} alt={preview.name}/>:preview.mimeType==='application/pdf'?<iframe title={preview.name} src={preview.url}/>:<p>Định dạng tệp này chưa hỗ trợ xem trước.</p>}
+        <footer><a href={preview.url} download={preview.name}>Tải tệp</a><button type="button" onClick={()=>setPreview(null)}>Đóng</button></footer>
+      </section>
+    </div>,document.body)}
+  </>;
 }
 
 function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile }) {
@@ -83,14 +104,18 @@ function BranchFilter({ branches, value, onChange }) {
   </label>;
 }
 
-function FundTransferTable({ rows, busy, fundFiles, setFundFiles, onUpload }) {
-  return <div className="finance-fund-transfer-list" aria-label="Danh sách yêu cầu chuyển tiền">
-    {rows.map((item)=><article className="finance-fund-transfer-card" key={item.id}>
-      <header className="finance-fund-transfer-card-head"><div><strong>{item.code}</strong><small>{item.sent_by_name||'Quản lý cấp cao'}</small></div><span className={`finance-status ${item.status.toLowerCase()}`}>{statusName[item.status]}</span></header>
-      <div className="finance-fund-transfer-facts"><div><span>Ngày gửi</span><strong>{localDate(item.sent_on)}</strong><small>Tạo yêu cầu: {localDateTime(item.sent_at)}</small></div><div><span>Số tiền</span><strong>{money(item.amount)}</strong></div><div><span>Mã giao dịch</span><strong>{item.transfer_reference||'—'}</strong></div>{item.received_at&&<div><span>Đã xác nhận</span><strong>{localDateTime(item.received_at)}</strong><small>{item.received_by_name||'Kế toán'}</small></div>}</div>
-      <div className="finance-fund-transfer-proof"><span>Bill chuyển khoản</span>{item.has_proof?<Attachments rows={[{id:item.attachment_id,kind:'TRANSFER_PROOF',original_name:item.attachment_name,mime_type:item.attachment_mime}]}/>:item.status==='WAITING_CONFIRMATION'?<form className="finance-fund-upload" onSubmit={(event)=>onUpload(event,item.id)}><input aria-label={`Chọn bill cho ${item.code}`} type="file" required accept={fileAccept} onChange={(event)=>setFundFiles({...fundFiles,[item.id]:{proof:event.target.files?.[0]||null}})}/><button disabled={busy}>{busy?'Đang lưu…':'Tải bill lên'}</button></form>:<small>Không có bill đính kèm</small>}</div>
-    </article>)}
-    {!rows.length&&<div className="finance-empty">Chưa có yêu cầu chuyển tiền.</div>}
+function FundTransferTable({ rows, busy, fundFiles, setFundFiles, onUpload, onConfirm }) {
+  return <div className="finance-fund-grid-outer" aria-label="Danh sách yêu cầu chuyển tiền" role="table">
+    <div className="finance-fund-grid-inner">
+      <div className="finance-fund-fixed-head" role="row"><span role="columnheader">Người gửi</span><span role="columnheader">Ngày gửi</span><span role="columnheader">Số tiền</span><span role="columnheader">Mã giao dịch · Bill</span><span role="columnheader">Trạng thái</span></div>
+      <div className="finance-fund-grid-scroll" role="rowgroup">{rows.map((item)=><div className="finance-fund-grid-row" role="row" key={item.id}>
+        <div className="finance-fund-grid-cell finance-fund-sender" role="cell" title={`${item.sent_by_name||'Quản lý cấp cao'} · ${item.code}`}><strong>{item.sent_by_name||'Quản lý cấp cao'} · {item.code}</strong></div>
+        <div className="finance-fund-grid-cell" role="cell" title={localDate(item.sent_on)}><strong>{localDate(item.sent_on)}</strong></div>
+        <div className="finance-fund-grid-cell finance-fund-grid-amount" role="cell"><strong>{money(item.amount)}</strong></div>
+        <div className="finance-fund-grid-cell finance-fund-bill" role="cell"><span className="finance-fund-reference" title={item.transfer_reference||'—'}>{item.transfer_reference||'—'}</span>{item.has_proof&&<Attachments compact rows={[{id:item.attachment_id,kind:'TRANSFER_PROOF',original_name:item.attachment_name,mime_type:item.attachment_mime}]} />}{!item.has_proof&&item.status==='WAITING_CONFIRMATION'&&onUpload&&<form className="finance-fund-upload" onSubmit={(event)=>onUpload(event,item.id)}><input aria-label={`Chọn bill cho ${item.code}`} type="file" required accept={fileAccept} onChange={(event)=>setFundFiles({...fundFiles,[item.id]:{proof:event.target.files?.[0]||null}})}/><button disabled={busy}>{busy?'Lưu…':'Tải bill'}</button></form>}{!item.has_proof&&item.status!=='WAITING_CONFIRMATION'&&<small>Chưa có bill</small>}</div>
+        <div className="finance-fund-grid-cell finance-fund-grid-status" role="cell"><span className={`finance-status ${item.status.toLowerCase()}`}>{statusName[item.status]}</span>{item.status==='WAITING_CONFIRMATION'&&onConfirm&&<button disabled={busy} onClick={()=>onConfirm(item.id)}>Đã nhận</button>}</div>
+      </div>)}{!rows.length&&<div className="finance-empty">Chưa có yêu cầu chuyển tiền.</div>}</div>
+    </div>
   </div>;
 }
 
@@ -153,7 +178,7 @@ function FinanceWorkspace({ user }) {
   const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['history','Lịch sử thanh toán và hoàn ứng']];
   const headOfficeTabs=[['fund','Cấp quỹ'],['expense_requests','Đề nghị thanh toán và hoàn ứng']];
 
-  return <main className="finance-page">
+  return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}`}>
     <header className="finance-heading"><div><p className="finance-kicker">QUẢN LÝ THU CHI</p><h1>{role==='HEAD_OFFICE_MANAGER'?'Quỹ & duyệt chi toàn chuỗi':role==='ACCOUNTANT'?accountantSection==='payments'?'Quản lý thu và cấp quỹ':accountantSection==='inventory'?'Hạng mục chi phí':'Chi và hoàn ứng':'Chi phí cơ sở'}</h1>{role!=='HEAD_OFFICE_MANAGER'&&<p>{role==='BRANCH_MANAGER'?`Cơ sở ${user.branchName||''}`:role==='ACCOUNTANT'&&accountantSection==='plus'?'Theo dõi và xử lý đề nghị của các cơ sở.':'Quản lý số dư quỹ và các khoản thu chi.'}</p>}</div><button type="button" onClick={reload} disabled={loading}>Làm mới</button></header>
     {notice&&<p className="finance-notice" role="status">{notice}</p>}{error&&<p className="finance-error" role="alert">{error}</p>}
 
@@ -161,7 +186,7 @@ function FinanceWorkspace({ user }) {
       <section className="finance-balance"><div><span>Số dư quỹ kế toán dùng chung toàn chuỗi</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div><p>Quỹ được cộng khi kế toán xác nhận đã nhận khoản chuyển từ quản lý cấp cao.</p></section>
       <nav className="finance-tabs" aria-label="Thu và cấp quỹ">{accountantFundTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>setAccountTab(key)}>{label}</button>)}</nav>
       {accountTab==='incoming'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">THU & CẤP QUỸ</span><h2>Lịch sử tiền vào</h2><p>Các khoản quản lý cấp cao gửi sang và trạng thái kế toán xác nhận.</p></div><div className="finance-mini-total"><span>Đã xác nhận</span><strong>{money(receivedTotal)}</strong></div><div className="finance-mini-total pending"><span>Chờ xác nhận</span><strong>{money(waitingTotal)}</strong></div></div>
-        <div className="finance-table-wrap"><table><thead><tr><th>Mã yêu cầu · Người gửi</th><th>Ngày gửi · Ngày tạo yêu cầu</th><th>Số tiền</th><th>Mã giao dịch · Bill</th><th>Trạng thái</th><th></th></tr></thead><tbody>{transfers.map((item)=><tr key={item.id}><td><strong>{item.code}</strong><small>{item.sent_by_name||'Quản lý cấp cao'}</small></td><td>{localDate(item.sent_on)}<small>Tạo yêu cầu: {localDateTime(item.sent_at)}</small></td><td><strong>{money(item.amount)}</strong></td><td>{item.transfer_reference||'—'}<Attachments rows={item.has_proof?[{id:item.attachment_id,kind:'TRANSFER_PROOF',original_name:item.attachment_name,mime_type:item.attachment_mime}]:[]}/>{!item.has_proof&&item.status==='WAITING_CONFIRMATION'&&<small>Chưa có bill đính kèm</small>}</td><td><span className={`finance-status ${item.status.toLowerCase()}`}>{statusName[item.status]}</span>{item.received_at&&<small>{localDateTime(item.received_at)}{item.received_by_name?` · ${item.received_by_name}`:''}</small>}</td><td>{item.status==='WAITING_CONFIRMATION'&&<button disabled={busy} onClick={()=>act(()=>financeApi.confirmFund(item.id),'Đã xác nhận nhận tiền; số dư quỹ đã cập nhật.')}>Đã nhận</button>}</td></tr>)}{!transfers.length&&<tr><td colSpan="6" className="finance-empty">Chưa có yêu cầu chuyển quỹ.</td></tr>}</tbody></table></div>
+        <FundTransferTable rows={transfers} busy={busy} onConfirm={(id)=>act(()=>financeApi.confirmFund(id),'Đã xác nhận nhận tiền; số dư quỹ đã cập nhật.')}/>
       </section>}
       {accountTab==='outgoing'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">THU & CẤP QUỸ</span><h2>Đề nghị thanh toán</h2><p>Đề nghị thanh toán và hoàn ứng đang chờ kế toán xử lý.</p></div><div className="finance-mini-total pending"><span>Đang chờ xử lý</span><strong>{openRequests.length} đề nghị</strong></div></div><RequestTable rows={openRequests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/></section>}
       {accountTab==='categories'&&<section className="finance-panel"><div className="finance-section-heading"><div><h2>Hạng mục chi phí</h2><p>Tạo, chỉnh sửa và cập nhật các hạng mục dùng chung.</p></div><div className="finance-mini-total"><span>Hạng mục đang dùng</span><strong>{categories.filter((item)=>item.active).length}</strong></div></div>
