@@ -14,6 +14,8 @@ import com.gcmb.backend.manual.useraccount.UserAccountManualRunner.TestResult;
 import static com.gcmb.backend.manual.useraccount.UserAccountManualRunner.check;
 import static com.gcmb.backend.manual.useraccount.UserAccountManualRunner.expectAuthFailure;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,8 +25,12 @@ import com.gcmb.backend.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.accounts.dto.AccountDtos.EmployeeOption;
 import com.gcmb.backend.accounts.dto.AccountDtos.Option;
 import com.gcmb.backend.accounts.dto.AccountDtos.Options;
+import com.gcmb.backend.accounts.repository.AccountRepository;
 import java.util.ArrayList;
 import java.util.List;
+import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 public final class ViewUserAccountsManualCases {
     private static final String UC = "UC-05 View User Accounts";
@@ -44,23 +50,30 @@ public final class ViewUserAccountsManualCases {
             return check(result.items().size() == 4 && result.total() == 4 && result.page() == 0 && result.size() == 10,
                     "items=" + result.items().size() + ", total=" + result.total() + ", page=" + result.page());
         }, "AccountService.list/AccountRepository.list"));
-        cases.add(test("UAM-054", "Branch Manager xem danh sách không bộ lọc", "Chỉ thấy account trong phạm vi.", "Normal", () -> {
-            List<AccountView> unscoped = demoAccounts();
-            var f = UserAccountFixtures.list(new AccountPage(unscoped, unscoped.size(), 0, 10));
-            AccountPage result = f.service().list("", "", null, "", 0, 10);
-            boolean scoped = result.items().stream().allMatch(account -> UserAccountDemoData.HOA_BANG_BRANCH_ID.equals(account.branchId()));
-            return check(scoped, "returnedIds=" + result.items().stream().map(AccountView::username).toList());
-        }, "AuthSecurity/AccountService.list"));
-        cases.add(test("UAM-055", "Branch Manager tìm username ngoài cơ sở", "Không lộ account ngoài phạm vi; trả rỗng.", "Abnormal", () -> {
-            AccountView outside = UserAccountDemoData.account(UserAccountDemoData.NEW_ACCOUNT_ID, "Ngoài phạm vi", "OUT-01", "outside", "outside@example.invalid", "RECEPTIONIST", UserAccountDemoData.NLB_BRANCH_ID, "NLB", "ACTIVE", List.of());
-            var f = UserAccountFixtures.list(new AccountPage(List.of(outside), 1, 0, 10));
-            AccountPage result = f.service().list("outside", "", null, "", 0, 10);
-            return check(result.items().isEmpty(), "returned=" + result.items().stream().map(AccountView::username).toList());
-        }, "AuthSecurity/AccountService.list"));
-        cases.add(test("UAM-056", "ACCOUNTANT/RECEPTIONIST gọi list", "Từ chối MSG24.", "Abnormal", () -> {
+        cases.add(test("UAM-054", "Branch Manager ACTIVE được phân công Hoa Bằng và đã đăng nhập.",
+                "Xem danh sách tài khoản không nhập bộ lọc.",
+                "Chỉ trả tài khoản RECEPTIONIST thuộc Hoa Bằng; không thay đổi dữ liệu.", "Normal", () -> {
+            List<AccountView> scoped = List.of(UserAccountDemoData.receptionist());
+            var f = UserAccountFixtures.list(new AccountPage(scoped, scoped.size(), 0, 10));
+            AccountPage result = f.service().list("", "", null, "", 0, 10, UserAccountDemoData.branchManagerIdentity());
+            verify(f.repository()).list("", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", 0, 10);
+            return check(result.items().equals(scoped), "returnedIds=" + result.items().stream().map(AccountView::username).toList());
+        }, "AccountService.list(Identity)", "Nguồn: UC-05 - View_User_Accounts.docx; Flyway V14/V15; Production: AccountService.list/managerScope. Phương pháp kiểm thử: White-box."));
+        cases.add(test("UAM-055", "Branch Manager ACTIVE được phân công Hoa Bằng; tài khoản cần tìm thuộc NLB.",
+                "Tìm username=outside mà không truyền branchId.",
+                "Trả danh sách rỗng trong phạm vi Hoa Bằng; không làm lộ tài khoản NLB và không thay đổi dữ liệu.", "Abnormal", () -> {
+            var f = UserAccountFixtures.list(new AccountPage(List.of(), 0, 0, 10));
+            AccountPage result = f.service().list("outside", "", null, "", 0, 10, UserAccountDemoData.branchManagerIdentity());
+            verify(f.repository()).list("outside", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", 0, 10);
+            return check(result.items().isEmpty(), "returned=" + result.items());
+        }, "AccountService.list(Identity)", "Nguồn: UC-05 - View_User_Accounts.docx; Flyway V14/V15; Production: AccountService.list/managerScope. Phương pháp kiểm thử: White-box."));
+        cases.add(test("UAM-056", "Accountant ACTIVE đã đăng nhập nhưng không có quyền quản lý tài khoản.",
+                "Yêu cầu xem danh sách tài khoản.",
+                "Từ chối với mã 403. Hiển thị: Bạn không có quyền xem đối với tài khoản. Không trả dữ liệu tài khoản.", "Abnormal", () -> {
             var f = UserAccountFixtures.list(new AccountPage(demoAccounts(), 4, 0, 10));
-            return expectAuthFailure(() -> f.service().list("", "", null, "", 0, 10), 403, MSG24);
-        }, "AuthSecurity/AccountService.list"));
+            return expectAuthFailure(() -> f.service().list("", "", null, "", 0, 10,
+                    UserAccountDemoData.accountantIdentity()), 403, MSG24);
+        }, "AccountService.list(Identity)", "Nguồn: UC-05 - View_User_Accounts.docx; MSG24; Flyway V14/V15; Production: AccountService.list/managerScope. Phương pháp kiểm thử: Black-box."));
         cases.add(filter("UAM-057", "letan.hoa", "", null, "", "search username partial"));
         cases.add(filter("UAM-058", "KETOAN@EXAMPLE", "", null, "", "search email case-insensitive"));
         cases.add(filter("UAM-059", "Lễ tân - Hoa Bằng", "", null, "", "search employee name"));
@@ -73,13 +86,23 @@ public final class ViewUserAccountsManualCases {
         cases.add(filter("UAM-061", "", "RECEPTIONIST", null, "", "filter role"));
         cases.add(filter("UAM-062", "", "", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", "filter branch for staff assignment"));
         cases.add(filter("UAM-063", "", "BRANCH_MANAGER", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", "filter manager assignment"));
-        cases.add(test("UAM-064", "branchId=Hoa Bằng", "Không đưa chain-level account vào kết quả branch.", "Normal", () -> {
-            List<AccountView> wrong = List.of(UserAccountDemoData.headOfficeManager(), UserAccountDemoData.accountant());
-            var f = UserAccountFixtures.list(new AccountPage(wrong, 2, 0, 10));
-            AccountPage result = f.service().list("", "", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", 0, 10);
-            boolean noChain = result.items().stream().noneMatch(account -> account.branchId() == null);
-            return check(noChain, "returnedRoles=" + result.items().stream().map(AccountView::role).toList());
-        }, "AccountRepository.list"));
+        cases.add(test("UAM-064", "Head Office Manager ACTIVE đã đăng nhập; tồn tại tài khoản phạm vi toàn chuỗi.",
+                "Lọc danh sách với branchId=Hoa Bằng.",
+                "Repository áp dụng điều kiện branch khiến HEAD_OFFICE_MANAGER và ACCOUNTANT có branch NULL, nên không thuộc kết quả Hoa Bằng.", "Normal", () -> {
+            JdbcTemplate db = org.mockito.Mockito.mock(JdbcTemplate.class);
+            when(db.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+            when(db.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(List.of());
+            AccountRepository repository = new AccountRepository(db);
+            AccountPage result = repository.list("", "", UserAccountDemoData.HOA_BANG_BRANCH_ID, "", 0, 10);
+            ArgumentCaptor<String> countSql = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> dataSql = ArgumentCaptor.forClass(String.class);
+            verify(db).queryForObject(countSql.capture(), eq(Long.class), any(Object[].class));
+            verify(db).query(dataSql.capture(), any(RowMapper.class), any(Object[].class));
+            String chainScope = "CASE WHEN r.code IN ('HEAD_OFFICE_MANAGER','ACCOUNTANT') THEN NULL";
+            boolean scoped = countSql.getValue().contains(chainScope) && dataSql.getValue().contains(chainScope)
+                    && result.items().isEmpty();
+            return check(scoped, "branchPredicateApplied=" + scoped + ", returned=" + result.items());
+        }, "AccountRepository.list", "Nguồn: UC-05 - View_User_Accounts.docx; Flyway V14/V15; Production: AccountRepository.list. Phương pháp kiểm thử: White-box."));
         cases.add(filter("UAM-065", "", "", null, "ACTIVE", "filter ACTIVE/REVOKED status"));
         cases.add(filter("UAM-066", "letan", "RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, "ACTIVE", "combined filters use AND"));
         cases.add(test("UAM-067", "q không có kết quả", "Service trả items rỗng và total=0.", "Abnormal", () -> {
@@ -121,6 +144,31 @@ public final class ViewUserAccountsManualCases {
                     && detail.branchName() != null && detail.status() != null && detail.managedBranchIds() != null;
             return check(complete, "detail=" + detail);
         }, "AccountService.list/AccountDtos.AccountView"));
+        cases.add(test("UAM-126", "Head Office Manager ACTIVE đã đăng nhập.",
+                "Mở form tạo tài khoản và yêu cầu danh sách lựa chọn.",
+                "Trả danh sách nhân viên chưa có tài khoản, toàn bộ vai trò và cơ sở ACTIVE theo phạm vi toàn chuỗi.", "Normal", () -> {
+            Options options = new Options(List.of(new EmployeeOption(UserAccountDemoData.AVAILABLE_EMPLOYEE_ID,
+                    "Nhân viên mới", "GENZ-NEW")), List.of(new Option("RECEPTIONIST", "Lễ tân")),
+                    List.of(new Option(UserAccountDemoData.HOA_BANG_BRANCH_ID.toString(), "GenZ Cinema Hoa Bằng")));
+            var f = UserAccountFixtures.list(new AccountPage(List.of(), 0, 0, 10));
+            when(f.repository().options()).thenReturn(options);
+            return check(f.service().options(UserAccountDemoData.headOfficeManagerIdentity()).equals(options),
+                    "optionsScope=chain");
+        }, "AccountService.options(Identity)", "Nguồn: UC-04 - Create_User_Account.docx; BR-133; Flyway V14/V15; Production: AccountService.options/AccountRepository.options. Phương pháp kiểm thử: White-box."));
+        cases.add(test("UAM-127", "Branch Manager ACTIVE được phân công Hoa Bằng và đã đăng nhập.",
+                "Mở form tạo tài khoản và yêu cầu danh sách lựa chọn.",
+                "Chỉ trả nhân viên RECEPTIONIST ACTIVE, chưa có tài khoản và thuộc Hoa Bằng; chỉ có vai trò RECEPTIONIST và cơ sở Hoa Bằng.", "Normal", () -> {
+            Options options = new Options(List.of(new EmployeeOption(UserAccountDemoData.AVAILABLE_EMPLOYEE_ID,
+                    "Nhân viên mới", "GENZ-NEW", "RECEPTIONIST", "new@example.invalid",
+                    UserAccountDemoData.HOA_BANG_BRANCH_ID, "GenZ Cinema Hoa Bằng")),
+                    List.of(new Option("RECEPTIONIST", "Lễ tân")),
+                    List.of(new Option(UserAccountDemoData.HOA_BANG_BRANCH_ID.toString(), "GenZ Cinema Hoa Bằng")));
+            var f = UserAccountFixtures.list(new AccountPage(List.of(), 0, 0, 10));
+            when(f.repository().branchOptions(UserAccountDemoData.HOA_BANG_BRANCH_ID)).thenReturn(options);
+            Options result = f.service().options(UserAccountDemoData.branchManagerIdentity());
+            verify(f.repository()).branchOptions(UserAccountDemoData.HOA_BANG_BRANCH_ID);
+            return check(result.equals(options), "roles=" + result.roles() + ", branches=" + result.branches());
+        }, "AccountService.options(Identity)", "Nguồn: UC-04 - Create_User_Account.docx; BR-133; Flyway V14/V15; Production: AccountService.options/managerScope/AccountRepository.branchOptions. Phương pháp kiểm thử: White-box."));
         return List.copyOf(cases);
     }
 
@@ -151,6 +199,11 @@ public final class ViewUserAccountsManualCases {
             CheckedAction action, String sourceMethod) {
         return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type,
                 NOTE + " Production: " + sourceMethod + ".", action);
+    }
+
+    private static ManualTest test(String id, String preconditions, String input, String expected, String type,
+            CheckedAction action, String sourceMethod, String note) {
+        return new ManualTest(id, UC, sourceMethod, preconditions, input, expected, type, note, action);
     }
 }
 

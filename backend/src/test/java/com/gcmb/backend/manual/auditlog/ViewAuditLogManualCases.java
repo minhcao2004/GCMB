@@ -25,6 +25,8 @@ import com.gcmb.backend.audit.dto.AuditDtos.Snapshot;
 import com.gcmb.backend.audit.repository.AuditRepository;
 import com.gcmb.backend.audit.service.AuditService;
 import com.gcmb.backend.audit.service.AuditSnapshots;
+import com.gcmb.backend.audit.service.MutationAudit;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.CheckedAction;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.ManualTest;
 import com.gcmb.backend.manual.auditlog.AuditLogManualRunner.TestResult;
@@ -38,11 +40,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 public final class ViewAuditLogManualCases {
     private static final String UC = "UC-08 View Audit Log";
@@ -164,7 +173,8 @@ public final class ViewAuditLogManualCases {
         cases.add(invalidLength("ALM-038", "a".repeat(201), ""));
         cases.add(validBoundary("ALM-039", "action dài 60", "", "A".repeat(60), 0, 10));
         cases.add(invalidLength("ALM-040", "", "A".repeat(61)));
-        cases.add(test("ALM-041", "from=28/10/2026,to=27/10/2026", "Từ chối 400 và đúng MSG106.", "Abnormal", () -> {
+        cases.add(test("ALM-041", "from=28/10/2026,to=27/10/2026",
+                "Từ chối 400 với message Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.", "Abnormal", () -> {
             ServiceFixture f = service(emptyPage(0, 10));
             TestResult result = expectAuthFailure(() -> f.service().list("", "", null,
                     LocalDate.of(2026, 10, 28), LocalDate.of(2026, 10, 27), 0, 10), 400, MSG106);
@@ -239,7 +249,164 @@ public final class ViewAuditLogManualCases {
                     .map(invocation -> invocation.getMethod().getName()).toList());
         }, "AuditService/AuditRepository"));
 
+        cases.add(mutationTest("ALM-053",
+                "Có yêu cầu ghi audit với loại đối tượng không thuộc danh sách cho phép.",
+                "Gọi record với type=UNKNOWN.",
+                "Từ chối với IllegalArgumentException và message Unsupported audit entity; không chạy thao tác nghiệp vụ hoặc truy vấn CSDL.",
+                "Abnormal", () -> {
+                    RecordingJdbc db = new RecordingJdbc();
+                    MutationFixture f = mutation(db);
+                    AtomicInteger operations = new AtomicInteger();
+                    try {
+                        f.audit().record("UPDATE_UNKNOWN", "UNKNOWN", ENTITY_ID,
+                                () -> operations.incrementAndGet(), result -> ENTITY_ID);
+                        return check(false, "No IllegalArgumentException was thrown");
+                    } catch (IllegalArgumentException failure) {
+                        return check("Unsupported audit entity".equals(failure.getMessage())
+                                        && operations.get() == 0 && db.queries().isEmpty(),
+                                "message=" + failure.getMessage() + ", operations=" + operations.get()
+                                        + ", queries=" + db.queries().size());
+                    }
+                }, "MutationAudit.record"));
+        cases.add(mutationTest("ALM-054",
+                "Không có Identity đã xác thực trong SecurityContext.",
+                "Ghi audit cho ROOM với thao tác hợp lệ.",
+                "Từ chối với IllegalStateException và message Business audit requires an authenticated actor; không chạy thao tác nghiệp vụ hoặc truy vấn CSDL.",
+                "Abnormal", () -> {
+                    SecurityContextHolder.clearContext();
+                    RecordingJdbc db = new RecordingJdbc();
+                    MutationFixture f = mutation(db);
+                    AtomicInteger operations = new AtomicInteger();
+                    try {
+                        f.audit().record("UPDATE_ROOM", "ROOM", ENTITY_ID,
+                                () -> operations.incrementAndGet(), result -> ENTITY_ID);
+                        return check(false, "No IllegalStateException was thrown");
+                    } catch (IllegalStateException failure) {
+                        return check("Business audit requires an authenticated actor".equals(failure.getMessage())
+                                        && operations.get() == 0 && db.queries().isEmpty(),
+                                "message=" + failure.getMessage() + ", operations=" + operations.get()
+                                        + ", queries=" + db.queries().size());
+                    }
+                }, "MutationAudit.record"));
+        cases.add(supportedEntity("ALM-055", "ASSET_CATEGORY", "asset_category", "assetCount"));
+        cases.add(supportedEntity("ALM-056", "ASSET", "asset", "latestIncident"));
+        cases.add(supportedEntity("ALM-057", "INCIDENT", "asset_incident", null));
+        cases.add(supportedEntity("ALM-058", "TRANSFER", "asset_transfer", null));
+        cases.add(mutationTest("ALM-059",
+                "Head Office Manager qlcc đã đăng nhập; thao tác tạo trả về ID mới.",
+                "Ghi CREATE_ROOM với id ban đầu null và resultId là ID vừa tạo.",
+                "Chụp snapshot sau theo ID mới, trả đúng kết quả nghiệp vụ và ghi đúng một audit_event có entity_id là ID mới.",
+                "Normal", () -> asActor(() -> {
+                    UUID created = UUID.fromString("81000000-0000-4000-8000-000000000059");
+                    RecordingJdbc db = new RecordingJdbc("{\"id\":\"" + created + "\",\"name\":\"Phòng mới\"}");
+                    MutationFixture f = mutation(db);
+                    UUID result = f.audit().record("CREATE_ROOM", "ROOM", null, () -> created, value -> value);
+                    Object[] args = db.updateArgs();
+                    boolean ok = created.equals(result) && db.updateCount() == 1 && created.equals(args[5])
+                            && db.queries().stream().anyMatch(sql -> sql.contains("FROM gcmb.room"));
+                    return check(ok, "result=" + result + ", auditWrites=" + db.updateCount()
+                            + ", entityId=" + args[5]);
+                }), "MutationAudit.record/MutationAudit.snapshot"));
+        cases.add(mutationTest("ALM-060",
+                "Head Office Manager qlcc đã đăng nhập; ROOM tồn tại và thay đổi dữ liệu.",
+                "Ghi UPDATE_ROOM với snapshot trước và sau khác nhau.",
+                "Ghi đúng một audit_event với actor, action, entity type/id, before_data, after_data và actorRole lấy từ runtime.",
+                "Normal", () -> asActor(() -> {
+                    String before = "{\"id\":\"" + ENTITY_ID + "\",\"name\":\"Phòng cũ\"}";
+                    String after = "{\"id\":\"" + ENTITY_ID + "\",\"name\":\"Phòng mới\"}";
+                    RecordingJdbc db = new RecordingJdbc(before, after);
+                    MutationFixture f = mutation(db);
+                    UUID result = f.audit().record("UPDATE_ROOM", "ROOM", ENTITY_ID,
+                            () -> ENTITY_ID, value -> value);
+                    Object[] args = db.updateArgs();
+                    boolean ok = ENTITY_ID.equals(result) && db.updateCount() == 1
+                            && ACTOR_ID.equals(args[0]) && "UPDATE_ROOM".equals(args[3])
+                            && "ROOM".equals(args[4]) && ENTITY_ID.equals(args[5])
+                            && before.equals(args[6]) && after.equals(args[7])
+                            && "HEAD_OFFICE_MANAGER".equals(args[8]);
+                    return check(ok, "auditWrites=" + db.updateCount() + ", args=" + Arrays.toString(args));
+                }), "MutationAudit.record"));
+        cases.add(mutationTest("ALM-061",
+                "Head Office Manager qlcc đã đăng nhập; snapshot ROOM trước và sau giống nhau.",
+                "Thực hiện thao tác không làm thay đổi dữ liệu.",
+                "Trả kết quả nghiệp vụ nhưng không ghi audit_event vì before_data bằng after_data.",
+                "Normal", () -> asActor(() -> {
+                    String unchanged = "{\"id\":\"" + ENTITY_ID + "\",\"name\":\"Không đổi\"}";
+                    RecordingJdbc db = new RecordingJdbc(unchanged, unchanged);
+                    MutationFixture f = mutation(db);
+                    UUID result = f.audit().record("UPDATE_ROOM", "ROOM", ENTITY_ID,
+                            () -> ENTITY_ID, value -> value);
+                    return check(ENTITY_ID.equals(result) && db.updateCount() == 0,
+                            "result=" + result + ", auditWrites=" + db.updateCount());
+                }), "MutationAudit.record"));
+        cases.add(mutationTest("ALM-062",
+                "Head Office Manager qlcc đã đăng nhập; snapshot trước tồn tại; thao tác nghiệp vụ phát sinh lỗi.",
+                "Thực hiện UPDATE_ROOM rồi supplier ném IllegalArgumentException.",
+                "Lỗi được truyền ra, transaction rollback và không ghi audit_event thành công dở dang.",
+                "Abnormal", () -> asActor(() -> {
+                    RecordingJdbc db = new RecordingJdbc("{\"id\":\"" + ENTITY_ID + "\"}");
+                    MutationFixture f = mutation(db);
+                    try {
+                        f.audit().record("UPDATE_ROOM", "ROOM", ENTITY_ID,
+                                () -> { throw new IllegalArgumentException("business failed"); }, value -> ENTITY_ID);
+                        return check(false, "No operation failure was thrown");
+                    } catch (IllegalArgumentException failure) {
+                        verify(f.manager()).rollback(any(TransactionStatus.class));
+                        return check("business failed".equals(failure.getMessage()) && db.updateCount() == 0,
+                                "message=" + failure.getMessage() + ", auditWrites=" + db.updateCount());
+                    }
+                }), "MutationAudit.record"));
+        cases.add(mutationTest("ALM-063",
+                "Head Office Manager qlcc đã đăng nhập; ROOM tồn tại trong CSDL test cô lập.",
+                "Chụp snapshot trước và sau khi thao tác không đổi.",
+                "SQL snapshot runtime chỉ chọn các trường nghiệp vụ trong allowlist; không chọn password, hash hoặc token.",
+                "Normal", () -> asActor(() -> {
+                    RecordingJdbc db = new RecordingJdbc("{}", "{}");
+                    MutationFixture f = mutation(db);
+                    f.audit().record("UPDATE_ROOM", "ROOM", ENTITY_ID, () -> ENTITY_ID, value -> value);
+                    String sql = db.queries().stream().filter(value -> value.contains("jsonb_object_agg"))
+                            .findFirst().orElse("");
+                    boolean ok = sql.contains("'id','code','name'") && !sql.contains("password")
+                            && !sql.contains("hash") && !sql.contains("token");
+                    return check(ok, "allowlistSql=" + ok + ", length=" + sql.length());
+                }), "MutationAudit.snapshot"));
+        cases.add(mutationTest("ALM-064",
+                "Head Office Manager qlcc đã đăng nhập; ROOM tồn tại trước thao tác và bị xóa thành công.",
+                "Ghi DELETE_ROOM; snapshot sau không còn bản ghi.",
+                "Ghi đúng một audit_event giữ before_data, after_data null và entity_id của bản ghi đã xóa.",
+                "Normal", () -> asActor(() -> {
+                    String before = "{\"id\":\"" + ENTITY_ID + "\",\"name\":\"Phòng xóa\"}";
+                    RecordingJdbc db = new RecordingJdbc(before, null);
+                    MutationFixture f = mutation(db);
+                    UUID result = f.audit().record("DELETE_ROOM", "ROOM", ENTITY_ID,
+                            () -> ENTITY_ID, value -> value);
+                    Object[] args = db.updateArgs();
+                    boolean ok = ENTITY_ID.equals(result) && db.updateCount() == 1
+                            && ENTITY_ID.equals(args[5]) && before.equals(args[6]) && args[7] == null;
+                    return check(ok, "auditWrites=" + db.updateCount() + ", entityId=" + args[5]
+                            + ", afterData=" + args[7]);
+                }), "MutationAudit.record/MutationAudit.snapshot"));
+
         return List.copyOf(cases);
+    }
+
+    private static ManualTest supportedEntity(String id, String type, String table, String extraFragment) {
+        return mutationTest(id,
+                "Head Office Manager qlcc đã đăng nhập; đối tượng " + type + " tồn tại trong CSDL test cô lập.",
+                "Ghi audit cho type=" + type + ".",
+                "Loại đối tượng được chấp nhận, khóa và chụp snapshot từ bảng gcmb." + table
+                        + (extraFragment == null ? "." : "; snapshot có trường tổng hợp " + extraFragment + "."),
+                "Normal", () -> asActor(() -> {
+                    RecordingJdbc db = new RecordingJdbc("{}", "{}");
+                    MutationFixture f = mutation(db);
+                    UUID result = f.audit().record("UPDATE_" + type, type, ENTITY_ID,
+                            () -> ENTITY_ID, value -> value);
+                    String combined = String.join("\n", db.queries());
+                    boolean ok = ENTITY_ID.equals(result) && combined.contains("gcmb." + table)
+                            && (extraFragment == null || combined.contains(extraFragment));
+                    return check(ok, "table=gcmb." + table + ", extra=" + extraFragment
+                            + ", auditWrites=" + db.updateCount());
+                }), "MutationAudit.record/MutationAudit.snapshot");
     }
 
     private static ManualTest searchCase(String id, String q, String sqlFragment) {
@@ -402,6 +569,32 @@ public final class ViewAuditLogManualCases {
                 NOTE + " Production: " + sourceMethod + ".", action);
     }
 
+    private static ManualTest mutationTest(String id, String preconditions, String input, String expected,
+            String type, CheckedAction action, String sourceMethod) {
+        String note = "Nguồn: UC-08 - View_Audit_Log.docx, hậu điều kiện; Flyway V14; Production: "
+                + sourceMethod + ". Phương pháp kiểm thử: White-box.";
+        return new ManualTest(id, UC, sourceMethod, preconditions, input, expected, type, note, action);
+    }
+
+    private static TestResult asActor(CheckedAction action) throws Exception {
+        var context = SecurityContextHolder.createEmptyContext();
+        Identity actor = new Identity(ACTOR_ID, "qlcc", "HEAD_OFFICE_MANAGER",
+                "/head-office", null, "Toàn chuỗi");
+        context.setAuthentication(new UsernamePasswordAuthenticationToken(actor, "N/A", List.of()));
+        SecurityContextHolder.setContext(context);
+        try {
+            return action.run();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private static MutationFixture mutation(RecordingJdbc db) {
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(new SimpleTransactionStatus());
+        return new MutationFixture(new MutationAudit(db, manager), manager);
+    }
+
     private record Query(String q, String action, UUID branchId, LocalDate from, LocalDate to, int page, int size) {
     }
 
@@ -411,5 +604,51 @@ public final class ViewAuditLogManualCases {
     private record RepoFixture(JdbcTemplate db, AuditRepository repository,
             AtomicReference<String> countSql, AtomicReference<String> dataSql,
             AtomicReference<Object[]> dataArgs, AtomicReference<String> actionSql) {
+    }
+
+    private record MutationFixture(MutationAudit audit, PlatformTransactionManager manager) {
+    }
+
+    private static final class RecordingJdbc extends JdbcTemplate {
+        private final List<String> snapshots;
+        private final List<String> queries = new ArrayList<>();
+        private int snapshotIndex;
+        private int updateCount;
+        private Object[] updateArgs;
+
+        private RecordingJdbc(String... snapshots) {
+            this.snapshots = Arrays.asList(snapshots);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> queryForList(String sql, Class<T> elementType, Object... args) {
+            queries.add(sql);
+            if (UUID.class.equals(elementType)) return List.of();
+            if (!String.class.equals(elementType)) {
+                throw new IllegalArgumentException("Unexpected element type " + elementType);
+            }
+            String value = snapshotIndex < snapshots.size() ? snapshots.get(snapshotIndex++) : null;
+            return value == null ? List.of() : List.of((T) value);
+        }
+
+        @Override
+        public int update(String sql, Object... args) {
+            updateCount++;
+            updateArgs = Arrays.copyOf(args, args.length);
+            return 1;
+        }
+
+        private List<String> queries() {
+            return List.copyOf(queries);
+        }
+
+        private int updateCount() {
+            return updateCount;
+        }
+
+        private Object[] updateArgs() {
+            return updateArgs == null ? new Object[0] : Arrays.copyOf(updateArgs, updateArgs.length);
+        }
     }
 }

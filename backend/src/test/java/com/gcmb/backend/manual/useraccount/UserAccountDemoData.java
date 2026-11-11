@@ -8,6 +8,7 @@
 package com.gcmb.backend.manual.useraccount;
 
 import com.gcmb.backend.accounts.dto.AccountDtos.AccountView;
+import com.gcmb.backend.auth.dto.Identity;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,6 +49,28 @@ public final class UserAccountDemoData {
         return account(ACCOUNTANT_ID, "Kế toán", "GENZ-ACC",
                 "ketoan", "ketoan@example.invalid", "ACCOUNTANT",
                 null, "Toàn chuỗi", "ACTIVE", List.of());
+    }
+
+    public static Identity receptionistIdentity() {
+        return identity(RECEPTIONIST_ID, "letan.hoabang", "RECEPTIONIST", HOA_BANG_BRANCH_ID,
+                "GenZ Cinema Hoa Bằng");
+    }
+
+    public static Identity branchManagerIdentity() {
+        return identity(BRANCH_MANAGER_ID, "qlcs.hoabang", "BRANCH_MANAGER", HOA_BANG_BRANCH_ID,
+                "GenZ Cinema Hoa Bằng");
+    }
+
+    public static Identity headOfficeManagerIdentity() {
+        return identity(HEAD_OFFICE_MANAGER_ID, "qlcc", "HEAD_OFFICE_MANAGER", null, "Toàn chuỗi");
+    }
+
+    public static Identity accountantIdentity() {
+        return identity(ACCOUNTANT_ID, "ketoan", "ACCOUNTANT", null, "Toàn chuỗi");
+    }
+
+    private static Identity identity(UUID id, String username, String role, UUID branchId, String branchName) {
+        return new Identity(id, username, role, "/", branchId, branchName, false);
     }
 
     public static AccountView account(UUID id, String employeeName, String employeeCode,

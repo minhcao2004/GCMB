@@ -133,7 +133,13 @@ public final class UpdateComboPackageManualCases {
                                 "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; CSRF hợp lệ khi ghi; hạng RT-QN/Queen và RT-KG/King active trong seed V3/V14+CIN_C1_QN version 1 active, RT-QN, tên Combo 1 · 2 giờ, 120 phút, khung 0–1440, giá 236000 đ, thành phần 2 giờ xem phim; 1 khô gà; 2 đồ uống tự chọn",
                                 "Sửa Kết thúc thành 1441 phút.",
                                 "Từ chối mốc kết thúc sau 24:00; bản đang lưu không đổi.",
-                                () -> invalidTime(edited("to", 1441)))
+                                () -> invalidTime(edited("to", 1441))),
+                test("CPM-139", "UC-25 UpdateComboPackage",
+                                "Nguồn: UC-25_Update_Combo_Package.docx; BR-13; Flyway V36, V37; Production: RoomCatalogService.updatePrice. Phương pháp kiểm thử: White-box.",
+                                "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; CIN_C1_QN version 1 active, có 2 đồ uống và 1 đồ ăn tặng kèm.",
+                                "Sửa số lượng tặng kèm thành 3 đồ uống và 4 đồ ăn rồi xác nhận.",
+                                "Bản version 1 chuyển inactive; tạo đúng một version mới active, giữ nguyên mã và trả về số lượng 3/4.",
+                                () -> accept(command("CIN_C1_QN", "Combo 1 · 2 giờ", QUEEN, 120, 0, 1440, "236000", 3, 4), true))
         );
     }
 }

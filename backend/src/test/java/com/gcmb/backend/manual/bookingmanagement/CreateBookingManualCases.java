@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,7 +42,7 @@ final class CreateBookingManualCases {
                 "Trả đúng branch, timezone, room type và combo; không ghi dữ liệu", "Normal", () -> {
                     Fixture f = fresh();
                     when(f.repository().roomTypes()).thenReturn(List.of(roomType()));
-                    when(f.repository().combos(ROOM_TYPE_ID)).thenReturn(List.of(combo()));
+                    when(f.repository().combos(ROOM_TYPE_ID, BRANCH_ID)).thenReturn(List.of(combo()));
                     BookingDtos.BookingOptions actual = f.service().options(identity());
                     boolean ok = actual.branchId().equals(BRANCH_ID)
                             && actual.timezone().equals("Asia/Ho_Chi_Minh")
@@ -71,14 +72,14 @@ final class CreateBookingManualCases {
                     return check(actual.rooms().isEmpty(), "rooms=" + actual.rooms().size());
                 }),
             t("BKM-004", "BookingService.availability", "plannedStart=null",
-                "MSG02: Vui lòng bổ sung Thời gian bắt đầu.", "Abnormal", () -> {
+                "Vui lòng bổ sung thời gian bắt đầu.", "Abnormal", () -> {
                     Fixture f = fresh();
                     return expectFailure(() -> f.service().availability(identity(), ROOM_TYPE_ID, null,
                             futureMinutes(120), "HOURLY", null), 400,
-                            "Vui lòng bổ sung Thời gian bắt đầu.");
+                            "Vui lòng bổ sung thời gian bắt đầu.");
                 }),
             t("BKM-005", "BookingService.availability", "End bằng hoặc trước start",
-                "MSG07: Thời gian kết thúc phải sau thời gian bắt đầu.", "Abnormal", () -> {
+                "Thời gian kết thúc phải sau thời gian bắt đầu.", "Abnormal", () -> {
                     Fixture f = fresh();
                     Instant start = futureMinutes(120);
                     return expectFailure(() -> f.service().availability(identity(), ROOM_TYPE_ID, start,
@@ -86,7 +87,7 @@ final class CreateBookingManualCases {
                             "Thời gian kết thúc phải sau thời gian bắt đầu.");
                 }),
             t("BKM-006", "BookingService.availability", "Advance booking có start trong quá khứ",
-                "MSG52 đúng tài liệu", "Abnormal", () -> {
+                "Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.", "Abnormal", () -> {
                     Fixture f = fresh();
                     Instant start = Instant.now().minusSeconds(300);
                     return expectFailure(() -> f.service().availability(identity(), ROOM_TYPE_ID, start,
@@ -94,30 +95,30 @@ final class CreateBookingManualCases {
                             "Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.");
                 }),
             t("BKM-007", "BookingService.availability", "Room type không tồn tại hoặc inactive",
-                "MSG63 đúng tài liệu", "Abnormal", () -> {
+                "Không có phòng hoặc mức giá phù hợp với lựa chọn hiện tại. Vui lòng thay đổi thời gian, hạng phòng hoặc hình thức thuê.", "Abnormal", () -> {
                     Fixture f = fresh();
                     when(f.repository().roomType(ROOM_TYPE_ID)).thenReturn(null);
                     Instant start = futureMinutes(120);
                     return expectFailure(() -> f.service().availability(identity(), ROOM_TYPE_ID, start,
-                            start.plusSeconds(7200), "HOURLY", null), 404,
+                            start.plusSeconds(7200), "HOURLY", null), 409,
                             "Không có phòng hoặc mức giá phù hợp với lựa chọn hiện tại. Vui lòng thay đổi thời gian, hạng phòng hoặc hình thức thuê.");
                 }),
             t("BKM-008", "BookingPricingService.quote", "Combo sai room type hoặc ngoài thời hạn",
-                "MSG62 đúng tài liệu", "Abnormal", () -> {
+                "Combo Music Box demo 2 giờ không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.", "Abnormal", () -> {
                     Instant start = futureMinutes(120), end = start.plusSeconds(7200);
                     String expected = "Combo Music Box demo 2 giờ không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.";
                     BookingRepository r1 = mock(BookingRepository.class);
                     ComboRow wrongType = new ComboRow(COMBO_ID, combo().code(), 1, OTHER_ROOM_TYPE_ID,
                             combo().name(), 120, combo().price(), combo().depositRequired(),
-                            combo().overtimeHourlyPrice(), start.minusSeconds(60), null);
-                    when(r1.combo(COMBO_ID)).thenReturn(wrongType);
+                            combo().overtimeHourlyPrice(), start.minusSeconds(60), null, 2, 1);
+                    when(r1.combo(COMBO_ID, BRANCH_ID)).thenReturn(wrongType);
                     TestResult a = expectFailure(() -> new BookingPricingService(r1).quote(ROOM_TYPE_ID,
                             BRANCH_ID, BRANCH.timezone(), start, end, "COMBO", COMBO_ID), 400, expected);
                     BookingRepository r2 = mock(BookingRepository.class);
                     ComboRow futureCombo = new ComboRow(COMBO_ID, combo().code(), 1, ROOM_TYPE_ID,
                             combo().name(), 120, combo().price(), combo().depositRequired(),
-                            combo().overtimeHourlyPrice(), start.plusSeconds(60), null);
-                    when(r2.combo(COMBO_ID)).thenReturn(futureCombo);
+                            combo().overtimeHourlyPrice(), start.plusSeconds(60), null, 2, 1);
+                    when(r2.combo(COMBO_ID, BRANCH_ID)).thenReturn(futureCombo);
                     TestResult b = expectFailure(() -> new BookingPricingService(r2).quote(ROOM_TYPE_ID,
                             BRANCH_ID, BRANCH.timezone(), start, end, "COMBO", COMBO_ID), 409, expected);
                     return combine(a, b);
@@ -125,13 +126,13 @@ final class CreateBookingManualCases {
             t("BKM-009", "BookingPricingService.quote", "Combo 120 phút nhưng end không khớp",
                 "Từ chối quote và không tạo charge", "Abnormal", () -> {
                     BookingRepository repository = mock(BookingRepository.class);
-                    when(repository.combo(COMBO_ID)).thenReturn(combo());
+                    when(repository.combo(COMBO_ID, BRANCH_ID)).thenReturn(combo());
                     Instant start = futureMinutes(120);
                     return expectFailureStatus(() -> new BookingPricingService(repository).quote(ROOM_TYPE_ID,
                             BRANCH_ID, BRANCH.timezone(), start, start.plusSeconds(7100), "COMBO", COMBO_ID), 400);
                 }),
             t("BKM-010", "BookingService.create", "Thời lượng bằng 0",
-                "Từ chối bằng MSG07/MSG48", "Boundary", () -> {
+                "Thời gian kết thúc phải sau thời gian bắt đầu.; không tạo booking", "Boundary", () -> {
                     Fixture f = fresh();
                     Instant start = futureMinutes(120);
                     BookingDtos.CreateBookingRequest request = createRequest(start, start, "HOURLY", null,
@@ -178,7 +179,7 @@ final class CreateBookingManualCases {
                     return check(actual != null, "Combo booking created");
                 }),
             t("BKM-014", "BookingService.create", "contactName null, rỗng, chỉ khoảng trắng",
-                "MSG02 cho Tên khách hàng", "Abnormal", () -> {
+                "Vui lòng bổ sung tên khách.; không tạo booking", "Abnormal", () -> {
                     TestResult[] results = new TestResult[3];
                     String[] values = {null, "", "   "};
                     for (int i = 0; i < values.length; i++) {
@@ -187,12 +188,12 @@ final class CreateBookingManualCases {
                         BookingDtos.CreateBookingRequest request = createRequest(base.plannedStart(), base.plannedEnd(),
                                 "HOURLY", null, values[i], "0900003437", 2, null, BigDecimal.ZERO);
                         results[i] = expectFailure(() -> f.service().create(identity(), request), 400,
-                                "Vui lòng bổ sung Tên khách hàng.");
+                                "Vui lòng bổ sung tên khách.");
                     }
                     return combine(results);
                 }),
             t("BKM-015", "BookingService.create", "Tên khách 200 và 201 ký tự",
-                "200 được nhận; 201 trả MSG03", "Boundary", () -> {
+                "Tên khách 200 ký tự được nhận; 201 ký tự trả: Tên khách chỉ được chứa tối đa 200 ký tự.", "Boundary", () -> {
                     Fixture accepted = fresh();
                     BookingDtos.CreateBookingRequest base = validCreate();
                     String max = "N".repeat(200);
@@ -204,7 +205,7 @@ final class CreateBookingManualCases {
                     TestResult b = expectFailure(() -> rejected.service().create(identity(), createRequest(
                             base.plannedStart(), base.plannedEnd(), "HOURLY", null, "N".repeat(201),
                             "0900003437", 2, null, BigDecimal.ZERO)), 400,
-                            "Tên khách hàng chỉ được chứa tối đa 200 ký tự.");
+                            "Tên khách chỉ được chứa tối đa 200 ký tự.");
                     return combine(a, b);
                 }),
             t("BKM-016", "BookingService.create", "contactPhone=0900003437",
@@ -230,7 +231,7 @@ final class CreateBookingManualCases {
                     }
                 }),
             t("BKM-018", "BookingService.create", "Phone chứa chữ, khoảng trắng hoặc nhiều dấu +",
-                "MSG04 đúng tài liệu", "Abnormal", () -> {
+                "Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu.", "Abnormal", () -> {
                     String[] invalid = {"0900A03437", "0900 03437", "84+90003437", "++8490003437"};
                     List<TestResult> results = new java.util.ArrayList<>();
                     for (String phone : invalid) {
@@ -255,15 +256,15 @@ final class CreateBookingManualCases {
                     return check(a != null && b != null, "guestCount 1 and 4 accepted");
                 }),
             t("BKM-020", "BookingService.create", "guestCount=0",
-                "MSG44 đúng tài liệu", "Boundary", () -> {
+                "Số lượng khách phải là số nguyên lớn hơn 0.", "Boundary", () -> {
                     Fixture f = fresh();
                     BookingDtos.CreateBookingRequest base = validCreate();
                     return expectFailure(() -> f.service().create(identity(), createRequest(base.plannedStart(),
                             base.plannedEnd(), "HOURLY", null, base.contactName(), base.contactPhone(), 0,
-                            null, BigDecimal.ZERO)), 400, "Số khách phải là số nguyên lớn hơn 0.");
+                            null, BigDecimal.ZERO)), 400, "Số lượng khách phải là số nguyên lớn hơn 0.");
                 }),
             t("BKM-021", "BookingService.create", "guestCount=5, capacity=4",
-                "MSG54 đúng tài liệu", "Boundary", () -> {
+                "Phòng DEMO-MB-01 chỉ phù hợp tối đa 4 khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.", "Boundary", () -> {
                     Fixture f = fresh();
                     BookingDtos.CreateBookingRequest base = validCreate();
                     return expectFailure(() -> f.service().create(identity(), createRequest(base.plannedStart(),
@@ -272,16 +273,19 @@ final class CreateBookingManualCases {
                             "Phòng DEMO-MB-01 chỉ phù hợp tối đa 4 khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.");
                 }),
             t("BKM-022", "BookingService.create", "Chọn DEMO-MB-06 đang maintenance",
-                "MSG55 và không tạo allocation", "Abnormal", () -> {
+                "Phòng DEMO-MB-06 đang bảo trì và chưa thể sử dụng. Vui lòng chọn phòng khác.; không tạo allocation", "Abnormal", () -> {
                     Fixture f = fresh();
                     when(f.repository().lockAvailableRoom(ROOM_ID, BRANCH_ID)).thenReturn(null);
+                    when(f.repository().lockRoomForValidation(ROOM_ID, BRANCH_ID))
+                            .thenReturn(new BookingRepository.RoomRow(ROOM_ID, "DEMO-MB-06", "Music Box demo 06", 4,
+                                    "UNDER_MAINTENANCE", ROOM_TYPE_ID, "Music Box demo"));
                     TestResult result = expectFailure(() -> f.service().create(identity(), validCreate()), 409,
                             "Phòng DEMO-MB-06 đang bảo trì và chưa thể sử dụng. Vui lòng chọn phòng khác.");
                     verify(f.repository(), never()).insertAllocation(any(), any(), any(), any(), any(), any());
                     return result;
                 }),
             t("BKM-023", "BookingService.create", "Phòng có allocation overlap",
-                "MSG15 và không tạo allocation mới", "Abnormal", () -> {
+                "Phòng DEMO-MB-01 đã có booking trùng với thời gian sử dụng đã chọn. Vui lòng chọn phòng hoặc thời gian khác.; không tạo allocation mới", "Abnormal", () -> {
                     Fixture f = fresh();
                     when(f.repository().hasRoomOverlap(eq(ROOM_ID), any(), any(), eq(null))).thenReturn(true);
                     TestResult result = expectFailure(() -> f.service().create(identity(), validCreate()), 409,
@@ -316,14 +320,48 @@ final class CreateBookingManualCases {
                             "quote=" + actual.expectedAmount());
                 }),
             t("BKM-027", "BookingService.create", "Receptionist không có active branch assignment",
-                "MSG24 và không ghi dữ liệu", "Abnormal", () -> {
+                "Bạn không có quyền truy cập đối với booking.; không ghi dữ liệu", "Abnormal", () -> {
                     Fixture f = fresh();
                     when(f.repository().branchScope(ACTOR_ID)).thenReturn(null);
                     TestResult result = expectFailure(() -> f.service().create(identityWithoutBranch(), validCreate()),
-                            403, "Bạn không có quyền tạo đối với booking.");
+                            403, "Bạn không có quyền truy cập đối với booking.");
                     verify(f.repository(), never()).insertBooking(any(), anyString(), anyString(), anyString(),
                             any(Integer.class), anyString(), any(), any(), any(Integer.class), any(), any());
                     return result;
+                }),
+            t("BKM-064", "BookingService.create", "Cơ sở DEMO-UC3437 đang SUSPENDED",
+                "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.; không tạo booking", "Abnormal", () -> {
+                    Fixture f = fresh();
+                    doThrow(new BookingFailure(403, "form",
+                            "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi."))
+                            .when(f.repository()).requireActiveBranch(BRANCH_ID);
+                    TestResult result = expectFailure(() -> f.service().create(identity(), validCreate()), 403,
+                            "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
+                    verify(f.repository(), never()).insertBooking(any(), anyString(), anyString(), anyString(),
+                            any(Integer.class), anyString(), any(), any(), any(Integer.class), any(), any());
+                    return result;
+                }),
+            t("BKM-065", "BookingService.options", "Hạng phòng có combo toàn hệ thống và combo riêng của branch",
+                "Chỉ truy vấn combo áp dụng cho DEMO-UC3437", "Normal", () -> {
+                    Fixture f = fresh();
+                    when(f.repository().roomTypes()).thenReturn(List.of(roomType()));
+                    when(f.repository().combos(ROOM_TYPE_ID, BRANCH_ID)).thenReturn(List.of(combo()));
+                    BookingDtos.BookingOptions actual = f.service().options(identity());
+                    verify(f.repository()).combos(ROOM_TYPE_ID, BRANCH_ID);
+                    return check(actual.roomTypes().get(0).combos().size() == 1, actual.toString());
+                }),
+            t("BKM-066", "BookingService.create", "Tạo booking COMBO có 2 đồ uống và 1 đồ ăn tặng kèm",
+                "Snapshot số quà combo vào booking: đồ uống=2, đồ ăn=1", "Normal", () -> {
+                    Fixture f = fresh();
+                    Instant start = futureMinutes(120);
+                    when(f.pricing().quote(ROOM_TYPE_ID, BRANCH_ID, BRANCH.timezone(), start,
+                            start.plusSeconds(7200), "COMBO", COMBO_ID)).thenReturn(comboQuote());
+                    when(f.repository().combo(COMBO_ID, BRANCH_ID)).thenReturn(combo());
+                    BookingDtos.CreateBookingRequest request = createRequest(start, start.plusSeconds(7200),
+                            "COMBO", COMBO_ID, "Nguyễn Khách Demo", "0900003437", 2, null, BigDecimal.ZERO);
+                    f.service().create(identity(), request);
+                    verify(f.repository()).setComboGiftQuantities(BOOKING_ID, 2, 1);
+                    return check(true, "comboIncludedFnbQuantity=2, comboIncludedFoodQuantity=1");
                 })
         );
     }

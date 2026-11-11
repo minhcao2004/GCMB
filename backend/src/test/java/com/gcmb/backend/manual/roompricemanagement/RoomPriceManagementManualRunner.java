@@ -8,21 +8,32 @@
 package com.gcmb.backend.manual.roompricemanagement;
 
 import com.gcmb.backend.pricing.dto.PriceRuleCommand;
+import com.gcmb.backend.pricing.dto.PriceRuleView;
+import com.gcmb.backend.pricing.dto.RoomTypeView;
 import com.gcmb.backend.pricing.service.RoomCatalogService;
+import java.math.BigDecimal;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.web.server.ResponseStatusException;
 
 public final class RoomPriceManagementManualRunner {
-    private static final int EXPECTED_CASES = 34;
+    private static final int EXPECTED_CASES = 47;
 
     private RoomPriceManagementManualRunner() {
     }
@@ -45,7 +56,9 @@ public final class RoomPriceManagementManualRunner {
     private static List<ManualTest> allTests() {
         List<ManualTest> cases = new ArrayList<>();
         cases.addAll(CreateRoomPriceManualCases.cases());
+        cases.addAll(ViewRoomPricesManualCases.cases());
         cases.addAll(UpdateRoomPriceManualCases.cases());
+        cases.addAll(ChangeRoomPriceStatusManualCases.cases());
         cases.sort(Comparator.comparing(ManualTest::id));
         validate(cases);
         return List.copyOf(cases);
@@ -178,9 +191,88 @@ public final class RoomPriceManagementManualRunner {
         return check(passed, actual.stream().collect(Collectors.joining("; ")));
     }
 
+    public static TestResult expectStatus(ThrowingRunnable action, int status, String message) {
+        try {
+            action.run();
+            return check(false, "Không phát sinh ResponseStatusException");
+        } catch (ResponseStatusException failure) {
+            boolean passed = failure.getStatusCode().value() == status
+                    && Objects.equals(message, failure.getReason());
+            return check(passed, "status=" + failure.getStatusCode().value()
+                    + ", message=" + failure.getReason());
+        } catch (Throwable failure) {
+            return check(false, "Unexpected " + failure.getClass().getSimpleName() + ": " + failure.getMessage());
+        }
+    }
+
+    public static RoomTypeView roomType(UUID id, String code, String name, boolean active) {
+        return new RoomTypeView(id, code, name, "CINEMA", 4, "Mô tả", active);
+    }
+
+    public static PriceRuleView priceRule(UUID id, String code, int version,
+            String name, boolean active) {
+        return new PriceRuleView(id, code, version,
+                UUID.fromString("00000000-0000-0000-0000-000000000101"),
+                "Queen", name, List.of(1, 2, 3, 4, 5),
+                LocalDate.of(2026, 10, 28), null, 480, 1320,
+                new BigDecimal("96000"), active);
+    }
+
     @FunctionalInterface
     public interface CheckedAction {
         TestResult run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    public static final class ScriptedJdbc extends JdbcTemplate {
+        public final Deque<Function<Object[], List<?>>> queryResults = new ArrayDeque<>();
+        public final Deque<Object> objects = new ArrayDeque<>();
+        public final Deque<Integer> updateResults = new ArrayDeque<>();
+        public final List<SqlCall> reads = new ArrayList<>();
+        public final List<SqlCall> updates = new ArrayList<>();
+        public int executeCalls;
+
+        @Override
+        public <T> List<T> query(String sql, RowMapper<T> rowMapper) {
+            return nextQuery(sql, new Object[0]);
+        }
+
+        @Override
+        public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+            return nextQuery(sql, args);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (T) objects.removeFirst();
+        }
+
+        @Override
+        public int update(String sql, Object... args) {
+            updates.add(new SqlCall(sql, args));
+            return updateResults.isEmpty() ? 1 : updateResults.removeFirst();
+        }
+
+        @Override
+        public <T> T execute(ConnectionCallback<T> action) {
+            executeCalls++;
+            return null;
+        }
+
+        @SuppressWarnings("unchecked")
+        private <T> List<T> nextQuery(String sql, Object[] args) {
+            reads.add(new SqlCall(sql, args));
+            return (List<T>) queryResults.removeFirst().apply(args);
+        }
+    }
+
+    public record SqlCall(String sql, Object[] args) {
     }
 
     public record TestResult(boolean passed, String actual) {

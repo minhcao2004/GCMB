@@ -87,22 +87,24 @@ final class ViewBookingsManualCases {
                                     + ", charges=" + actual.charges().size());
                 }),
             t("BKM-033", "BookingService.detail", "Booking ID ngoài branch assignment",
-                "Không trả dữ liệu và phản hồi như không tìm thấy", "Abnormal", () -> {
+                "Bạn không có quyền truy cập đối với booking.; không trả dữ liệu", "Abnormal", () -> {
                     Fixture f = fresh();
                     when(f.repository().booking(BOOKING_ID, BRANCH_ID)).thenReturn(null);
-                    return expectFailureStatus(() -> f.service().detail(identity(), BOOKING_ID), 404);
+                    when(f.repository().bookingExists(BOOKING_ID)).thenReturn(true);
+                    return expectFailure(() -> f.service().detail(identity(), BOOKING_ID), 403,
+                            "Bạn không có quyền truy cập đối với booking.");
                 }),
             t("BKM-034", "BookingService.list/detail", "Receptionist không có active assignment",
-                "MSG24 và không trả booking", "Abnormal", () -> {
+                "Bạn không có quyền truy cập đối với booking.; không trả booking", "Abnormal", () -> {
                     Fixture listFixture = fresh();
                     when(listFixture.repository().branchScope(ACTOR_ID)).thenReturn(null);
                     TestResult a = expectFailure(() -> listFixture.service().list(identityWithoutBranch(),
                             null, null, null, null, null, 0, 20), 403,
-                            "Bạn không có quyền xem đối với booking.");
+                            "Bạn không có quyền truy cập đối với booking.");
                     Fixture detailFixture = fresh();
                     when(detailFixture.repository().branchScope(ACTOR_ID)).thenReturn(null);
                     TestResult b = expectFailure(() -> detailFixture.service().detail(identityWithoutBranch(), BOOKING_ID),
-                            403, "Bạn không có quyền xem đối với booking.");
+                            403, "Bạn không có quyền truy cập đối với booking.");
                     return combine(a, b);
                 }),
             t("BKM-035", "BookingService.detail", "Catalog đã đổi, booking có snapshot giá cũ",
@@ -117,6 +119,17 @@ final class ViewBookingsManualCases {
                             && "HOURLY".equals(charge.pricingSnapshot().get("pricingMode"));
                     return check(ok, "expectedAmount=" + actual.booking().expectedAmount()
                             + ", snapshot=" + charge.pricingSnapshot());
+                }),
+            t("BKM-067", "BookingService.list/detail", "Cơ sở DEMO-UC3437 đang SUSPENDED",
+                "Vẫn xem được danh sách và chi tiết; không thực hiện mutation", "Normal", () -> {
+                    Fixture f = fresh();
+                    when(f.repository().countBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null)).thenReturn(1L);
+                    when(f.repository().findBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null, 0, 20))
+                            .thenReturn(List.of(summary()));
+                    BookingDtos.BookingPage page = f.service().list(identity(), null, null, null, null, null, 0, 20);
+                    BookingDtos.BookingDetail detail = f.service().detail(identity(), BOOKING_ID);
+                    verify(f.repository(), never()).requireActiveBranch(BRANCH_ID);
+                    return check(page.totalElements() == 1 && detail != null, "list=1, detail available");
                 })
         );
     }

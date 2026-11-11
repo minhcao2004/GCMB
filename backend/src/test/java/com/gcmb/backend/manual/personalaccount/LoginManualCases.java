@@ -35,6 +35,10 @@ public final class LoginManualCases {
     private static final String UC = "UC-128 Login";
     private static final String PRE = "Tài khoản demo đã được tạo bởi V14/V15 và người dùng chưa đăng nhập.";
     private static final String NOTE = "Nguồn: UC-128_Login.docx; BR-111, BR-131; MSG02, MSG03, MSG08, MSG24, MSG33; Flyway V14/V15.";
+    private static final String NOTE_ACCOUNT_STATE = "Nguồn: UC-128 - Login.docx; BR-131; MSG33; "
+            + "Flyway V1 status constraint; Production: AuthService.login/active. Phương pháp kiểm thử: Black-box.";
+    private static final String NOTE_BRANCH_SCOPE = "Nguồn: UC-128 - Login.docx; MSG24; "
+            + "Production: AuthService.login. Phương pháp kiểm thử: White-box.";
 
     private LoginManualCases() {
     }
@@ -103,20 +107,25 @@ public final class LoginManualCases {
                             "Sai@1234", false), 401,
                             "Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.");
                 }));
-        cases.add(inactiveCase("PAM-012", "INACTIVE"));
+        cases.add(inactiveCase("PAM-012", "REVOKED"));
         cases.add(inactiveCase("PAM-013", "LOCKED"));
-        cases.add(test("PAM-014", "quản lý cơ sở ACTIVE nhưng chưa được gán cơ sở",
-                "Từ chối 403 theo MSG24, không tạo phiên.", "Abnormal", () -> {
+        cases.add(test("PAM-014",
+                "Tài khoản Branch Manager đã đăng ký, trạng thái ACTIVE nhưng chưa được gán branch; "
+                        + "người dùng chưa đăng nhập.",
+                "Đăng nhập bằng username và mật khẩu hợp lệ của Branch Manager.",
+                "Từ chối với mã 403. Hiển thị: Bạn không có quyền đăng nhập đối với tài khoản. "
+                        + "Không tạo phiên.",
+                "Abnormal", () -> {
                     Fixture f = fixture();
                     Account account = PersonalAccountDemoData.account(PersonalAccountDemoData.BRANCH_MANAGER_ID,
                             "qlcs.hoabang", "qlcs.hoabang@example.invalid", "ACTIVE", "BRANCH_MANAGER", null, null);
                     when(f.repository.findByUsername(account.username())).thenReturn(account);
                     TestResult result = expectAuthFailure(() -> f.service.login(account.username(),
                             PersonalAccountDemoData.CURRENT_PASSWORD, false), 403,
-                            "Bạn không có quyền đăng nhập đối với cơ sở chưa được phân công.");
+                            "Bạn không có quyền đăng nhập đối với tài khoản.");
                     verify(f.repository, never()).createSession(any(), anyString());
                     return result;
-                }));
+                }, NOTE_BRANCH_SCOPE));
         cases.add(test("PAM-015", "username có đúng 100 ký tự và tài khoản ACTIVE",
                 "Chấp nhận biên 100 ký tự và đăng nhập thành công.", "Boundary", () -> {
                     String username = "u".repeat(100);
@@ -173,8 +182,11 @@ public final class LoginManualCases {
     }
 
     private static ManualTest inactiveCase(String id, String status) {
-        return test(id, "tài khoản demo có trạng thái " + status,
-                "Từ chối 403 và hiển thị MSG33: Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.",
+        return test(id,
+                "Tài khoản đã đăng ký, trạng thái " + status + "; người dùng chưa đăng nhập.",
+                "Đăng nhập bằng username và mật khẩu của tài khoản " + status + ".",
+                "Từ chối với mã 403. Hiển thị: Tài khoản đã bị vô hiệu hóa. "
+                        + "Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ. Không tạo phiên và không ghi nhận đăng nhập.",
                 "Abnormal", () -> {
                     Fixture f = fixture();
                     Account account = PersonalAccountDemoData.account(PersonalAccountDemoData.RECEPTIONIST_ID,
@@ -184,12 +196,17 @@ public final class LoginManualCases {
                     return expectAuthFailure(() -> f.service.login(account.username(),
                             PersonalAccountDemoData.CURRENT_PASSWORD, false), 403,
                             "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
-                });
+                }, NOTE_ACCOUNT_STATE);
     }
 
     private static ManualTest test(String id, String input, String expected, String type,
             CheckedAction action) {
         return new ManualTest(id, UC, "AuthService.login", PRE, input, expected, type, NOTE, action);
+    }
+
+    private static ManualTest test(String id, String preconditions, String input, String expected, String type,
+            CheckedAction action, String note) {
+        return new ManualTest(id, UC, "AuthService.login", preconditions, input, expected, type, note, action);
     }
 
     private static Fixture successFixture(Account account) {

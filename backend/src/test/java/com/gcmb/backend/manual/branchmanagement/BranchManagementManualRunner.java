@@ -8,21 +8,27 @@
 package com.gcmb.backend.manual.branchmanagement;
 
 import com.gcmb.backend.branch.dto.BranchDtos.BranchCommand;
+import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.branch.service.BranchAdministrationService;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 public final class BranchManagementManualRunner {
-    private static final int EXPECTED_CASES = 35;
+    private static final int EXPECTED_CASES = 58;
 
     private BranchManagementManualRunner() {
     }
@@ -45,7 +51,10 @@ public final class BranchManagementManualRunner {
     private static List<ManualTest> allTests() {
         List<ManualTest> cases = new ArrayList<>();
         cases.addAll(CreateBranchManualCases.cases());
+        cases.addAll(ViewBranchListManualCases.cases());
         cases.addAll(UpdateBranchManualCases.cases());
+        cases.addAll(SetBranchManagerManualCases.cases());
+        cases.addAll(ChangeBranchStatusManualCases.cases());
         cases.sort(Comparator.comparing(ManualTest::id));
         validate(cases);
         return List.copyOf(cases);
@@ -142,6 +151,10 @@ public final class BranchManagementManualRunner {
                     && (expectedMessage == null || Objects.equals(expectedMessage, failure.getReason()));
             return check(passed, "status=" + failure.getStatusCode().value()
                     + ", message=" + failure.getReason());
+        } catch (AuthFailure failure) {
+            boolean passed = failure.status() == 400
+                    && (expectedMessage == null || Objects.equals(expectedMessage, failure.getMessage()));
+            return check(passed, "status=" + failure.status() + ", message=" + failure.getMessage());
         } catch (Throwable failure) {
             return check(false, "Unexpected " + failure.getClass().getSimpleName() + ": " + failure.getMessage());
         }
@@ -167,9 +180,81 @@ public final class BranchManagementManualRunner {
         return check(passed, actual.stream().collect(Collectors.joining("; ")));
     }
 
+    public static TestResult expectStatus(ThrowingRunnable action, int status, String message) {
+        try {
+            action.run();
+            return check(false, "Không phát sinh ResponseStatusException");
+        } catch (ResponseStatusException failure) {
+            boolean passed = failure.getStatusCode().value() == status
+                    && Objects.equals(message, failure.getReason());
+            return check(passed, "status=" + failure.getStatusCode().value()
+                    + ", message=" + failure.getReason());
+        } catch (Throwable failure) {
+            return check(false, "Unexpected " + failure.getClass().getSimpleName() + ": " + failure.getMessage());
+        }
+    }
+
+    public static Map<String, Object> branch(UUID id, String status) {
+        return Map.of("branchId", id, "branchName", "GenZ Cinema Hoa Bằng", "status", status);
+    }
+
     @FunctionalInterface
     public interface CheckedAction {
         TestResult run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    public static final class ScriptedJdbc extends JdbcTemplate {
+        public final Deque<List<Map<String, Object>>> mapRows = new ArrayDeque<>();
+        public final Deque<List<?>> typedRows = new ArrayDeque<>();
+        public final Deque<Object> objects = new ArrayDeque<>();
+        public final List<SqlCall> reads = new ArrayList<>();
+        public final List<SqlCall> updates = new ArrayList<>();
+        public final List<String> executions = new ArrayList<>();
+
+        @Override
+        public List<Map<String, Object>> queryForList(String sql) {
+            reads.add(new SqlCall(sql, new Object[0]));
+            return mapRows.removeFirst();
+        }
+
+        @Override
+        public List<Map<String, Object>> queryForList(String sql, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return mapRows.removeFirst();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> queryForList(String sql, Class<T> elementType, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (List<T>) typedRows.removeFirst();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (T) objects.removeFirst();
+        }
+
+        @Override
+        public int update(String sql, Object... args) {
+            updates.add(new SqlCall(sql, args));
+            return 1;
+        }
+
+        @Override
+        public void execute(String sql) {
+            executions.add(sql);
+        }
+    }
+
+    public record SqlCall(String sql, Object[] args) {
     }
 
     public record TestResult(boolean passed, String actual) {

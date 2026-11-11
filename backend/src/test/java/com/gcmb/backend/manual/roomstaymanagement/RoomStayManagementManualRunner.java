@@ -31,6 +31,7 @@ import com.gcmb.backend.booking.service.BookingPricingService;
 import com.gcmb.backend.booking.service.BookingService;
 import com.gcmb.backend.booking.service.CheckoutService;
 import com.gcmb.backend.booking.service.SePaySettings;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -54,7 +55,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 public final class RoomStayManagementManualRunner {
-    private static final int EXPECTED_CASES = 93;
+    private static final int EXPECTED_CASES = 102;
     static final UUID ACTOR_ID = UUID.fromString("47570000-0000-4000-8000-000000000001");
     static final UUID BRANCH_ID = UUID.fromString("47570000-0000-4000-8000-000000000101");
     static final UUID BOOKING_ID = UUID.fromString("47570000-0000-4000-8000-000000000201");
@@ -180,7 +181,91 @@ public final class RoomStayManagementManualRunner {
         if (number <= 14) return runCheckIn(number);
         if (number <= 34) return runChangeRoom(number);
         if (number <= 56) return runExtendStay(number);
-        return runCheckout(number);
+        if (number <= 93) return runCheckout(number);
+        return runRefreshedSourceCases(number);
+    }
+
+    private static TestResult runRefreshedSourceCases(int number) {
+        if (number <= 96) {
+            BookingFixture f = bookingFixture();
+            Instant now = Instant.now();
+            when(f.repository().booking(BOOKING_ID, BRANCH_ID))
+                    .thenReturn(booking("CONFIRMED", "PHONE", now.minusSeconds(1800), now.plusSeconds(5400), 2));
+            when(f.repository().currentAllocationForUpdate(BOOKING_ID))
+                    .thenReturn(allocation("RESERVED", "AVAILABLE", now.minusSeconds(1800), now.plusSeconds(5400)));
+            if (number == 94) {
+                UUID drink = UUID.randomUUID();
+                UUID food = UUID.randomUUID();
+                var drinks = List.of(new BookingDtos.ComboGiftItem(drink, 1));
+                var foods = List.of(new BookingDtos.ComboGiftItem(food, 1));
+                when(f.repository().comboGiftRequirements(BOOKING_ID, BRANCH_ID))
+                        .thenReturn(new BookingRepository.ComboGiftRequirements(1, 1));
+                try {
+                    f.service().checkIn(identity(), BOOKING_ID, new BookingDtos.CheckInRequest(drinks, foods));
+                    verify(f.foodOrders()).createComboGiftOrder(identity(), BOOKING_ID, ALLOCATION_ID, drinks, foods);
+                    return check(invocationCount(f.repository(), "checkInBooking") == 1,
+                            "gift order created and check-in mutation count=1");
+                } catch (Throwable failure) {
+                    return unexpected(failure);
+                }
+            }
+            if (number == 95) {
+                when(f.repository().comboGiftRequirements(BOOKING_ID, BRANCH_ID))
+                        .thenReturn(new BookingRepository.ComboGiftRequirements(2, 0));
+                TestResult result = expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID,
+                        new BookingDtos.CheckInRequest(List.of(new BookingDtos.ComboGiftItem(UUID.randomUUID(), 1)), List.of())),
+                        400, "Vui lòng chọn đúng 2 đồ uống tặng kèm combo.");
+                return check(result.passed() && invocationCount(f.repository(), "checkInBooking") == 0
+                                && invocationCount(f.foodOrders(), "createComboGiftOrder") == 0,
+                        result.actual() + "; check-in/gift mutations=0");
+            }
+            when(f.repository().branchScope(ACTOR_ID)).thenReturn(null);
+            return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 403,
+                    "Bạn không có quyền truy cập đối với booking.");
+        }
+        if (number == 97 || number == 98) {
+            BookingFixture f = bookingFixture();
+            when(f.repository().branchScope(ACTOR_ID)).thenReturn(null);
+            if (number == 97) return expectFailure(() -> f.service().changeRoom(identity(), BOOKING_ID,
+                    new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null)), 403,
+                    "Bạn không có quyền truy cập đối với booking.");
+            return expectFailure(() -> f.service().extendStay(identity(), BOOKING_ID,
+                    new BookingDtos.ExtendStayRequest("HOURLY", null, 1)), 403,
+                    "Bạn không có quyền truy cập đối với booking.");
+        }
+        CheckoutFixture f = checkoutFixture();
+        if (number == 99) {
+            f.db().paid = new BigDecimal("300000");
+            try {
+                f.service().complete(identity(), BILL_ID);
+                return check(invocationCount(f.foodOrders(), "deductComboGiftStock") == 1,
+                        "combo-gift stock deduction count=1 after full payment");
+            } catch (Throwable failure) {
+                return unexpected(failure);
+            }
+        }
+        if (number == 100) {
+            f.db().billStatus = "SETTLED";
+            try {
+                f.service().complete(identity(), BILL_ID);
+                return check(invocationCount(f.foodOrders(), "deductComboGiftStock") == 0,
+                        "settled bill returned; combo-gift stock deduction count=0");
+            } catch (Throwable failure) {
+                return unexpected(failure);
+            }
+        }
+        if (number == 101) {
+            CheckoutDtos.Issue stale = new CheckoutDtos.Issue(true, "Đã kiểm tra", List.of(), false,
+                    BigDecimal.ZERO, true, Instant.now().minusSeconds(301), "stale-token");
+            return expectFailure(() -> f.service().issue(identity(), BOOKING_ID, stale), 409,
+                    "Báo giá đã hết hiệu lực. Vui lòng cập nhật tiền phòng và xác nhận lại.");
+        }
+        if (number == 102) {
+            when(f.repository().branchScope(ACTOR_ID)).thenReturn(null);
+            return expectFailure(() -> f.service().complete(identity(), BILL_ID), 403,
+                    "Bạn không có quyền checkout đối với booking.");
+        }
+        throw new IllegalArgumentException("Unknown refreshed-source case " + number);
     }
 
     private static TestResult runCheckIn(int number) {
@@ -201,7 +286,7 @@ public final class RoomStayManagementManualRunner {
                 when(f.repository().booking(BOOKING_ID, BRANCH_ID)).thenReturn(early);
                 when(f.repository().currentAllocationForUpdate(BOOKING_ID)).thenReturn(reserved);
                 try {
-                    f.service().checkIn(identity(), BOOKING_ID);
+                    f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn());
                     ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
                     verify(f.repository()).checkInBooking(eq(BOOKING_ID), any(Instant.class), end.capture());
                     long minutes = Duration.between(Instant.now(), end.getValue()).toMinutes();
@@ -223,37 +308,37 @@ public final class RoomStayManagementManualRunner {
             case 5 -> {
                 when(f.repository().booking(BOOKING_ID, BRANCH_ID))
                         .thenReturn(booking("CANCELLED", "PHONE", now.minusSeconds(1800), now.plusSeconds(5400), 2));
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
                         "Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.");
             }
             case 6, 7 -> {
                 String status = number == 6 ? "UNDER_MAINTENANCE" : "INACTIVE";
                 when(f.repository().currentAllocationForUpdate(BOOKING_ID))
                         .thenReturn(allocation("RESERVED", status, now.minusSeconds(1800), now.plusSeconds(5400)));
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
                         "Phòng Q01 chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
             }
             case 8 -> {
                 when(f.repository().currentAllocationForUpdate(BOOKING_ID)).thenReturn(null);
-                return expectFailureStatus(() -> f.service().checkIn(identity(), BOOKING_ID), 409);
+                return expectFailureStatus(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409);
             }
             case 9 -> {
                 when(f.repository().booking(BOOKING_ID, BRANCH_ID))
                         .thenReturn(booking("CONFIRMED", "PHONE", now.minusSeconds(7200), now.minusSeconds(1), 2));
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
                         "Đã quá khung giờ booking; không thể check-in");
             }
             case 10 -> {
                 when(f.repository().hasRoomOverlap(eq(ROOM_ID), any(Instant.class), any(Instant.class), eq(BOOKING_ID)))
                         .thenReturn(true);
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
                         "Phòng Q01 đã có booking trùng với thời gian sử dụng đã chọn. Vui lòng chọn phòng hoặc thời gian khác.");
             }
             case 11 -> {
                 when(f.repository().booking(BOOKING_ID, BRANCH_ID))
                         .thenReturn(booking("IN_HOUSE", "PHONE", now.minusSeconds(1800), now.plusSeconds(5400), 2));
                 try {
-                    f.service().checkIn(identity(), BOOKING_ID);
+                    f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn());
                     return check(true, "repeated command returned the current check-in state without a second mutation");
                 } catch (BookingFailure failure) {
                     return check(false, "status=" + failure.status() + ", message=" + failure.getMessage());
@@ -261,18 +346,18 @@ public final class RoomStayManagementManualRunner {
             }
             case 12 -> {
                 when(f.repository().checkInBooking(eq(BOOKING_ID), any(Instant.class), any(Instant.class))).thenReturn(0);
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
-                        "Chưa thể xác nhận kết quả check-in. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
+                        "Chưa thể xác nhận kết quả nhận phòng. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 13 -> {
                 when(f.repository().occupyAllocation(eq(ALLOCATION_ID), any(Instant.class))).thenReturn(0);
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 409,
-                        "Chưa thể xác nhận kết quả check-in. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 409,
+                        "Chưa thể xác nhận kết quả nhận phòng. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 14 -> {
                 when(f.repository().branchScope(ACTOR_ID)).thenReturn(null);
-                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID), 403,
-                        "Bạn không có quyền check-in đối với booking.");
+                return expectFailure(() -> f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn()), 403,
+                        "Bạn không có quyền truy cập đối với booking.");
             }
             default -> throw new IllegalArgumentException("Unknown check-in case " + number);
         }
@@ -280,7 +365,7 @@ public final class RoomStayManagementManualRunner {
 
     private static TestResult successfulCheckIn(BookingFixture f, boolean early, String actual) {
         try {
-            f.service().checkIn(identity(), BOOKING_ID);
+            f.service().checkIn(identity(), BOOKING_ID, emptyCheckIn());
             verify(f.repository()).checkInBooking(eq(BOOKING_ID), any(Instant.class), any(Instant.class));
             if (early) verify(f.repository()).shiftAndOccupyAllocation(eq(ALLOCATION_ID), any(Instant.class), any(Instant.class), any(Instant.class));
             else verify(f.repository()).occupyAllocation(eq(ALLOCATION_ID), any(Instant.class));
@@ -387,7 +472,7 @@ public final class RoomStayManagementManualRunner {
                 when(f.repository().finishOccupiedAllocation(eq(ALLOCATION_ID), any(), anyString(), any())).thenReturn(0);
                 return expectFailure(() -> f.service().changeRoom(identity(), BOOKING_ID,
                         new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null)), 409,
-                        "Chưa thể xác nhận kết quả. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.");
+                        "Chưa thể xác nhận kết quả đổi phòng. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 32 -> {
                 when(f.repository().occupyAllocation(eq(UUID.fromString("47570000-0000-4000-8000-000000001401")), any())).thenReturn(0);
@@ -398,17 +483,20 @@ public final class RoomStayManagementManualRunner {
                 when(f.repository().supersedeCharge(CHARGE_ID)).thenReturn(0);
                 return expectFailure(() -> f.service().changeRoom(identity(), BOOKING_ID,
                         new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null)), 409,
-                        "Chưa thể xác nhận kết quả. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.");
+                        "Chưa thể xác nhận kết quả đổi phòng. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 34 -> {
+                var request = new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null, "room-change-001");
                 try {
-                    f.service().changeRoom(identity(), BOOKING_ID,
-                            new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null));
-                    f.service().changeRoom(identity(), BOOKING_ID,
-                            new BookingDtos.RoomChangeRequest(TARGET_ROOM_ID, "CUSTOMER", null));
-                    return check(false, "a repeated change-room command executed a second mutation");
+                    f.service().changeRoom(identity(), BOOKING_ID, request);
+                    when(f.repository().hasEventIdempotencyKey(BOOKING_ID, "BOOKING_ROOM_CHANGED", "room-change-001"))
+                            .thenReturn(true);
+                    f.service().changeRoom(identity(), BOOKING_ID, request);
+                    return check(false, "repeated change-room command was not rejected");
                 } catch (BookingFailure failure) {
-                    return check(false, "second command is not idempotent: " + failure.getMessage());
+                    return check(failure.status() == 409 && invocationCount(f.repository(), "finishOccupiedAllocation") == 1,
+                            "status=" + failure.status() + ", second mutation count="
+                                    + invocationCount(f.repository(), "finishOccupiedAllocation"));
                 }
             }
             default -> throw new IllegalArgumentException("Unknown room-change case " + number);
@@ -438,7 +526,7 @@ public final class RoomStayManagementManualRunner {
         when(f.repository().currentAllocationForUpdate(BOOKING_ID)).thenReturn(current);
         switch (number) {
             case 35 -> {
-                when(f.repository().combos(ROOM_TYPE_ID)).thenReturn(List.of(combo(COMBO_ID, ROOM_TYPE_ID, "Combo 2 giờ", 120)));
+                when(f.repository().combos(ROOM_TYPE_ID, BRANCH_ID)).thenReturn(List.of(combo(COMBO_ID, ROOM_TYPE_ID, "Combo 2 giờ", 120)));
                 try {
                     var options = f.service().stayOptions(identity(), BOOKING_ID);
                     return check(options.extensionStartsAt().equals(inHouse.plannedEnd()) && options.extensionCombos().size() == 1,
@@ -451,20 +539,20 @@ public final class RoomStayManagementManualRunner {
                 return successfulExtension(f, new BookingDtos.ExtendStayRequest("HOURLY", null, 1), Duration.ofHours(1));
             }
             case 37 -> {
-                when(f.repository().combo(COMBO_ID)).thenReturn(combo(COMBO_ID, ROOM_TYPE_ID, "Combo 2 giờ", 120));
+                when(f.repository().combo(COMBO_ID, BRANCH_ID)).thenReturn(combo(COMBO_ID, ROOM_TYPE_ID, "Combo 2 giờ", 120));
                 return successfulExtension(f, new BookingDtos.ExtendStayRequest("COMBO", COMBO_ID, null), Duration.ofHours(2));
             }
             case 38 -> {
-                when(f.repository().combo(COMBO_ID)).thenReturn(combo(COMBO_ID, OTHER_ROOM_TYPE_ID, "CIN_C1_KG", 120));
+                when(f.repository().combo(COMBO_ID, BRANCH_ID)).thenReturn(combo(COMBO_ID, OTHER_ROOM_TYPE_ID, "CIN_C1_KG", 120));
                 return expectFailure(() -> f.service().extensionQuote(identity(), BOOKING_ID,
                         new BookingDtos.ExtendStayRequest("COMBO", COMBO_ID, null)), 400,
                         "Combo CIN_C1_KG không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             }
             case 39 -> {
-                when(f.repository().combo(COMBO_ID)).thenReturn(combo(COMBO_ID, ROOM_TYPE_ID, "Combo đêm", 120));
+                when(f.repository().combo(COMBO_ID, BRANCH_ID)).thenReturn(combo(COMBO_ID, ROOM_TYPE_ID, "Combo đêm", 120));
                 return expectFailure(() -> f.service().extensionQuote(identity(), BOOKING_ID,
                         new BookingDtos.ExtendStayRequest("COMBO", COMBO_ID, null)), 400,
-                        "Combo đêm không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
+                        "Combo Combo đêm không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
             }
             case 40 -> {
                 return expectFailure(() -> f.service().extensionQuote(identity(), BOOKING_ID,
@@ -481,8 +569,11 @@ public final class RoomStayManagementManualRunner {
             }
             case 43, 44 -> {
                 when(f.repository().hasRoomOverlap(eq(ROOM_ID), any(), any(), eq(BOOKING_ID))).thenReturn(true);
+                Instant nextStart = inHouse.plannedEnd().plusSeconds(1800);
+                if (number == 43) when(f.repository().nextRoomBookingStart(ROOM_ID, inHouse.plannedEnd(), BOOKING_ID)).thenReturn(nextStart);
                 String expected = number == 43
-                        ? "Khoảng gia hạn vượt quá thời gian trống trước booking tiếp theo."
+                        ? "Không thể gia hạn đến thời gian đã chọn vì trùng với booking tiếp theo. Có thể gia hạn tối đa đến "
+                            + java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(BRANCH.timezone()).format(nextStart) + "."
                         : "Không thể gia hạn vì không còn thời gian trống trước booking tiếp theo của phòng Q01.";
                 return expectFailure(() -> f.service().extendStay(identity(), BOOKING_ID,
                         new BookingDtos.ExtendStayRequest("HOURLY", null, 1)), 409, expected);
@@ -491,21 +582,25 @@ public final class RoomStayManagementManualRunner {
                 when(f.repository().updateInHouseBookingEnd(eq(BOOKING_ID), any(), any())).thenReturn(0);
                 return expectFailure(() -> f.service().extendStay(identity(), BOOKING_ID,
                         new BookingDtos.ExtendStayRequest("HOURLY", null, 1)), 409,
-                        "Chưa thể xác nhận kết quả. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.");
+                        "Chưa thể xác nhận kết quả gia hạn. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 46 -> {
                 when(f.repository().updateOccupiedAllocationEnd(eq(ALLOCATION_ID), any(), any())).thenReturn(0);
                 return expectFailure(() -> f.service().extendStay(identity(), BOOKING_ID,
                         new BookingDtos.ExtendStayRequest("HOURLY", null, 1)), 409,
-                        "Chưa thể xác nhận kết quả. Vui lòng kiểm tra lại trạng thái trước khi thực hiện lại.");
+                        "Chưa thể xác nhận kết quả gia hạn. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 47 -> {
+                var request = new BookingDtos.ExtendStayRequest("HOURLY", null, 1, "extend-001");
                 try {
-                    f.service().extendStay(identity(), BOOKING_ID, new BookingDtos.ExtendStayRequest("HOURLY", null, 1));
-                    f.service().extendStay(identity(), BOOKING_ID, new BookingDtos.ExtendStayRequest("HOURLY", null, 1));
-                    return check(false, "repeated extension added time/charges again");
-                } catch (Throwable failure) {
-                    return check(false, "extension has no idempotency key: " + failure.getMessage());
+                    f.service().extendStay(identity(), BOOKING_ID, request);
+                    when(f.repository().hasEventIdempotencyKey(BOOKING_ID, "BOOKING_EXTENDED", "extend-001")).thenReturn(true);
+                    f.service().extendStay(identity(), BOOKING_ID, request);
+                    return check(false, "repeated extension was not rejected");
+                } catch (BookingFailure failure) {
+                    return check(failure.status() == 409 && invocationCount(f.repository(), "updateInHouseBookingEnd") == 1,
+                            "status=" + failure.status() + ", booking-end mutation count="
+                                    + invocationCount(f.repository(), "updateInHouseBookingEnd"));
                 }
             }
             case 48, 49 -> {
@@ -545,8 +640,11 @@ public final class RoomStayManagementManualRunner {
                 when(f.repository().currentAllocationForUpdate(BOOKING_ID))
                         .thenReturn(allocation("OCCUPIED", "AVAILABLE", now.minusSeconds(7200), end));
                 when(f.repository().hasRoomOverlap(eq(ROOM_ID), any(), any(), eq(BOOKING_ID))).thenReturn(true);
+                Instant nextStart = now.plusSeconds(3600);
+                when(f.repository().nextRoomBookingStart(eq(ROOM_ID), any(), eq(BOOKING_ID))).thenReturn(nextStart);
                 return expectFailure(() -> f.service().startHourlyMeter(identity(), BOOKING_ID), 409,
-                        "Khoảng thời gian đã chọn trùng với booking khác.");
+                        "Không thể gia hạn đến thời gian đã chọn vì trùng với booking tiếp theo. Có thể gia hạn tối đa đến "
+                                + java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(BRANCH.timezone()).format(nextStart) + ".");
             }
             case 52 -> {
                 when(f.repository().meter(BOOKING_ID)).thenReturn(meter("RUNNING", now.minusSeconds(60), null));
@@ -561,6 +659,8 @@ public final class RoomStayManagementManualRunner {
             case 53, 54 -> {
                 long seconds = number == 53 ? 300 : 301;
                 when(f.repository().meter(BOOKING_ID)).thenReturn(meter("RUNNING", now.minusSeconds(seconds), null));
+                if (number == 54) when(f.pricing().overstay(eq(ROOM_TYPE_ID), eq(BRANCH_ID), eq(BRANCH.timezone()), any(), any()))
+                        .thenReturn(List.of(overtimeCharge(new BigDecimal("8027"), seconds)));
                 try {
                     f.service().stopHourlyMeter(identity(), BOOKING_ID);
                     List<BookingDtos.ChargeLine> charges = insertedCharges(f.repository());
@@ -577,15 +677,23 @@ public final class RoomStayManagementManualRunner {
                 }
             }
             case 55 -> {
-                BookingRow ended = booking("IN_HOUSE", "PHONE", now.minusSeconds(7200), now.minusSeconds(3700), 2);
-                when(f.repository().booking(BOOKING_ID, BRANCH_ID)).thenReturn(ended);
-                when(f.repository().meter(BOOKING_ID)).thenReturn(meter("RUNNING", now.minusSeconds(1800), null));
+                BookingRepository repository = mock(BookingRepository.class);
+                BookingPricingService pricing = new BookingPricingService(repository);
+                java.time.ZoneId timezone = BRANCH.timezone();
+                java.time.LocalDate date = java.time.LocalDate.now(timezone);
+                Instant from = date.atTime(9, 58).atZone(timezone).toInstant();
+                Instant to = date.atTime(10, 4).atZone(timezone).toInstant();
+                PricingRule morning = new PricingRule(UUID.randomUUID(), "Sáng", BRANCH_ID, date.minusDays(1), null,
+                        "ALL", null, 0, 600, new BigDecimal("60000"), new BigDecimal("60000"), 60, 1);
+                PricingRule daytime = new PricingRule(UUID.randomUUID(), "Ngày", BRANCH_ID, date.minusDays(1), null,
+                        "ALL", null, 600, 1440, new BigDecimal("120000"), new BigDecimal("120000"), 60, 1);
+                when(repository.pricingRules(ROOM_TYPE_ID, BRANCH_ID, date, date)).thenReturn(List.of(morning, daytime));
                 try {
-                    var lines = f.service().checkoutOvertime(identity(), BOOKING_ID, now);
-                    int rateLookups = invocationCount(f.pricing(), "meteredRate");
-                    return check(rateLookups >= 2,
-                            "overtime lines=" + lines.size() + ", price-window lookups=" + rateLookups
-                                    + " (meter segment keeps one locked rate and is not split by price window)");
+                    var lines = pricing.overstay(ROOM_TYPE_ID, BRANCH_ID, timezone, from, to);
+                    return check(lines.size() == 2
+                                    && lines.get(0).amount().compareTo(new BigDecimal("2000")) == 0
+                                    && lines.get(1).amount().compareTo(new BigDecimal("8000")) == 0,
+                            "segments=" + lines.size() + ", amounts=" + lines.stream().map(BookingDtos.ChargeLine::amount).toList());
                 } catch (Throwable failure) {
                     return unexpected(failure);
                 }
@@ -646,6 +754,8 @@ public final class RoomStayManagementManualRunner {
                         .thenReturn(booking("IN_HOUSE", "PHONE", now.minusSeconds(7200), now.minusSeconds(seconds), 2));
                 when(bf.repository().currentAllocation(BOOKING_ID))
                         .thenReturn(allocation("OCCUPIED", "AVAILABLE", now.minusSeconds(7200), now.plusSeconds(7200)));
+                if (number == 60) when(bf.pricing().overstay(eq(ROOM_TYPE_ID), eq(BRANCH_ID), eq(BRANCH.timezone()), any(), any()))
+                        .thenReturn(List.of(overtimeCharge(new BigDecimal("8027"), seconds)));
                 try {
                     var lines = bf.service().checkoutOvertime(identity(), BOOKING_ID, now);
                     BigDecimal actual = lines.stream().map(CheckoutDtos.Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -658,59 +768,61 @@ public final class RoomStayManagementManualRunner {
             }
             case 61 -> {
                 return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(false, null, List.of(), false, BigDecimal.ZERO)), 400,
+                        issue(false, null, List.of(), false, BigDecimal.ZERO)), 400,
                         "Vui lòng xác nhận đã kiểm tra phòng trước khi lập bill thanh toán.");
             }
             case 62 -> {
-                return successfulIssue(f, new CheckoutDtos.Issue(true, "x".repeat(2000), List.of(), false, BigDecimal.ZERO),
+                return successfulIssue(f, issue(true, "x".repeat(2000), List.of(), false, BigDecimal.ZERO),
                         state -> state.lastInspectionNote.length() == 2000, "inspection note length=2000 persisted");
             }
             case 63 -> {
                 return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(true, "x".repeat(2001), List.of(), false, BigDecimal.ZERO)), 400,
+                        issue(true, "x".repeat(2001), List.of(), false, BigDecimal.ZERO)), 400,
                         "Ghi chú kiểm tra phòng chỉ được chứa tối đa 2000 ký tự.");
             }
             case 64 -> {
-                return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(true, null, List.of(new CheckoutDtos.Surcharge(" ", BigDecimal.ONE)), false, BigDecimal.ZERO)), 400,
+                return expectIssueFailure(f,
+                        issue(true, null, List.of(new CheckoutDtos.Surcharge(" ", BigDecimal.ONE)), false, BigDecimal.ZERO), 400,
                         "Vui lòng bổ sung lý do phụ phí.");
             }
             case 65 -> {
-                return successfulIssue(f, new CheckoutDtos.Issue(true, null,
+                return successfulIssue(f, issue(true, null,
                         List.of(new CheckoutDtos.Surcharge("x".repeat(180), BigDecimal.ONE)), false, BigDecimal.ZERO),
                         state -> state.sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.booking_charge")),
                         "180-character surcharge reason accepted and persisted");
             }
             case 66 -> {
-                return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(true, null,
-                                List.of(new CheckoutDtos.Surcharge("x".repeat(181), BigDecimal.ONE)), false, BigDecimal.ZERO)), 400,
+                return expectIssueFailure(f, issue(true, null,
+                                List.of(new CheckoutDtos.Surcharge("x".repeat(181), BigDecimal.ONE)), false, BigDecimal.ZERO), 400,
                         "Lý do phụ phí chỉ được chứa tối đa 180 ký tự.");
             }
             case 67 -> {
-                return successfulIssue(f, new CheckoutDtos.Issue(true, null,
+                return successfulIssue(f, issue(true, null,
                         List.of(new CheckoutDtos.Surcharge("Khăn hỏng", BigDecimal.ONE)), false, BigDecimal.ZERO),
                         state -> state.sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.booking_charge")),
                         "1 VND surcharge accepted and included in source lines");
             }
             case 68, 69 -> {
                 BigDecimal amount = number == 68 ? BigDecimal.ZERO : BigDecimal.ONE.negate();
-                return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(true, null,
-                                List.of(new CheckoutDtos.Surcharge("Phụ phí", amount)), false, BigDecimal.ZERO)), 400,
+                return expectIssueFailure(f, issue(true, null,
+                                List.of(new CheckoutDtos.Surcharge("Phụ phí", amount)), false, BigDecimal.ZERO), 400,
                         "Phụ phí phải lớn hơn 0 đ.");
             }
             case 70 -> {
-                return expectFailure(() -> f.service().issue(identity(), BOOKING_ID,
-                        new CheckoutDtos.Issue(true, null,
-                                List.of(new CheckoutDtos.Surcharge("Phụ phí", new BigDecimal("1.5"))), false, BigDecimal.ZERO)), 400,
+                return expectIssueFailure(f, issue(true, null,
+                                List.of(new CheckoutDtos.Surcharge("Phụ phí", new BigDecimal("1.5"))), false, BigDecimal.ZERO), 400,
                         "Phụ phí phải là số tiền nguyên đồng, không có phần thập phân.");
             }
             case 71 -> {
                 f.db().pendingOrders = 2;
+                CheckoutDtos.Issue unconfirmed = new CheckoutDtos.Issue(true, "Đã kiểm tra", List.of(), false,
+                        BigDecimal.ZERO, false, null, null);
+                TestResult warning = expectFailure(() -> f.service().issue(identity(), BOOKING_ID, unconfirmed), 409,
+                        "Booking còn 2 món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Bạn có muốn tiếp tục?");
+                if (!warning.passed()) return warning;
                 try {
-                    f.service().issue(identity(), BOOKING_ID, validIssue());
-                    return check(true, "warning exposed 2 pending orders and issue continued after confirmation");
+                    f.service().issue(identity(), BOOKING_ID, withQuote(f, validIssue()));
+                    return check(true, "exact 2-item warning returned; issue continued after confirmation");
                 } catch (BookingFailure failure) {
                     return check(false, "checkout is blocked instead of warning/continue: " + failure.getMessage());
                 }
@@ -774,7 +886,7 @@ public final class RoomStayManagementManualRunner {
             case 80 -> {
                 return expectFailure(() -> f.service().plan(identity(), BILL_ID,
                         new CheckoutDtos.PaymentPlan("CASH", null, new BigDecimal("300000.5"))), 400,
-                        "Số tiền phải là số nguyên đồng, không có phần thập phân.");
+                        "Tiền khách đưa phải là số tiền nguyên đồng, không có phần thập phân.");
             }
             case 81 -> {
                 return successfulPlan(f, new CheckoutDtos.PaymentPlan("MIXED", new BigDecimal("100000"), new BigDecimal("100000")),
@@ -845,7 +957,7 @@ public final class RoomStayManagementManualRunner {
     private static TestResult successfulIssue(CheckoutFixture f, CheckoutDtos.Issue issue,
             StateCheck condition, String actual) {
         try {
-            f.service().issue(identity(), BOOKING_ID, issue);
+            f.service().issue(identity(), BOOKING_ID, withQuote(f, issue));
             return check(condition.test(f.db()), actual);
         } catch (Throwable failure) {
             return unexpected(failure);
@@ -889,7 +1001,8 @@ public final class RoomStayManagementManualRunner {
     private static BookingFixture bookingFixture() {
         BookingRepository repository = mock(BookingRepository.class);
         BookingPricingService pricing = mock(BookingPricingService.class);
-        BookingService service = new BookingService(repository, pricing, new ObjectMapper());
+        FoodOrderService foodOrders = mock(FoodOrderService.class);
+        BookingService service = new BookingService(repository, pricing, new ObjectMapper(), foodOrders);
         Instant now = Instant.now();
         BookingRow booking = booking("IN_HOUSE", "PHONE", now.minusSeconds(3600), now.plusSeconds(3600), 2);
         AllocationRow allocation = allocation("OCCUPIED", "AVAILABLE", now.minusSeconds(3600), now.plusSeconds(3600));
@@ -899,6 +1012,8 @@ public final class RoomStayManagementManualRunner {
         when(repository.booking(BOOKING_ID, BRANCH_ID)).thenReturn(booking);
         when(repository.currentAllocation(BOOKING_ID)).thenReturn(allocation);
         when(repository.currentAllocationForUpdate(BOOKING_ID)).thenReturn(allocation);
+        when(repository.comboGiftRequirements(BOOKING_ID, BRANCH_ID))
+                .thenReturn(new BookingRepository.ComboGiftRequirements(0, 0));
         when(repository.meter(BOOKING_ID)).thenReturn(null);
         when(repository.availableRoom(TARGET_ROOM_ID, BRANCH_ID)).thenReturn(room(TARGET_ROOM_ID, "K01", ROOM_TYPE_ID, 4));
         when(repository.lockAvailableRoom(TARGET_ROOM_ID, BRANCH_ID)).thenReturn(room(TARGET_ROOM_ID, "K01", ROOM_TYPE_ID, 4));
@@ -922,12 +1037,13 @@ public final class RoomStayManagementManualRunner {
         when(pricing.meteredRate(eq(ROOM_TYPE_ID), eq(BRANCH_ID), eq(BRANCH.timezone()), any()))
                 .thenReturn(rate());
         stubDetail(repository, booking, allocation);
-        return new BookingFixture(repository, pricing, service);
+        return new BookingFixture(repository, pricing, foodOrders, service);
     }
 
     private static CheckoutFixture checkoutFixture() {
         BookingRepository repository = mock(BookingRepository.class);
         BookingService bookings = mock(BookingService.class);
+        FoodOrderService foodOrders = mock(FoodOrderService.class);
         JdbcState state = new JdbcState();
         JdbcTemplate db = mock(JdbcTemplate.class, state::answer);
         when(repository.branchScope(ACTOR_ID)).thenReturn(BRANCH);
@@ -939,8 +1055,8 @@ public final class RoomStayManagementManualRunner {
         when(repository.lockDeposit(BOOKING_ID)).thenReturn(DEPOSIT_ID);
         when(repository.depositBalance(BOOKING_ID)).thenReturn(BigDecimal.ZERO);
         SePaySettings sepay = new SePaySettings("VCB", "0123456789", "GENZ KARAOKE", "test-key");
-        CheckoutService service = new CheckoutService(db, repository, bookings, sepay, new ObjectMapper());
-        return new CheckoutFixture(repository, bookings, service, state);
+        CheckoutService service = new CheckoutService(db, repository, bookings, sepay, new ObjectMapper(), foodOrders);
+        return new CheckoutFixture(repository, bookings, foodOrders, service, state);
     }
 
     private static void stubDetail(BookingRepository repository, BookingRow booking, AllocationRow allocation) {
@@ -984,7 +1100,7 @@ public final class RoomStayManagementManualRunner {
 
     private static ComboRow combo(UUID id, UUID type, String name, int minutes) {
         return new ComboRow(id, "CIN_C1_QN", 1, type, name, minutes, new BigDecimal("192000"),
-                BigDecimal.ZERO, new BigDecimal("96000"), Instant.now().minusSeconds(86400), null);
+                BigDecimal.ZERO, new BigDecimal("96000"), Instant.now().minusSeconds(86400), null, 0, 0);
     }
 
     private static MeterRow meter(String status, Instant billedFrom, Instant stoppedAt) {
@@ -1000,7 +1116,29 @@ public final class RoomStayManagementManualRunner {
     }
 
     private static CheckoutDtos.Issue validIssue() {
-        return new CheckoutDtos.Issue(true, "Đã kiểm tra", List.of(), false, BigDecimal.ZERO);
+        return issue(true, "Đã kiểm tra", List.of(), false, BigDecimal.ZERO);
+    }
+
+    private static BookingDtos.CheckInRequest emptyCheckIn() {
+        return new BookingDtos.CheckInRequest(List.of(), List.of());
+    }
+
+    private static CheckoutDtos.Issue issue(boolean inspected, String note, List<CheckoutDtos.Surcharge> surcharges,
+            boolean overtimeConfirmed, BigDecimal overtimeAmount) {
+        return new CheckoutDtos.Issue(inspected, note, surcharges, overtimeConfirmed, overtimeAmount,
+                true, null, null);
+    }
+
+    private static CheckoutDtos.Issue withQuote(CheckoutFixture f, CheckoutDtos.Issue issue) {
+        Map<String, Object> preview = f.service().preview(identity(), BOOKING_ID);
+        return new CheckoutDtos.Issue(issue.inspected(), issue.inspectionNote(), issue.surcharges(),
+                issue.overtimeConfirmed(), issue.overtimeAmount(), issue.unservedConfirmed(),
+                (Instant) preview.get("checkoutAt"), (String) preview.get("quoteToken"));
+    }
+
+    private static TestResult expectIssueFailure(CheckoutFixture f, CheckoutDtos.Issue issue,
+            int status, String message) {
+        return expectFailure(() -> f.service().issue(identity(), BOOKING_ID, withQuote(f, issue)), status, message);
     }
 
     private static Map<String, Object> line(String description, BigDecimal amount) {
@@ -1013,6 +1151,11 @@ public final class RoomStayManagementManualRunner {
         line.put("amount", amount);
         line.put("category", "ROOM");
         return line;
+    }
+
+    private static BookingDtos.ChargeLine overtimeCharge(BigDecimal amount, long seconds) {
+        return new BookingDtos.ChargeLine("OVERTIME", "Quá giờ", BigDecimal.valueOf(seconds),
+                new BigDecimal("96000"), amount, PRICE_RULE_ID, null, Map.of());
     }
 
     private static String nowText() {
@@ -1064,10 +1207,11 @@ public final class RoomStayManagementManualRunner {
         return new TestResult(condition, actual);
     }
 
-    record BookingFixture(BookingRepository repository, BookingPricingService pricing, BookingService service) {
+    record BookingFixture(BookingRepository repository, BookingPricingService pricing,
+                          FoodOrderService foodOrders, BookingService service) {
     }
 
-    record CheckoutFixture(BookingRepository repository, BookingService bookings,
+    record CheckoutFixture(BookingRepository repository, BookingService bookings, FoodOrderService foodOrders,
                            CheckoutService service, JdbcState db) {
     }
 
@@ -1149,7 +1293,8 @@ public final class RoomStayManagementManualRunner {
             if (statement.contains("FROM gcmb.refund_request")) return pendingRefund ? List.of(Map.of("id", UUID.randomUUID())) : List.of();
             if (statement.contains("FROM gcmb.fb_order") && statement.contains("PENDING")) {
                 List<Map<String, Object>> rows = new ArrayList<>();
-                for (int i = 0; i < pendingOrders; i++) rows.add(Map.of("id", UUID.randomUUID(), "status", "PENDING"));
+                for (int i = 0; i < pendingOrders; i++) rows.add(Map.of(
+                        "id", UUID.randomUUID(), "status", "PENDING", "itemCount", BigDecimal.ONE));
                 return rows;
             }
             if (statement.contains("FROM gcmb.booking_charge c")) return sourceLines;
@@ -1161,7 +1306,7 @@ public final class RoomStayManagementManualRunner {
             if (statement.contains("INSERT INTO gcmb.bill(")) {
                 existingBill = true;
                 amount = (BigDecimal) args[5];
-                lastInspectionNote = String.valueOf(args[7]);
+                lastInspectionNote = String.valueOf(args[8]);
             }
             if (statement.contains("INSERT INTO gcmb.deposit_entry") && statement.contains("'APPLY'")) {
                 depositApplied = (BigDecimal) args[2];

@@ -17,7 +17,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 public final class UserAccountManualRunner {
-    private static final int EXPECTED_CASES = 116;
+    private static final int EXPECTED_CASES = 127;
 
     private UserAccountManualRunner() {
     }

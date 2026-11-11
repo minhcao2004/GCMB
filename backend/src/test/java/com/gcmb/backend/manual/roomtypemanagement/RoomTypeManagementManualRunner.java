@@ -8,21 +8,27 @@
 package com.gcmb.backend.manual.roomtypemanagement;
 
 import com.gcmb.backend.pricing.dto.RoomTypeCommand;
+import com.gcmb.backend.pricing.dto.RoomTypeView;
 import com.gcmb.backend.pricing.service.RoomCatalogService;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.web.server.ResponseStatusException;
 
 public final class RoomTypeManagementManualRunner {
-    private static final int EXPECTED_CASES = 16;
+    private static final int EXPECTED_CASES = 31;
 
     private RoomTypeManagementManualRunner() {
     }
@@ -45,7 +51,10 @@ public final class RoomTypeManagementManualRunner {
     private static List<ManualTest> allTests() {
         List<ManualTest> cases = new ArrayList<>();
         cases.addAll(CreateRoomTypeManualCases.cases());
+        cases.addAll(ViewRoomTypesManualCases.cases());
         cases.addAll(UpdateRoomTypeManualCases.cases());
+        cases.addAll(ChangeRoomTypeStatusManualCases.cases());
+        cases.addAll(DeleteRoomTypeManualCases.cases());
         cases.sort(Comparator.comparing(ManualTest::id));
         validate(cases);
         return List.copyOf(cases);
@@ -179,9 +188,84 @@ public final class RoomTypeManagementManualRunner {
         return check(passed, actual.stream().collect(Collectors.joining("; ")));
     }
 
+    public static TestResult expectStatus(ThrowingRunnable action, int status, String message) {
+        try {
+            action.run();
+            return check(false, "Không phát sinh ResponseStatusException");
+        } catch (ResponseStatusException failure) {
+            boolean passed = failure.getStatusCode().value() == status
+                    && Objects.equals(message, failure.getReason());
+            return check(passed, "status=" + failure.getStatusCode().value()
+                    + ", message=" + failure.getReason());
+        } catch (Throwable failure) {
+            return check(false, "Unexpected " + failure.getClass().getSimpleName() + ": " + failure.getMessage());
+        }
+    }
+
+    public static RoomTypeView roomType(UUID id, String code, String name, boolean active) {
+        return new RoomTypeView(id, code, name, "CINEMA", 4, "Mô tả", active);
+    }
+
     @FunctionalInterface
     public interface CheckedAction {
         TestResult run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    public static final class ScriptedJdbc extends JdbcTemplate {
+        public final Deque<List<?>> queryRows = new ArrayDeque<>();
+        public final Deque<List<?>> typedRows = new ArrayDeque<>();
+        public final Deque<Object> objects = new ArrayDeque<>();
+        public final Deque<Integer> updateResults = new ArrayDeque<>();
+        public final List<SqlCall> reads = new ArrayList<>();
+        public final List<SqlCall> updates = new ArrayList<>();
+        public RuntimeException nextUpdateFailure;
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> query(String sql, RowMapper<T> rowMapper) {
+            reads.add(new SqlCall(sql, new Object[0]));
+            return (List<T>) queryRows.removeFirst();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (List<T>) queryRows.removeFirst();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> queryForList(String sql, Class<T> elementType, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (List<T>) typedRows.removeFirst();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+            reads.add(new SqlCall(sql, args));
+            return (T) objects.removeFirst();
+        }
+
+        @Override
+        public int update(String sql, Object... args) {
+            updates.add(new SqlCall(sql, args));
+            if (nextUpdateFailure != null) {
+                RuntimeException failure = nextUpdateFailure;
+                nextUpdateFailure = null;
+                throw failure;
+            }
+            return updateResults.isEmpty() ? 1 : updateResults.removeFirst();
+        }
+    }
+
+    public record SqlCall(String sql, Object[] args) {
     }
 
     public record TestResult(boolean passed, String actual) {

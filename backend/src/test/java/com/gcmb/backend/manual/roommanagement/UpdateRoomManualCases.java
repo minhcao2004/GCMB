@@ -23,14 +23,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 public final class UpdateRoomManualCases {
     private static final String UC = "UC-29 Update Room";
-    private static final String NOTE = "Nguồn: UC-29_Update_Room.docx; BR-111, BR-139, BR-173, BR-179; MSG02, MSG03, MSG24, MSG38, MSG44; Flyway V14. Phương pháp: White-box.";
-
     private UpdateRoomManualCases() {
     }
 
     public static List<ManualTest> cases() {
         List<ManualTest> cases = new ArrayList<>();
-        cases.add(test("RM-011", "update(identity, roomId, validCommand)",
+        cases.add(test("RM-011", "Cập nhật phòng RM-UT-01 bằng thông tin hợp lệ",
                 "Trả RoomView và truyền đúng branch, roomId, command.", "Normal", () -> {
                     Fixture f = fixture();
                     RoomCommand command = validCommand();
@@ -40,34 +38,34 @@ public final class UpdateRoomManualCases {
                     verify(f.repository()).update(BRANCH_ID, ROOM_ID, command);
                     return check(expected.equals(actual), "returned=" + actual);
                 }));
-        cases.add(test("RM-012", "update(identity, roomId, null)",
-                "Từ chối 400 bằng MSG02 và không gọi repository.", "Abnormal", () -> {
+        cases.add(test("RM-012", "Xác nhận cập nhật nhưng không cung cấp thông tin phòng",
+                "Từ chối với thông báo “Vui lòng bổ sung Thông tin phòng.”; không gọi repository.", "Abnormal", () -> {
                     Fixture f = fixture();
                     TestResult result = expectStatus(() -> f.service().update(f.identity(), ROOM_ID, null), 400,
                             "Vui lòng bổ sung Thông tin phòng.");
                     verify(f.repository(), never()).update(any(), any(), any());
                     return result;
                 }));
-        cases.add(test("RM-013", "code/name blank; roomTypeId/floorNumber null",
-                "Mỗi biến thể bị từ chối 400 bằng MSG02; không gọi repository.", "Abnormal", () ->
+        cases.add(test("RM-013", "Lần lượt để trống mã, tên, loại phòng và tầng",
+                "Lần lượt hiển thị “Vui lòng bổ sung Mã phòng.”, “Vui lòng bổ sung Tên phòng.”, “Vui lòng bổ sung Loại phòng.” và “Vui lòng bổ sung Tầng.”; không gọi repository.", "Abnormal", () ->
                         combine(invalidRequired(command(" ", "Phòng", 1, ROOM_TYPE_ID, 1, null), "Mã phòng"),
                                 invalidRequired(command("RM-UT-01", " ", 1, ROOM_TYPE_ID, 1, null), "Tên phòng"),
                                 invalidRequired(command("RM-UT-01", "Phòng", 1, null, 1, null), "Loại phòng"),
                                 invalidRequired(command("RM-UT-01", "Phòng", null, ROOM_TYPE_ID, 1, null), "Tầng"))));
-        cases.add(test("RM-014", "capacity=0 và capacity=1",
-                "Từ chối 0 bằng MSG44; chấp nhận biên 1.", "Boundary", () ->
+        cases.add(test("RM-014", "V01 sức chứa = 0; V02 sức chứa = 1",
+                "V01 hiển thị “Sức chứa phải là số nguyên lớn hơn 0.”; V02 cập nhật thành công.", "Boundary", () ->
                         combine(capacity(0, false), capacity(1, true))));
-        cases.add(test("RM-015", "name dài 200 và 201 ký tự",
-                "Chấp nhận 200; từ chối 201 bằng MSG03.", "Boundary", () ->
+        cases.add(test("RM-015", "V01 tên phòng dài 200; V02 dài 201 ký tự",
+                "V01 được chấp nhận; V02 hiển thị “Tên phòng chỉ được chứa tối đa 200 ký tự.”.", "Boundary", () ->
                         combine(nameLength(200, true), nameLength(201, false))));
-        cases.add(test("RM-016", "repo.update trả null trong branch hiện tại",
-                "Từ chối 404, không trả dữ liệu branch khác.", "Abnormal", () -> {
+        cases.add(test("RM-016", "Cập nhật roomId không tồn tại trong cơ sở Hoa Bằng",
+                "Từ chối với thông báo “Không tìm thấy phòng”; không trả dữ liệu cơ sở khác.", "Abnormal", () -> {
                     Fixture f = fixture();
                     when(f.repository().update(BRANCH_ID, ROOM_ID, validCommand())).thenReturn(null);
                     return expectStatus(() -> f.service().update(f.identity(), ROOM_ID, validCommand()), 404);
                 }));
-        cases.add(test("RM-017", "repo.update báo trùng code trong cơ sở",
-                "Từ chối 409 và hiển thị đúng MSG38.", "Abnormal", () -> {
+        cases.add(test("RM-017", "Mã RM-UT-01 trùng do một giao dịch đồng thời vừa ghi trước khi cập nhật",
+                "Từ chối với thông báo “Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.”.", "Abnormal", () -> {
                     Fixture f = fixture();
                     RoomCommand command = validCommand();
                     when(f.repository().update(BRANCH_ID, ROOM_ID, command))
@@ -75,8 +73,8 @@ public final class UpdateRoomManualCases {
                     return expectStatus(() -> f.service().update(f.identity(), ROOM_ID, command), 409,
                             "Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.");
                 }));
-        cases.add(test("RM-018", "identity.branchId=null",
-                "Từ chối 403 bằng MSG24 và không gọi repository.", "Abnormal", () -> {
+        cases.add(test("RM-018", "Tài khoản Branch Manager chưa được gán cơ sở",
+                "Từ chối với thông báo “Bạn không có quyền cập nhật đối với phòng.”; không gọi repository.", "Abnormal", () -> {
                     Fixture f = fixture();
                     TestResult result = expectStatus(
                             () -> f.service().update(identityWithoutBranch(), ROOM_ID, validCommand()), 403,
@@ -84,11 +82,32 @@ public final class UpdateRoomManualCases {
                     verify(f.repository(), never()).update(any(), any(), any());
                     return result;
                 }));
+        cases.add(test("RM-037", "Cập nhật phòng tại cơ sở đang tạm ngừng hoạt động",
+                SUSPENDED_MESSAGE + "; không kiểm tra trùng và không cập nhật phòng.", "Abnormal", () -> {
+                    Fixture f = fixture();
+                    suspended(f);
+                    TestResult result = expectStatus(
+                            () -> f.service().update(f.identity(), ROOM_ID, validCommand()), 403,
+                            SUSPENDED_MESSAGE);
+                    verify(f.repository(), never()).codeExists(any(), any(), any());
+                    verify(f.repository(), never()).update(any(), any(), any());
+                    return result;
+                }));
+        cases.add(test("RM-038", "Cập nhật phòng thành mã RM-UT-01 đã thuộc phòng khác trong cơ sở",
+                "Từ chối với thông báo “Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.”; không cập nhật.", "Abnormal", () -> {
+                    Fixture f = fixture();
+                    when(f.repository().codeExists(BRANCH_ID, "RM-UT-01", ROOM_ID)).thenReturn(true);
+                    TestResult result = expectStatus(
+                            () -> f.service().update(f.identity(), ROOM_ID, validCommand()), 409,
+                            "Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.");
+                    verify(f.repository(), never()).update(any(), any(), any());
+                    return result;
+                }));
         return List.copyOf(cases);
     }
 
     private static ManualTest test(String id, String input, String expected, String type, CheckedAction action) {
-        return new ManualTest(id, UC, "BranchRoomService.update", precondition(id), input, expected, type, NOTE, action);
+        return new ManualTest(id, UC, "BranchRoomService.update", precondition(id), input, expected, type, note(id), action);
     }
 
     private static String precondition(String id) {
@@ -105,10 +124,27 @@ public final class UpdateRoomManualCases {
                     + "Các trường không được nêu trong Input đều hợp lệ. " + unit;
             case "RM-016" -> validScope
                     + "Không có phòng mang roomId trong phạm vi cơ sở Hoa Bằng. " + unit;
-            case "RM-017" -> validScope + roomExists + activeType
+            case "RM-017", "RM-038" -> validScope + roomExists + activeType
                     + "Một phòng khác cùng cơ sở đã sử dụng mã RM-UT-01. " + unit;
             case "RM-018" -> "Branch Manager qlcs.hoabang đã đăng nhập và đang ACTIVE nhưng tài khoản chưa được gán cơ sở. "
                     + "Phòng không được truy cập trước khi xác định branch scope. " + unit;
+            case "RM-037" -> "Branch Manager qlcs.hoabang đã đăng nhập và được phân công quản lý cơ sở Hoa Bằng; cơ sở đang tạm ngừng hoạt động. "
+                    + roomExists + activeType + unit;
+            default -> throw new IllegalArgumentException("Unknown test case: " + id);
+        };
+    }
+
+    private static String note(String id) {
+        String source = "Nguồn: UC-29_Update_Room.docx; ";
+        return source + switch (id) {
+            case "RM-011" -> "BR-111, BR-139, BR-173, BR-179; Flyway V14; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-012", "RM-013" -> "BR-111; MSG02; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-014" -> "BR-139; MSG44; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-015" -> "BR-179; MSG03; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-016" -> "Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-017", "RM-038" -> "BR-173; MSG38; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-018" -> "MSG24; Production: BranchRoomService.update. Phương pháp kiểm thử: White-box.";
+            case "RM-037" -> "BR-177; Production: BranchRoomService.update; BranchRoomRepository.requireActive. Phương pháp kiểm thử: White-box.";
             default -> throw new IllegalArgumentException("Unknown test case: " + id);
         };
     }

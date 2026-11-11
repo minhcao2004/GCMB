@@ -28,6 +28,7 @@ import com.gcmb.backend.booking.repository.BookingRepository.RoomRow;
 import com.gcmb.backend.booking.repository.BookingRepository.RoomTypeRow;
 import com.gcmb.backend.booking.service.BookingPricingService;
 import com.gcmb.backend.booking.service.BookingService;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -43,7 +44,7 @@ import java.util.UUID;
 import tools.jackson.databind.ObjectMapper;
 
 public final class BookingManagementManualRunner {
-    private static final int EXPECTED_CASES = 63;
+    private static final int EXPECTED_CASES = 88;
 
     static final UUID ACTOR_ID = UUID.fromString("34370000-0000-4000-8000-000000000003");
     static final UUID BRANCH_ID = UUID.fromString("34370000-0000-4000-8000-000000000001");
@@ -85,6 +86,7 @@ public final class BookingManagementManualRunner {
         cases.addAll(ViewBookingsManualCases.cases());
         cases.addAll(UpdateBookingManualCases.cases());
         cases.addAll(CancelBookingManualCases.cases());
+        cases.addAll(UpdateTaxInvoiceRequestStatusManualCases.cases());
         cases.sort(java.util.Comparator.comparing(ManualTest::id));
         validate(cases);
         return List.copyOf(cases);
@@ -159,7 +161,8 @@ public final class BookingManagementManualRunner {
     static Fixture fresh() {
         BookingRepository repository = mock(BookingRepository.class);
         BookingPricingService pricing = mock(BookingPricingService.class);
-        BookingService service = new BookingService(repository, pricing, new ObjectMapper());
+        FoodOrderService foodOrders = mock(FoodOrderService.class);
+        BookingService service = new BookingService(repository, pricing, new ObjectMapper(), foodOrders);
         Instant start = futureMinutes(180);
         BookingRow booking = booking("CONFIRMED", start, start.plusSeconds(7200));
         AllocationRow allocation = allocation(ROOM_ID, ROOM_TYPE_ID, start, start.plusSeconds(7200), "RESERVED");
@@ -184,7 +187,7 @@ public final class BookingManagementManualRunner {
         when(repository.createDepositRefundRequest(eq(BRANCH_ID), eq(BOOKING_ID), eq(DEPOSIT_ID),
                 any(BigDecimal.class), anyString(), anyString(), anyString(), anyString(), eq(ACTOR_ID))).thenReturn(REFUND_ID);
         stubDetail(repository, booking, allocation, BigDecimal.ZERO);
-        return new Fixture(repository, pricing, service, booking, allocation);
+        return new Fixture(repository, pricing, foodOrders, service, booking, allocation);
     }
 
     static void stubDetail(BookingRepository repository, BookingRow booking, AllocationRow allocation,
@@ -229,7 +232,7 @@ public final class BookingManagementManualRunner {
     static ComboRow combo() {
         return new ComboRow(COMBO_ID, "DEMO-UC3437-MB-2H", 1, ROOM_TYPE_ID,
                 "Music Box demo 2 giờ", 120, new BigDecimal("450000"), new BigDecimal("100000"),
-                new BigDecimal("180000"), Instant.now().minusSeconds(86400), null);
+                new BigDecimal("180000"), Instant.now().minusSeconds(86400), null, 2, 1);
     }
 
     static PricingRule pricingRule(BigDecimal hourlyPrice) {
@@ -341,7 +344,7 @@ public final class BookingManagementManualRunner {
         return new TestResult(condition, actual);
     }
 
-    record Fixture(BookingRepository repository, BookingPricingService pricing,
+    record Fixture(BookingRepository repository, BookingPricingService pricing, FoodOrderService foodOrders,
                    BookingService service, BookingRow booking, AllocationRow allocation) {
     }
 

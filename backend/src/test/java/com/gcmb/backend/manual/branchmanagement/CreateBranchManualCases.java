@@ -25,9 +25,10 @@ public final class CreateBranchManualCases {
     private static final String PAGE = "../frontend/src/features/branch/pages/BranchManagementPage.js";
     private static final String V14 = "src/main/resources/db/migration/V14__seed_genz_branches_and_accounts.sql";
     private static final String PRE = "Head Office Manager qlcc và dữ liệu cơ sở/tài khoản demo Flyway V14 tồn tại.";
-    private static final String MSG02_CODE = "Vui lòng bổ sung Mã cơ sở.";
-    private static final String MSG02_NAME = "Vui lòng bổ sung Tên cơ sở.";
-    private static final String MSG02_ADDRESS = "Vui lòng bổ sung Địa chỉ cơ sở.";
+    private static final String MSG02_FORM = "Vui lòng bổ sung thông tin cơ sở.";
+    private static final String MSG02_CODE = "Vui lòng bổ sung mã cơ sở.";
+    private static final String MSG02_NAME = "Vui lòng bổ sung tên cơ sở.";
+    private static final String MSG02_ADDRESS = "Vui lòng bổ sung địa chỉ cơ sở.";
     private static final String MSG03_NAME = "Tên cơ sở chỉ được chứa tối đa 200 ký tự.";
     private static final String MSG03_ADDRESS = "Địa chỉ cơ sở chỉ được chứa tối đa 2000 ký tự.";
     private static final String MSG03_NOTE = "Ghi chú chỉ được chứa tối đa 4000 ký tự.";
@@ -42,7 +43,7 @@ public final class CreateBranchManualCases {
         List<ManualTest> cases = new ArrayList<>();
                 cases.add(tc("BRM-006", "Request body null", "body=null",
                 "HTTP 400 và thông báo dữ liệu bắt buộc; không gọi DB.",
-                () -> validateRejected(null, MSG02_CODE), "BranchAdministrationService.validate"));
+                () -> validateRejected(null, MSG02_FORM), "BranchAdministrationService.validate"));
         cases.add(tc("BRM-007", "Code null/rỗng/khoảng trắng", "code=null, '', '   '",
                 "Từng giá trị bị từ chối bằng MSG02 cho Mã cơ sở.",
                 () -> combine(

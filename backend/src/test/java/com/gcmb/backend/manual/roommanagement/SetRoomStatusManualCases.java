@@ -30,35 +30,33 @@ import org.springframework.jdbc.core.RowMapper;
 
 public final class SetRoomStatusManualCases {
     private static final String UC = "UC-33 Set Room Operating Status";
-    private static final String NOTE = "Nguồn: UC-33_Set_Room_Operating_Status.docx; BR-05, BR-43, BR-111, BR-165; MSG02, MSG24. Phương pháp: White-box.";
-
     private SetRoomStatusManualCases() {
     }
 
     public static List<ManualTest> cases() {
         List<ManualTest> cases = new ArrayList<>();
-        cases.add(test("RM-026", "status AVAILABLE, UNDER_MAINTENANCE và INACTIVE; reason hợp lệ",
+        cases.add(test("RM-026", "Lần lượt chọn AVAILABLE, UNDER_MAINTENANCE và INACTIVE với lý do hợp lệ",
                 "Chấp nhận đúng ba trạng thái và chuyển đầy đủ command/actor/branch vào repository.", "Normal", () ->
                         combine(validStatus("AVAILABLE"), validStatus("UNDER_MAINTENANCE"), validStatus("INACTIVE")),
                 "BranchRoomService.status"));
-        cases.add(test("RM-027", "status(identity, roomId, null)",
-                "Từ chối 400 bằng MSG02 và không gọi repository.", "Abnormal", () -> {
+        cases.add(test("RM-027", "Xác nhận thay đổi nhưng không cung cấp thông tin trạng thái",
+                "Từ chối với thông báo “Vui lòng bổ sung Trạng thái phòng.”; không gọi repository.", "Abnormal", () -> {
                     Fixture f = fixture();
                     TestResult result = expectStatus(() -> f.service().status(f.identity(), ROOM_ID, null), 400,
                             "Vui lòng bổ sung Trạng thái phòng.");
                     verify(f.repository(), never()).changeStatus(any(), any(), any(), any());
                     return result;
                 }, "BranchRoomService.status"));
-        cases.add(test("RM-028", "status=null, rỗng, UNKNOWN hoặc CLEANING",
-                "Mỗi trạng thái bị từ chối 400 có kiểm soát; không gọi repository.", "Abnormal", () ->
+        cases.add(test("RM-028", "V01 trạng thái null; V02 rỗng; V03 UNKNOWN; V04 CLEANING",
+                "V01–V02 hiển thị “Vui lòng bổ sung Trạng thái phòng.”; V03–V04 hiển thị “Trạng thái phòng không hợp lệ.”; không gọi repository.", "Abnormal", () ->
                         combine(invalidStatus(null), invalidStatus(""), invalidStatus("UNKNOWN"), invalidStatus("CLEANING")),
                 "BranchRoomService.status"));
-        cases.add(test("RM-029", "reason=null, rỗng hoặc chỉ khoảng trắng",
-                "Mỗi biến thể bị từ chối 400 bằng MSG02; không gọi repository.", "Abnormal", () ->
+        cases.add(test("RM-029", "Lý do thay đổi null, rỗng hoặc chỉ có khoảng trắng",
+                "Mỗi biến thể hiển thị “Vui lòng bổ sung Lý do thay đổi.”; không gọi repository.", "Abnormal", () ->
                         combine(invalidReason(null), invalidReason(""), invalidReason("   ")),
                 "BranchRoomService.status"));
-        cases.add(test("RM-030", "identity.branchId=null",
-                "Từ chối 403 bằng MSG24 và không gọi repository.", "Abnormal", () -> {
+        cases.add(test("RM-030", "Tài khoản Branch Manager chưa được gán cơ sở",
+                "Từ chối với thông báo “Bạn không có quyền thay đổi trạng thái đối với phòng.”; không gọi repository.", "Abnormal", () -> {
                     Fixture f = fixture();
                     RoomStatusCommand command = status("INACTIVE", "Ngừng sử dụng", null);
                     TestResult result = expectStatus(
@@ -67,14 +65,14 @@ public final class SetRoomStatusManualCases {
                     verify(f.repository(), never()).changeStatus(any(), any(), any(), any());
                     return result;
                 }, "BranchRoomService.status"));
-        cases.add(test("RM-031", "repo.changeStatus trả null",
-                "Từ chối 404 khi phòng không tồn tại trong branch được cấp.", "Abnormal", () -> {
+        cases.add(test("RM-031", "Đổi trạng thái roomId không tồn tại trong cơ sở được phân quyền",
+                "Từ chối với thông báo “Không tìm thấy phòng trong cơ sở được phân quyền”.", "Abnormal", () -> {
                     Fixture f = fixture();
                     RoomStatusCommand command = status("INACTIVE", "Ngừng sử dụng", null);
                     when(f.repository().changeStatus(BRANCH_ID, ROOM_ID, ACTOR_ID, command)).thenReturn(null);
                     return expectStatus(() -> f.service().status(f.identity(), ROOM_ID, command), 404);
                 }, "BranchRoomService.status"));
-        cases.add(test("RM-032", "UNDER_MAINTENANCE có reason và expectedReadyAt",
+        cases.add(test("RM-032", "Chuyển UNDER_MAINTENANCE, lý do Sửa máy chiếu, dự kiến 30/10/2026 09:00 +07",
                 "Truyền nguyên trạng thái, lý do, thời gian dự kiến và actorId vào repository.", "Normal", () -> {
                     Fixture f = fixture();
                     OffsetDateTime ready = OffsetDateTime.of(2026, 10, 30, 9, 0, 0, 0, ZoneOffset.ofHours(7));
@@ -85,7 +83,7 @@ public final class SetRoomStatusManualCases {
                     verify(f.repository()).changeStatus(BRANCH_ID, ROOM_ID, ACTOR_ID, command);
                     return check(expected.equals(actual), "expectedReadyAt=" + ready);
                 }, "BranchRoomService.status"));
-        cases.add(test("RM-033", "BranchRoomRepository.changeStatus với phòng tồn tại",
+        cases.add(test("RM-033", "Chuyển phòng hiện có từ AVAILABLE sang UNDER_MAINTENANCE",
                 "Thực hiện một UPDATE room, một INSERT history và trả trạng thái sau cập nhật.", "Normal", () -> {
                     RoomView before = room("Phòng kiểm thử", "AVAILABLE");
                     RoomView after = room("Phòng kiểm thử", "UNDER_MAINTENANCE");
@@ -108,12 +106,22 @@ public final class SetRoomStatusManualCases {
                     return check(after.equals(actual) && updateRoom && insertHistory && values,
                             "sql=" + db.sql() + ", historyArgs=" + Arrays.toString(history));
                 }, "BranchRoomRepository.changeStatus"));
+        cases.add(test("RM-040", "Đổi trạng thái phòng tại cơ sở đang tạm ngừng hoạt động",
+                SUSPENDED_MESSAGE + "; không ghi trạng thái hoặc lịch sử.", "Abnormal", () -> {
+                    Fixture f = fixture();
+                    suspended(f);
+                    RoomStatusCommand command = status("INACTIVE", "Ngừng sử dụng", null);
+                    TestResult result = expectStatus(
+                            () -> f.service().status(f.identity(), ROOM_ID, command), 403, SUSPENDED_MESSAGE);
+                    verify(f.repository(), never()).changeStatus(any(), any(), any(), any());
+                    return result;
+                }, "BranchRoomService.status"));
         return List.copyOf(cases);
     }
 
     private static ManualTest test(String id, String input, String expected, String type,
             CheckedAction action, String source) {
-        return new ManualTest(id, UC, source, precondition(id), input, expected, type, NOTE, action);
+        return new ManualTest(id, UC, source, precondition(id), input, expected, type, note(id), action);
     }
 
     private static String precondition(String id) {
@@ -138,6 +146,23 @@ public final class SetRoomStatusManualCases {
             case "RM-033" -> validScope
                     + "Phòng tồn tại trong cơ sở, trạng thái ban đầu AVAILABLE; actorId hợp lệ. "
                     + "BranchRoomRepository thật; RecordingJdbc trả snapshot trước/sau và không kết nối database ngoài.";
+            case "RM-040" -> "Branch Manager qlcs.hoabang đã đăng nhập và được phân công quản lý cơ sở Hoa Bằng; cơ sở đang tạm ngừng hoạt động. "
+                    + roomExists + serviceUnit;
+            default -> throw new IllegalArgumentException("Unknown test case: " + id);
+        };
+    }
+
+    private static String note(String id) {
+        String source = "Nguồn: UC-33_Set_Room_Operating_Status.docx; ";
+        return source + switch (id) {
+            case "RM-026" -> "BR-05, BR-111; Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-027", "RM-029" -> "BR-111; MSG02; Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-028" -> "BR-111; MSG02; Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-030" -> "MSG24; Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-031" -> "Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-032" -> "BR-05; Production: BranchRoomService.status. Phương pháp kiểm thử: White-box.";
+            case "RM-033" -> "Production: BranchRoomRepository.changeStatus. Phương pháp kiểm thử: White-box.";
+            case "RM-040" -> "BR-177; Production: BranchRoomService.status; BranchRoomRepository.requireActive. Phương pháp kiểm thử: White-box.";
             default -> throw new IllegalArgumentException("Unknown test case: " + id);
         };
     }

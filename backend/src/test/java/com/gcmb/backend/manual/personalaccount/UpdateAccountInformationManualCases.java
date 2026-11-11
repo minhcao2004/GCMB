@@ -35,6 +35,12 @@ public final class UpdateAccountInformationManualCases {
     private static final String UC = "UC-03 Update Account Information";
     private static final String PRE = "Người dùng đã đăng nhập bằng tài khoản demo ACTIVE trong V14/V15 và mở hồ sơ của chính mình.";
     private static final String NOTE = "Nguồn: UC-03_Update_Account_Information.docx; BR-111, BR-113, BR-119, BR-130, BR-134; MSG02, MSG03, MSG04, MSG05, MSG11, MSG28, MSG35; Flyway V14/V15.";
+    private static final String NOTE_DUPLICATE_EMAIL = "Nguồn: UC-03 - Update_Account_Information.docx; "
+            + "BR-134; MSG35; Flyway V14/V15; Production: AccountProfileService.update. "
+            + "Phương pháp kiểm thử: Black-box.";
+    private static final String NOTE_DUPLICATE_EMAIL_RACE = "Nguồn: UC-03 - Update_Account_Information.docx; "
+            + "BR-134; MSG35; Flyway V14/V15; Production: AccountProfileService.update. "
+            + "Phương pháp kiểm thử: White-box.";
     private static final String MSG04 = "Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu.";
 
     private UpdateAccountInformationManualCases() {
@@ -118,7 +124,9 @@ public final class UpdateAccountInformationManualCases {
                             "Mật khẩu hiện tại không đúng. Vui lòng nhập lại.");
                 }, "AccountProfileService.update"));
         cases.add(test("PAM-098", "email mới đã thuộc tài khoản khác",
-                "Từ chối 409 và hiển thị đúng MSG35.", "Abnormal", () -> {
+                "Từ chối với mã 409. Hiển thị: Email này đã được sử dụng cho tài khoản khác. "
+                        + "Vui lòng nhập email khác. Hồ sơ và audit không thay đổi.",
+                "Abnormal", () -> {
                     Fixture f = linkedFixture(profile(fName(), phone(), "used@example.com"));
                     when(f.crypto.matches(PersonalAccountDemoData.CURRENT_PASSWORD,
                             PersonalAccountDemoData.PASSWORD_HASH)).thenReturn(true);
@@ -128,9 +136,11 @@ public final class UpdateAccountInformationManualCases {
                             new UpdateProfile(fName(), phone(), "used@example.com",
                                     PersonalAccountDemoData.CURRENT_PASSWORD)), 409,
                             "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
-                }, "AccountProfileService.update"));
+                }, "AccountProfileService.update", NOTE_DUPLICATE_EMAIL));
         cases.add(test("PAM-099", "email bị tài khoản khác chiếm giữa bước kiểm tra và lưu",
-                "Từ chối 409 và hiển thị đúng MSG35; không ghi audit sai.", "Abnormal", () -> {
+                "Từ chối với mã 409. Hiển thị: Email này đã được sử dụng cho tài khoản khác. "
+                        + "Vui lòng nhập email khác. Không tạo audit sai.",
+                "Abnormal", () -> {
                     Fixture f = linkedFixture(profile(fName(), phone(), "race@example.com"));
                     when(f.crypto.matches(PersonalAccountDemoData.CURRENT_PASSWORD,
                             PersonalAccountDemoData.PASSWORD_HASH)).thenReturn(true);
@@ -144,7 +154,7 @@ public final class UpdateAccountInformationManualCases {
                             "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
                     verify(f.repository, never()).audit(any(), any());
                     return result;
-                }, "AccountProfileService.update"));
+                }, "AccountProfileService.update", NOTE_DUPLICATE_EMAIL_RACE));
         cases.add(test("PAM-100", "tài khoản không liên kết nhân viên, chỉ đổi email và xác nhận mật khẩu đúng",
                 "Cho phép đổi email; không sửa họ tên/số điện thoại.", "Normal", () -> {
                     Profile before = PersonalAccountDemoData.unlinkedProfile();
@@ -220,6 +230,11 @@ public final class UpdateAccountInformationManualCases {
     private static ManualTest test(String id, String input, String expected, String type,
             CheckedAction action, String sourceMethod) {
         return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type, NOTE, action);
+    }
+
+    private static ManualTest test(String id, String input, String expected, String type,
+            CheckedAction action, String sourceMethod, String note) {
+        return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type, note, action);
     }
 
     private static Fixture linkedFixture(Profile after) {

@@ -16,7 +16,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 public final class AuditLogManualRunner {
-    private static final int EXPECTED_CASES = 47;
+    private static final int EXPECTED_CASES = 59;
 
     private AuditLogManualRunner() {
     }

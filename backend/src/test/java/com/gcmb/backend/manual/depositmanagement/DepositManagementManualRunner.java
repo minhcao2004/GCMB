@@ -10,6 +10,8 @@ package com.gcmb.backend.manual.depositmanagement;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,6 +33,7 @@ import com.gcmb.backend.booking.service.CheckoutService;
 import com.gcmb.backend.booking.service.DepositManagementService;
 import com.gcmb.backend.booking.service.RefundEvidenceStorageService;
 import com.gcmb.backend.booking.service.SePaySettings;
+import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -55,10 +58,11 @@ import org.mockito.invocation.InvocationOnMock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.services.s3.S3Client;
 import tools.jackson.databind.ObjectMapper;
 
 public final class DepositManagementManualRunner {
-    private static final int EXPECTED_CASES = 72;
+    private static final int EXPECTED_CASES = 74;
     static final UUID RECEPTIONIST_ID = UUID.fromString("47570000-0000-4000-8000-000000000001");
     static final UUID ACCOUNTANT_ID = UUID.fromString("47570000-0000-4000-8000-000000000006");
     static final UUID BRANCH_ID = UUID.fromString("47570000-0000-4000-8000-000000000101");
@@ -69,7 +73,9 @@ public final class DepositManagementManualRunner {
     static final String REFERENCE = "GZ1234567890ABCDEF1234";
     static final BranchScope BRANCH = new BranchScope(BRANCH_ID, "HN_HOA_BANG", ZoneId.of("Asia/Ho_Chi_Minh"));
     static final String PRE42 = "Lễ tân letan.hoabang đăng nhập tại HN_HOA_BANG đang hoạt động; booking thuộc cùng chi nhánh; dữ liệu Flyway V14; production code thật với mock/Recording JDBC.";
-    static final String PRE44 = "Kế toán ketoan hoặc lễ tân letan.hoabang đăng nhập đúng vai trò tại HN_HOA_BANG đang hoạt động; booking/refund request thuộc cùng chi nhánh; dữ liệu Flyway V14; production code thật với mock/Recording JDBC.";
+    static final String PRE44 = "Kế toán ketoan đăng nhập; có request hoàn cọc PENDING của booking CANCELLED đủ điều kiện, còn số dư cọc; dữ liệu Flyway V14; production code thật với mock/Recording JDBC.";
+    static final String PRE44_REQUEST = "Lễ tân letan.hoabang đăng nhập tại HN_HOA_BANG đang hoạt động; booking thuộc cùng cơ sở; dữ liệu Flyway V14; production code thật với mock/Recording JDBC.";
+    static final String PRE44_RECEPTION = "Lễ tân letan.hoabang đăng nhập tại HN_HOA_BANG đang hoạt động; dữ liệu Flyway V14; production code thật với mock/Recording JDBC.";
 
     private DepositManagementManualRunner() {
     }
@@ -186,68 +192,90 @@ public final class DepositManagementManualRunner {
     private static TestResult runDepositPlan(int number, CheckoutFixture f) {
         switch (number) {
             case 3 -> {
-                return callPlan(f, true, result -> "PENDING".equals(result.get("status"))
-                        && new BigDecimal("30000").compareTo((BigDecimal) result.get("amount")) == 0
-                        && result.get("qrUrl") != null && f.db().insertedRequests == 1
-                        && f.db().sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.audit_event")),
-                        "one PENDING request, correct 30% amount, QR and audit");
+                try {
+                    Map<String, Object> actual = f.service().confirmDeposit(
+                            receptionist(), BOOKING_ID, "FT-20261110-001", new BigDecimal("30000"));
+                    return check(!f.db().depositReceived && f.db().financialTransactions == 0,
+                            "status=" + actual.get("status") + ", deposit received=" + f.db().depositReceived
+                                    + ", financial transactions=" + f.db().financialTransactions);
+                } catch (Throwable failure) {
+                    return unexpected(failure);
+                }
             }
             case 4 -> {
-                when(f.repository().depositReceivedAmount(BOOKING_ID)).thenReturn(new BigDecimal("30000"));
-                return callPlan(f, true, result -> "SETTLED".equals(result.get("status"))
-                        && f.db().insertedRequests == 0, "SETTLED; request inserts=0");
+                f.db().depositReceived = true;
+                try {
+                    Map<String, Object> actual = f.service().confirmDeposit(
+                            receptionist(), BOOKING_ID, "FT-20261110-001", new BigDecimal("30000"));
+                    verify(f.repository(), never()).receiveDeposit(any(), any(), any(), any(), anyString(), anyString());
+                    return check("SETTLED".equals(actual.get("status")) && f.db().financialTransactions == 0,
+                            "status=" + actual.get("status") + ", new financial transactions=" + f.db().financialTransactions);
+                } catch (Throwable failure) {
+                    return unexpected(failure);
+                }
             }
             case 5 -> {
                 when(f.repository().booking(BOOKING_ID, BRANCH_ID)).thenReturn(booking("DRAFT"));
-                return expectFailure(() -> f.service().depositPayment(receptionist(), BOOKING_ID, true), 409, null);
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-001", new BigDecimal("30000")), 409,
+                        "Chỉ xác nhận cọc cho booking chưa nhận phòng.");
             }
             case 6 -> {
-                f.db().requestExists = true;
-                return callPlan(f, true, result -> REFERENCE.equals(result.get("reference"))
-                        && f.db().insertedRequests == 0 && f.db().cancelledRequests == 0,
-                        "reused existing PENDING reference; duplicate inserts=0");
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, null, new BigDecimal("30000")), 400,
+                        "Vui lòng bổ sung nội dung chuyển khoản.");
             }
             case 7 -> {
-                f.db().requestExists = true;
-                f.db().requestAmount = new BigDecimal("29999");
-                return callPlan(f, true, result -> f.db().insertedRequests == 1
-                        && f.db().cancelledRequests == 1, "old amount cancelled; one replacement created");
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "   ", new BigDecimal("30000")), 400,
+                        "Vui lòng bổ sung nội dung chuyển khoản.");
             }
             case 8 -> {
-                f.db().requestExists = true;
-                f.db().requestExpired = true;
-                return callPlan(f, true, result -> f.db().insertedRequests == 1
-                        && f.db().cancelledRequests == 1, "expired request cancelled; one replacement created");
+                when(f.repository().activeChargeTotal(BOOKING_ID)).thenReturn(new BigDecimal("101"));
+                try {
+                    Map<String, Object> actual = f.service().confirmDeposit(
+                            receptionist(), BOOKING_ID, "FT-20261110-002", new BigDecimal("31"));
+                    return check(!f.db().depositReceived,
+                            "status=" + actual.get("status") + ", deposit received=" + f.db().depositReceived);
+                } catch (Throwable failure) {
+                    return unexpected(failure);
+                }
             }
             case 9 -> {
-                return callPlan(f, false, result -> "NONE".equals(result.get("status"))
-                        && f.db().sql.stream().noneMatch(sql -> sql.contains("INSERT INTO gcmb.payment_request")),
-                        "status=NONE; writes=0");
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-003", null), 409,
+                        "Chưa thể xác nhận kết quả thu tiền cọc. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 10 -> {
-                f.db().requestExists = true;
-                f.db().requestExpired = true;
-                return callPlan(f, false, result -> "EXPIRED".equals(result.get("status"))
-                        && result.get("qrUrl") == null, "status=EXPIRED; qrUrl absent");
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-004", new BigDecimal("29999")), 409,
+                        "Chưa thể xác nhận kết quả thu tiền cọc. Vui lòng kiểm tra lại trạng thái của booking trước khi thực hiện lại.");
             }
             case 11 -> {
-                CheckoutFixture unavailable = checkoutFixture(new SePaySettings("", "", "", ""));
-                return expectFailure(() -> unavailable.service().depositPayment(receptionist(), BOOKING_ID, true), 503,
-                        "Chưa nhận được phản hồi từ SePay. Nếu đang thanh toán, hãy kiểm tra trạng thái thanh toán trước khi thực hiện lại.");
+                when(f.repository().activeChargeTotal(BOOKING_ID)).thenReturn(BigDecimal.ZERO);
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-005", BigDecimal.ZERO), 400,
+                        "Số tiền cọc phải lớn hơn 0 đ.");
             }
             case 12 -> {
-                when(f.repository().activeChargeTotal(BOOKING_ID)).thenReturn(BigDecimal.ZERO);
-                return expectFailure(() -> f.service().depositPayment(receptionist(), BOOKING_ID, true), 400,
-                        "Số tiền giao dịch phải lớn hơn 0 đ.");
+                doThrow(new BookingFailure(403, "form",
+                        "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi."))
+                        .when(f.repository()).requireActiveBranch(BRANCH_ID);
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-006", new BigDecimal("30000")), 403,
+                        "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
             }
             case 13 -> {
                 Identity wrong = new Identity(ACCOUNTANT_ID, "ketoan", "ACCOUNTANT", "/accounting", null, null);
-                return expectFailure(() -> f.service().depositPayment(wrong, BOOKING_ID, true), 403,
+                return expectFailure(() -> f.service().confirmDeposit(
+                        wrong, BOOKING_ID, "FT-20261110-007", new BigDecimal("30000")), 403,
                         "Bạn không có quyền thu tiền cọc đối với booking.");
             }
             case 14 -> {
-                when(f.repository().branchScope(RECEPTIONIST_ID)).thenReturn(null);
-                return expectFailure(() -> f.service().depositPayment(receptionist(), BOOKING_ID, true), 403,
+                f.db().bookingLocked = false;
+                when(f.repository().bookingExists(BOOKING_ID)).thenReturn(true);
+                return expectFailure(() -> f.service().confirmDeposit(
+                        receptionist(), BOOKING_ID, "FT-20261110-008", new BigDecimal("30000")), 403,
                         "Bạn không có quyền thu tiền cọc đối với booking.");
             }
             default -> throw new IllegalArgumentException("Unknown plan case " + number);
@@ -260,16 +288,10 @@ public final class DepositManagementManualRunner {
         CheckoutDtos.Webhook basePayload = payload(991L, "VCB", "0123456789", "in", new BigDecimal("30000"), Instant.now());
         switch (number) {
             case 15 -> {
-                try {
-                    f.service().webhook("Apikey test-key", basePayload);
-                    boolean payment = f.db().sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.payment("));
-                    boolean receive = f.db().sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.deposit_entry"));
-                    verify(f.repository()).createDepositAccount(BOOKING_ID);
-                    return check(payment && receive && f.db().sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.audit_event")),
-                            "bank transaction/payment/RECEIVE/audit written once");
-                } catch (Throwable failure) {
-                    return unexpected(failure);
-                }
+                return callWebhook(f, basePayload,
+                        state -> state.payments == 1 && state.depositEntries == 1
+                                && state.sql.stream().anyMatch(sql -> sql.contains("INSERT INTO gcmb.audit_event")),
+                        "matched SePay deposit confirmation");
             }
             case 16 -> {
                 return expectFailure(() -> f.service().webhook("Apikey wrong", basePayload), 401, null);
@@ -343,11 +365,12 @@ public final class DepositManagementManualRunner {
             case 29 -> refundQueue(f);
             case 30 -> createRefund(f, validRequest(), true, null);
             case 31 -> expectFailure(() -> f.service().createRefundRequest(receptionist(), null), 400,
-                    "Vui lòng bổ sung Booking.");
+                    "Vui lòng bổ sung booking cần yêu cầu hoàn cọc.");
             case 32 -> {
                 when(f.bookings().lockBookingId(BOOKING_ID, BRANCH_ID)).thenReturn(null);
-                yield expectFailure(() -> f.service().createRefundRequest(receptionist(), validRequest()), 404,
-                        "Bạn không có quyền yêu cầu hoàn cọc đối với booking.");
+                when(f.bookings().bookingExists(BOOKING_ID)).thenReturn(true);
+                yield expectFailure(() -> f.service().createRefundRequest(receptionist(), validRequest()), 403,
+                        "Bạn không có quyền gửi yêu cầu hoàn cọc đối với booking.");
             }
             case 33 -> {
                 when(f.bookings().booking(BOOKING_ID, BRANCH_ID)).thenReturn(booking("CONFIRMED"));
@@ -363,16 +386,17 @@ public final class DepositManagementManualRunner {
             }
             case 36 -> {
                 when(f.deposits().canRequestRefund(BRANCH_ID, BOOKING_ID)).thenReturn(false);
-                yield expectFailureStatus(() -> f.service().createRefundRequest(receptionist(), validRequest()), 409);
+                yield expectFailure(() -> f.service().createRefundRequest(receptionist(), validRequest()), 409,
+                        "Thao tác này đã được ghi nhận. Không tạo thêm bản ghi; vui lòng kiểm tra kết quả hiện có.");
             }
             case 37 -> createRefund(f, request(" ", "VCB", "012345", "Hoàn cọc"), false,
-                    "Vui lòng bổ sung Tên chủ tài khoản.");
+                    "Vui lòng bổ sung tên chủ tài khoản.");
             case 38 -> createRefund(f, request("Nguyễn A", " ", "012345", "Hoàn cọc"), false,
-                    "Vui lòng bổ sung Ngân hàng.");
+                    "Vui lòng bổ sung ngân hàng.");
             case 39 -> createRefund(f, request("Nguyễn A", "VCB", " ", "Hoàn cọc"), false,
-                    "Vui lòng bổ sung Số tài khoản.");
+                    "Vui lòng bổ sung số tài khoản.");
             case 40 -> createRefund(f, request("Nguyễn A", "VCB", "012345", " "), false,
-                    "Vui lòng bổ sung Lý do hoàn cọc.");
+                    "Vui lòng bổ sung lý do hoàn cọc.");
             case 41 -> createRefund(f, request("A".repeat(200), "VCB", "012345", "Hoàn cọc"), true, null);
             case 42 -> createRefund(f, request("A".repeat(201), "VCB", "012345", "Hoàn cọc"), false,
                     "Tên chủ tài khoản chỉ được chứa tối đa 200 ký tự.");
@@ -389,12 +413,12 @@ public final class DepositManagementManualRunner {
                     "Mã giao dịch hoàn chỉ được chứa tối đa 200 ký tự.");
             case 62 -> expectFailureStatus(() -> f.service().completeRefund(accountant(), null, "TX", jpeg("p.jpg")), 400);
             case 63 -> {
-                when(f.deposits().refundRequest(BRANCH_ID, REQUEST_ID, false)).thenReturn(null);
+                when(f.deposits().refundRequestForAccounting(REQUEST_ID, false)).thenReturn(null);
                 yield expectFailure(() -> f.service().completeRefund(accountant(), REQUEST_ID, "TX", jpeg("p.jpg")), 404,
-                        "Bạn không có quyền hoàn cọc đối với yêu cầu hoàn cọc.");
+                        "Không tìm thấy yêu cầu hoàn cọc");
             }
             case 64 -> {
-                when(f.deposits().refundRequest(BRANCH_ID, REQUEST_ID, false)).thenReturn(refundRow("PAID", new BigDecimal("100000")));
+                when(f.deposits().refundRequestForAccounting(REQUEST_ID, false)).thenReturn(refundRow("PAID", new BigDecimal("100000")));
                 yield expectFailure(() -> f.service().completeRefund(accountant(), REQUEST_ID, "TX", jpeg("p.jpg")), 409,
                         "Thao tác này đã được ghi nhận. Không tạo thêm bản ghi; vui lòng kiểm tra kết quả hiện có.");
             }
@@ -411,27 +435,32 @@ public final class DepositManagementManualRunner {
                 yield expectFailureStatus(() -> f.service().completeRefund(accountant(), REQUEST_ID, "TX", jpeg("p.jpg")), 409);
             }
             case 68 -> {
-                when(f.deposits().refundRequest(BRANCH_ID, REQUEST_ID, true)).thenReturn(refundRow("PAID", new BigDecimal("100000")));
+                when(f.deposits().refundRequestForAccounting(REQUEST_ID, true)).thenReturn(refundRow("PAID", new BigDecimal("100000")));
                 yield expectFailure(() -> f.service().completeRefund(accountant(), REQUEST_ID, "TX", jpeg("p.jpg")), 409,
                         "Thao tác này đã được ghi nhận. Không tạo thêm bản ghi; vui lòng kiểm tra kết quả hiện có.");
             }
             case 69 -> readEvidence(f, true);
             case 70 -> readEvidence(f, false);
             case 71 -> readCrossBranchEvidence(f);
+            case 73 -> readAccountingEvidence(f);
+            case 74 -> expectFailure(() -> f.service().accountingRefundEvidence(receptionist(), REQUEST_ID), 403,
+                    "Bạn không có quyền xử lý yêu cầu hoàn cọc đối với yêu cầu hoàn cọc.");
             default -> throw new IllegalArgumentException("Unknown refund case " + number);
         };
     }
 
     private static TestResult refundQueue(RefundFixture f) {
         DepositDtos.RefundRequestItem item = new DepositDtos.RefundRequestItem(REQUEST_ID, BOOKING_ID,
-                "BK-HB-001", "Nguyễn A", "0900000001", new BigDecimal("100000"), "Hoàn cọc",
+                "BK-HB-001", "Hòa Bằng", "Nguyễn A", "0900000001", new BigDecimal("100000"), "Hoàn cọc",
                 "Nguyễn A", "VCB", "012345", "REQUESTED", Instant.now(), null, null, false);
-        when(f.deposits().refundRequests(BRANCH_ID)).thenReturn(List.of(item));
+        when(f.deposits().refundRequestsForAccounting()).thenReturn(List.of(item));
         try {
             DepositDtos.RefundRequestQueue actual = f.service().refundRequests(accountant());
-            verify(f.deposits()).refundRequests(BRANCH_ID);
-            return check(actual.items().size() == 1 && BRANCH.name().equals(actual.branchName()),
-                    "branch=" + actual.branchName() + ", items=" + actual.items().size());
+            verify(f.deposits()).refundRequestsForAccounting();
+            return check(actual.items().size() == 1 && "Tất cả cơ sở".equals(actual.branchName())
+                            && "Hòa Bằng".equals(actual.items().get(0).branchName()),
+                    "scope=" + actual.branchName() + ", item branch=" + actual.items().get(0).branchName()
+                            + ", items=" + actual.items().size());
         } catch (Throwable failure) {
             return unexpected(failure);
         }
@@ -469,16 +498,20 @@ public final class DepositManagementManualRunner {
     private static TestResult runEvidenceStorage(int number) {
         try {
             Path dir = Files.createTempDirectory("gcmb-deposit-ut-");
-            RefundEvidenceStorageService storage = new RefundEvidenceStorageService(dir.toString());
+            RefundEvidenceStorageService storage = new RefundEvidenceStorageService(
+                    dir.toString(), "unit-test", "us-east-1", "", true);
+            var clientField = RefundEvidenceStorageService.class.getDeclaredField("client");
+            clientField.setAccessible(true);
+            clientField.set(storage, mock(S3Client.class));
             MultipartFile file;
             boolean expectedSuccess;
             String expectedMessage = null;
             switch (number) {
                 case 51 -> { file = png("proof.png"); expectedSuccess = true; }
                 case 52 -> { file = webp("proof.webp"); expectedSuccess = true; }
-                case 53 -> { file = bytes("proof.heic", "image/heic", "....ftypheic".getBytes(StandardCharsets.US_ASCII)); expectedSuccess = true; }
-                case 54 -> { file = bytes("proof.heif", "image/heif", "....ftypheif".getBytes(StandardCharsets.US_ASCII)); expectedSuccess = true; }
-                case 55 -> { file = bytes("proof.pdf", "application/pdf", "%PDF-1.7".getBytes(StandardCharsets.US_ASCII)); expectedSuccess = true; }
+                case 53 -> { file = bytes("proof.heic", "image/heic", heifBytes("heic")); expectedSuccess = true; }
+                case 54 -> { file = bytes("proof.heif", "image/heif", heifBytes("mif1")); expectedSuccess = true; }
+                case 55 -> { file = bytes("proof.pdf", "application/pdf", "%PDF-1.7\n%%EOF".getBytes(StandardCharsets.US_ASCII)); expectedSuccess = true; }
                 case 56 -> { file = bytes("proof.txt", "text/plain", "text".getBytes(StandardCharsets.UTF_8)); expectedSuccess = false; expectedMessage = "Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác."; }
                 case 57 -> { file = bytes("proof.png", "image/png", new byte[0]); expectedSuccess = false; expectedMessage = "Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB."; }
                 case 58 -> { byte[] data = new byte[20_000_000]; System.arraycopy(pngBytes(), 0, data, 0, pngBytes().length); file = bytes("proof.png", "image/png", data); expectedSuccess = true; }
@@ -489,10 +522,10 @@ public final class DepositManagementManualRunner {
             }
             try {
                 RefundEvidenceStorageService.StoredEvidence stored = storage.store(file);
-                byte[] read = storage.read(stored.objectKey());
                 storage.deleteQuietly(stored.objectKey());
-                return check(expectedSuccess && read.length == file.getBytes().length,
-                        "stored mime=" + stored.mimeType() + ", bytes=" + read.length);
+                return check(expectedSuccess && stored.byteSize() == file.getBytes().length,
+                        "stored mime=" + stored.mimeType() + ", bytes=" + stored.byteSize()
+                                + ", object key=" + stored.objectKey());
             } catch (BookingFailure failure) {
                 return check(!expectedSuccess && Objects.equals(expectedMessage, failure.getMessage()),
                         "status=" + failure.status() + ", message=" + failure.getMessage());
@@ -505,15 +538,16 @@ public final class DepositManagementManualRunner {
     private static TestResult readEvidence(RefundFixture f, boolean exists) {
         try {
             if (exists) {
-                RefundEvidenceStorageService.StoredEvidence stored = f.storage().store(png("proof.png"));
                 when(f.deposits().refundEvidence(BRANCH_ID, REQUEST_ID))
-                        .thenReturn(new RefundEvidenceRow(stored.objectKey(), "proof.png", "image/png"));
-                DepositDtos.RefundEvidenceContent actual = f.service().refundEvidence(accountant(), REQUEST_ID);
+                        .thenReturn(new RefundEvidenceRow("s3/proof.png", "proof.png", "image/png"));
+                when(f.storage().read("s3/proof.png")).thenReturn(pngBytes());
+                DepositDtos.RefundEvidenceContent actual = f.service().refundEvidence(receptionist(), REQUEST_ID);
                 return check("proof.png".equals(actual.originalName()) && actual.bytes().length == pngBytes().length,
                         "name=" + actual.originalName() + ", mime=" + actual.mimeType() + ", bytes=" + actual.bytes().length);
             }
             when(f.deposits().refundEvidence(BRANCH_ID, REQUEST_ID)).thenReturn(null);
-            return expectFailureStatus(() -> f.service().refundEvidence(accountant(), REQUEST_ID), 404);
+            when(f.deposits().refundRequestForAccounting(REQUEST_ID, false)).thenReturn(null);
+            return expectFailureStatus(() -> f.service().refundEvidence(receptionist(), REQUEST_ID), 404);
         } catch (Throwable failure) {
             return unexpected(failure);
         }
@@ -521,18 +555,37 @@ public final class DepositManagementManualRunner {
 
     private static TestResult readCrossBranchEvidence(RefundFixture f) {
         when(f.deposits().refundEvidence(BRANCH_ID, REQUEST_ID)).thenReturn(null);
-        return expectFailure(() -> f.service().refundEvidence(accountant(), REQUEST_ID), 404,
+        return expectFailure(() -> f.service().refundEvidence(receptionist(), REQUEST_ID), 403,
                 "Bạn không có quyền xem chứng từ hoàn cọc đối với yêu cầu hoàn cọc.");
+    }
+
+    private static TestResult readAccountingEvidence(RefundFixture f) {
+        try {
+            when(f.deposits().refundEvidenceForAccounting(REQUEST_ID))
+                    .thenReturn(new RefundEvidenceRow("s3/proof.png", "proof.png", "image/png"));
+            when(f.storage().read("s3/proof.png")).thenReturn(pngBytes());
+            DepositDtos.RefundEvidenceContent actual = f.service().accountingRefundEvidence(accountant(), REQUEST_ID);
+            return check("proof.png".equals(actual.originalName()) && actual.bytes().length == pngBytes().length,
+                    "name=" + actual.originalName() + ", mime=" + actual.mimeType()
+                            + ", bytes=" + actual.bytes().length);
+        } catch (Throwable failure) {
+            return unexpected(failure);
+        }
     }
 
     private static TestResult runFundPostcondition() {
         List<String> sql = new ArrayList<>();
+        UUID periodId = UUID.fromString("47570000-0000-4000-8000-000000000601");
         JdbcTemplate db = mock(JdbcTemplate.class, invocation -> {
-            if ("update".equals(invocation.getMethod().getName())) {
-                Object[] args = invocation.getArguments();
-                if (args.length > 0 && args[0] instanceof String statement) sql.add(statement);
+            String method = invocation.getMethod().getName();
+            Object[] args = invocation.getArguments();
+            String statement = args.length > 0 && args[0] instanceof String value ? value : "";
+            if ("update".equals(method)) {
+                sql.add(statement);
                 return 1;
             }
+            if ("query".equals(method) && statement.contains("financial_period")) return List.of(periodId);
+            if ("query".equals(method)) return List.of(ACCOUNT_ID);
             return null;
         });
         DepositRepository repository = new DepositRepository(db);
@@ -556,9 +609,16 @@ public final class DepositManagementManualRunner {
         when(repository.branchScope(RECEPTIONIST_ID)).thenReturn(BRANCH);
         when(repository.branchScope(ACCOUNTANT_ID)).thenReturn(BRANCH);
         when(repository.booking(BOOKING_ID, BRANCH_ID)).thenReturn(booking("CONFIRMED"));
-        when(repository.depositReceivedAmount(BOOKING_ID)).thenReturn(BigDecimal.ZERO);
+        when(repository.depositReceivedAmount(BOOKING_ID))
+                .thenAnswer(invocation -> state.depositReceived ? new BigDecimal("30000") : BigDecimal.ZERO);
         when(repository.activeChargeTotal(BOOKING_ID)).thenReturn(new BigDecimal("100000"));
-        CheckoutService service = new CheckoutService(db, repository, bookings, sepay, new ObjectMapper());
+        doAnswer(invocation -> {
+            state.depositReceived = true;
+            return null;
+        }).when(repository).receiveDeposit(eq(BRANCH_ID), eq(BOOKING_ID), eq(RECEPTIONIST_ID),
+                any(BigDecimal.class), eq("MANUAL_TRANSFER"), anyString());
+        CheckoutService service = new CheckoutService(
+                db, repository, bookings, sepay, new ObjectMapper(), mock(FoodOrderService.class));
         return new CheckoutFixture(repository, service, state);
     }
 
@@ -566,8 +626,12 @@ public final class DepositManagementManualRunner {
         try {
             BookingRepository bookings = mock(BookingRepository.class);
             DepositRepository deposits = mock(DepositRepository.class);
-            Path dir = Files.createTempDirectory("gcmb-refund-ut-");
-            RefundEvidenceStorageService storage = new RefundEvidenceStorageService(dir.toString());
+            RefundEvidenceStorageService storage = mock(RefundEvidenceStorageService.class);
+            when(storage.store(any(MultipartFile.class))).thenAnswer(invocation -> {
+                MultipartFile file = invocation.getArgument(0);
+                return new RefundEvidenceStorageService.StoredEvidence(UUID.randomUUID(), "s3/proof.jpg",
+                        file.getOriginalFilename(), file.getContentType(), file.getSize(), "test-sha256");
+            });
             DepositManagementService service = new DepositManagementService(bookings, deposits, storage);
             when(bookings.branchScope(RECEPTIONIST_ID)).thenReturn(BRANCH);
             when(bookings.branchScope(ACCOUNTANT_ID)).thenReturn(BRANCH);
@@ -579,21 +643,14 @@ public final class DepositManagementManualRunner {
                     eq(new BigDecimal("100000")), anyString(), anyString(), anyString(), anyString(), eq(RECEPTIONIST_ID)))
                     .thenReturn(REQUEST_ID);
             when(deposits.canRequestRefund(BRANCH_ID, BOOKING_ID)).thenReturn(true);
-            when(deposits.refundRequest(BRANCH_ID, REQUEST_ID, false)).thenReturn(refundRow("REQUESTED", new BigDecimal("100000")));
-            when(deposits.refundRequest(BRANCH_ID, REQUEST_ID, true)).thenReturn(refundRow("REQUESTED", new BigDecimal("100000")));
-            when(deposits.completeRefundRequest(eq(BRANCH_ID), any(), eq(ACCOUNTANT_ID), anyString(), any())).thenReturn(true);
+            when(deposits.refundRequestForAccounting(REQUEST_ID, false))
+                    .thenReturn(refundRow("REQUESTED", new BigDecimal("100000")));
+            when(deposits.refundRequestForAccounting(REQUEST_ID, true))
+                    .thenReturn(refundRow("REQUESTED", new BigDecimal("100000")));
+            when(deposits.completeRefundRequest(eq(BRANCH_ID), any(), eq(ACCOUNTANT_ID), any(), any())).thenReturn(true);
             return new RefundFixture(bookings, deposits, storage, service);
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
-        }
-    }
-
-    private static TestResult callPlan(CheckoutFixture f, boolean create, MapCheck condition, String actual) {
-        try {
-            Map<String, Object> result = f.service().depositPayment(receptionist(), BOOKING_ID, create);
-            return check(condition.test(result), actual + "; returned status=" + result.get("status"));
-        } catch (Throwable failure) {
-            return unexpected(failure);
         }
     }
 
@@ -628,7 +685,7 @@ public final class DepositManagementManualRunner {
     }
 
     private static RefundRequestRow refundRow(String status, BigDecimal amount) {
-        return new RefundRequestRow(REQUEST_ID, BOOKING_ID, DEPOSIT_ID, amount, "Hoàn cọc", status);
+        return new RefundRequestRow(REQUEST_ID, BRANCH_ID, BOOKING_ID, DEPOSIT_ID, amount, "Hoàn cọc", status);
     }
 
     private static Identity receptionist() {
@@ -656,6 +713,13 @@ public final class DepositManagementManualRunner {
 
     private static byte[] pngBytes() {
         return new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+    }
+
+    private static byte[] heifBytes(String brand) {
+        byte[] bytes = new byte[] {0, 0, 0, 16, 'f', 't', 'y', 'p', 0, 0, 0, 0, 0, 0, 0, 0};
+        byte[] brandBytes = brand.getBytes(StandardCharsets.US_ASCII);
+        System.arraycopy(brandBytes, 0, bytes, 8, 4);
+        return bytes;
     }
 
     private static MockMultipartFile webp(String name) {
@@ -714,7 +778,6 @@ public final class DepositManagementManualRunner {
 
     @FunctionalInterface interface CheckedAction { TestResult run() throws Exception; }
     @FunctionalInterface interface ThrowingRunnable { void run() throws Exception; }
-    @FunctionalInterface interface MapCheck { boolean test(Map<String, Object> value); }
     @FunctionalInterface interface StateCheck { boolean test(CheckoutJdbcState value); }
 
     static final class CheckoutJdbcState {
@@ -723,12 +786,15 @@ public final class DepositManagementManualRunner {
         boolean requestExpired;
         boolean referenceFound;
         boolean duplicateTransaction;
+        boolean bookingLocked = true;
+        boolean depositReceived;
         int insertedRequests;
         int cancelledRequests;
         int bankTransactions;
         int payments;
         int depositEntries;
         int exceptionMatches;
+        int financialTransactions;
         BigDecimal requestAmount = new BigDecimal("30000");
 
         Object answer(InvocationOnMock invocation) {
@@ -748,12 +814,18 @@ public final class DepositManagementManualRunner {
                 if (statement.contains("financial_account")) {
                     return Map.of("bank_name", "VCB", "bank_account_number", "0123456789", "account_holder", "GENZ CINEMA");
                 }
+                if (statement.contains("financial_period")) {
+                    return Map.of("id", UUID.fromString("47570000-0000-4000-8000-000000000601"), "status", "OPEN");
+                }
                 return requestRow();
             }
             if ("update".equals(method)) return update(statement);
             if (!"queryForList".equals(method)) return null;
+            if (statement.contains("FROM gcmb.financial_account WHERE kind='BANK'")) {
+                return List.of(ACCOUNT_ID);
+            }
             if (statement.contains("SELECT id FROM gcmb.booking") && statement.contains("FOR UPDATE")) {
-                return List.of(Map.of("id", BOOKING_ID));
+                return bookingLocked ? List.of(BOOKING_ID) : List.of();
             }
             if (statement.contains("WHERE booking_id=? AND purpose='DEPOSIT'")) {
                 return requestExists ? List.of(requestRow()) : List.of();
@@ -772,6 +844,7 @@ public final class DepositManagementManualRunner {
             }
             if (statement.contains("INSERT INTO gcmb.payment(")) payments++;
             if (statement.contains("INSERT INTO gcmb.deposit_entry")) depositEntries++;
+            if (statement.contains("INSERT INTO gcmb.financial_transaction")) financialTransactions++;
             if (statement.contains("match_status='EXCEPTION'")) exceptionMatches++;
             return 1;
         }

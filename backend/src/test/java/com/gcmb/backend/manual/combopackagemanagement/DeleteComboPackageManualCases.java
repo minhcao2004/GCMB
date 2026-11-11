@@ -31,7 +31,13 @@ public final class DeleteComboPackageManualCases {
                                 "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; CSRF hợp lệ khi ghi; hạng RT-QN/Queen và RT-KG/King active trong seed V3/V14; UUID 00000000-0000-0000-0000-000000000000 không tồn tại trong seed",
                                 "Yêu cầu xóa combo không tồn tại.",
                                 "Báo không tìm thấy; không xóa combo khác.",
-                                () -> notFound(true))
+                                () -> notFound(true)),
+                test("CPM-140", "UC-27 DeleteComboPackage",
+                                "Nguồn: UC-27_Delete_Combo_Package.docx; BR-118; MSG104; Production: RoomCatalogService.deletePrice. Phương pháp kiểm thử: White-box.",
+                                "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; combo CIN_4H_QN tồn tại và đang được dữ liệu nghiệp vụ tham chiếu.",
+                                "Chọn xóa combo CIN_4H_QN và xác nhận.",
+                                "Từ chối xóa với thông báo “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; combo vẫn còn.",
+                                () -> deleteReferenced())
         );
     }
 }

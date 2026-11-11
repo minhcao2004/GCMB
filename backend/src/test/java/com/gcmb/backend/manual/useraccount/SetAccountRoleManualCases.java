@@ -32,6 +32,12 @@ public final class SetAccountRoleManualCases {
     private static final String NOTE = "Nguồn: UC-06_Set_Account_Role.docx; BR-132; MSG02, MSG11, MSG14, MSG24, MSG40; Flyway V14/V15.";
     private static final String MSG24 = "Bạn không có quyền phân quyền đối với tài khoản.";
     private static final String MSG40 = "Cơ sở GenZ hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công.";
+    private static final String MSG02_BRANCH = "Vui lòng bổ sung Cơ sở.";
+    private static final String NOTE_AUTH = "Nguồn: UC-06 - Set_Account_Role.docx; MSG24; Flyway V14/V15; "
+            + "Production: AccountAccessService.setRole/editable. Phương pháp kiểm thử: Black-box.";
+    private static final String NOTE_BRANCH = "Nguồn: UC-06 - Set_Account_Role.docx; BR-132; MSG40; "
+            + "Flyway V14/V15; Production: AccountAccessService.setRole/AccountRepository.activeBranch. "
+            + "Phương pháp kiểm thử: Black-box.";
 
     private SetAccountRoleManualCases() {
     }
@@ -57,12 +63,13 @@ public final class SetAccountRoleManualCases {
             var f = fixture(UserAccountDemoData.headOfficeManager(), input);
             return expectAuthFailure(() -> f.service().setRole(UserAccountDemoData.HEAD_OFFICE_MANAGER_ID, input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 400, "Không thể thay đổi quyền hoặc thu hồi chính tài khoản đang đăng nhập");
         }, "AccountAccessService.editable"));
-        cases.add(test("UAM-083", "actor không ACTIVE hoặc không còn HOM", "Từ chối MSG24.", "Abnormal", () -> {
+        cases.add(test("UAM-083", "actor không ACTIVE hoặc không còn vai trò Head Office Manager",
+                "Từ chối với mã 403. Hiển thị: " + MSG24 + " Không thay đổi quyền.", "Abnormal", () -> {
             SetRole input = new SetRole("ACCOUNTANT", null, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);
             when(f.access().lockManagement(UserAccountDemoData.HEAD_OFFICE_MANAGER_ID)).thenReturn(false);
             return expectAuthFailure(() -> f.service().setRole(f.before().id(), input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 403, MSG24);
-        }, "AccountAccessService.editable/AccountAccessRepository.lockManagement"));
+        }, "AccountAccessService.editable/AccountAccessRepository.lockManagement", NOTE_AUTH));
         cases.add(test("UAM-084", "targetId không tồn tại", "Từ chối 404; không audit.", "Abnormal", () -> {
             SetRole input = new SetRole("ACCOUNTANT", null, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);
@@ -77,27 +84,31 @@ public final class SetAccountRoleManualCases {
             var f = fixture(revoked, input);
             return expectAuthFailure(() -> f.service().setRole(revoked.id(), input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 409, "Tài khoản đã bị thu hồi truy cập");
         }, "AccountAccessService.editable"));
-        cases.add(roleInvalid("UAM-086", null, "role=null", "Vui lòng bổ sung Vai trò."));
-        cases.add(roleInvalid("UAM-087", "UNKNOWN_ROLE", "role không tồn tại", "Vai trò không hợp lệ"));
-        cases.add(invalidBranch("UAM-088", new SetRole("ACCOUNTANT", UserAccountDemoData.HOA_BANG_BRANCH_ID, null), "chain role có branchId", MSG40));
-        cases.add(invalidBranch("UAM-089", new SetRole("RECEPTIONIST", null, null), "RECEPTIONIST thiếu branchId", MSG40));
-        cases.add(test("UAM-090", "RECEPTIONIST dùng branch INACTIVE", "Từ chối đúng MSG40.", "Abnormal", () -> {
+        cases.add(roleInvalid("UAM-086", null, "role=null", "Vui lòng chọn vai trò hợp lệ"));
+        cases.add(roleInvalid("UAM-087", "UNKNOWN_ROLE", "role không tồn tại", "Vui lòng chọn vai trò hợp lệ"));
+        cases.add(invalidBranch("UAM-088", new SetRole("ACCOUNTANT", UserAccountDemoData.HOA_BANG_BRANCH_ID, null),
+                "chain role có branchId", "Vai trò này có phạm vi toàn chuỗi"));
+        cases.add(invalidBranch("UAM-089", new SetRole("RECEPTIONIST", null, null),
+                "RECEPTIONIST thiếu branchId", MSG02_BRANCH));
+        cases.add(test("UAM-090", "RECEPTIONIST dùng branch INACTIVE",
+                "Từ chối với mã 400. Hiển thị: " + MSG40 + " Không thay đổi vai trò hoặc phạm vi.", "Abnormal", () -> {
             SetRole input = new SetRole("RECEPTIONIST", UserAccountDemoData.INACTIVE_BRANCH_ID, null);
             var f = fixture(UserAccountDemoData.accountant(), input);
             when(f.accounts().activeBranch(UserAccountDemoData.INACTIVE_BRANCH_ID)).thenReturn(false);
             return expectAuthFailure(() -> f.service().setRole(f.before().id(), input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 400, MSG40);
-        }, "AccountAccessService.setRole/AccountRepository.activeBranch"));
+        }, "AccountAccessService.setRole/AccountRepository.activeBranch", NOTE_BRANCH));
         cases.add(invalidBranch("UAM-091", new SetRole("RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, List.of(UserAccountDemoData.HOA_BANG_BRANCH_ID)), "branchIds cho role không phải BM", "Chỉ quản lý cơ sở được phân công nhiều cơ sở"));
         cases.add(invalidBranch("UAM-092", new SetRole("BRANCH_MANAGER", null, List.of()), "branchIds rỗng", "Chọn ít nhất một cơ sở, không chọn trùng"));
         cases.add(invalidBranch("UAM-093", new SetRole("BRANCH_MANAGER", null, java.util.Arrays.asList(UserAccountDemoData.HOA_BANG_BRANCH_ID, null)), "branchIds chứa null", "Chọn ít nhất một cơ sở, không chọn trùng"));
         cases.add(invalidBranch("UAM-094", new SetRole("BRANCH_MANAGER", null, List.of(UserAccountDemoData.HOA_BANG_BRANCH_ID, UserAccountDemoData.HOA_BANG_BRANCH_ID)), "branchIds trùng", "Chọn ít nhất một cơ sở, không chọn trùng"));
-        cases.add(test("UAM-095", "branchIds gồm ACTIVE và INACTIVE", "Từ chối toàn bộ, đúng MSG40.", "Abnormal", () -> {
+        cases.add(test("UAM-095", "branchIds gồm ACTIVE và INACTIVE",
+                "Từ chối với mã 400. Hiển thị: " + MSG40 + " Không thay đổi bất kỳ assignment nào.", "Abnormal", () -> {
             SetRole input = new SetRole("BRANCH_MANAGER", UserAccountDemoData.HOA_BANG_BRANCH_ID, List.of(UserAccountDemoData.HOA_BANG_BRANCH_ID, UserAccountDemoData.INACTIVE_BRANCH_ID));
             var f = fixture(UserAccountDemoData.branchManager(), input);
             when(f.accounts().activeBranch(UserAccountDemoData.HOA_BANG_BRANCH_ID)).thenReturn(true);
             when(f.accounts().activeBranch(UserAccountDemoData.INACTIVE_BRANCH_ID)).thenReturn(false);
             return expectAuthFailure(() -> f.service().setRole(f.before().id(), input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 400, MSG40);
-        }, "AccountAccessService.setRole/AccountRepository.activeBranch"));
+        }, "AccountAccessService.setRole/AccountRepository.activeBranch", NOTE_BRANCH));
         cases.add(test("UAM-096", "Gửi lại cùng role và branch", "No-op: không update, revoke token hoặc audit.", "Normal", () -> {
             SetRole input = new SetRole("RECEPTIONIST", UserAccountDemoData.HOA_BANG_BRANCH_ID, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);
@@ -158,16 +169,18 @@ public final class SetAccountRoleManualCases {
     }
 
     private static ManualTest actorDenied(String id, java.util.UUID actor, String description) {
-        return test(id, description + " gọi setRole", "Từ chối đúng MSG24.", "Abnormal", () -> {
+        return test(id, description + " gọi setRole", "Từ chối với mã 403. Hiển thị: " + MSG24
+                + " Không thay đổi quyền.", "Abnormal", () -> {
             SetRole input = new SetRole("ACCOUNTANT", null, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);
             when(f.access().lockManagement(actor)).thenReturn(false);
             return expectAuthFailure(() -> f.service().setRole(f.before().id(), input, actor), 403, MSG24);
-        }, "AuthSecurity/AccountAccessService.editable");
+        }, "AccountAccessService.editable", NOTE_AUTH);
     }
 
     private static ManualTest roleInvalid(String id, String role, String description, String expected) {
-        return test(id, description, "Từ chối role không hợp lệ.", "Abnormal", () -> {
+        return test(id, description, "Từ chối với mã 400. Hiển thị: " + expected
+                + ". Không thay đổi quyền.", "Abnormal", () -> {
             SetRole input = new SetRole(role, null, null);
             var f = fixture(UserAccountDemoData.receptionist(), input);
             if (role != null) when(f.accounts().roleId(role)).thenReturn(null);
@@ -176,7 +189,8 @@ public final class SetAccountRoleManualCases {
     }
 
     private static ManualTest invalidBranch(String id, SetRole input, String description, String expected) {
-        return test(id, description, "Từ chối branch scope không hợp lệ.", "Abnormal", () -> {
+        return test(id, description, "Từ chối với mã 400. Hiển thị: " + expected
+                + ". Không thay đổi quyền.", "Abnormal", () -> {
             var f = fixture(UserAccountDemoData.receptionist(), input);
             return expectAuthFailure(() -> f.service().setRole(f.before().id(), input, UserAccountDemoData.HEAD_OFFICE_MANAGER_ID), 400, expected);
         }, "AccountAccessService.setRole");
@@ -196,6 +210,11 @@ public final class SetAccountRoleManualCases {
             CheckedAction action, String sourceMethod) {
         return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type,
                 NOTE + " Production: " + sourceMethod + ".", action);
+    }
+
+    private static ManualTest test(String id, String input, String expected, String type,
+            CheckedAction action, String sourceMethod, String note) {
+        return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type, note, action);
     }
 }
 

@@ -23,9 +23,9 @@ public final class UpdateBranchManualCases {
     private static final String SECURITY = "src/main/java/com/gcmb/backend/auth/security/AuthSecurity.java";
     private static final String PAGE = "../frontend/src/features/branch/pages/BranchManagementPage.js";
     private static final String PRE = "Head Office Manager qlcc đã đăng nhập; branch demo Flyway V14 tồn tại.";
-    private static final String MSG02_CODE = "Vui lòng bổ sung Mã cơ sở.";
-    private static final String MSG02_NAME = "Vui lòng bổ sung Tên cơ sở.";
-    private static final String MSG02_ADDRESS = "Vui lòng bổ sung Địa chỉ cơ sở.";
+    private static final String MSG02_CODE = "Vui lòng bổ sung mã cơ sở.";
+    private static final String MSG02_NAME = "Vui lòng bổ sung tên cơ sở.";
+    private static final String MSG02_ADDRESS = "Vui lòng bổ sung địa chỉ cơ sở.";
     private static final String MSG03_NAME = "Tên cơ sở chỉ được chứa tối đa 200 ký tự.";
     private static final String MSG03_ADDRESS = "Địa chỉ cơ sở chỉ được chứa tối đa 2000 ký tự.";
     private static final String MSG03_NOTE = "Ghi chú chỉ được chứa tối đa 4000 ký tự.";

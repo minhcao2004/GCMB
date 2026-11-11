@@ -39,6 +39,10 @@ public final class ResetPasswordManualCases {
     private static final String UC = "UC-02 Reset Password";
     private static final String PRE = "Tài khoản demo tồn tại, ACTIVE và đã có email khôi phục trong V14/V15; người dùng ở màn hình Quên mật khẩu.";
     private static final String NOTE = "Nguồn: UC-02_Reset_Password.docx; BR-111, BR-113, BR-114, BR-120, BR-126; MSG02, MSG03, MSG05, MSG06, MSG09, MSG25, MSG29, MSG31, MSG32, MSG33; Flyway V14/V15.";
+    private static final String NOTE_REVOKED_RECOVERY = "Nguồn: UC-02 - Reset_Password.docx; MSG33; "
+            + "Flyway V1 status constraint; Production: AuthService.sendCode/active. Phương pháp kiểm thử: White-box.";
+    private static final String NOTE_MISSING_CODE = "Nguồn: UC-02 - Reset_Password.docx; BR-111; MSG02; "
+            + "Flyway V14/V15; Production: AuthService.reset/AuthValidation.code. Phương pháp kiểm thử: Black-box.";
     private static final String MSG29 = "Mật khẩu phải dài 8–64 ký tự và bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt, không chứa khoảng trắng.";
 
     private ResetPasswordManualCases() {
@@ -80,16 +84,25 @@ public final class ResetPasswordManualCases {
                     verify(f.repository, never()).createReset(any(), anyString(), anyString(), any());
                     return result;
                 }, "AuthService.sendCode"));
-        cases.add(test("PAM-054", "email thuộc tài khoản INACTIVE",
-                "Từ chối 403 và hiển thị đúng MSG33; không gửi mã.", "Abnormal", () -> {
+        cases.add(test("PAM-054",
+                "Tài khoản đã đăng ký, có email khôi phục nhưng trạng thái REVOKED; "
+                        + "người dùng đang ở luồng quên mật khẩu.",
+                "Yêu cầu gửi mã khôi phục đến email của tài khoản.",
+                "Từ chối với mã 403. Hiển thị: Tài khoản đã bị vô hiệu hóa. "
+                        + "Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ. "
+                        + "Không tạo mã khôi phục và không gửi email.",
+                "Abnormal", () -> {
                     Fixture f = fixture();
-                    Account inactive = PersonalAccountDemoData.account(PersonalAccountDemoData.RECEPTIONIST_ID,
-                            PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL, "INACTIVE",
+                    Account revoked = PersonalAccountDemoData.account(PersonalAccountDemoData.RECEPTIONIST_ID,
+                            PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL, "REVOKED",
                             "RECEPTIONIST", PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "GenZ Cinema Hoa Bằng");
-                    when(f.repository.findByEmail(PersonalAccountDemoData.EMAIL)).thenReturn(inactive);
-                    return expectAuthFailure(() -> f.service.sendCode(PersonalAccountDemoData.EMAIL), 403,
+                    when(f.repository.findByEmail(PersonalAccountDemoData.EMAIL)).thenReturn(revoked);
+                    TestResult result = expectAuthFailure(() -> f.service.sendCode(PersonalAccountDemoData.EMAIL), 403,
                             "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
-                }, "AuthService.sendCode"));
+                    verify(f.repository, never()).createReset(any(), anyString(), anyString(), any());
+                    verify(f.mailer, never()).send(anyString(), anyString());
+                    return result;
+                }, "AuthService.sendCode", NOTE_REVOKED_RECOVERY));
         cases.add(test("PAM-055", "SMTP không sẵn sàng khi gửi mã",
                 "Hoàn tác giao dịch và trả thông báo dịch vụ ngoài theo MSG25.", "Abnormal", () -> {
                     Fixture f = fixture();
@@ -118,12 +131,17 @@ public final class ResetPasswordManualCases {
                     verify(f.repository).revokeTokens(eq(PersonalAccountDemoData.RECEPTIONIST_ID), any());
                     return check(true, "password changed, reset consumed, sessions revoked");
                 }, "AuthService.reset"));
-        cases.add(test("PAM-057", "code=null",
-                "Từ chối 400 theo MSG02 cho Mã xác minh.", "Abnormal",
+        cases.add(test("PAM-057",
+                "Tài khoản demo tồn tại, ACTIVE và có email khôi phục trong V14/V15; "
+                        + "người dùng đã bắt đầu yêu cầu đặt lại mật khẩu.",
+                "code=null",
+                "Từ chối với mã 400 tại trường code. Hiển thị: Vui lòng bổ sung Mã xác minh. "
+                        + "Mật khẩu không thay đổi.",
+                "Abnormal",
                 () -> expectAuthFailure(() -> fixture().service.reset(PersonalAccountDemoData.EMAIL,
                         PersonalAccountDemoData.CHALLENGE, null, PersonalAccountDemoData.NEW_PASSWORD,
                         PersonalAccountDemoData.NEW_PASSWORD), 400, "Vui lòng bổ sung Mã xác minh."),
-                "AuthService.reset/AuthValidation.code"));
+                "AuthService.reset/AuthValidation.code", NOTE_MISSING_CODE));
         cases.add(codeFormatCase("PAM-058", "12345", "5 chữ số"));
         cases.add(codeFormatCase("PAM-059", "1234567", "7 chữ số"));
         cases.add(codeFormatCase("PAM-060", "１２３４５６", "6 chữ số Unicode"));
@@ -240,6 +258,11 @@ public final class ResetPasswordManualCases {
     private static ManualTest test(String id, String input, String expected, String type,
             CheckedAction action, String sourceMethod) {
         return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type, NOTE, action);
+    }
+
+    private static ManualTest test(String id, String preconditions, String input, String expected, String type,
+            CheckedAction action, String sourceMethod, String note) {
+        return new ManualTest(id, UC, sourceMethod, preconditions, input, expected, type, note, action);
     }
 
     private static Fixture fixture() {

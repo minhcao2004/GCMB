@@ -8,6 +8,7 @@
 package com.gcmb.backend.manual.roommanagement;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.branch.dto.RoomCommand;
@@ -25,13 +26,14 @@ import java.util.UUID;
 import org.springframework.web.server.ResponseStatusException;
 
 public final class RoomManagementManualRunner {
-    private static final int EXPECTED_CASES = 33;
+    private static final int EXPECTED_CASES = 40;
 
     static final UUID ACTOR_ID = UUID.fromString("47570000-0000-4000-8000-000000000003");
     static final UUID BRANCH_ID = UUID.fromString("34370000-0000-4000-8000-000000000001");
     static final UUID ROOM_ID = UUID.fromString("34370000-0000-4000-8000-000000000101");
     static final UUID ROOM_TYPE_ID = UUID.fromString("34370000-0000-4000-8000-000000000201");
     static final String BRANCH_NAME = "Hoa Bằng";
+    static final String SUSPENDED_MESSAGE = "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.";
 
     private RoomManagementManualRunner() {
     }
@@ -122,10 +124,9 @@ public final class RoomManagementManualRunner {
             throw new IllegalStateException("Expected " + EXPECTED_CASES + " cases but found " + cases.size());
         }
         Set<String> ids = new HashSet<>();
-        for (int index = 0; index < cases.size(); index++) {
-            String expectedId = "RM-%03d".formatted(index + 1);
-            if (!expectedId.equals(cases.get(index).id()) || !ids.add(cases.get(index).id())) {
-                throw new IllegalStateException("Invalid or duplicate Test Case ID: " + cases.get(index).id());
+        for (ManualTest test : cases) {
+            if (!test.id().matches("RM-\\d{3}") || !ids.add(test.id())) {
+                throw new IllegalStateException("Invalid or duplicate Test Case ID: " + test.id());
             }
         }
     }
@@ -155,7 +156,12 @@ public final class RoomManagementManualRunner {
     static RoomView room(String name, String status) {
         return new RoomView(ROOM_ID, "RM-UT-01", name, 1, ROOM_TYPE_ID,
                 "RT-QN", "Phòng tiêu chuẩn", "CINEMA", 1, "Phòng mẫu",
-                status, "", null, "READY");
+                status, "", null, "READY", "MR-ROOM-UT-01");
+    }
+
+    static void suspended(Fixture fixture) {
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, SUSPENDED_MESSAGE))
+                .when(fixture.repository()).requireActive(BRANCH_ID);
     }
 
     static TestResult expectStatus(ThrowingRunnable action, int status, String message) {

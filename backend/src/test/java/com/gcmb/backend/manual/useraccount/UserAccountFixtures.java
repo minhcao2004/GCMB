@@ -36,6 +36,11 @@ final class UserAccountFixtures {
         when(repository.lockAvailableEmployee(any(UUID.class))).thenReturn(true);
         when(repository.roleId(anyString())).thenReturn(UserAccountDemoData.ROLE_ID);
         when(repository.activeBranch(any(UUID.class))).thenReturn(true);
+        when(repository.branchName(any(UUID.class))).thenReturn("GenZ");
+        when(repository.emailReserved(anyString(), any(UUID.class), any())).thenReturn(false);
+        when(repository.employeeInBranch(any(UUID.class), any(UUID.class))).thenReturn(true);
+        when(repository.manages(any(UUID.class), any(UUID.class), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(true);
         when(repository.exists(anyString(), anyString())).thenReturn(false);
         when(crypto.encode(anyString())).thenReturn("{pbkdf2-gcmb}test-hash");
         when(repository.insert(any(CreateAccount.class), anyString(), anyString(), anyString(),
@@ -59,6 +64,8 @@ final class UserAccountFixtures {
         when(repository.list(anyString(), anyString(), any(), anyString(),
                 org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenReturn(result);
+        when(repository.manages(any(UUID.class), any(UUID.class), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(true);
         return new ListFixture(repository,
                 new AccountService(repository, mock(AuthCrypto.class), mock(BranchAdministrationService.class)));
     }
@@ -72,12 +79,16 @@ final class UserAccountFixtures {
         when(accounts.find(before.id())).thenReturn(before, after);
         when(accounts.roleId(anyString())).thenReturn(UserAccountDemoData.ROLE_ID);
         when(accounts.activeBranch(any(UUID.class))).thenReturn(true);
+        when(accounts.manages(any(UUID.class), any(UUID.class), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(true);
+        when(accounts.canReactivate(any(UUID.class))).thenReturn(true);
+        when(accounts.branchName(any(UUID.class))).thenReturn("GenZ");
         return new AccessFixture(accounts, access, branches,
                 new AccountAccessService(accounts, access, branches), before, after);
     }
 
     static AccountView changed(AccountView before, SetRole input) {
-        boolean chain = List.of("HEAD_OFFICE_MANAGER", "ACCOUNTANT").contains(input.role());
+        boolean chain = "HEAD_OFFICE_MANAGER".equals(input.role()) || "ACCOUNTANT".equals(input.role());
         List<UUID> managed = input.branchIds() == null ? List.of() : input.branchIds();
         UUID branchId = chain ? null : managed.isEmpty() ? input.branchId() : managed.get(0);
         String branchName = chain ? "Toàn chuỗi" : branchId == null ? "Chưa phân công" : "GenZ Cinema Hoa Bằng";

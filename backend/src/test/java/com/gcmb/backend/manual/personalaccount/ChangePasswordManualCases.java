@@ -39,6 +39,10 @@ public final class ChangePasswordManualCases {
     private static final String UC = "UC-01 Change Password";
     private static final String PRE = "Người dùng đã đăng nhập bằng tài khoản demo ACTIVE trong V14/V15 và đang xem hồ sơ của chính mình.";
     private static final String NOTE = "Nguồn: UC-01_Change_Password.docx; BR-111, BR-114, BR-120, BR-121, BR-130; MSG02, MSG06, MSG28, MSG29, MSG30, MSG33; Flyway V14/V15.";
+    private static final String NOTE_REVOKED_PROFILE = "Nguồn: UC-01 - Change_Password.docx; MSG33; "
+            + "Flyway V1 status constraint; Production: AccountProfileService.view. Phương pháp kiểm thử: Black-box.";
+    private static final String NOTE_REVOKED_CHANGE = "Nguồn: UC-01 - Change_Password.docx; MSG33; "
+            + "Flyway V1 status constraint; Production: AuthService.changePassword/active. Phương pháp kiểm thử: White-box.";
     private static final String MSG29 = "Mật khẩu phải dài 8–64 ký tự và bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt, không chứa khoảng trắng.";
 
     private ChangePasswordManualCases() {
@@ -63,15 +67,19 @@ public final class ChangePasswordManualCases {
                     return expectAuthFailure(() -> new AccountProfileService(repository, mock(AuthCrypto.class))
                             .view(UUID.randomUUID()), 404, "Tài khoản không tồn tại");
                 }, "AccountProfileService.view"));
-        cases.add(test("PAM-029", "tài khoản của actor có trạng thái INACTIVE",
-                "Từ chối 403 và hiển thị đúng MSG33.", "Abnormal", () -> {
+        cases.add(test("PAM-029",
+                "Người dùng đã có phiên đăng nhập, sau đó tài khoản chuyển sang REVOKED trước khi đọc hồ sơ.",
+                "Xem hồ sơ của chính tài khoản đã bị thu hồi.",
+                "Từ chối với mã 403. Hiển thị: Tài khoản đã bị vô hiệu hóa. "
+                        + "Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ. Không trả dữ liệu hồ sơ.",
+                "Abnormal", () -> {
                     AccountProfileRepository repository = mock(AccountProfileRepository.class);
-                    Profile profile = inactiveProfile();
+                    Profile profile = revokedProfile();
                     when(repository.find(PersonalAccountDemoData.RECEPTIONIST_ID)).thenReturn(profile);
                     return expectAuthFailure(() -> new AccountProfileService(repository, mock(AuthCrypto.class))
                             .view(PersonalAccountDemoData.RECEPTIONIST_ID), 403,
                             "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
-                }, "AccountProfileService.view"));
+                }, "AccountProfileService.view", NOTE_REVOKED_PROFILE));
         cases.add(test("PAM-030", "currentPassword=Demo@123, password=Moi@1234, confirmation=Moi@1234",
                 "Đổi mật khẩu thành công; băm mật khẩu mới và vô hiệu mã khôi phục đang chờ.", "Normal", () -> {
                     Fixture f = fixture(PersonalAccountDemoData.receptionistAccount());
@@ -136,10 +144,15 @@ public final class ChangePasswordManualCases {
                     verify(f.repository, never()).changePassword(any(), anyString(), any());
                     return result;
                 }, "AuthService.changePassword"));
-        cases.add(test("PAM-045", "tài khoản chuyển sang INACTIVE trước khi lưu",
-                "Từ chối 403 theo MSG33 và không đổi mật khẩu.", "Abnormal", () -> {
+        cases.add(test("PAM-045",
+                "Người dùng đã đăng nhập; tài khoản chuyển sang REVOKED trước khi lưu mật khẩu mới.",
+                "Đổi mật khẩu với mật khẩu hiện tại và mật khẩu mới hợp lệ.",
+                "Từ chối với mã 403. Hiển thị: Tài khoản đã bị vô hiệu hóa. "
+                        + "Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ. "
+                        + "Không đổi mật khẩu và không thu hồi reset token.",
+                "Abnormal", () -> {
                     Account account = PersonalAccountDemoData.account(PersonalAccountDemoData.RECEPTIONIST_ID,
-                            PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL, "INACTIVE",
+                            PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL, "REVOKED",
                             "RECEPTIONIST", PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "GenZ Cinema Hoa Bằng");
                     Fixture f = fixture(account);
                     TestResult result = expectAuthFailure(() -> f.service.changePassword(
@@ -148,7 +161,7 @@ public final class ChangePasswordManualCases {
                             "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
                     verify(f.repository, never()).changePassword(any(), anyString(), any());
                     return result;
-                }, "AuthService.changePassword"));
+                }, "AuthService.changePassword", NOTE_REVOKED_CHANGE));
         return List.copyOf(cases);
     }
 
@@ -176,6 +189,11 @@ public final class ChangePasswordManualCases {
         return new ManualTest(id, UC, sourceMethod, PRE, input, expected, type, NOTE, action);
     }
 
+    private static ManualTest test(String id, String preconditions, String input, String expected, String type,
+            CheckedAction action, String sourceMethod, String note) {
+        return new ManualTest(id, UC, sourceMethod, preconditions, input, expected, type, note, action);
+    }
+
     private static Fixture fixture(Account account) {
         AuthRepository repository = mock(AuthRepository.class);
         AuthCrypto crypto = mock(AuthCrypto.class);
@@ -188,11 +206,11 @@ public final class ChangePasswordManualCases {
         return new Fixture(repository, crypto, service);
     }
 
-    private static Profile inactiveProfile() {
+    private static Profile revokedProfile() {
         Profile active = PersonalAccountDemoData.linkedProfile();
         var a = active.account();
         return new Profile(new com.gcmb.backend.accounts.dto.AccountDtos.AccountView(a.id(), a.employeeName(),
-                a.employeeCode(), a.username(), a.email(), a.role(), a.branchId(), a.branchName(), "INACTIVE"),
+                a.employeeCode(), a.username(), a.email(), a.role(), a.branchId(), a.branchName(), "REVOKED"),
                 active.fullName(), active.phone(), active.linkedEmployee());
     }
 
