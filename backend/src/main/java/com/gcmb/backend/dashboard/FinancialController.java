@@ -94,7 +94,7 @@ public class FinancialController {
               UNION SELECT date_trunc('month',booking_date)::date FROM gcmb.financial_transaction
               UNION SELECT date_trunc('month',CURRENT_DATE)::date
             )
-            SELECT p.id,m.month::text month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",u.username "closedBy",
+            SELECT p.id,m.month::text AS "month",COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",u.username "closedBy",
               count(c.id) FILTER (WHERE c.status<>'RECONCILED') "unreconciledClosings"
             FROM months m LEFT JOIN gcmb.financial_period p ON p.month=m.month
             LEFT JOIN gcmb.user_account u ON u.id=p.closed_by
@@ -123,7 +123,7 @@ public class FinancialController {
         if (unresolved != null && unresolved > 0) throw conflict("Chưa thể chốt kỳ tài chính vì còn " + unresolved + " phiếu chốt quỹ chưa đối soát. Vui lòng hoàn tất đối soát tất cả phiếu trong kỳ."); // BR-99, MSG101.
         if (confirmation == null || !Boolean.TRUE.equals(confirmation.get("confirmed"))) throw bad("Vui lòng xác nhận khóa kỳ tài chính.");
         db.update("UPDATE gcmb.financial_period SET status='CLOSED',closed_by=?,closed_at=CURRENT_TIMESTAMP WHERE id=? AND status='OPEN'", actor.id(), period.get("id"));
-        return db.queryForMap("SELECT p.id,p.month::text month,p.status,p.closed_at \"closedAt\",u.username \"closedBy\" FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?", period.get("id"));
+        return db.queryForMap("SELECT p.id,p.month::text AS \"month\",p.status,p.closed_at \"closedAt\",u.username \"closedBy\" FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?", period.get("id"));
     }
 
     @GetMapping("/transactions")
