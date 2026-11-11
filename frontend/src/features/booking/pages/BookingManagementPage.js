@@ -22,14 +22,9 @@ const navigation = [
 const accountingNavigation = [
   ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'],
-
-  ['Thu & cấp quỹ', 'payments', true],
-  ['Chi & hoàn ứng', 'plus', true],
-  ['Đối soát chốt quỹ', 'calendar'],
-
   ['Thu & cấp quỹ', 'payments'],
   ['Chi & hoàn ứng', 'plus'],
-  ['Đối soát chốt quỹ', 'calendar', true],
+  ['Đối soát chốt quỹ', 'calendar'],
 
   ['Hoàn tiền cọc', 'deposit'],
   ['Lương nhân viên', 'booking'],

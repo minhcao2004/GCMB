@@ -18,7 +18,6 @@ import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
-import FinancePage from '../features/finance/pages/FinancePage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
 
 import HomePage from '../features/landing/pages/HomePage';
@@ -55,8 +54,8 @@ export default function AppRoutes() {
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
     {/* HuyDV / UC-91..101 */}
-    <Route path="/ke-toan/luong" element={<FinancePage payroll />} />
-    <Route path="/ke-toan/chot-quy" element={<FinancePage />} />
+    <Route path="/ke-toan/luong" element={<AccountantFinancePage mode="payroll" />} />
+    <Route path="/ke-toan/chot-quy" element={<AccountantFinancePage mode="cash-closing" />} />
     <Route path="/ke-toan" element={<AccountantFinancePage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/ke-toan/chi-phi" element={<AccountantFinancePage />} />
