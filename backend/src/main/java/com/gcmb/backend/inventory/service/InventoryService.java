@@ -74,7 +74,10 @@ public class InventoryService {
     @Transactional
     public InventoryItemView create(Identity actor, InventoryItemCommand input) {
         UUID branchId = writableBranch(actor);
-        InventoryItemCommand command = validate(input);
+        if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
+        // Mã mặt hàng được cấp tự động trong phạm vi từng cơ sở.
+        InventoryItemCommand command = validate(new InventoryItemCommand(repository.nextInventorySku(branchId),
+            input.name(), input.category(), input.unitId(), input.trackingMode(), input.minimumQuantity(), input.active()));
         try {
             UUID id = repository.create(branchId, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity());

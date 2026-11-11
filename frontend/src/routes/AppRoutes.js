@@ -23,6 +23,7 @@ import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage
 import HomePage from '../features/landing/pages/HomePage';
 
 import AccountantFinancePage from '../features/finance/pages/AccountantFinancePage';
+import AccountantOverviewPage from '../features/dashboard/AccountantFinancePage';
 
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
@@ -56,7 +57,7 @@ export default function AppRoutes() {
     {/* HuyDV / UC-91..101 */}
     <Route path="/ke-toan/luong" element={<AccountantFinancePage mode="payroll" />} />
     <Route path="/ke-toan/chot-quy" element={<AccountantFinancePage mode="cash-closing" />} />
-    <Route path="/ke-toan" element={<AccountantFinancePage />} />
+    <Route path="/ke-toan" element={<AccountantOverviewPage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
     <Route path="/ke-toan/chi-phi" element={<AccountantFinancePage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />

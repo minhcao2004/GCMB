@@ -63,11 +63,13 @@ public class DashboardController {
         // BR-103, BR-107: cộng OPEX, lương và ứng lương đã trả; tách CAPEX, loại chuyển quỹ khỏi chi phí vận hành.
         // BR-104, BR-105: lợi nhuận trừ chi vận hành và lương; biên chỉ tính khi thu > 0.
         // BR-106: dòng tiền thuần lấy tổng bút toán thu vào trừ bút toán thu ra trong sổ tiền.
+        // BR-108: cọc tịch thu được báo cáo riêng, không nhập vào doanh thu dịch vụ.
         return db.queryForList("""
             SELECT b.id, b.code, b.name, b.address, b.status, b.timezone,
                 COALESCE(revenue.amount,0) AS revenue, COALESCE(revenue.bills,0) AS "billCount",
                 COALESCE(cost.opex,0)+COALESCE(salary.amount,0) AS expenses, COALESCE(salary.amount,0) AS salary,
                 COALESCE(cost.capex,0) AS investment, COALESCE(cost.payments,0)+COALESCE(salary.payments,0) AS "expenseCount",
+                COALESCE(forfeiture.amount,0) AS "forfeitedDeposits",
                 COALESCE(cash.net,0) AS "netCashFlow",
                 COALESCE(revenue.amount,0)-COALESCE(cost.opex,0)-COALESCE(salary.amount,0) AS profit,
                 CASE WHEN COALESCE(revenue.amount,0)>0 THEN (revenue.amount-COALESCE(cost.opex,0)-COALESCE(salary.amount,0))*100/revenue.amount ELSE NULL END AS margin
@@ -81,25 +83,31 @@ public class DashboardController {
                 FROM gcmb.financial_transaction ft JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
                 WHERE ft.kind IN ('SALARY','ADVANCE') AND fe.branch_id=b.id AND fe.amount_signed<0
                   AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) salary ON true
+            -- BR-108: tách tiền cọc tịch thu khỏi doanh thu bill và dòng tiền nhận cọc.
+            LEFT JOIN LATERAL (SELECT sum(de.amount) amount FROM gcmb.deposit_entry de
+                JOIN gcmb.deposit d ON d.id=de.deposit_id JOIN gcmb.booking bk ON bk.id=d.booking_id
+                WHERE bk.branch_id=b.id AND de.kind='FORFEIT'
+                  AND (de.created_at AT TIME ZONE b.timezone)::date>=? AND (de.created_at AT TIME ZONE b.timezone)::date<?) forfeiture ON true
             LEFT JOIN LATERAL (SELECT sum(fe.amount_signed) net FROM gcmb.financial_entry fe
                 JOIN gcmb.financial_transaction ft ON ft.id=fe.transaction_id
                 WHERE fe.branch_id=b.id AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) cash ON true
             WHERE (?::uuid IS NULL OR b.id=?::uuid) ORDER BY b.name,b.id
-            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), selected, selected);
+            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), selected, selected);
     }
     private Map<String, Object> totals(List<Map<String, Object>> rows) {
         // BR-109: lợi nhuận chuỗi bằng tổng lợi nhuận các cơ sở trong kỳ.
-        BigDecimal revenue=BigDecimal.ZERO, expenses=BigDecimal.ZERO, salary=BigDecimal.ZERO, investment=BigDecimal.ZERO, profit=BigDecimal.ZERO, cash=BigDecimal.ZERO;
+        BigDecimal revenue=BigDecimal.ZERO, expenses=BigDecimal.ZERO, salary=BigDecimal.ZERO, investment=BigDecimal.ZERO, forfeitedDeposits=BigDecimal.ZERO, profit=BigDecimal.ZERO, cash=BigDecimal.ZERO;
         long bills=0, payments=0, loss=0;
         for (Map<String,Object> row : rows) {
             revenue=revenue.add((BigDecimal)row.get("revenue")); expenses=expenses.add((BigDecimal)row.get("expenses"));
             investment=investment.add((BigDecimal)row.get("investment")); profit=profit.add((BigDecimal)row.get("profit"));
             cash=cash.add((BigDecimal)row.get("netCashFlow"));
             salary=salary.add((BigDecimal)row.get("salary"));
+            forfeitedDeposits=forfeitedDeposits.add((BigDecimal)row.get("forfeitedDeposits"));
             bills+=((Number)row.get("billCount")).longValue(); payments+=((Number)row.get("expenseCount")).longValue(); if (((BigDecimal)row.get("profit")).signum()<0) loss++;
         }
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("revenue",revenue); result.put("expenses",expenses); result.put("salary",salary); result.put("investment",investment); result.put("profit",profit); result.put("netCashFlow",cash);
+        result.put("revenue",revenue); result.put("expenses",expenses); result.put("salary",salary); result.put("investment",investment); result.put("forfeitedDeposits",forfeitedDeposits); result.put("profit",profit); result.put("netCashFlow",cash);
         result.put("billCount",bills); result.put("expenseCount",payments); result.put("lossBranches",loss); result.put("branchCount",rows.size());
         return result;
     }

@@ -111,7 +111,7 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
         </span>
         <span className="accounting-refund-upload-action">Chọn tệp</span>
       </label>
-      {previewUrl && <div className="accounting-refund-image-preview">
+      {previewUrl && image && <div className="accounting-refund-image-preview">
         {['image/jpeg', 'image/png', 'image/webp'].includes(image.type)
           ? <img src={previewUrl} alt="Ảnh chứng minh chuyển khoản đã chọn" />
           : <a href={previewUrl} target="_blank" rel="noreferrer">Mở tệp minh chứng đã chọn</a>}

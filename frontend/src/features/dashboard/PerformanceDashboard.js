@@ -46,11 +46,13 @@ function FinanceStrip({ totals, isChain, branchSelected }) {
     ['Chi vận hành đã trả', money(totals.expenses), 'Đã gồm lương và ứng lương'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Chưa gồm chi đầu tư'],
     ['Dòng tiền thuần', money(totals.netCashFlow), 'Theo sổ giao dịch'],
+    ['Cọc tịch thu', money(totals.forfeitedDeposits), 'Trình bày riêng, không cộng doanh thu'],
   ] : [
     ['Doanh thu dịch vụ', money(totals.revenue), `${amount(totals.billCount)} bill hoàn tất`],
     ['Chi vận hành đã trả', money(totals.expenses), 'Chưa gồm chi đầu tư'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Doanh thu trừ chi vận hành'],
     ['Biên lợi nhuận', percent(totals.margin), 'Tính khi doanh thu lớn hơn 0'],
+    ['Cọc tịch thu', money(totals.forfeitedDeposits), 'Trình bày riêng, không cộng doanh thu'],
   ];
   return <section className="performance-summary" aria-label="Kết quả tài chính trong kỳ">
     <div className="performance-summary-heading"><h2>Kết quả tài chính</h2><span>{isChain ? branchSelected ? 'Cơ sở đang chọn' : 'Toàn hệ thống' : 'Cơ sở được phân quyền'}</span></div>

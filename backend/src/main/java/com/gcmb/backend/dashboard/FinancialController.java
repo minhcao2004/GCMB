@@ -33,11 +33,12 @@ public class FinancialController {
                                              @RequestParam(required = false) UUID branchId) {
         requireReportRole(actor);
         LocalDate start = month(month);
-        // BR-102/103/104/105/106/107/109/211: doanh thu bill hoàn tất, chi đã trả, đầu tư riêng; dòng tiền lấy từ sổ tiền.
+        // BR-102/103/104/105/106/107/108/109/211: doanh thu bill, chi đã trả, cọc tịch thu riêng, dòng tiền từ sổ tiền.
         List<Map<String, Object>> rows = db.queryForList("""
             SELECT b.id,b.code,b.name,
               COALESCE(revenue.amount,0) revenue,COALESCE(revenue.bills,0) "billCount",
               COALESCE(cost.opex,0)+COALESCE(salary.amount,0) expenses,COALESCE(salary.amount,0) salary,COALESCE(cost.capex,0) investment,
+              COALESCE(forfeiture.amount,0) "forfeitedDeposits",
               COALESCE(cash.net,0) "netCashFlow",
               COALESCE(revenue.amount,0)-COALESCE(cost.opex,0)-COALESCE(salary.amount,0) profit,
               CASE WHEN COALESCE(revenue.amount,0)>0 THEN
@@ -55,12 +56,17 @@ public class FinancialController {
               JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
               WHERE ft.kind IN ('SALARY','ADVANCE') AND fe.branch_id=b.id AND fe.amount_signed<0
                 AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) salary ON true
+            -- BR-108: báo cáo cọc tịch thu riêng; không cộng vào doanh thu bill.
+            LEFT JOIN LATERAL (SELECT sum(de.amount) amount FROM gcmb.deposit_entry de
+              JOIN gcmb.deposit d ON d.id=de.deposit_id JOIN gcmb.booking bk ON bk.id=d.booking_id
+              WHERE bk.branch_id=b.id AND de.kind='FORFEIT'
+                AND (de.created_at AT TIME ZONE b.timezone)::date>=? AND (de.created_at AT TIME ZONE b.timezone)::date<?) forfeiture ON true
             LEFT JOIN LATERAL (SELECT sum(fe.amount_signed) net FROM gcmb.financial_entry fe
               JOIN gcmb.financial_transaction ft ON ft.id=fe.transaction_id
               WHERE fe.branch_id=b.id AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=?
                 AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) cash ON true
             WHERE (?::uuid IS NULL OR b.id=?::uuid) ORDER BY b.name,b.id
-            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), branchId, branchId);
+            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), branchId, branchId);
         return Map.of("month", month, "results", rows, "totals", totals(rows));
     }
 
@@ -89,17 +95,17 @@ public class FinancialController {
         requireAccountant(actor);
         return db.queryForList("""
             WITH months AS (
-              SELECT month FROM gcmb.financial_period
+              SELECT "month" FROM gcmb.financial_period
               UNION SELECT date_trunc('month',business_date)::date FROM gcmb.daily_cash_closing
               UNION SELECT date_trunc('month',booking_date)::date FROM gcmb.financial_transaction
               UNION SELECT date_trunc('month',CURRENT_DATE)::date
             )
-            SELECT p.id,m.month::text month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",u.username "closedBy",
+            SELECT p.id,m."month"::text AS "month",COALESCE(p.status,'OPEN') AS status,p.closed_at "closedAt",u.username "closedBy",
               count(c.id) FILTER (WHERE c.status<>'RECONCILED') "unreconciledClosings"
-            FROM months m LEFT JOIN gcmb.financial_period p ON p.month=m.month
+            FROM months m LEFT JOIN gcmb.financial_period p ON p."month"=m."month"
             LEFT JOIN gcmb.user_account u ON u.id=p.closed_by
-            LEFT JOIN gcmb.daily_cash_closing c ON date_trunc('month',c.business_date)::date=m.month
-            GROUP BY p.id,m.month,p.status,p.closed_at,u.username ORDER BY m.month DESC
+            LEFT JOIN gcmb.daily_cash_closing c ON date_trunc('month',c.business_date)::date=m."month"
+            GROUP BY p.id,m."month",p.status,p.closed_at,u.username ORDER BY m."month" DESC
             """);
     }
 
@@ -110,20 +116,20 @@ public class FinancialController {
         requireAccountant(actor);
         LocalDate start = month(month);
         Boolean available = db.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE month=?
+            SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE "month"=?
               UNION SELECT 1 FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<?
               UNION SELECT 1 FROM gcmb.financial_transaction WHERE booking_date>=? AND booking_date<?
               UNION SELECT 1 WHERE date_trunc('month',CURRENT_DATE)::date=?)
             """, Boolean.class, start, start, start.plusMonths(1), start, start.plusMonths(1), start);
         if (!Boolean.TRUE.equals(available)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu kỳ tài chính cần chốt.");
-        db.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", start);
-        Map<String, Object> period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE month=? FOR UPDATE", start);
+        db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", start);
+        Map<String, Object> period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE \"month\"=? FOR UPDATE", start);
         if ("CLOSED".equals(period.get("status"))) throw conflict("Kỳ tài chính này đã được chốt.");
         Long unresolved = db.queryForObject("SELECT count(*) FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<? AND status<>'RECONCILED'", Long.class, start, start.plusMonths(1));
-        if (unresolved != null && unresolved > 0) throw conflict("Chưa thể chốt kỳ tài chính vì còn " + unresolved + " phiếu chốt quỹ chưa đối soát. Vui lòng hoàn tất đối soát tất cả phiếu trong kỳ."); // BR-99, MSG101.
+        if (unresolved != null && unresolved > 0) throw conflict("Chưa thể chốt kỳ tài chính vì còn " + unresolved + " phiếu chốt quỹ chưa đối soát. Vui lòng hoàn tất đối soát tất cả phiếu trong kỳ."); // BR-99, MSG102.
         if (confirmation == null || !Boolean.TRUE.equals(confirmation.get("confirmed"))) throw bad("Vui lòng xác nhận khóa kỳ tài chính.");
         db.update("UPDATE gcmb.financial_period SET status='CLOSED',closed_by=?,closed_at=CURRENT_TIMESTAMP WHERE id=? AND status='OPEN'", actor.id(), period.get("id"));
-        return db.queryForMap("SELECT p.id,p.month::text month,p.status,p.closed_at \"closedAt\",u.username \"closedBy\" FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?", period.get("id"));
+        return db.queryForMap("SELECT p.id,p.\"month\"::text AS \"month\",p.status,p.closed_at \"closedAt\",u.username \"closedBy\" FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?", period.get("id"));
     }
 
     @GetMapping("/transactions")
@@ -217,12 +223,12 @@ public class FinancialController {
     }
 
     private Map<String,Object> totals(List<Map<String,Object>> rows) {
-        BigDecimal revenue=BigDecimal.ZERO,expenses=BigDecimal.ZERO,salary=BigDecimal.ZERO,investment=BigDecimal.ZERO,profit=BigDecimal.ZERO,cash=BigDecimal.ZERO;
+        BigDecimal revenue=BigDecimal.ZERO,expenses=BigDecimal.ZERO,salary=BigDecimal.ZERO,investment=BigDecimal.ZERO,forfeitedDeposits=BigDecimal.ZERO,profit=BigDecimal.ZERO,cash=BigDecimal.ZERO;
         long bills=0;
         for (Map<String,Object> row:rows) { revenue=revenue.add((BigDecimal)row.get("revenue")); expenses=expenses.add((BigDecimal)row.get("expenses"));
-            investment=investment.add((BigDecimal)row.get("investment")); salary=salary.add((BigDecimal)row.get("salary")); profit=profit.add((BigDecimal)row.get("profit")); cash=cash.add((BigDecimal)row.get("netCashFlow")); bills+=((Number)row.get("billCount")).longValue(); }
+            investment=investment.add((BigDecimal)row.get("investment")); salary=salary.add((BigDecimal)row.get("salary")); forfeitedDeposits=forfeitedDeposits.add((BigDecimal)row.get("forfeitedDeposits")); profit=profit.add((BigDecimal)row.get("profit")); cash=cash.add((BigDecimal)row.get("netCashFlow")); bills+=((Number)row.get("billCount")).longValue(); }
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("revenue",revenue); result.put("expenses",expenses); result.put("salary",salary); result.put("investment",investment); result.put("profit",profit);
+        result.put("revenue",revenue); result.put("expenses",expenses); result.put("salary",salary); result.put("investment",investment); result.put("forfeitedDeposits",forfeitedDeposits); result.put("profit",profit);
         result.put("netCashFlow",cash); result.put("billCount",bills); result.put("margin",revenue.signum()>0?profit.multiply(BigDecimal.valueOf(100)).divide(revenue,2,RoundingMode.HALF_UP):null);
         return result;
     }

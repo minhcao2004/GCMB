@@ -443,18 +443,19 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     return () => { active = false; };
   }, [booking?.id, booking?.status]);
   const actualTime = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
-  const recordedCheckIn = detail?.booking?.id === booking?.id
+  const detailMatchesBooking = Boolean(booking?.id && detail?.booking?.id === booking.id);
+  const recordedCheckIn = detailMatchesBooking
     ? detail.booking.actualCheckin || booking?.actualCheckin
     : booking?.actualCheckin;
   const savedCheckInTime = recordedCheckIn
     ? displayPart(recordedCheckIn, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone)
     : 'Chưa có dữ liệu';
   const charge = Number(booking?.expectedAmount || 0);
-  const depositReceived = Number(detail?.booking?.id === booking?.id
+  const depositReceived = Number(detailMatchesBooking
     ? detail.deposit?.receivedAmount ?? booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0
     : booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0);
-  const depositBalance = Number(detail?.booking?.id === booking?.id ? detail.deposit?.balance ?? booking?.depositBalance ?? 0 : booking?.depositBalance ?? 0);
-  const depositDetail = detail?.booking?.id === booking?.id ? detail.deposit : null;
+  const depositBalance = Number(detailMatchesBooking ? detail.deposit?.balance ?? booking?.depositBalance ?? 0 : booking?.depositBalance ?? 0);
+  const depositDetail = detailMatchesBooking ? detail.deposit : null;
   const depositOutcome = depositDetail?.cancellationOutcome;
   const depositStatus = depositOutcomeLabel(depositOutcome, depositReceived, booking?.status);
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, Number(depositDetail?.forfeitedAmount ?? 0), booking?.status);
@@ -471,11 +472,13 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
       || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
   const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
+    const categoryKeyword = prefix === 'drink' ? 'uống' : 'ăn';
+    const matchingGiftMenu = giftMenu.filter((item) => (item.category || '').toLocaleLowerCase('vi-VN').includes(categoryKeyword));
     const slots = [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
       ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))];
     const usedElsewhere = slots.filter((slot) => slot.key !== `${prefix}-${index}` && slot.id)
       .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
-    return <label key={`${prefix}-${index}`}><span>{label} {index + 1}</span><select required value={selectedId} onChange={(event) => setSelections((current) => current.map((id, i) => i === index ? event.target.value : id))}><option value="">Chọn {label.toLowerCase()}</option>{giftMenu.map((item) => <option key={item.id} value={item.id} disabled={Number(item.stockQuantity || 0) <= (usedElsewhere[item.id] || 0)}>{item.name} · tồn {item.stockQuantity} {item.unitName}</option>)}</select></label>;
+    return <label key={`${prefix}-${index}`}><span>{label} {index + 1}</span><select required value={selectedId} onChange={(event) => setSelections((current) => current.map((id, i) => i === index ? event.target.value : id))}><option value="">{matchingGiftMenu.length ? `Chọn ${label.toLowerCase()}` : `Chưa có ${label.toLowerCase()} phù hợp`}</option>{matchingGiftMenu.map((item) => <option key={item.id} value={item.id} disabled={item.stockTracked && Number(item.stockQuantity || 0) <= (usedElsewhere[item.id] || 0)}>{item.stockTracked ? `${item.name} · tồn ${item.stockQuantity} ${item.unitName}` : `${item.name} · không theo dõi tồn kho`}</option>)}</select></label>;
   });
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
@@ -490,11 +493,11 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
           <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{booking.roomCode ? `${booking.roomCode} · ${booking.roomName || ''}` : 'Chưa gán'}</strong></div>
         </div></section>
-        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Chọn mặt hàng của cơ sở; kho sẽ trừ khi xác nhận check-in.</p>
+        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
-          {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng đóng gói liên kết kho tự trừ.</small>}
+          {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
           {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
           {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
         </section>}

@@ -146,7 +146,8 @@ export default function MenuItemsPage({ user }) {
     return items.filter((item) => {
       const matchesSearch = !term || [item.code, item.name, item.category, item.description, item.inventoryName, item.inventorySku]
         .filter(Boolean).join(' ').toLocaleLowerCase('vi-VN').includes(term);
-      const matchesCategory = category === 'all' || item.category === category;
+      const matchesCategory = category === 'all'
+        || item.category?.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN');
       const matchesStatus = status === 'all' || (status === 'active' ? item.active : !item.active);
       return matchesSearch && matchesCategory && matchesStatus;
     });

@@ -53,6 +53,8 @@ export default function InventoryPage({ user }) {
   const [itemDraft, setItemDraft] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [receiptDraft, setReceiptDraft] = useState(null);
+  const [receiptCreateLineId, setReceiptCreateLineId] = useState(null);
+  const [receiptItemDraft, setReceiptItemDraft] = useState(null);
   const [adjustDraft, setAdjustDraft] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustLoading, setAdjustLoading] = useState(false);
@@ -192,6 +194,8 @@ export default function InventoryPage({ user }) {
 
   const openReceipt = () => {
     setReceiptDraft({ receivedAt: makeLocalDateTime(), supplierName: '', supplierInvoice: '', items: [newReceiptLine(newId())] });
+    setReceiptCreateLineId(null);
+    setReceiptItemDraft(null);
     setEvidence(null);
     setError('');
     setScreen('receipt');
@@ -232,6 +236,37 @@ export default function InventoryPage({ user }) {
     }
   };
 
+  const saveReceiptItem = async () => {
+    if (!receiptItemDraft || busy) return;
+    if (!receiptItemDraft.name.trim() || !receiptItemDraft.category.trim() || !receiptItemDraft.unitId) {
+      setError('Vui lòng nhập tên, nhóm hàng và đơn vị tồn kho.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const item = await inventoryApi.createItem({
+        sku: '', name: receiptItemDraft.name.trim(), category: receiptItemDraft.category.trim(),
+        unitId: receiptItemDraft.unitId, trackingMode: receiptItemDraft.trackingMode,
+        minimumQuantity: Number(receiptItemDraft.minimumQuantity || 0), active: true,
+      });
+      setItems((current) => [...current, item]);
+      setMetadata((current) => ({
+        ...current,
+        categories: current.categories.includes(item.category)
+          ? current.categories : [...current.categories, item.category].sort((left, right) => left.localeCompare(right, 'vi')),
+      }));
+      updateReceiptLine(receiptCreateLineId, 'inventoryItemId', item.id);
+      setReceiptCreateLineId(null);
+      setReceiptItemDraft(null);
+      setToastMessage(`Đã tạo ${item.name} · mã ${item.sku}. Chọn đơn vị nhận để tiếp tục.`);
+    } catch (saveError) {
+      setError(displayError(saveError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteItem = async (item) => {
     setBusy(true);
     setError('');
@@ -252,7 +287,7 @@ export default function InventoryPage({ user }) {
       if (line.id !== id) return line;
       // Đổi mặt hàng phải nhập lại quy cách và giá, tránh dùng nhầm quy cách của mặt hàng trước.
       if (key === 'inventoryItemId') return { ...newReceiptLine(id), inventoryItemId: value };
-      if (key === 'receivingUnit') return { ...line, receivingUnit: value, quantity: '', unitsPerPack: '', customUnit: '' };
+      if (key === 'receivingUnit') return { ...line, receivingUnit: value, unitsPerPack: '', customUnit: '' };
       return { ...line, [key]: value };
     }) }));
   };
@@ -474,7 +509,7 @@ export default function InventoryPage({ user }) {
       <form className="inv-panel inv-item-form" onSubmit={saveItem}>
         <h2>Thông tin mặt hàng</h2>
         <div className="inv-form-grid">
-          <label className="inv-field"><span>Mã mặt hàng *</span><input required maxLength="60" value={itemDraft?.sku || ''} onChange={(event) => setItemDraft({ ...itemDraft, sku: event.target.value })} placeholder="INV-019" /></label>
+          <label className="inv-field"><span>Mã mặt hàng</span><input readOnly value={itemMode === 'create' ? 'Tự cấp khi tạo' : itemDraft?.sku || ''} /><small>Mã được hệ thống tạo tự động và không cần nhập tay.</small></label>
           <label className="inv-field"><span>Tên mặt hàng *</span><input required maxLength="200" value={itemDraft?.name || ''} onChange={(event) => setItemDraft({ ...itemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
           <label className="inv-field"><span>Nhóm hàng *</span><input required maxLength="100" list="inventory-categories" value={itemDraft?.category || ''} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })} placeholder="Đồ uống" />
             <datalist id="inventory-categories">{metadata.categories.map((name) => <option key={name} value={name} />)}</datalist></label>
@@ -522,27 +557,56 @@ export default function InventoryPage({ user }) {
               const unitName = receivingUnitName(line, item);
               const conversion = receiptQuantity(line);
               const quantity = Number(conversion.value || 0);
-              const conversionStarted = line.quantity !== '' && (!line.receivingUnit || line.unitsPerPack !== '');
+              const conversionStarted = line.quantity !== '' && (!line.receivingUnit || line.receivingUnit === 'BASE' || line.unitsPerPack !== '');
               return <div className="inv-receipt-line" key={line.id}>
-                <label className="inv-field inv-line-product"><span>Mặt hàng *</span><select required value={line.inventoryItemId} onChange={(event) => updateReceiptLine(line.id, 'inventoryItemId', event.target.value)}>
-                  <option value="">Chọn mặt hàng</option>{activeItems.filter((option) => !receiptLines.some((other) => other.id !== line.id && other.inventoryItemId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.sku} · {option.name}</option>)}
-                </select><small>{item ? `Đơn vị tồn kho: ${item.unitName}` : 'Chọn mặt hàng kho đang sử dụng'}</small></label>
+                <div className="inv-line-product">
+                  <label className="inv-field"><span>Mặt hàng *</span><select required value={line.inventoryItemId} onChange={(event) => updateReceiptLine(line.id, 'inventoryItemId', event.target.value)}>
+                    <option value="">Chọn mặt hàng</option>{activeItems.filter((option) => !receiptLines.some((other) => other.id !== line.id && other.inventoryItemId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.sku} · {option.name}</option>)}
+                  </select><small>{item ? `Đơn vị tồn kho: ${item.unitName}` : 'Chọn mặt hàng kho đang sử dụng'}</small></label>
+                  <button type="button" className="inv-text-button inv-receipt-create-toggle" disabled={busy}
+                    onClick={() => {
+                      if (receiptCreateLineId === line.id) { setReceiptCreateLineId(null); setReceiptItemDraft(null); return; }
+                      setReceiptCreateLineId(line.id);
+                      setReceiptItemDraft({ name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '', trackingMode: 'AUTO_ON_SALE', minimumQuantity: '5' });
+                      setError('');
+                    }}>+ Tạo mặt hàng mới</button>
+                  {receiptCreateLineId === line.id && <div className="inv-receipt-inline-create" role="group" aria-label="Tạo mặt hàng mới"
+                    onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}>
+                    <strong>Tạo mặt hàng và tiếp tục nhập</strong>
+                    <div className="inv-receipt-create-grid">
+                      <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft?.name || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
+                      <label className="inv-field"><span>Nhóm hàng *</span><input maxLength="100" list={`receipt-categories-${line.id}`} value={receiptItemDraft?.category || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })} placeholder="Đồ uống" />
+                        <datalist id={`receipt-categories-${line.id}`}>{metadata.categories.map((name) => <option key={name} value={name} />)}</datalist></label>
+                      <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft?.unitId || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
+                        <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                      </select></label>
+                      <label className="inv-field"><span>Cách theo dõi tồn *</span><select value={receiptItemDraft?.trackingMode || 'AUTO_ON_SALE'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, trackingMode: event.target.value })}>
+                        <option value="AUTO_ON_SALE">Tự trừ khi bán</option><option value="MANUAL">Theo dõi thủ công</option>
+                      </select></label>
+                      <label className="inv-field"><span>Ngưỡng sắp hết</span><input type="number" min="0" step="0.001" value={receiptItemDraft?.minimumQuantity ?? '5'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, minimumQuantity: event.target.value })} /></label>
+                    </div>
+                    <div className="inv-receipt-create-actions"><small>Mã mặt hàng sẽ được hệ thống cấp tự động. Tồn ban đầu bằng 0; tồn chỉ tăng khi xác nhận phiếu nhập.</small>
+                      <button type="button" className="inv-button inv-button-primary" disabled={busy || !metadata.units.length} onClick={saveReceiptItem}>{busy ? 'Đang tạo…' : 'Tạo và chọn mặt hàng'}</button>
+                    </div>
+                  </div>}
+                </div>
                 <button type="button" className="inv-remove-line" aria-label={`Bỏ dòng ${item?.name || 'mặt hàng'}`} disabled={receiptLines.length === 1} onClick={() => removeReceiptLine(line.id)}>Bỏ</button>
-                <label className="inv-field inv-line-quantity"><span>SL nhận *</span><input required disabled={!item || busy} type="number" min={line.receivingUnit ? '1' : '0.001'} max="999999999999999.999" step={line.receivingUnit ? '1' : '0.001'} value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /></label>
-                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
-                  <option value="">{item?.unitName || 'Đơn vị gốc'}</option>
+                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select required disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
+                  <option value="">Chọn đơn vị nhận</option>
+                  <option value="BASE">{item?.unitName || 'Đơn vị tồn kho'} (đơn vị tồn kho)</option>
                   {RECEIVING_UNITS.filter((unit) => unit.toLocaleLowerCase('vi-VN') !== item?.unitName.toLocaleLowerCase('vi-VN')).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
                   <option value="CUSTOM">Khác…</option>
                 </select></label>
-                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><input required disabled={!item || busy} type="number" min="0" max="999999999999999999" step="1" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value)} /></label>
+                <label className="inv-field inv-line-quantity"><span>SL nhận *</span><input required disabled={!item || !line.receivingUnit || busy} type="text" inputMode={line.receivingUnit === 'BASE' ? 'decimal' : 'numeric'} autoComplete="off" maxLength="19" aria-describedby={`receipt-quantity-hint-${line.id}`} value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /><small id={`receipt-quantity-hint-${line.id}`}>{line.receivingUnit === 'BASE' ? 'Có thể nhập tối đa 3 chữ số thập phân.' : 'Nhập số nguyên theo đơn vị nhận đã chọn.'}</small></label>
+                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><input required disabled={!item || busy} type="text" inputMode="numeric" autoComplete="off" maxLength="18" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value.replace(/[^0-9]/g, ''))} /></label>
                 {line.receivingUnit === 'CUSTOM' && <label className="inv-field inv-line-custom-unit"><span>Tên đơn vị nhận *</span><input required disabled={busy} maxLength="30" value={line.customUnit} onChange={(event) => updateReceiptLine(line.id, 'customUnit', event.target.value)} placeholder="Ví dụ: Kiện, can…" /></label>}
-                {line.receivingUnit && <label className="inv-field inv-line-conversion"><span>Quy cách *</span>
-                  <span className="inv-pack-size"><span>1 {unitName || 'đơn vị nhận'} =</span><input required disabled={busy} aria-label={`Số ${item?.unitName || 'đơn vị gốc'} trong 1 ${unitName || 'đơn vị nhận'}`} type="number" min="0.001" max="999999999999999.999" step="0.001" value={line.unitsPerPack} onChange={(event) => updateReceiptLine(line.id, 'unitsPerPack', event.target.value)} /><span>{item?.unitName}</span></span>
+                {line.receivingUnit && line.receivingUnit !== 'BASE' && <label className="inv-field inv-line-conversion"><span>Quy cách *</span>
+                  <span className="inv-pack-size"><span>1 {unitName || 'đơn vị nhận'} =</span><input required disabled={busy} aria-label={`Số ${item?.unitName || 'đơn vị gốc'} trong 1 ${unitName || 'đơn vị nhận'}`} type="text" inputMode="decimal" autoComplete="off" maxLength="19" value={line.unitsPerPack} onChange={(event) => updateReceiptLine(line.id, 'unitsPerPack', event.target.value)} /><span>{item?.unitName}</span></span>
                   <small>Nhập quy cách thực tế của mặt hàng. Đơn giá ở trên tính cho 1 {item?.unitName}.</small>
                 </label>}
                 <div className="inv-line-result" aria-live="polite">
                   <div className="inv-line-stock"><span>Số lượng nhập kho</span><strong>{!item || conversion.error ? '—' : `${formatQuantity(quantity)} ${item.unitName}`}</strong>
-                    {item && line.receivingUnit && !conversion.error && <small>{formatQuantity(line.quantity)} {unitName.toLocaleLowerCase('vi-VN')} × {formatQuantity(line.unitsPerPack)} {item.unitName}</small>}
+                    {item && line.receivingUnit && line.receivingUnit !== 'BASE' && !conversion.error && <small>{formatQuantity(line.quantity)} {unitName.toLocaleLowerCase('vi-VN')} × {formatQuantity(line.unitsPerPack)} {item.unitName}</small>}
                     {conversionStarted && conversion.error && <small className="inv-danger-text">{conversion.error}</small>}
                   </div>
                   <div className="inv-line-total"><span>Thành tiền</span><strong>{formatVnd(receiptAmount(conversion.value || '0', line.unitCost) ?? 0n)}</strong></div>
@@ -558,7 +622,7 @@ export default function InventoryPage({ user }) {
         <p>{receiptSummary.length} mặt hàng · Số lượng theo đơn vị tồn kho của từng mặt hàng</p>
         <ul className="inv-summary-lines">{receiptSummary.map((line) => <li key={line.id}><span>{line.item.name}</span>
           {line.conversion.error ? <small>Chưa đủ số lượng hoặc quy cách hợp lệ</small> : <><span>{formatQuantity(line.quantity)} {line.item.unitName} × {formatVnd(line.unitCost)} / {line.item.unitName}</span>
-            {line.receivingUnit && <small>Nhận {formatQuantity(line.receivedQuantity)} {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} · 1 {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} = {formatQuantity(line.unitsPerPack)} {line.item.unitName}</small>}
+            {line.receivingUnit && line.receivingUnit !== 'BASE' && <small>Nhận {formatQuantity(line.receivedQuantity)} {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} · 1 {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} = {formatQuantity(line.unitsPerPack)} {line.item.unitName}</small>}
             <strong>{formatVnd(line.amount)}</strong><small>Tồn sau: {formatQuantity(Number(line.item.quantity) + line.quantity)} {line.item.unitName}</small></>}
         </li>)}</ul>
         <div className="inv-summary-total"><span>Tổng giá trị</span><strong>{formatVnd(receiptTotalValue)}</strong></div>

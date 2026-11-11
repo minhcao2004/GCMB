@@ -52,7 +52,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
           : tab === 'transactions' ? '/accounting/transactions' : null;
     if (!path) { setLoading(false); return undefined; }
     const config = tab === 'periods' ? undefined : { params: { month, ...(['report', 'expenses'].includes(tab) && branchId ? { branchId } : {}) } };
-    api.get(path, config).then(({ data: result }) => { if (live) { tab === 'periods' ? setRows(result) : setData(result); setLoadedAt(new Date()); if (tab === 'report' && !branchId) setBranchOptions(result.results); } })
+    api.get(path, config).then(({ data: result }) => { if (live) { const report = tab === 'report' ? { ...result, results: Array.isArray(result?.results) ? result.results : [] } : result; tab === 'periods' ? setRows(result) : setData(report); setLoadedAt(new Date()); if (tab === 'report' && !branchId) setBranchOptions(report.results); } })
       .catch((e) => { if (live) setError(errorText(e)); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [tab, month, branchId, revision]);
@@ -134,14 +134,15 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         <div><h2>Kết quả tháng {formatMonth(month)}</h2><p>{branchId ? 'Cơ sở đang chọn' : `Toàn bộ ${data.results.length} cơ sở`} · Đơn vị: đồng (VND)</p></div>
         <div className="finance-freshness"><span>{loadedAt ? `Tải trên màn hình lúc ${loadedAt.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}` : ''}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>Tải lại</button></div>
       </div>
-      {/* BR-102/211, BR-103/107, BR-104, BR-106: hiển thị đúng nguồn của từng chỉ số; dòng tiền thuần không phải số dư quỹ. */}
+      {/* BR-102/108/211, BR-103/107, BR-104, BR-106: cọc tịch thu tách khỏi doanh thu; dòng tiền thuần không phải số dư quỹ. */}
       <dl className="finance-metrics">
         <div><dt>Doanh thu dịch vụ</dt><dd>{money(data.totals.revenue)}</dd><small>Bill đã hoàn tất; không gồm cọc chưa sử dụng</small></div>
         <div><dt>Chi vận hành đã trả</dt><dd>{money(data.totals.expenses)}</dd><small>Gồm lương và ứng lương; không gồm đầu tư</small></div>
         <div><dt>Lợi nhuận vận hành</dt><dd className={Number(data.totals.profit) < 0 ? 'finance-negative' : ''}>{money(data.totals.profit)}</dd><small>Doanh thu trừ chi vận hành đã trả</small></div>
         <div><dt>Dòng tiền thuần</dt><dd className={Number(data.totals.netCashFlow) < 0 ? 'finance-negative' : ''}>{money(data.totals.netCashFlow)}</dd><small>Tiền vào trừ tiền ra theo sổ; không phải số dư quỹ</small></div>
+        <div><dt>Cọc tịch thu</dt><dd>{money(data.totals.forfeitedDeposits)}</dd><small>Trình bày riêng; không cộng vào doanh thu dịch vụ</small></div>
       </dl>
-      <DataTable caption={`Kết quả của ${data.results.length} cơ sở trong tháng ${formatMonth(month)}`} columns={['Cơ sở', 'Bill hoàn tất', 'Doanh thu', 'Chi vận hành', 'Trong đó · lương/ứng', 'Đầu tư', 'Lợi nhuận', 'Biên lợi nhuận', 'Dòng tiền thuần']} numericColumns={[1, 2, 3, 4, 5, 6, 7, 8]} rows={data.results} values={(r) => [r.name, r.billCount, money(r.revenue), money(r.expenses), money(r.salary), money(r.investment), money(r.profit), percent(r.margin), money(r.netCashFlow)]} />
+      <DataTable caption={`Kết quả của ${data.results.length} cơ sở trong tháng ${formatMonth(month)}`} columns={['Cơ sở', 'Bill hoàn tất', 'Doanh thu', 'Cọc tịch thu', 'Chi vận hành', 'Trong đó · lương/ứng', 'Đầu tư', 'Lợi nhuận', 'Biên lợi nhuận', 'Dòng tiền thuần']} numericColumns={[1, 2, 3, 4, 5, 6, 7, 8, 9]} rows={data.results} values={(r) => [r.name, r.billCount, money(r.revenue), money(r.forfeitedDeposits), money(r.expenses), money(r.salary), money(r.investment), money(r.profit), percent(r.margin), money(r.netCashFlow)]} />
     </>}
     {!reportsOnly && tab === 'report' && <p className="finance-shortcuts"><span>Nghiệp vụ liên quan</span><Link to="/ke-toan/hoan-coc">Yêu cầu hoàn cọc</Link><Link to="/ke-toan/hoa-don-thue">Hóa đơn thuế</Link></p>}
     {tab === 'expenses' && data && <DataTable caption={`Chi phí đã thanh toán trong tháng ${formatMonth(month)}`} columns={['Loại', 'Danh mục', 'Cơ sở', 'Đã thanh toán', 'Số lần chi']} numericColumns={[3, 4]} rows={data.rows} values={(r) => [r.class === 'CAPEX' ? 'Đầu tư' : 'Vận hành', r.categoryName, r.branchName, money(r.amount), r.paymentCount]} />}
@@ -156,6 +157,6 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     breadcrumb="Tài chính & báo cáo" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>{content}</AppShell>;
 }
 
-function DataTable({ caption, columns, numericColumns = [], rows, values }) {
+function DataTable({ caption, columns = [], numericColumns = [], rows = [], values }) {
   return <div className="finance-table-panel"><div className="finance-table-wrap"><table className="finance-table"><caption>{caption}</caption><thead><tr>{columns.map((column, cell) => <th scope="col" className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || `${index}-${row.categoryName || row.month || ''}`}>{values(row).map((value, cell) => <td className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={cell}>{value}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 && <p className="finance-empty">Chưa có dữ liệu trong phạm vi đã chọn.</p>}</div>;
 }

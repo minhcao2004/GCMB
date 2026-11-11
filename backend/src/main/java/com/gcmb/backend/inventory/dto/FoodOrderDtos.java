@@ -11,7 +11,7 @@ public final class FoodOrderDtos {
 
     public record ItemRequest(UUID menuItemId, Integer quantity) {}
     public record ComboGiftOption(UUID id, String name, String category, BigDecimal salePrice,
-                                  BigDecimal stockQuantity, String unitName) {}
+                                  BigDecimal stockQuantity, String unitName, boolean stockTracked) {}
     public record StaffItemRequest(UUID menuItemId, Integer quantity, BigDecimal unitPrice) {}
     public record RoomRequest(List<ItemRequest> items, String idempotencyKey) {}
     public record StaffOrderRequest(UUID bookingId, UUID assignedEmployeeId,
