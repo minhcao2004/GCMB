@@ -36,18 +36,6 @@ public class EquipmentAssetFileStorageService {
 
     // BR-115/BR-116: File tải mới luôn được lưu local để API phân quyền phục vụ cho các vai trò.
     public StoredFile store(MultipartFile file) {
-
-        return store(file, false);
-    }
-
-    public StoredFile storeInDrive(MultipartFile file) {
-        driveStorage.requireConfigured();
-        return store(file, true);
-    }
-
-    public void requireDriveConfigured() { driveStorage.requireConfigured(); }
-
-    private StoredFile store(MultipartFile file, boolean useDrive) {
         if (file == null || file.isEmpty() || file.getSize() > MAX_BYTES)
             throw invalid("Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB."); // BR-116 / MSG79
         String declaredType = file.getContentType();

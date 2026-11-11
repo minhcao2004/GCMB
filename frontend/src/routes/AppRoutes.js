@@ -17,7 +17,6 @@ import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
-import AccountantFinancePage from '../features/dashboard/AccountantFinancePage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
 import FinancePage from '../features/finance/pages/FinancePage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';

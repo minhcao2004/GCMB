@@ -1,7 +1,8 @@
 
 /** Author: HuyDV. UC-91..101: CSRF và phạm vi cơ sở cho API lương/chốt quỹ. */
 import api from '../../../api/client';
-export const financeApi = {
+import apiClient from '../../../api/client';
+const legacyFinanceApi = {
   async get(path, params, branch) {
     return (await api.get(path, { params, headers: branch ? { 'X-GCMB-Branch-Id': branch } : {} }))
       .data;
@@ -42,8 +43,6 @@ export const today = () =>
   }).format(new Date());
 export const emptyMessage = 'Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.'; // MSG01.
 
-import apiClient from '../../../api/client';
-
 const route = {
   HEAD_OFFICE_MANAGER: '/head-office/finance',
   ACCOUNTANT: '/accounting/finance',
@@ -61,6 +60,7 @@ async function mutate(method, url, body, multipart=false) {
   return apiClient.request({ method, url, data: body, headers }).then(({ data }) => data);
 }
 export const financeApi = {
+  ...legacyFinanceApi,
   load: (role) => apiClient.get(route[role]).then(({ data }) => data),
   sendFund: (values) => mutate('post','/head-office/finance/fund-transfers',values),
   uploadFundProof: (id, proof) => mutate('post',`/head-office/finance/fund-transfers/${id}/proof`,form({proof}),true),

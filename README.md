@@ -321,7 +321,7 @@ The directory alone does not run migrations. If the team selects Flyway, configu
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
 
-Khắc phục checksum V5 (08/11/2026): khôi phục nguyên phần chú thích đầu `V5__branch_room_management.sql` từ commit `00c5414` để khớp checksum `-167495418` của bản đã áp dụng. Các câu lệnh SQL không đổi; không chạy lại V5, không sửa lịch sử Flyway hoặc dữ liệu nghiệp vụ. Flyway tính cả nội dung chú thích vào checksum, vì vậy không xóa hoặc chỉnh chú thích của migration đã phát hành. Nếu môi trường khác báo checksum khác, đối chiếu bản đã áp dụng trước khi xử lý.
+Khôi phục tính tương thích Flyway (11/11/2026): giữ nội dung đã phát hành tại các phiên bản V32–V40; các migration payroll mới được đặt tiếp theo ở V41–V43. Không đổi SQL của các migration V32–V40 đã áp dụng. V3–V5 được khôi phục theo checksum của database phát triển đang dùng: V3 `1759023455`, V4 `2097460310`, V5 `-262747397`; phần khác biệt trước đó chỉ là chú thích đầu file. Không chạy `repair` để đánh dấu migration mới là đã áp dụng. Nếu một database khác có checksum V3–V5 khác, so sánh lịch sử của database và nội dung SQL trước khi sửa checksum; không xóa schema hoặc dữ liệu.
 
 ## Usage
 
