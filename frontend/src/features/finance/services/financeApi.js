@@ -1,6 +1,8 @@
+
 /** Author: HuyDV. UC-91..101: CSRF và phạm vi cơ sở cho API lương/chốt quỹ. */
 import api from '../../../api/client';
-export const financeApi = {
+import apiClient from '../../../api/client';
+const legacyFinanceApi = {
   async get(path, params, branch) {
     return (await api.get(path, { params, headers: branch ? { 'X-GCMB-Branch-Id': branch } : {} }))
       .data;
@@ -40,3 +42,35 @@ export const today = () =>
     day: '2-digit',
   }).format(new Date());
 export const emptyMessage = 'Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.'; // MSG01.
+
+const route = {
+  HEAD_OFFICE_MANAGER: '/head-office/finance',
+  ACCOUNTANT: '/accounting/finance',
+  BRANCH_MANAGER: '/branch-management/finance',
+};
+const form = (values) => {
+  const data = new FormData();
+  Object.entries(values).forEach(([key, value]) => { if (value !== null && value !== undefined && value !== '') data.append(key, value); });
+  return data;
+};
+async function mutate(method, url, body, multipart=false) {
+  const { data: csrf } = await apiClient.get('/auth/csrf');
+  const headers = { [csrf.headerName]: csrf.token };
+  if (multipart) headers['Content-Type'] = undefined;
+  return apiClient.request({ method, url, data: body, headers }).then(({ data }) => data);
+}
+export const financeApi = {
+  ...legacyFinanceApi,
+  load: (role) => apiClient.get(route[role]).then(({ data }) => data),
+  sendFund: (values) => mutate('post','/head-office/finance/fund-transfers',values),
+  uploadFundProof: (id, proof) => mutate('post',`/head-office/finance/fund-transfers/${id}/proof`,form({proof}),true),
+  confirmFund: (id) => mutate('post',`/accounting/finance/fund-transfers/${id}/confirm`),
+  createCategory: (value) => mutate('post','/accounting/finance/categories',value),
+  updateCategory: (id, value) => mutate('put',`/accounting/finance/categories/${id}`,value),
+  deleteCategory: (id) => mutate('delete',`/accounting/finance/categories/${id}`),
+  createRequest: (values) => mutate('post','/branch-management/finance/requests',values),
+  uploadRequestAttachment: (id, kind, file) => mutate('post',`/branch-management/finance/requests/${id}/attachments?kind=${kind}`,form({file}),true),
+  review: (role, id, approve, note='') => mutate('post',`${route[role]}/requests/${id}/review`,{ approve, note }),
+  pay: (id, reference, proof) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({ reference, proof }),true),
+};
+

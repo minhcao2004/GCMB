@@ -20,8 +20,13 @@ import InventoryPage from '../../inventory/pages/InventoryPage';
 import WorkforcePage from '../../workforce/pages/WorkforcePage';
 import StaffPage from '../../workforce/pages/StaffPage';
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
+
 // HuyDV / UC-98/100: chốt quỹ theo cơ sở đang chọn.
 import CashClosingPage from '../../finance/pages/CashClosingPage';
+
+import FinancePage from '../../finance/pages/FinancePage';
+
+
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
@@ -128,6 +133,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
                   : active === 'Thực đơn F&B' ? <MenuItemsPage user={{ ...user, readOnly }} />
                     : active === 'Kho hàng' ? <InventoryPage user={{ ...user, readOnly }} />
                       : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage user={{ ...user, readOnly }} />
+                        : active === 'Chi phí & đề nghị' ? <FinancePage user={{ ...user, readOnly }} />
                         : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
       </section>
     </div>

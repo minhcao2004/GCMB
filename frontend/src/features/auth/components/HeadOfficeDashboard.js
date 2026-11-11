@@ -22,6 +22,7 @@ import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
 import StaffPage from '../../workforce/pages/StaffPage';
 
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
+import FinancePage from '../../finance/pages/FinancePage';
 
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
@@ -98,6 +99,8 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
         <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
+      ) : activeTab === 'Phê duyệt chi' ? (
+        <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
     </div>
   </div>;

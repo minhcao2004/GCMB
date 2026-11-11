@@ -22,13 +22,14 @@ const navigation = [
 const accountingNavigation = [
   ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'],
-  ['Thu & cấp quỹ', 'payments', true],
-  ['Chi & hoàn ứng', 'plus', true],
+  ['Thu & cấp quỹ', 'payments'],
+  ['Chi & hoàn ứng', 'plus'],
   ['Đối soát chốt quỹ', 'calendar'],
+
   ['Hoàn tiền cọc', 'deposit'],
   ['Lương nhân viên', 'booking'],
   ['Báo cáo tài chính', 'orders', true],
-  ['Danh mục chi phí', 'inventory', true],
+  ['Danh mục chi phí', 'inventory'],
 ];
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
@@ -188,6 +189,7 @@ export function AppShell({
                       if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
                       if (icon === 'overview') navigate('/ke-toan');
                       if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
+                      if (['payments', 'plus', 'inventory'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
                     }}
                   >
                     <Icon name={icon} /><span>{label}</span>

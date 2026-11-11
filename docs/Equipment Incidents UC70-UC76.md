@@ -28,4 +28,17 @@
 
 ## Ghi chú
 
+
 Chứng cứ báo sự cố là tùy chọn; kết quả sửa chữa bắt buộc có chứng từ. File được kiểm tra nội dung và dung lượng theo BR-115/BR-116. Màn hình hiện nhận một file mỗi lần báo cáo (số lượng này nằm trong giới hạn tối đa năm ảnh của Lễ tân theo BR-196). Thanh toán chi phí sửa chữa vẫn thuộc quy trình kế toán hiện có, theo BR-47; tạo liên kết đề nghị thanh toán từ kết quả sửa chữa là bước tích hợp tiếp theo.
+
+Chứng cứ báo sự cố là tùy chọn; kết quả sửa chữa bắt buộc có chứng từ. File được kiểm tra nội dung và dung lượng theo BR-115/BR-116, lưu trên thư mục local của backend (`GCMB_ATTACHMENT_STORAGE_DIR`, mặc định `./data/attachments`) và xem trực tiếp qua API đã xác thực. Quản lý cấp cao xem được chứng từ của tất cả cơ sở; quản lý cơ sở và lễ tân chỉ xem trong phạm vi cơ sở được phân quyền. Màn hình báo cáo nhận tối đa một file chứng cứ cho sự cố; kết quả sửa chữa nhận một hóa đơn và một chứng từ chuyển khoản (số lượng này nằm trong giới hạn tối đa năm ảnh của Lễ tân theo BR-196). Thanh toán chi phí sửa chữa vẫn thuộc quy trình kế toán hiện có, theo BR-47; tạo liên kết đề nghị thanh toán từ kết quả sửa chữa là bước tích hợp tiếp theo.
+
+Migration V37 mở rộng tập trạng thái sự cố để hỗ trợ chờ duyệt và từ chối. V38 thêm đơn vị sửa chữa/thay thế, mô tả hạng mục thay thế và chi phí dự kiến. Cần áp dụng Flyway V39 trước khi triển khai backend mới.
+
+## Khuyến nghị vận hành
+
+- Dùng severity để đo hậu quả/khu vực ảnh hưởng; dùng priority để quyết định thứ tự phản hồi theo thời gian. Ví dụ thiết bị hỏng nhẹ nhưng phục vụ phòng sắp check-in có thể severity thấp, priority cao.
+- Bắt buộc ngày dự kiến hoàn tất ngay khi đã có đánh giá; cập nhật ngày và ghi chú mỗi lần nhà cung cấp thay đổi lịch. Đừng xóa các mốc cũ khỏi nhật ký.
+- Dùng mã `ASSET-{BRANCH}-{NNNN}` cho tài sản và mã nhóm `EQ-{LOẠI}`. Cấp số tăng dần theo cơ sở, không tái sử dụng mã đã xóa/đã nghỉ hưu.
+- Lễ tân báo cáo, chọn phương án và hạn dự kiến; quản lý cơ sở duyệt/từ chối, cập nhật tiến trình, chi phí, nghiệm thu rồi đóng. Báo cáo có severity `CRITICAL` hoặc priority `URGENT` cần được ưu tiên xử lý ngay và kiểm tra tình trạng phòng liên quan.
+
