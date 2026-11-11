@@ -62,6 +62,7 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                 .requestMatchers("/api/v1/reception/**").hasRole("RECEPTIONIST")
                 .requestMatchers("/api/v1/accounting/reports/**").hasAnyRole("HEAD_OFFICE_MANAGER", "ACCOUNTANT")
                 .requestMatchers("/api/v1/accounting/**").hasRole("ACCOUNTANT")
+                .requestMatchers("/api/v1/finance/attachments/**").hasAnyRole("HEAD_OFFICE_MANAGER", "BRANCH_MANAGER", "ACCOUNTANT")
                 .anyRequest().denyAll())
             .exceptionHandling(config -> config
                 .authenticationEntryPoint((request, response, e) -> {

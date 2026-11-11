@@ -27,19 +27,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Component
 public class EquipmentAssetFileStorageService {
     private static final long MAX_BYTES = 20_000_000L;
-    private static final String DRIVE_PREFIX = "gdrive:";
     private final Path storageRoot;
-    private final GoogleDriveFileStorageService driveStorage;
 
     // BR-116: Tất cả chứng từ tài sản dùng cùng thư mục quản lý file đã cấu hình cho ứng dụng.
-    public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory,
-            GoogleDriveFileStorageService driveStorage) {
+    public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory) {
         storageRoot = Path.of(directory).toAbsolutePath().normalize();
-        this.driveStorage = driveStorage;
     }
 
-    // BR-115/BR-116: Chỉ nhận file hợp lệ có nội dung nhận diện được và kích thước từ 1 đến 20 MB.
+    // BR-115/BR-116: File tải mới luôn được lưu local để API phân quyền phục vụ cho các vai trò.
     public StoredFile store(MultipartFile file) {
+
         return store(file, false);
     }
 
@@ -57,6 +54,10 @@ public class EquipmentAssetFileStorageService {
         if (declaredType == null || !Set.of("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
                 .contains(declaredType))
             throw invalid("Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác."); // BR-115 / MSG78
+
+        if (file == null || file.isEmpty()) throw invalid("Vui lòng chọn ảnh thiết bị");
+        if (file.getSize() > MAX_BYTES) throw invalid("Ảnh thiết bị không được vượt quá 20 MB");
+
         byte[] bytes;
         try { bytes = file.getBytes(); }
         catch (IOException e) { throw invalid("Không thể đọc tệp hoặc định dạng tệp không khớp với nội dung. Vui lòng xuất lại tệp đúng định dạng và tải lên lại."); }
@@ -66,17 +67,11 @@ public class EquipmentAssetFileStorageService {
             throw invalid("Không thể đọc tệp hoặc định dạng tệp không khớp với nội dung. Vui lòng xuất lại tệp đúng định dạng và tải lên lại."); // BR-115 / MSG80
         UUID id = UUID.randomUUID();
         String sourceName = sourceName(file);
-        String objectKey;
-        if (useDrive) {
-            String driveId = driveStorage.upload("GCMB-"+id+"-"+sourceName, type.mime, bytes);
-            objectKey = DRIVE_PREFIX+driveId;
-        } else {
-            objectKey = id + "." + type.extension;
-            try {
-                Files.createDirectories(storageRoot);
-                Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không lưu được ảnh thiết bị", e); }
-        }
+        String objectKey = id + "." + type.extension;
+        try {
+            Files.createDirectories(storageRoot);
+            Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không lưu được ảnh thiết bị", e); }
         return new StoredFile(id, objectKey, sourceName, type.mime, bytes.length, sha256(bytes), bytes);
     }
 
@@ -88,13 +83,14 @@ public class EquipmentAssetFileStorageService {
 
     // BR-115: Chỉ đọc file theo khóa lưu nội bộ, không nhận đường dẫn tùy ý từ request.
     public byte[] read(String objectKey) throws IOException {
-        if (objectKey != null && objectKey.startsWith(DRIVE_PREFIX)) return driveStorage.download(objectKey.substring(DRIVE_PREFIX.length()));
+        if (objectKey != null && objectKey.startsWith("gdrive:"))
+            throw new IOException("Chứng từ cũ chưa có bản lưu local. Vui lòng tải lại chứng từ lên hệ thống.");
         return Files.readAllBytes(resolve(objectKey));
     }
 
     // BR-118: Dọn file mới tải lên nếu giao dịch ghi metadata hoặc liên kết tài sản thất bại.
     public void deleteQuietly(String objectKey) {
-        if (objectKey != null && objectKey.startsWith(DRIVE_PREFIX)) { driveStorage.deleteQuietly(objectKey.substring(DRIVE_PREFIX.length())); return; }
+        if (objectKey != null && objectKey.startsWith("gdrive:")) return;
         try { Files.deleteIfExists(resolve(objectKey)); } catch (IOException ignored) { /* cleanup best effort */ }
     }
 

@@ -62,7 +62,7 @@ The current scope excludes a customer booking portal, hardware barcode-scanner i
 | Backend | Java 17, Spring Boot, Maven Wrapper |
 | Database | PostgreSQL with version-controlled SQL migration scripts |
 | Communication | REST API with JSON |
-| External integrations | SePay, email service, cloud storage |
+| External integrations | SePay, email service |
 | Version control | Git and GitHub |
 | Testing | JUnit and API testing tools such as Postman |
 | Deployment target | Docker on VPS/Cloud |
@@ -73,7 +73,11 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
+
 The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `dashboard`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+
+The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `finance`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +86,10 @@ The backend is deployed as one application. The current backend contains nine pe
 
 ## Project Structure
 
+
 The tree below reflects the current repository structure. Inventory, workforce, and dashboard are active backend features. Payroll and cash closing are active; other finance workflows remain planned.
+
+The tree below reflects the current repository structure. Inventory, workforce, and core funds/payment/reimbursement workflows are active backend features. Cash closing and financial reporting remain planned.
 
 ```text
 GCMB/
@@ -97,6 +104,7 @@ GCMB/
 │   │   ├── dashboard/
 │   │   ├── inventory/
 │   │   ├── workforce/
+│   │   ├── finance/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yaml
@@ -120,6 +128,7 @@ GCMB/
 │   │   │   ├── finance/
 │   │   │   ├── inventory/
 │   │   │   ├── workforce/
+│   │   │   ├── finance/
 │   │   │   ├── landing/
 │   │   │   └── pricing/
 │   │   ├── shared/
@@ -148,11 +157,18 @@ GCMB/
 | `audit` | Mutation audit recording and audit-history lookup. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
+
 | `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
 | `dashboard` | Chain and branch performance summaries; accountant financial reports and period operations. |
 | `finance` (frontend) | Payroll and cash-closing screens. Funds, expenses, and reimbursements remain planned. |
+
+| `booking` | Reservations, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
+| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, and movement history. |
+| `workforce` | Staff records, branch assignments and transfers, shift schedules, and attendance. Payroll remains planned. |
+| `finance` | Chain-wide accountant fund receipts, shared expense categories, branch payment/reimbursement requests, approval thresholds, payment history, and private evidence access. Cash closing and financial reporting remain planned. |
+
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -377,6 +393,10 @@ The detailed project references are:
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.
 - GenZ Cinema AS-IS / TO-BE workflows.
+
+- [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
+- [Finance Fund and Expense Workflow](docs/Finance%20Fund%20and%20Expense%20Workflow.md) — fund receipt confirmation, category maintenance, branch expense requests, approval thresholds, payment, reimbursement, and evidence access.
+
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.
 
