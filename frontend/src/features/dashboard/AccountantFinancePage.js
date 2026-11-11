@@ -19,6 +19,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [tab, setTab] = useState('report');
   const [month, setMonth] = useState(monthNow);
   const [data, setData] = useState(null);
+  const [dataTab, setDataTab] = useState(null);
   const [branchOptions, setBranchOptions] = useState([]);
   const [branchId, setBranchId] = useState('');
   const [rows, setRows] = useState([]);
@@ -37,6 +38,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [periodLoading, setPeriodLoading] = useState(false);
   const [periodError, setPeriodError] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [blockedPeriod, setBlockedPeriod] = useState(null);
 
   useEffect(() => {
     authApi.me().then((identity) => { if (identity.role !== 'ACCOUNTANT' && !(reportsOnly && identity.role === 'HEAD_OFFICE_MANAGER')) navigate(identity.destination, { replace: true }); else setUser(identity); })
@@ -45,14 +47,23 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
 
   useEffect(() => {
     let live = true;
-    setError(''); setData(null); setRows([]); setLoadedAt(null); setLoading(true);
+    setError(''); setData(null); setDataTab(null); setRows([]); setLoadedAt(null); setLoading(true);
     const path = tab === 'report' ? '/accounting/reports/monthly'
       : tab === 'expenses' ? '/accounting/reports/expense-breakdown'
         : tab === 'periods' ? '/accounting/financial-periods'
           : tab === 'transactions' ? '/accounting/transactions' : null;
     if (!path) { setLoading(false); return undefined; }
     const config = tab === 'periods' ? undefined : { params: { month, ...(['report', 'expenses'].includes(tab) && branchId ? { branchId } : {}) } };
-    api.get(path, config).then(({ data: result }) => { if (live) { const report = tab === 'report' ? { ...result, results: Array.isArray(result?.results) ? result.results : [] } : result; tab === 'periods' ? setRows(result) : setData(report); setLoadedAt(new Date()); if (tab === 'report' && !branchId) setBranchOptions(report.results); } })
+    api.get(path, config).then(({ data: result }) => {
+      if (!live) return;
+      const report = tab === 'report'
+        ? { ...result, results: Array.isArray(result?.results) ? result.results : [], totals: result?.totals || {} }
+        : result;
+      if (tab === 'periods') setRows(result);
+      else { setData(report); setDataTab(tab); }
+      setLoadedAt(new Date());
+      if (tab === 'report' && !branchId) setBranchOptions(report.results);
+    })
       .catch((e) => { if (live) setError(errorText(e)); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [tab, month, branchId, revision]);
@@ -67,6 +78,13 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       .finally(() => { if (live) setPeriodLoading(false); });
     return () => { live = false; };
   }, [reportsOnly, user?.role, tab, month, revision]);
+
+  useEffect(() => {
+    if (!blockedPeriod) return undefined;
+    const dismiss = (event) => event.key === 'Escape' && setBlockedPeriod(null);
+    window.addEventListener('keydown', dismiss);
+    return () => window.removeEventListener('keydown', dismiss);
+  }, [blockedPeriod]);
 
   async function closePeriod(periodMonth) {
     setBusy(true); setError('');
@@ -114,7 +132,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     <nav className="finance-tabs" aria-label="Nghiệp vụ tài chính">{Object.entries(label).filter(([key]) => !reportsOnly || ['report', 'expenses'].includes(key)).map(([key, value]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => { setTab(key); setError(''); }}>{value}</button>)}</nav>
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải dữ liệu…</p>}
-    {tab === 'report' && data && <>
+    {tab === 'report' && dataTab === 'report' && data && <>
       {!reportsOnly && <section className={`finance-period${periodInfo?.status === 'CLOSED' ? ' is-closed' : Number(periodInfo?.unreconciledClosings) > 0 ? ' is-blocked' : ''}`} aria-labelledby="finance-period-title">
         <div>
           <h2 id="finance-period-title">Tình trạng kỳ {formatMonth(month)}</h2>
@@ -145,8 +163,12 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       <DataTable caption={`Kết quả của ${data.results.length} cơ sở trong tháng ${formatMonth(month)}`} columns={['Cơ sở', 'Bill hoàn tất', 'Doanh thu', 'Cọc tịch thu', 'Chi vận hành', 'Trong đó · lương/ứng', 'Đầu tư', 'Lợi nhuận', 'Biên lợi nhuận', 'Dòng tiền thuần']} numericColumns={[1, 2, 3, 4, 5, 6, 7, 8, 9]} rows={data.results} values={(r) => [r.name, r.billCount, money(r.revenue), money(r.forfeitedDeposits), money(r.expenses), money(r.salary), money(r.investment), money(r.profit), percent(r.margin), money(r.netCashFlow)]} />
     </>}
     {!reportsOnly && tab === 'report' && <p className="finance-shortcuts"><span>Nghiệp vụ liên quan</span><Link to="/ke-toan/hoan-coc">Yêu cầu hoàn cọc</Link><Link to="/ke-toan/hoa-don-thue">Hóa đơn thuế</Link></p>}
-    {tab === 'expenses' && data && <DataTable caption={`Chi phí đã thanh toán trong tháng ${formatMonth(month)}`} columns={['Loại', 'Danh mục', 'Cơ sở', 'Đã thanh toán', 'Số lần chi']} numericColumns={[3, 4]} rows={data.rows} values={(r) => [r.class === 'CAPEX' ? 'Đầu tư' : 'Vận hành', r.categoryName, r.branchName, money(r.amount), r.paymentCount]} />}
-    {!reportsOnly && tab === 'periods' && !loading && !error && <DataTable caption="Tình trạng chốt kỳ tài chính" columns={['Kỳ', 'Trạng thái', 'Phiếu chốt quỹ chưa đối soát', 'Người chốt', 'Thao tác']} numericColumns={[2]} rows={rows} values={(r) => [formatMonth(String(r.month).slice(0, 7)), r.status === 'CLOSED' ? 'Đã chốt' : 'Chưa chốt', r.unreconciledClosings, r.closedBy || '—', r.status === 'OPEN' ? <button type="button" disabled={busy || Number(r.unreconciledClosings) > 0} title={Number(r.unreconciledClosings) > 0 ? `Còn ${r.unreconciledClosings} phiếu chốt quỹ chưa đối soát` : undefined} onClick={() => { if (window.confirm(`Chốt kỳ tài chính ${formatMonth(String(r.month).slice(0, 7))}?`)) closePeriod(String(r.month).slice(0, 7)); }}>Chốt kỳ</button> : '—'] } />}
+    {tab === 'expenses' && dataTab === 'expenses' && data && <DataTable caption={`Chi phí đã thanh toán trong tháng ${formatMonth(month)}`} columns={['Loại', 'Danh mục', 'Cơ sở', 'Đã thanh toán', 'Số lần chi']} numericColumns={[3, 4]} rows={data.rows} values={(r) => [r.class === 'CAPEX' ? 'Đầu tư' : 'Vận hành', r.categoryName, r.branchName, money(r.amount), r.paymentCount]} />}
+    {!reportsOnly && tab === 'periods' && !loading && !error && <DataTable caption="Tình trạng chốt kỳ tài chính" columns={['Kỳ', 'Trạng thái', 'Phiếu chốt quỹ chưa đối soát', 'Người chốt', 'Thao tác']} numericColumns={[2]} rows={rows} values={(r) => [formatMonth(String(r.month).slice(0, 7)), r.status === 'CLOSED' ? 'Đã chốt' : 'Chưa chốt', r.unreconciledClosings, r.closedBy || '—', r.status === 'OPEN' ? <button type="button" disabled={busy} onClick={() => {
+      if (Number(r.unreconciledClosings) > 0) { setBlockedPeriod(r); return; }
+      if (window.confirm(`Chốt kỳ tài chính ${formatMonth(String(r.month).slice(0, 7))}?`)) closePeriod(String(r.month).slice(0, 7));
+    }}>Chốt kỳ</button> : '—'] } />}
+    {!reportsOnly && blockedPeriod && <div className="finance-period-dialog-backdrop" role="presentation"><section className="finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="blocked-period-title"><h2 id="blocked-period-title">Chưa thể chốt kỳ {formatMonth(String(blockedPeriod.month).slice(0, 7))}</h2><p>Kỳ này còn {blockedPeriod.unreconciledClosings} phiếu chốt quỹ chưa đối soát. Hãy hoàn tất đối soát các phiếu trước, sau đó quay lại chốt kỳ.</p><div className="finance-period-dialog-actions"><button type="button" autoFocus onClick={() => setBlockedPeriod(null)}>Đóng</button><Link className="finance-period-dialog-primary" to="/ke-toan/chot-quy">Đi tới đối soát quỹ</Link></div></section></div>}
     {!reportsOnly && tab === 'transactions' && !loading && !error && <>
       <DataTable caption={`Giao dịch tháng ${formatMonth(month)}`} columns={['Ngày ghi sổ', 'Loại', 'Lý do', 'Số tiền', 'Điều chỉnh đã ghi', 'Thao tác']} numericColumns={[3]} rows={rows} values={(r) => [r.bookingDate, r.kind, r.reason, money(r.amount), r.adjustmentCount ? <details><summary>{r.adjustmentCount} lần</summary><ul>{parseAdjustments(r.adjustments).map((item, i) => <li key={`${r.id}-${i}`}>{money(item.amount)} · {item.reason} · {item.createdBy || 'Hệ thống'} · {item.createdAt}</li>)}</ul></details> : '—', r.kind !== 'TRANSFER' && r.kind !== 'OPENING' && r.kind !== 'ADJUSTMENT' ? <button type="button" onClick={() => { setAdjusting(r.id); setAmount(''); setReason(''); setAdjustmentConfirmed(false); }}>Điều chỉnh</button> : '—']} />
       {adjusting && <form className="finance-adjust-form" onSubmit={submitAdjustment}><h2>Điều chỉnh giao dịch</h2><p>Giao dịch gốc: {adjusting}. Số tiền dương ghi tăng quỹ; số âm ghi giảm quỹ.</p><label>Số tiền điều chỉnh (VND)<input type="number" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} required /></label><label>Lý do<textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required /></label><p>Điều chỉnh mới: {amount ? money(Number(amount)) : '—'} · {reason || 'Chưa có lý do'}</p><label className="finance-confirm"><input type="checkbox" checked={adjustmentConfirmed} onChange={(e) => setAdjustmentConfirmed(e.target.checked)} /> Tôi đã kiểm tra điều chỉnh sẽ được ghi riêng, không sửa giao dịch gốc.</label><button type="submit" disabled={busy || !adjustmentConfirmed}>Xác nhận ghi điều chỉnh</button><button type="button" disabled={busy} onClick={() => setAdjusting('')}>Hủy</button></form>}
@@ -154,7 +176,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     {!reportsOnly && tab === 'export' && <section className="finance-export"><h2>Xuất dữ liệu kế toán</h2><p>Tệp CSV gồm các dòng sổ tiền trong kỳ đã chọn. Việc xuất không thay đổi giao dịch.</p><label>Phạm vi dữ liệu<select value={scope} onChange={(e) => setScope(e.target.value)}><option value="ALL">Tất cả dòng tiền</option><option value="INFLOW">Tiền vào</option><option value="OUTFLOW">Tiền ra</option></select></label><button type="button" disabled={busy} onClick={download}>{busy ? 'Đang tạo tệp…' : 'Tải CSV'}</button></section>}
   </section>;
   return reportsOnly ? content : <AppShell user={user} branchName="toàn chuỗi" busy={logoutBusy} onLogout={logout}
-    breadcrumb="Tài chính & báo cáo" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>{content}</AppShell>;
+    breadcrumb="Báo cáo chi tiết" activeTab="report" audience="accountant" hideSearch showCurrentMonth={false}>{content}</AppShell>;
 }
 
 function DataTable({ caption, columns = [], numericColumns = [], rows = [], values }) {

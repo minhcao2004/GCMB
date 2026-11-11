@@ -177,6 +177,7 @@
 }
 
 .manager-navigation button,.manager-navigation a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -193,6 +194,25 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+.manager-navigation .accounting-nav-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 10px;
+  padding: 0 6px;
+  color: #fff;
+  background: #b4235d;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .manager-navigation button:hover,.manager-navigation a:hover {

@@ -6,7 +6,7 @@
  * Description: Dashboard, điều hướng, đồng hồ và hồ sơ quản lý cơ sở.
  */
 
-import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import BranchOverviewDashboard from './BranchOverviewDashboard';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -124,7 +124,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
         {switching ? <p role="status">Đang chuyển cơ sở…</p>
-          : active === 'Tổng quan' ? <PerformanceDashboard user={user} onNavigate={selectScreen} />
+          : active === 'Tổng quan' ? <BranchOverviewDashboard user={user} onNavigate={selectScreen} />
           : active === 'Chốt quỹ' ? <CashClosingPage user={user} readOnly={readOnly} />
           : active === 'Tài khoản' ? <AccountsPage actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} />
             : active === 'Nhân sự' ? <StaffPage user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} />

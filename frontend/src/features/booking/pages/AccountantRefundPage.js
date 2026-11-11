@@ -46,7 +46,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
   const [confirmed, setConfirmed] = useState(false);
   const [image, setImage] = useState(null);
   const [imageError, setImageError] = useState('');
-  const [proofError, setProofError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const imageInput = useRef(null);
 
@@ -62,7 +61,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
 
   function selectImage(file) {
     setImageError('');
-    setProofError('');
     if (!file) { setImage(null); return; }
     const mimeType = (file.type || '').split(';', 2)[0].trim().toLowerCase();
     const extension = file.name?.split('.').pop()?.toLowerCase() || '';
@@ -83,11 +81,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
 
   return <form className="accounting-refund-action" onSubmit={(event) => {
     event.preventDefault();
-    setProofError('');
-    if (!externalReference.trim() && !image) {
-      setProofError('Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.');
-      return;
-    }
     onSubmit(externalReference.trim(), image);
   }}>
     <div className="deposit-accounting-note">
@@ -95,11 +88,11 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
       <p>GCMB sẽ lưu bút toán hoàn đúng số tiền yêu cầu vào sổ cọc và khóa yêu cầu này khỏi xử lý lại.</p>
     </div>
     <label className="deposit-form-field">
-      <span>Mã giao dịch chuyển khoản <small>(không bắt buộc nếu đã tải minh chứng)</small></span>
-      <input maxLength={200} value={externalReference} onChange={(event) => { setExternalReference(event.target.value); setProofError(''); }} autoComplete="off" />
+      <span>Mã giao dịch chuyển khoản <small>(không bắt buộc)</small></span>
+      <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} autoComplete="off" />
     </label>
     <div className="deposit-form-field accounting-refund-evidence-field">
-      <span>Tệp minh chứng chuyển khoản <small>(không bắt buộc nếu đã nhập mã giao dịch)</small></span>
+      <span>Tệp minh chứng chuyển khoản <small>(không bắt buộc)</small></span>
       <label className="accounting-refund-upload">
         <input ref={imageInput} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf"
           onChange={(event) => selectImage(event.target.files?.[0] || null)}
@@ -123,7 +116,7 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
       <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required />
       <span>Tôi xác nhận đã hoàn {formatVnd(item.amount)} đến đúng tài khoản người nhận ở trên.</span>
     </label>
-    {(proofError || error) && <p className="booking-inline-error" role="alert">{proofError || error}</p>}
+    {error && <p className="booking-inline-error" role="alert">{error}</p>}
     <button className="booking-button booking-button-primary" type="submit" disabled={busy || !confirmed}>
       {busy ? 'Đang ghi nhận…' : 'Ghi nhận đã hoàn cọc'}
     </button>
@@ -291,9 +284,9 @@ export default function AccountantRefundPage() {
     try {
       const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
       setFilter('all');
-      setNotice(image
-        ? `Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} và lưu tệp minh chứng.`
-        : `Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} theo mã giao dịch.`);
+      const proofNotice = image ? ' và lưu tệp minh chứng.'
+        : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode}${proofNotice}`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error)); }
     finally { setBusy(false); }

@@ -126,13 +126,11 @@ public class DepositManagementService {
                                                                String externalReference, MultipartFile image) {
         requireAccountant(identity);
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
-        // BR-157: kế toán được xác nhận hoàn bằng mã giao dịch hoặc tệp minh chứng.
+        // Tạm thời cho phép kế toán ghi nhận hoàn cọc khi chưa đính kèm tệp minh chứng.
         String normalizedReference = externalReference == null ? "" : externalReference.trim();
         String reference = normalizedReference.isEmpty() ? null
             : required(normalizedReference, "externalReference", "Mã giao dịch hoàn", 200);
         boolean hasImage = image != null && !image.isEmpty();
-        if (reference == null && !hasImage)
-            throw new BookingFailure(400, "form", "Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.");
         RefundRequestRow initial = deposits.refundRequestForAccounting(requestId, false);
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();

@@ -89,6 +89,41 @@ public class FinancialController {
         return Map.of("month", month, "rows", rows);
     }
 
+    @GetMapping("/dashboard-details")
+    @Transactional(readOnly = true)
+    public Map<String, Object> dashboardDetails(@AuthenticationPrincipal Identity actor,
+                                                @RequestParam String month,
+                                                @RequestParam(required = false) UUID branchId) {
+        requireAccountant(actor);
+        LocalDate start = month(month);
+        List<Map<String, Object>> methods = db.queryForList("""
+            WITH bills AS (
+              SELECT b.id,b.net_amount,
+                CASE WHEN COUNT(DISTINCT p.method)>1 THEN 'Kết hợp'
+                     WHEN BOOL_OR(p.method='BANK_TRANSFER') THEN 'SePay' ELSE 'Tiền mặt' END AS method
+              FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
+              JOIN gcmb.payment p ON p.bill_id=b.id AND p.purpose='BILL'
+              WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date>=?
+                AND (b.completed_at AT TIME ZONE br.timezone)::date<?
+                AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
+              GROUP BY b.id,b.net_amount
+            ) SELECT method AS label,SUM(net_amount) AS value FROM bills GROUP BY method ORDER BY method
+            """, start, start.plusMonths(1), branchId, branchId);
+        List<Map<String, Object>> exceptions = db.queryForList("""
+            SELECT bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
+              bt.match_status AS status,bt.transfer_content AS reason,
+              COALESCE(b.name,'Tài khoản chung') AS "branchName"
+            FROM gcmb.bank_transaction bt JOIN gcmb.financial_account a ON a.id=bt.account_id
+            LEFT JOIN gcmb.payment p ON p.bank_transaction_id=bt.id
+            LEFT JOIN gcmb.branch b ON b.id=COALESCE(p.branch_id,a.branch_id)
+            WHERE bt.provider='SEPAY' AND bt.match_status='EXCEPTION' AND bt.occurred_at>=? AND bt.occurred_at<?
+              AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
+            ORDER BY bt.occurred_at DESC LIMIT 100
+            """, start.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
+                start.plusMonths(1).atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), branchId, branchId);
+        return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
+    }
+
     @GetMapping("/financial-periods")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> periods(@AuthenticationPrincipal Identity actor) {

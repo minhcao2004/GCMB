@@ -8,7 +8,7 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
-import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import ExecutiveDashboard from '../../dashboard/ExecutiveDashboard';
 import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useState } from 'react';
@@ -75,7 +75,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     <div className="manager-workspace">
       <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
       {activeTab === 'Tổng quan' ? (
-        <PerformanceDashboard user={user} isChain />
+        <ExecutiveDashboard user={user} />
       ) : activeTab === 'Báo cáo kinh doanh' ? (
         <AccountantFinancePage reportsOnly />
       ) : activeTab === 'Cơ sở' ? (

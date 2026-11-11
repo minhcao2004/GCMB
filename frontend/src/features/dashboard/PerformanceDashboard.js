@@ -76,6 +76,7 @@ function ChainDetails({ totals }) {
 }
 
 function BranchFinance({ totals }) {
+  const [selectedCost, setSelectedCost] = useState(null);
   const otherOperatingCost = Math.max(0, amount(totals.expenses) - amount(totals.salary));
   const items = [
     ['Chi phí khác', otherOperatingCost],
@@ -86,9 +87,10 @@ function BranchFinance({ totals }) {
   return <article className="performance-panel performance-breakdown">
     <div className="performance-panel-heading"><div><h2>Cơ cấu khoản chi</h2><p>Đã thanh toán trong kỳ báo cáo</p></div></div>
     <dl>{items.map(([label, value]) => <div className="performance-breakdown-row" key={label}>
-      <dt>{label}<span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, value / max * 100)}%` }} /></span></dt>
+      <dt><button type="button" className="performance-chart-choice" onClick={() => setSelectedCost([label, value])}>{label}</button><span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, value / max * 100)}%` }} /></span></dt>
       <dd>{money(value)}</dd>
     </div>)}</dl>
+    <p className="performance-chart-detail" aria-live="polite">{selectedCost ? `${selectedCost[0]}: ${money(selectedCost[1])} trong tháng hiện tại.` : 'Bấm vào một khoản chi để xem số liệu hiện tại.'}</p>
   </article>;
 }
 
@@ -110,11 +112,13 @@ function BranchOperations({ operations, onNavigate }) {
 }
 
 export default function PerformanceDashboard({ user, isChain, onNavigate }) {
-  const [month, setMonth] = useState(currentMonth);
+  const month = currentMonth();
   const [branchId, setBranchId] = useState('');
+  const [selectedChartBranch, setSelectedChartBranch] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -125,7 +129,14 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
       .catch((e) => { if (live) setError(e.response?.data?.detail || e.response?.data?.message || 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.'); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [month, branchId, isChain, user.branchId]);
+  }, [month, branchId, isChain, user.branchId, revision]);
+
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1);
+    const timer = window.setInterval(refresh, 90_000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
 
   const rows = isChain ? data?.results || [] : data?.result ? [data.result] : [];
   const branch = !isChain ? data?.result : branchId ? rows[0] : null;
@@ -135,8 +146,8 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
     <header className="performance-heading"><div><h1 id="performance-title">{isChain ? 'Hiệu quả kinh doanh chuỗi' : 'Tổng quan cơ sở'}</h1>
       <p>{isChain ? 'Kết quả tài chính và mức đóng góp theo từng cơ sở.' : `${user.branchName || 'Cơ sở được phân quyền'} · Kết quả kinh doanh và tình hình vận hành.`}</p></div>
       <div className="performance-filters">
-        <label><span>Tháng báo cáo</span><input type="month" value={month} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} /></label>
-        {isChain && <label><span>Phạm vi cơ sở</span><select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+        <span className="performance-current-period">Số liệu tháng hiện tại · tự cập nhật mỗi 90 giây</span>
+        {isChain && <label><span>Phạm vi cơ sở</span><select value={branchId} onChange={(event) => { setBranchId(event.target.value); setSelectedChartBranch(null); }}>
           <option value="">Tất cả cơ sở</option>{(data?.branches || []).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
         </select></label>}
       </div>
@@ -150,7 +161,13 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
       <FinanceStrip totals={totals} isChain={isChain} branchSelected={Boolean(branchId)} />
       {isChain ? <div className="performance-grid performance-grid-chain">
         <article className="performance-panel performance-branches"><div className="performance-panel-heading"><div><h2>Kết quả theo cơ sở</h2><p>{branchId ? 'Kết quả của cơ sở đang chọn' : 'Chọn cơ sở đang hoạt động để xem riêng'}</p></div><span>{rows.length} cơ sở</span></div>
-          {rows.length ? <Results rows={rows} onSelect={branchId ? null : setBranchId} /> : <p className="performance-empty">Chưa có cơ sở trong phạm vi báo cáo đã chọn.</p>}
+          <div className="performance-chart" aria-label="Biểu đồ doanh thu theo cơ sở">
+            {rows.map((row) => <button type="button" key={`chart-${row.id}`} className={`performance-chart-row${branchId === row.id ? ' is-selected' : ''}`} onClick={() => { setSelectedChartBranch(row); if (!branchId) setBranchId(row.id); }} aria-pressed={Boolean(branchId && (selectedChartBranch?.id === row.id || branchId === row.id))}>
+              <span>{row.name}</span><span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / Math.max(1, ...rows.map((item) => amount(item.revenue))) * 100)}%` }} /></span><strong>{money(row.revenue)}</strong>
+            </button>)}
+          </div>
+          {selectedChartBranch && <p className="performance-chart-detail" aria-live="polite">{selectedChartBranch.name}: lợi nhuận {money(selectedChartBranch.profit)}, chi đã trả {money(selectedChartBranch.expenses)}.</p>}
+          {rows.length ? <Results rows={rows} onSelect={branchId ? null : (id) => { setSelectedChartBranch(null); setBranchId(id); }} /> : <p className="performance-empty">Chưa có cơ sở trong phạm vi báo cáo đã chọn.</p>}
         </article>
         <ChainDetails totals={totals} />
       </div> : <div className="performance-grid performance-grid-branch">

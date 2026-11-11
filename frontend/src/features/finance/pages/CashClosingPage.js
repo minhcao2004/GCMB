@@ -61,6 +61,12 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
       active = false;
     };
   }, [base, branch, tab, date, from, to, status, revision]);
+  useEffect(() => {
+    if (!detail) return undefined;
+    const dismiss = (event) => event.key === 'Escape' && setDetail(null);
+    window.addEventListener('keydown', dismiss);
+    return () => window.removeEventListener('keydown', dismiss);
+  }, [detail]);
   const open = async (id) => {
     setBusy(true);
     setError('');
@@ -334,7 +340,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         </div>
       ) : (
         tab !== 'create' && (
-          <div className={detail ? 'finance-columns' : ''}>
+          <div>
             <article className="finance-card finance-table-wrap">
               <table>
                 <thead>
@@ -370,12 +376,18 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
               {!shown.length && <p>{emptyMessage}</p>}
             </article>
             {detail && (
-              <article className="finance-card">
+              <div className="cash-closing-dialog-backdrop">
+                <article
+                  className="finance-card cash-closing-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="cash-closing-dialog-title"
+                >
                 <div className="finance-actions">
-                  <h2>
+                  <h2 id="cash-closing-dialog-title">
                     {detail.business_date} · {detail.branchName}
                   </h2>
-                  <button onClick={() => setDetail(null)}>Đóng</button>
+                  <button type="button" autoFocus onClick={() => setDetail(null)}>Đóng</button>
                 </div>
                 <p>
                   Người chốt: <strong>{detail.submittedBy}</strong>
@@ -451,7 +463,8 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
                     </button>
                   </form>
                 )}
-              </article>
+                </article>
+              </div>
             )}
           </div>
         )

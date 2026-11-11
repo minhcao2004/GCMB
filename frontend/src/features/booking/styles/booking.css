@@ -52,6 +52,7 @@
 .reception-dashboard .sidebar-is-collapsed .manager-sidebar-footer,
 .reception-dashboard .sidebar-is-collapsed .manager-navigation button span { display: none; }
 .reception-dashboard .sidebar-is-collapsed .manager-navigation button { justify-content: center; }
+.reception-dashboard .sidebar-is-collapsed .manager-navigation button .accounting-nav-badge { display: inline-flex; position: absolute; top: 2px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 9px; }
 .reception-dashboard .sidebar-is-collapsed .booking-sidebar-toggle { align-self: center; }
 @media (max-width: 850px) {
   .booking-app--accountant .sidebar-is-collapsed .manager-sidebar { width: 100%; }
@@ -296,6 +297,40 @@
 .booking-package-choice b { color: var(--booking-blue); font-size: 10px; }
 .booking-package-choice small { color: #267588; font-size: 10px; }
 .booking-checkin-gifts > p { margin: 0 0 10px; color: #69768a; font-size: 11px; }
+.booking-checkin-gift-group { display: grid; gap: 9px; margin-top: 13px; }
+.booking-checkin-gift-group > strong { color: #4c596b; font-size: 12px; }
+.booking-gift-slot { display: grid; gap: 6px; color: #536071; font-size: 11px; font-weight: 700; }
+.booking-gift-picker-trigger { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #d5dde3; border-radius: 9px; padding: 7px 11px; color: #25283d; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.booking-gift-picker-trigger:hover { border-color: #cf2c87; background: #fffafd; }
+.booking-gift-picker-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.booking-gift-picker-trigger small { flex: 0 0 auto; color: #788393; font-size: 10px; font-weight: 500; }
+.booking-gift-picker-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(27, 35, 49, .48); }
+.booking-gift-picker-dialog { display: flex; width: min(560px, 100%); max-height: min(720px, calc(100dvh - 36px)); flex-direction: column; overflow: hidden; border: 1px solid #e1e6ec; border-radius: 14px; background: #fff; box-shadow: 0 22px 68px rgba(20, 28, 44, .24); }
+.booking-gift-picker-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--booking-line); padding: 18px 20px 14px; }
+.booking-gift-picker-heading h2 { margin: 0; color: #282c40; font-size: 17px; }
+.booking-gift-picker-heading p { margin: 5px 0 0; color: #788393; font-size: 11px; }
+.booking-gift-picker-heading > button { width: 32px; height: 32px; border: 0; border-radius: 7px; color: #687485; background: #f4f6f8; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.booking-gift-picker-search { display: grid; gap: 6px; padding: 14px 20px 0; color: #586476; font-size: 11px; font-weight: 700; }
+.booking-gift-picker-search input,.booking-gift-picker-filters select { width: 100%; min-height: 40px; border: 1px solid #d9e0e7; border-radius: 8px; padding: 0 11px; color: #25283d; background: #fff; font: inherit; font-size: 12px; }
+.booking-gift-picker-filters { display: grid; gap: 12px; padding: 12px 20px 14px; }
+.booking-gift-picker-filters > label { display: grid; grid-template-columns: 90px minmax(0,1fr); align-items: center; gap: 10px; color: #586476; font-size: 11px; font-weight: 700; }
+.booking-gift-picker-stock-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.booking-gift-picker-stock-filter button { min-height: 31px; border: 1px solid #dbe1e8; border-radius: 999px; padding: 0 10px; color: #586476; background: #fff; font: inherit; font-size: 10px; cursor: pointer; }
+.booking-gift-picker-stock-filter button.is-active { border-color: #cf2c87; color: #a71d6a; background: #fff1f8; }
+.booking-gift-picker-list { display: grid; gap: 7px; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--booking-line); padding: 12px 20px; }
+.booking-gift-picker-item { display: flex; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e1e6ec; border-radius: 9px; padding: 8px 11px; color: #282c40; background: #fff; text-align: left; cursor: pointer; }
+.booking-gift-picker-item:hover:not(:disabled),.booking-gift-picker-item.is-selected { border-color: #cf2c87; background: #fff8fc; }
+.booking-gift-picker-item > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.booking-gift-picker-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.booking-gift-picker-item small { color: #788393; font-size: 10px; }
+.booking-gift-picker-stock { flex: 0 0 auto; color: #25744d; font-size: 10px; font-weight: 700; }
+.booking-gift-picker-stock.is-untracked { color: #59677a; }
+.booking-gift-picker-item:disabled { border-color: #e9ecef; color: #8c95a1; background: #f5f6f7; cursor: not-allowed; }
+.booking-gift-picker-item:disabled .booking-gift-picker-stock { color: #a04d59; }
+.booking-gift-picker-empty { margin: auto; padding: 24px 8px; color: #788393; font-size: 12px; text-align: center; }
+.booking-gift-picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--booking-line); padding: 11px 20px; color: #788393; font-size: 10px; }
+.booking-gift-picker-footer button { min-height: 34px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 12px; color: #536071; background: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.booking-gift-picker-dialog button:focus-visible,.booking-gift-picker-dialog input:focus-visible,.booking-gift-picker-dialog select:focus-visible,.booking-gift-picker-trigger:focus-visible { outline: 3px solid #ce2e87; outline-offset: 2px; }
 .booking-checkin-gift-group { display: grid; gap: 9px; margin-top: 12px; }
 .booking-checkin-gift-group > strong { color: #25283d; font-size: 12px; }
 .booking-checkin-gift-group label { display: grid; gap: 5px; color: #4f5d71; font-size: 11px; font-weight: 650; }
@@ -552,6 +587,12 @@
   .booking-checkin-overlay { top: 58px; left: 57px; }
   .booking-checkin-scroll { padding: 16px 16px 8px; }
   .booking-checkin-footer { padding-right: 16px; padding-left: 16px; }
+  .booking-gift-picker-backdrop { padding: 8px; }
+  .booking-gift-picker-dialog { max-height: calc(100dvh - 16px); }
+  .booking-gift-picker-heading,.booking-gift-picker-search { padding-right: 14px; padding-left: 14px; }
+  .booking-gift-picker-filters,.booking-gift-picker-list { padding-right: 14px; padding-left: 14px; }
+  .booking-gift-picker-footer { padding-right: 14px; padding-left: 14px; }
+  .booking-gift-picker-filters > label { grid-template-columns: 1fr; gap: 5px; }
   .booking-cancel-backdrop { padding: 8px; }
   .booking-cancel-dialog { max-height: calc(100svh - 16px); padding: 18px 15px; }
   .booking-stay-backdrop { padding: 8px; }

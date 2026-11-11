@@ -107,6 +107,10 @@
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
   gap: 24px;
 }
+.cash-closing-dialog-backdrop { position:fixed; z-index:10000; inset:0; display:grid; place-items:center; padding:20px; background:rgb(21 31 48 / 52%); }
+.cash-closing-dialog { width:min(680px,100%); max-height:min(88vh,800px); overflow:auto; margin:0; box-shadow:0 24px 80px rgb(18 30 50 / 26%); }
+.cash-closing-dialog .finance-actions { align-items:flex-start; margin-top:0; }
+.cash-closing-dialog .finance-actions h2 { min-width:0; overflow-wrap:anywhere; }
 .finance-card {
   padding: 24px;
   background: white;

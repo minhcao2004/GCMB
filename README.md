@@ -155,7 +155,7 @@ GCMB/
 | `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Chain and branch performance summaries; accountant financial reports, transaction adjustments, and financial-period operations. |
+| `dashboard` | Head-office chain dashboard with period filters, KPIs, interactive Recharts, branch ranking, pending approvals and operational alerts; branch performance summaries; receptionist room and booking status charts; accountant financial reports and financial-period operations. |
 | `finance` (frontend) | Accountant fund and expense workflows, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
 | `finance` (backend) | Chain-wide funds, expenses, approvals, reimbursements, cash reconciliation, financial transactions, and period closing. |
 
