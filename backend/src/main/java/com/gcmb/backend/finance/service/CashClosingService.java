@@ -92,13 +92,20 @@ public class CashClosingService {
     var current=source(branch,LocalDate.now(zone(branch)));
     result.put("currentBalance",current.get("expected"));
     result.put("cashCycle",cashCycle((UUID)result.get("accountId"),zone(branch),current));
+    result.put("pendingHandovers",db.queryForObject(
+      "SELECT count(*) FROM gcmb.shift_cash_handover WHERE branch_id=? AND status='DISCREPANCY'",Integer.class,branch));
     return result;
   }
 
   private Map<String,Object> source(UUID branch, LocalDate date) {
+    return sourceAt(branch,date,date.plusDays(1).atStartOfDay(zone(branch)).toInstant());
+  }
+
+  // HuyDV: bàn giao ca dùng cùng nguồn tiền với chốt ngày, chỉ thay mốc kết thúc.
+  Map<String,Object> sourceAt(UUID branch, LocalDate date, Instant cutoff) {
     UUID account = drawer(branch);
     ZoneId zone = zone(branch);
-    Timestamp end = Timestamp.from(date.plusDays(1).atStartOfDay(zone).toInstant());
+    Timestamp end = Timestamp.from(cutoff);
     // BR-95: cash receipts not yet posted to the ledger are included exactly once.
     // V44 receipt movements remain historical; no new report creates a handover.
     var all = db.queryForList("""

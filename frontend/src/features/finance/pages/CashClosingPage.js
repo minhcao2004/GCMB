@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
+import ShiftCashHandoverPanel from '../components/ShiftCashHandoverPanel';
 import MoneyInput from '../components/MoneyInput';
 import DrawerFundingPanel from '../components/DrawerFundingPanel';
 import '../styles/finance.css';
@@ -48,6 +49,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     setSaved(null);
     setPreview(null);
     setConfirm(false);
+    if (tab === 'handover') { setLoading(false); return () => { active = false; }; }
     const load = async () => {
       try {
         if (tab === 'create' || tab === 'remit') {
@@ -163,7 +165,13 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
       {!accounting && <button aria-current={tab === 'create' ? 'page' : undefined} onClick={() => setTab('create')}>Báo cáo cuối ngày</button>}
       <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => setTab('history')}>Lịch sử báo cáo</button>
       {!accounting && <button aria-current={tab === 'remit' ? 'page' : undefined} onClick={() => setTab('remit')}>Nộp tiền khỏi két</button>}
+      {!accounting && <button aria-current={tab === 'handover' ? 'page' : undefined} onClick={() => setTab('handover')}>Bàn giao ca</button>}
     </nav>
+    {tab === 'handover' ? <ShiftCashHandoverPanel user={user} manager readOnly={readOnly} /> : <>
+    {!accounting && preview?.pendingHandovers > 0 && <p className="finance-warning" role="status">
+      Có {preview.pendingHandovers} bàn giao ca chênh lệch cần xử lý.{' '}
+      <button type="button" onClick={() => setTab('handover')}>Xem bàn giao ca</button>
+    </p>}
     {error && <p className="finance-error" role="alert">{error}</p>}
     {notice && <p className="finance-success" role="status">{notice}</p>}
     <div className="finance-toolbar">
@@ -260,6 +268,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         </form>}
       </article>}
     </div>}
+    </>}
   </section>;
 }
 
