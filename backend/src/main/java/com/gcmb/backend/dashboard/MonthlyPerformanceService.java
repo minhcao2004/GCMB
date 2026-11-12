@@ -85,7 +85,7 @@ public class MonthlyPerformanceService {
           WHEN t.adjusts_transaction_id IS NOT NULL THEN 'Điều chỉnh' END,t.kind) item_category,
         a.code account_code,e.amount_signed,pay.method payment_method,
         COALESCE(payment_request.reference_code,refund.external_reference,ep.external_reference,
-          salary_payment.external_reference,salary_advance.external_reference,fund_transfer.transfer_reference) source_reference,
+          salary_payment.external_reference,salary_advance.external_reference,fund_transfer.external_reference) source_reference,
         (SELECT string_agg(fa.kind || ': ' || fa.original_name,'; ' ORDER BY fa.created_at,fa.id)
           FROM gcmb.finance_attachment fa
           WHERE fa.owner_type='FINANCIAL_TRANSACTION' AND fa.owner_id=t.id) documents

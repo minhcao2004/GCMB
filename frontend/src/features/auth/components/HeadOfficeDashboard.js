@@ -12,6 +12,7 @@ import ExecutiveDashboard from '../../dashboard/ExecutiveDashboard';
 import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import AppShell from '../../../shared/components/AppShell';
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
@@ -59,24 +60,26 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     const search = params.toString();
     navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
-  return <div className="head-office-dashboard">
-    <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">QUẢN LÝ CẤP CAO</p>
-      <nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-current={activeTab === tab ? 'page' : undefined}>
+  return <AppShell
+    audience="head-office-manager"
+    sidebarLabel="Quản lý cấp cao"
+    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    roleLabel="QUẢN LÝ CẤP CAO"
+    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
+        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
-        </NavLink> : <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
+          <span>{tab}</span>
+        </NavLink> : <button key={tab} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
+          <span>{tab}</span>
         </button>)}
-      </nav>
-      <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
-    </aside>
-    <div className="manager-workspace">
-      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
-      {activeTab === 'Tổng quan' ? (
+      </nav>}
+    footer={<div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>}
+    renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
+      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} onToggleSidebar={onToggleSidebar} sidebarExpanded={sidebarExpanded} />
+    )}
+  >
+    {activeTab === 'Tổng quan' ? (
         <ExecutiveDashboard user={user} />
       ) : activeTab === 'Báo cáo kinh doanh' ? (
         <AccountantFinancePage reportsOnly />
@@ -106,6 +109,5 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       ) : activeTab === 'Phê duyệt chi' ? (
         <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
-    </div>
-  </div>;
+  </AppShell>;
 }

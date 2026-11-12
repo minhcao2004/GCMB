@@ -124,26 +124,13 @@
   --manager-accent-soft: #fdecf5;
   --manager-focus: #087f93;
   --manager-canvas: #f5f7fa;
-  padding: 4px;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
   background: var(--manager-canvas);
   font-family: 'Be Vietnam Pro', Arial, sans-serif;
   color: #202338;
-}
-
-.head-office-dashboard {
-  display: flex;
-  min-height: calc(100svh - 8px);
-  border-left: 3px solid var(--manager-accent);
-}
-
-.manager-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border-radius: 0 6px 6px 0;
-  padding: 12px 8px;
 }
 
 .manager-brand {
@@ -155,7 +142,7 @@
   object-fit: contain;
 }
 
-.manager-sidebar .manager-role {
+.gcmb-ui-app-shell__sidebar .gcmb-ui-app-shell__role {
   margin: 10px 4px 12px;
   padding: 7px 10px;
   border-radius: 6px;
@@ -166,7 +153,7 @@
   letter-spacing: .4px;
 }
 
-.manager-sidebar .manager-navigation {
+.gcmb-ui-app-shell__sidebar .manager-navigation {
   position: static;
   display: flex;
   flex-direction: column;
@@ -253,30 +240,14 @@
   font-size: 10px;
 }
 
-.manager-workspace {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding-left: 6px;
-}
-
-.booking-app .head-office-dashboard--sidebar-collapsed .manager-sidebar {
-  display: none;
-}
-
-.booking-app .head-office-dashboard--sidebar-collapsed .manager-workspace {
-  margin-top: 0;
-  padding-left: 0;
-}
-
 .manager-topbar {
+  box-sizing: border-box;
   min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 20px;
+  padding: 6px 20px;
   background: #fff;
   border-radius: 6px;
   color: #637089;
@@ -378,10 +349,10 @@
 
 .manager-content {
   flex: 1;
-  background: #fff;
-  margin-top: 6px;
-  border-radius: 6px;
-  padding: 24px;
+  background: transparent;
+  margin: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
 .manager-content h1 {
@@ -399,37 +370,11 @@
 }
 
 @media (max-width: 720px) {
-  .head-office-dashboard {
-    flex-direction: column;
-  }
-  .manager-sidebar {
-    width: 100%;
-    border-radius: 0 10px 10px 0;
-  }
   .manager-brand {
     padding: 8px;
   }
-  .manager-sidebar .manager-navigation {
-    flex-direction: row;
-    overflow-x: auto;
-  }
-  .manager-navigation button {
-    width: auto;
-    flex-shrink: 0;
-  }
-  .manager-sidebar-footer {
-    display: none;
-  }
-  .manager-workspace {
-    padding-left: 0;
-    margin-top: 6px;
-  }
   .manager-topbar {
-    padding: 16px;
+    padding: 8px 16px;
     flex-wrap: wrap;
-  }
-  .manager-content {
-    min-height: 50svh;
-    padding: 24px;
   }
 }

@@ -32,6 +32,11 @@ const errorText = (error) => {
   const errors = apiErrors(error);
   return errors.form || Object.values(errors)[0] || 'Không thể xử lý yêu cầu.';
 };
+const roundToNearestThousand = (amount) => {
+  const value = window.BigInt(amount);
+  const remainder = value % 1000n;
+  return Number(value - remainder + (remainder >= 500n ? 1000n : 0n));
+};
 export default function CheckoutPage() {
   const { bookingId, billId } = useParams();
   const navigate = useNavigate();
@@ -146,6 +151,7 @@ export default function CheckoutPage() {
     }
     run(async () => {
       let result;
+      const payableAmount = roundToNearestThousand(Math.max(0, amount - depositAmount));
       try {
         result = await api.issue(bookingId, {
           inspected,
@@ -155,6 +161,7 @@ export default function CheckoutPage() {
           unservedConfirmed,
           quotedAt: data.checkoutAt,
           quoteToken: data.quoteToken,
+          payableAmount,
           surcharges: fees.map((fee) => ({
             reason: fee.reason,
             amount: Number(fee.amount),
@@ -231,7 +238,11 @@ export default function CheckoutPage() {
   const extra = fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
   const amount = Number(data?.amount || 0) + (bookingId ? extra : 0);
   const depositAmount = Number(data?.depositApplied ?? data?.depositBalance ?? 0);
-  const paymentDue = Number(data?.remaining ?? Math.max(0, amount - depositAmount));
+  const rawPreviewDue = Math.max(0, amount - depositAmount);
+  const paymentDue = Number(data?.remaining ?? roundToNearestThousand(rawPreviewDue));
+  const roundingAdjustment = bookingId
+    ? paymentDue - rawPreviewDue
+    : Number(data?.roundingAdjustment || 0);
   const cashDue =
     method === 'BANK_TRANSFER'
       ? 0
@@ -508,6 +519,14 @@ export default function CheckoutPage() {
                 paymentDue={paymentDue}
                 preview
               />
+              {roundingAdjustment !== 0 && (
+                <dl className="co-totals">
+                  <Info
+                    label="Điều chỉnh làm tròn thanh toán"
+                    value={`${roundingAdjustment > 0 ? '+' : '−'}${formatVnd(Math.abs(roundingAdjustment))}`}
+                  />
+                </dl>
+              )}
               <p className="co-note">
                 Giữ đơn giá đã xác nhận. Lập bill chốt sử dụng đến thời điểm báo giá hiển thị, có
                 hiệu lực 5 phút. Bấm Cập nhật tiền phòng nếu khách vẫn tiếp tục sử dụng.
@@ -772,7 +791,17 @@ export default function CheckoutPage() {
                   </>
                 )}
               </section>
-              <CheckoutReceipt data={data} className="co-card co-summary co-print" />
+              <div className="co-card co-summary co-print">
+                <CheckoutReceipt data={data} className="co-receipt-body" />
+                {roundingAdjustment !== 0 && (
+                  <dl className="co-totals">
+                    <Info
+                      label="Điều chỉnh làm tròn thanh toán"
+                      value={`${roundingAdjustment > 0 ? '+' : '−'}${formatVnd(Math.abs(roundingAdjustment))}`}
+                    />
+                  </dl>
+                )}
+              </div>
             </div>
           </>
         )}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 import '../../auth/styles/dashboard.css';
@@ -154,22 +155,7 @@ export function AppShell({
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountingPending, setAccountingPending] = useState({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return window.localStorage.getItem(`gcmb:${audience}:sidebar-collapsed`) === 'true';
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(`gcmb:${audience}:sidebar-collapsed`, String(sidebarCollapsed));
-    } catch {
-      // Tùy chọn vẫn dùng được trong phiên hiện tại nếu trình duyệt chặn lưu trữ.
-    }
-  }, [audience, sidebarCollapsed]);
   const isAccountant = audience === 'accountant';
-  const toggleSidebar = () => setSidebarCollapsed((collapsed) => !collapsed);
 
   useEffect(() => {
     if (!isAccountant) return undefined;
@@ -227,12 +213,13 @@ export function AppShell({
 
     return (
       <>
-        <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
-          <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
-            <aside className="manager-sidebar" id="app-sidebar" aria-label="Kế toán thu chi">
-              <div className="manager-brand"><BrandWordmark /></div>
-              <p className="manager-role">KẾ TOÁN THU CHI</p>
-              <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+        <SharedAppShell
+          audience={audience}
+          className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}
+          sidebarLabel="Kế toán thu chi"
+          brand={<div className="manager-brand"><BrandWordmark /></div>}
+          roleLabel="KẾ TOÁN THU CHI"
+          navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
                 {navItems.map(([label, icon, unavailable]) => {
                   const pendingCount = icon === 'payments' ? accountingPending.payments
                     : icon === 'plus' ? accountingPending.expenses
@@ -263,14 +250,12 @@ export function AppShell({
                     <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
                   </button>
                 );})}
-              </nav>
-              <div className="manager-sidebar-footer">
+              </nav>}
+          footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>
                 <p>Phạm vi: {branchName || 'cơ sở được phân công'}</p>
-              </div>
-            </aside>
-
-            <div className="manager-workspace">
+              </div>}
+          renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
               <DashboardTopbar
                 role={roleLabel}
                 page={breadcrumb}
@@ -278,15 +263,16 @@ export function AppShell({
                 busy={busy}
                 onLogout={onLogout}
                 onProfile={() => setProfileOpen(true)}
-                onToggleSidebar={toggleSidebar}
-                sidebarExpanded={!sidebarCollapsed}
+                onToggleSidebar={onToggleSidebar}
+                sidebarExpanded={sidebarExpanded}
               >
                 {showCurrentMonth && <span className="booking-topbar-datetime">{currentMonth}</span>}
               </DashboardTopbar>
-              <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
-            </div>
-          </div>
-        </div>
+          )}
+          mainClassName="booking-main"
+        >
+          {user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}
+        </SharedAppShell>
 
         {profileOpen && (
           <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
@@ -318,12 +304,13 @@ export function AppShell({
 
   return (
     <>
-      <div className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}>
-        <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
-          <aside className="manager-sidebar" id="app-sidebar" aria-label="Lễ tân">
-            <div className="manager-brand"><BrandWordmark /></div>
-            <p className="manager-role">LỄ TÂN</p>
-            <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
+      <SharedAppShell
+        audience={audience}
+        className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}
+        sidebarLabel="Lễ tân"
+        brand={<div className="manager-brand"><BrandWordmark /></div>}
+        roleLabel="LỄ TÂN"
+        navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
               {navigation.map(([label, icon]) => (
                 <button
                   type="button"
@@ -337,14 +324,12 @@ export function AppShell({
                   <Icon name={icon} /><span>{label}</span>
                 </button>
               ))}
-            </nav>
-            <div className="manager-sidebar-footer">
+            </nav>}
+        footer={<div className="manager-sidebar-footer">
               <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
               <p>Đang làm việc · Lễ tân</p>
-            </div>
-          </aside>
-
-          <div className="manager-workspace">
+            </div>}
+        renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
             <DashboardTopbar
               role="LỄ TÂN"
               page={breadcrumb}
@@ -352,8 +337,8 @@ export function AppShell({
               busy={busy}
               onLogout={onLogout}
               onProfile={() => setProfileOpen(true)}
-              onToggleSidebar={toggleSidebar}
-              sidebarExpanded={!sidebarCollapsed}
+              onToggleSidebar={onToggleSidebar}
+              sidebarExpanded={sidebarExpanded}
             >
               {!hideSearch && (
                 <label className="booking-global-search">
@@ -373,10 +358,11 @@ export function AppShell({
                 </label>
               )}
             </DashboardTopbar>
-            <main className={`booking-main${activeTab === 'rooms' ? ' booking-main--rooms' : ''}${activeTab === 'shifts' ? ' booking-main--shifts' : ''}`} id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
-          </div>
-        </div>
-      </div>
+        )}
+        mainClassName={`booking-main${activeTab === 'rooms' ? ' booking-main--rooms' : ''}${activeTab === 'shifts' ? ' booking-main--shifts' : ''}`}
+      >
+        {user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}
+      </SharedAppShell>
 
       {profileOpen && (
         <div className="dashboard-page dashboard-page-manager profile-dashboard-context">

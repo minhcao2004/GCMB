@@ -63,20 +63,6 @@
 .accounting-refund-page :focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 
 @media (max-width: 850px) {
-  .booking-app--accountant .head-office-dashboard { flex-direction: column; }
-  .booking-app--accountant .manager-sidebar {
-    box-sizing: border-box;
-    width: 100%;
-    border-radius: 0 10px 10px 0;
-  }
-  .booking-app--accountant .manager-brand { padding: 8px; }
-  .booking-app--accountant .manager-sidebar .manager-navigation {
-    flex-direction: row;
-    overflow-x: auto;
-  }
-  .booking-app--accountant .manager-navigation button { width: auto; flex-shrink: 0; }
-  .booking-app--accountant .manager-sidebar-footer { display: none; }
-  .booking-app--accountant .manager-workspace { min-height: 0; padding-left: 0; margin-top: 6px; }
   .accounting-refund-summary { gap: 10px; }
   .accounting-refund-metric { min-height: 92px; padding: 14px 16px; }
   .accounting-refund-search { flex-basis: 250px; }
@@ -87,9 +73,9 @@
   .accounting-refund-details { min-height: 0; }
 }
 
-@media (max-width: 999px) {
+@media (max-width: 1199px) {
   .accounting-refund-content-grid { grid-template-columns: 1fr; }
-  .accounting-refund-table { min-width: 640px; }
+  .accounting-refund-table { min-width: 0; }
   .accounting-refund-details { min-height: 430px; }
 }
 
@@ -100,4 +86,133 @@
   .accounting-refund-filters { width: 100%; }
   .accounting-refund-filters button { flex: 1; justify-content: center; padding-inline: 6px; }
   .accounting-refund-search { width: 100%; max-width: none; flex-basis: auto; }
+}
+
+.accounting-refund-page { min-width: 0; }
+.accounting-refund-scope { margin: 6px 0 0; color: #536071; font-size: 13px; font-weight: 650; }
+.accounting-refund-load-error { align-items: center; justify-content: space-between; gap: 12px; }
+.accounting-refund-load-error button { min-height: 40px; flex: 0 0 auto; padding: 0 10px; }
+.accounting-refund-summary { display: flex; flex-direction: column; gap: 8px; }
+.accounting-refund-summary-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.accounting-refund-summary-heading h2 { margin: 0; color: var(--booking-ink); font-size: 16px; font-weight: 750; }
+.accounting-refund-summary-heading p { margin: 0; color: #536071; font-size: 12px; text-align: right; }
+.accounting-refund-summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.accounting-refund-metric { border: 1px solid #e5e8ed; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); }
+.accounting-refund-metric span { color: #536071; font-size: 13px; }
+.accounting-refund-metric strong { font-size: 24px; }
+.accounting-refund-controls { flex-wrap: wrap; }
+.accounting-refund-filters button { min-height: 42px; font-size: 12px; }
+.accounting-refund-search input { font-size: 14px; }
+.accounting-refund-content-grid { width: 100%; min-width: 0; grid-template-columns: minmax(0, 1.45fr) minmax(360px, .95fr); }
+.accounting-refund-page .deposit-table-card { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #e5e8ed; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); }
+.accounting-refund-page .deposit-table-scroll { min-width: 0; }
+.accounting-refund-table { min-width: 640px; }
+.accounting-refund-table th { height: 46px; font-size: 11px; }
+.accounting-refund-table td { height: 76px; font-size: 12px; }
+.accounting-refund-table td strong { font-size: 12px; }
+.accounting-refund-table td small { color: #536071; font-size: 11px; line-height: 1.45; }
+.accounting-refund-table td small b { color: #354050; font-weight: 650; }
+.accounting-refund-mobile-list { display: none; }
+.accounting-refund-page .deposit-status { min-height: 34px; font-size: 11px; }
+.accounting-refund-page .accounting-refund-details { width: auto; height: auto; min-width: 0; max-height: none; border: 1px solid #e5e8ed; border-radius: 14px; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); animation: none; }
+.accounting-refund-page .deposit-details-scroll { padding: 17px 18px; }
+.accounting-refund-page .deposit-details-heading { align-items: flex-start; }
+.accounting-refund-page .deposit-details-heading h2 { font-size: 19px; }
+.accounting-refund-page .deposit-details-heading strong { font-size: 13px; line-height: 1.45; }
+.accounting-refund-page .deposit-details-amount { margin: 14px 0 8px; padding: 13px 15px; }
+.accounting-refund-page .deposit-details-amount span { color: #536071; font-size: 13px; }
+.accounting-refund-page .deposit-details-amount strong { color: var(--booking-pink); font-size: 25px; line-height: 1.25; overflow-wrap: anywhere; }
+.accounting-refund-page .deposit-details-amount small { font-size: 11px; }
+.accounting-refund-page .deposit-detail-list { padding-block: 5px 11px; }
+.accounting-refund-page .deposit-detail-list > div { min-height: 44px; grid-template-columns: minmax(110px, .8fr) minmax(0, 1.2fr); gap: 12px; }
+.accounting-refund-page .deposit-detail-list dt { color: #536071; font-size: 12px; }
+.accounting-refund-page .deposit-detail-list dd { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.accounting-refund-reason p { color: #536071; font-size: 13px; }
+.accounting-refund-page .deposit-accounting-note { padding: 13px 14px; }
+.accounting-refund-page .deposit-accounting-note strong { font-size: 13px; }
+.accounting-refund-page .deposit-accounting-note p { color: #536071; font-size: 12px; line-height: 1.5; }
+.accounting-refund-action { padding-top: 15px; }
+.accounting-refund-action .deposit-form-field { font-size: 13px; }
+.accounting-refund-action .deposit-form-field small { font-size: 12px; }
+.accounting-refund-action .deposit-form-field input { min-height: 44px; font-size: 14px; }
+.accounting-refund-final-check { margin: 13px 0 11px; padding: 12px 14px; border: 1px solid #dfe6eb; border-radius: 10px; background: #f8fafc; }
+.accounting-refund-final-check p { display: grid; grid-template-columns: minmax(120px, .75fr) minmax(0, 1.25fr); gap: 12px; margin: 0; padding: 7px 0; }
+.accounting-refund-final-check p + p { border-top: 1px solid #e5e8ed; }
+.accounting-refund-final-check span { color: #536071; font-size: 12px; }
+.accounting-refund-final-check strong { color: var(--booking-ink); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.accounting-refund-final-check p:first-child strong { color: var(--booking-pink); font-size: 18px; font-variant-numeric: tabular-nums; }
+.accounting-refund-confirm { min-height: 48px; grid-template-columns: 20px minmax(0,1fr); gap: 11px; margin-block: 10px 14px; color: #354050; font-size: 13px; line-height: 1.55; }
+.accounting-refund-confirm input { width: 19px; height: 19px; margin-top: 2px; }
+.accounting-refund-action > .booking-button { min-height: 48px; font-size: 14px; }
+.accounting-refund-evidence h3 { color: #354050; font-size: 14px; }
+.accounting-refund-evidence-message { color: #536071; font-size: 12px; }
+.accounting-refund-upload { min-height: 76px; }
+.accounting-refund-upload-copy strong { font-size: 12px; }
+.accounting-refund-upload-copy small { color: #536071; font-size: 11px; line-height: 1.45; }
+.accounting-refund-upload-action { min-height: 34px; display: inline-flex; align-items: center; font-size: 11px; }
+.accounting-refund-image-preview button { min-height: 36px; font-size: 11px; }
+.accounting-refund-refresh { min-height: 40px; font-size: 12px; }
+.accounting-refund-back { display: none; }
+
+@media (max-width: 1199px) {
+  .accounting-refund-summary-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .accounting-refund-summary-heading p { text-align: left; }
+  .accounting-refund-summary-metrics { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .accounting-refund-controls { align-items: stretch; flex-direction: column; }
+  .accounting-refund-filters { width: 100%; }
+  .accounting-refund-filters button { flex: 1; justify-content: center; }
+  .accounting-refund-search { max-width: none; flex-basis: auto; }
+  .accounting-refund-content-grid { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .accounting-refund-content-grid[data-mobile-view="detail"] > .deposit-table-card { display: none; }
+  .accounting-refund-content-grid[data-mobile-view="queue"] > .accounting-refund-details { display: none; }
+  .accounting-refund-page .deposit-table-card { min-height: 0; }
+  .accounting-refund-desktop-list { display: none; }
+  .accounting-refund-mobile-list { width: 100%; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 9px; padding: 10px; }
+  .accounting-refund-mobile-card { width: 100%; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "heading heading" "customer amount" "branch branch" "requested requested"; align-items: start; gap: 10px 12px; border: 1px solid #e5e8ed; border-radius: 11px; padding: 13px; color: var(--booking-ink); background: #fff; font: inherit; text-align: left; cursor: pointer; }
+  .accounting-refund-mobile-card:hover { border-color: #c8d5dd; background: #fbfdfe; }
+  .accounting-refund-mobile-card.is-selected { border-color: var(--booking-cyan); background: #f1fbfd; box-shadow: 0 0 0 1px var(--booking-cyan); }
+  .accounting-refund-mobile-card:focus-visible { outline: 3px solid var(--booking-cyan); outline-offset: 2px; }
+  .accounting-refund-mobile-card-heading { min-width: 0; grid-area: heading; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .accounting-refund-mobile-card-heading > strong { min-width: 0; flex: 1 1 auto; padding-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
+  .accounting-refund-mobile-card-heading .deposit-status { flex: 0 0 auto; }
+  .accounting-refund-mobile-customer { min-width: 0; grid-area: customer; display: flex; flex-direction: column; gap: 3px; }
+  .accounting-refund-mobile-customer strong { font-size: 13px; overflow-wrap: anywhere; }
+  .accounting-refund-mobile-customer small { color: #536071; font-size: 12px; }
+  .accounting-refund-mobile-amount { grid-area: amount; display: flex; flex-direction: column; gap: 2px; text-align: right; }
+  .accounting-refund-mobile-amount small,.accounting-refund-mobile-meta small { color: #536071; font-size: 11px; }
+  .accounting-refund-mobile-amount strong { color: var(--booking-ink); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .accounting-refund-mobile-meta { min-width: 0; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; color: #354050; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+  .accounting-refund-mobile-branch { grid-area: branch; }
+  .accounting-refund-mobile-requested { grid-area: requested; }
+  .accounting-refund-mobile-state { margin: 0; padding: 28px 14px; color: #536071; font-size: 13px; text-align: center; }
+  .accounting-refund-mobile-state--error { color: #a52b43; }
+  .accounting-refund-page .deposit-details-scroll { overflow: visible; padding: 15px; }
+  .accounting-refund-page .accounting-refund-details { min-height: 0; }
+  .accounting-refund-page .deposit-details-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .accounting-refund-back { min-height: 44px; grid-column: 1 / -1; display: inline-flex; align-items: center; justify-self: start; gap: 7px; border: 1px solid #e5e8ed; border-radius: 9px; padding: 0 11px; color: #354050; background: #fff; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+  .accounting-refund-back svg { width: 18px; height: 18px; }
+  .accounting-refund-back:hover { background: #f8fafc; }
+  .accounting-refund-page .deposit-details-heading > div { min-width: 0; }
+  .accounting-refund-page .deposit-details-heading .deposit-status { align-self: start; }
+  .accounting-refund-page .deposit-details-empty { min-height: 160px; }
+  .deposit-table-footer { min-height: 54px; font-size: 12px; }
+}
+
+@media (max-width: 620px) {
+  .accounting-refund-page .deposit-page-heading h1 { font-size: 25px; }
+  .accounting-refund-scope { font-size: 13px; }
+  .accounting-refund-summary-metrics { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .accounting-refund-metric { min-height: 72px; padding: 11px 14px; }
+  .accounting-refund-metric strong { font-size: 22px; }
+  .accounting-refund-filters button { min-height: 44px; font-size: 12px; }
+  .accounting-refund-search { min-height: 46px; }
+  .accounting-refund-search input { font-size: 14px; }
+  .accounting-refund-final-check { padding: 10px 12px; }
+  .accounting-refund-final-check p { grid-template-columns: minmax(105px, .7fr) minmax(0, 1.3fr); gap: 8px; }
+  .accounting-refund-final-check span { font-size: 11px; }
+  .accounting-refund-final-check strong { font-size: 13px; }
+  .accounting-refund-final-check p:first-child strong { font-size: 17px; }
+  .accounting-refund-confirm { font-size: 13px; }
+  .accounting-refund-upload { flex-wrap: wrap; }
+  .accounting-refund-upload-action { margin-left: 33px; }
 }

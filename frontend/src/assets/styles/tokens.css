@@ -1,0 +1,54 @@
+:root {
+  --gcmb-color-primary: #ed188d;
+  --gcmb-color-primary-hover: #d90c7e;
+  --gcmb-color-primary-soft: #fdecf5;
+  --gcmb-color-on-primary: #000000;
+  --gcmb-color-on-primary-hover: #ffffff;
+
+  --gcmb-color-ink: #1a1a2e;
+  --gcmb-color-text: #536071;
+  --gcmb-color-muted: #8792a0;
+  --gcmb-color-bg: #f5f7fa;
+  --gcmb-color-panel: #ffffff;
+  --gcmb-color-line: #e5e8ed;
+
+  --gcmb-color-info: #087f93;
+  --gcmb-color-info-soft: #e8f8fb;
+  --gcmb-color-success: #168b5b;
+  --gcmb-color-success-soft: #e8f6ef;
+  --gcmb-color-warning: #d18a17;
+  --gcmb-color-warning-soft: #fff5e5;
+  --gcmb-color-danger: #b12642;
+  --gcmb-color-danger-soft: #fbecef;
+
+  --gcmb-font-family: "Be Vietnam Pro", sans-serif;
+  --gcmb-line-height: 1.5;
+  --gcmb-font-size-xs: 11px;
+  --gcmb-font-size-sm: 12px;
+  --gcmb-font-size-base: 13px;
+  --gcmb-font-size-md: 14px;
+  --gcmb-font-size-lg: 16px;
+  --gcmb-font-size-xl: 20px;
+  --gcmb-font-size-2xl: 24px;
+
+  --gcmb-space-1: 4px;
+  --gcmb-space-2: 8px;
+  --gcmb-space-3: 12px;
+  --gcmb-space-4: 16px;
+  --gcmb-space-6: 24px;
+  --gcmb-space-8: 32px;
+
+  --gcmb-radius-control: 8px;
+  --gcmb-radius-panel: 12px;
+  --gcmb-radius-auth: 20px;
+
+  --gcmb-shadow-sm: 0 1px 2px rgb(26 26 46 / 6%);
+  --gcmb-shadow-md: 0 6px 18px rgb(26 26 46 / 10%);
+  --gcmb-shadow-lg: 0 16px 60px rgb(22 2 27 / 22%);
+
+  /* Reference values only: CSS custom properties cannot be used in @media queries. */
+  --gcmb-breakpoint-sm: 600px;
+  --gcmb-breakpoint-md: 720px;
+  --gcmb-breakpoint-lg: 1000px;
+  --gcmb-breakpoint-xl: 1280px;
+}

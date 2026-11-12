@@ -142,12 +142,19 @@ public class CheckoutService {
             overtime.stream().map(Overtime::amount).reduce(BigDecimal.ZERO, BigDecimal::add)
         );
         result.put("lines", lines);
-        result.put("amount", total(lines));
-        result.put("quoteToken", quoteToken(actor, bookingId, checkoutAt, total(lines)));
+        BigDecimal amount = total(lines);
+        BigDecimal depositBalance = repository.depositBalance(bookingId);
+        BigDecimal rawPayable = amount.subtract(depositBalance);
+        BigDecimal roundingBase = rawPayable.max(BigDecimal.ZERO);
+        BigDecimal payableAmount = roundToNearestThousand(roundingBase);
+        result.put("amount", amount);
+        result.put("roundingAdjustment", payableAmount.subtract(roundingBase));
+        result.put("payableAmount", payableAmount);
+        result.put("quoteToken", quoteToken(actor, bookingId, checkoutAt, amount));
         var unserved = pendingOrders(bookingId);
         result.put("pendingOrders", unserved);
         result.put("unservedItemCount", unservedCount(unserved));
-        result.put("depositBalance", repository.depositBalance(bookingId));
+        result.put("depositBalance", depositBalance);
         result.put("hasPendingRefund", hasPendingRefund(bookingId));
         result.put("sepayReady", sepay.ready());
         return result;
@@ -270,14 +277,22 @@ public class CheckoutService {
                 "Số dư cọc không hợp lệ hoặc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán."
             );
         }
+        // Chỉ điều chỉnh khoản phải thu sau khi trừ cọc; net_amount và bill_line giữ nguyên giá trị hóa đơn.
+        BigDecimal rawPayable = amount.subtract(heldDeposit);
+        BigDecimal payableAmount = roundToNearestThousand(rawPayable);
+        BigDecimal roundingAdjustment = payableAmount.subtract(rawPayable);
+        money(payableAmount);
+        if (input.payableAmount() == null || input.payableAmount().compareTo(payableAmount) != 0) {
+            throw fail(409, "Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
+        }
         UUID id = UUID.randomUUID();
         String number =
             "HD" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
         db.update(
             """
-            INSERT INTO gcmb.bill(id,booking_id,branch_id,number,status,gross_amount,discount_amount,net_amount,
+            INSERT INTO gcmb.bill(id,booking_id,branch_id,number,status,gross_amount,discount_amount,net_amount,checkout_rounding_adjustment,
                 issued_at,checkout_at,inspection_note,issued_by)
-            VALUES (?,?,?,?,'ISSUED',?,0,?,CURRENT_TIMESTAMP,?,?,?)
+            VALUES (?,?,?,?,'ISSUED',?,0,?,?,CURRENT_TIMESTAMP,?,?,?)
             """,
             id,
             bookingId,
@@ -285,6 +300,7 @@ public class CheckoutService {
             number,
             amount,
             amount,
+            roundingAdjustment,
             Timestamp.from(at),
             input.inspectionNote() == null ? "" : input.inspectionNote().trim(),
             actor.id()
@@ -328,6 +344,10 @@ public class CheckoutService {
                 id,
                 "amount",
                 amount,
+                "roundingAdjustment",
+                roundingAdjustment,
+                "payableAmount",
+                payableAmount,
                 "depositAmount",
                 heldDeposit,
                 "unservedConfirmed",
@@ -343,6 +363,7 @@ public class CheckoutService {
         var rows = db.queryForList(
             """
             SELECT b.id,b.booking_id AS "bookingId",b.number,b.status,b.net_amount AS amount,
+                b.checkout_rounding_adjustment AS "roundingAdjustment",
                 b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
                 b.planned_cash AS "plannedCash",b.planned_cash_tendered AS "plannedCashTendered",
                 COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
@@ -373,6 +394,7 @@ public class CheckoutService {
         result.put(
             "remaining",
             decimal(result, "amount")
+                .add(decimal(result, "roundingAdjustment"))
                 .subtract(decimal(result, "depositApplied"))
                 .subtract(decimal(result, "paid"))
         );
@@ -381,7 +403,7 @@ public class CheckoutService {
             decimal(result, "paid")
                 .add(decimal(result, "plannedCash"))
                 .add(decimal(result, "depositApplied"))
-                .compareTo(decimal(result, "amount")) == 0
+                .compareTo(decimal(result, "amount").add(decimal(result, "roundingAdjustment"))) == 0
         );
         result.put("sepayReady", sepay.ready());
         var requests = db.queryForList(
@@ -519,7 +541,7 @@ public class CheckoutService {
             received
                 .add(cash)
                 .add(decimal(bill, "depositApplied"))
-                .compareTo(decimal(bill, "amount")) != 0
+                .compareTo(decimal(bill, "amount").add(decimal(bill, "roundingAdjustment"))) != 0
         ) throw fail(409, "Bill chưa được thanh toán đủ; chờ SePay xác nhận hoặc nhập tiền mặt.");
         UUID bookingId = (UUID) bill.get("bookingId");
         var allocation = repository.currentAllocationForUpdate(bookingId);
@@ -594,6 +616,8 @@ public class CheckoutService {
                 id,
                 "amount",
                 received,
+                "roundingAdjustment",
+                decimal(bill, "roundingAdjustment"),
                 "depositAmount",
                 decimal(bill, "depositApplied")
             )
@@ -1010,6 +1034,14 @@ public class CheckoutService {
             .stream()
             .map(line -> (BigDecimal) line.get("amount"))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static BigDecimal roundToNearestThousand(BigDecimal amount) {
+        BigDecimal thousand = BigDecimal.valueOf(1000);
+        BigDecimal remainder = amount.remainder(thousand);
+        return amount.subtract(remainder).add(
+            remainder.compareTo(BigDecimal.valueOf(500)) >= 0 ? thousand : BigDecimal.ZERO
+        );
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String key) {

@@ -7,6 +7,7 @@
  */
 
 import BranchOverviewDashboard from './BranchOverviewDashboard';
+import AppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -101,18 +102,20 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     contentRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [active]);
 
-  return <div className={`head-office-dashboard branch-manager-dashboard${active === 'Thực đơn F&B' ? ' has-menu-items' : ''}${active === 'Kho hàng' ? ' has-inventory' : ''}`}>
-    <aside className="manager-sidebar">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">QUẢN LÝ CƠ SỞ</p>
-      <nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
-        {branchNav.map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
+  return <AppShell
+    audience="branch-manager"
+    className={`branch-manager-dashboard${active === 'Thực đơn F&B' ? ' has-menu-items' : ''}${active === 'Kho hàng' ? ' has-inventory' : ''}`}
+    sidebarLabel="Quản lý cơ sở"
+    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    roleLabel="QUẢN LÝ CƠ SỞ"
+    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
+        {branchNav.map((label, i) => <button key={label} aria-label={label} title={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg><span>{label}</span>
         </button>)}
-      </nav>
-    </aside>
-    <div className="manager-workspace">
+      </nav>}
+    renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
       <DashboardTopbar role="QUẢN LÝ CƠ SỞ" page={active} user={user} busy={busy || switching} onProfile={onProfile} onLogout={onLogout}
+        onToggleSidebar={onToggleSidebar} sidebarExpanded={sidebarExpanded}
         accountHeader={<label className="manager-branch-selector">Cơ sở đang quản lý
           <select aria-label="Cơ sở đang quản lý" title={user.branchName || 'Cơ sở được phân quyền'}
             value={user.branchId || ''} onChange={selectBranch} disabled={busy || switching || loadingBranches}>
@@ -120,7 +123,11 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
             {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
         </label>} />
-      <section ref={contentRef} className="manager-content branch-manager-content" key={`${active}-${user.branchId}`}>
+    )}
+    mainClassName="manager-content branch-manager-content"
+    mainRef={contentRef}
+    mainKey={`${active}-${user.branchId}`}
+  >
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
         {switching ? <p role="status">Đang chuyển cơ sở…</p>
@@ -135,7 +142,5 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
                       : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage user={{ ...user, readOnly }} />
                         : active === 'Chi phí & đề nghị' ? <FinancePage user={{ ...user, readOnly }} />
                         : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
-      </section>
-    </div>
-  </div>;
+  </AppShell>;
 }

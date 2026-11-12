@@ -128,6 +128,7 @@ GCMB/
 │   │   │   └── pricing/
 │   │   ├── shared/
 │   │   │   ├── components/
+│   │   │   ├── styles/
 │   │   │   └── utils/
 │   │   ├── layouts/
 │   │   ├── routes/
@@ -150,6 +151,7 @@ GCMB/
 | `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
+| `shared` (frontend) | Shared admin `AppShell` for the head-office manager, branch manager, receptionist, and accountant with per-audience collapsed-sidebar persistence; presentational UI primitives for buttons, form controls, overlays, data tables, feedback, and page composition, styled with centralized design tokens and without business logic. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
 | `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |

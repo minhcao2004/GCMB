@@ -16,8 +16,9 @@
   align-items: center;
   justify-content: center;
   padding: 48px 20px 76px;
-  color: #39333f;
-  font-family: Arial, sans-serif;
+  color: var(--gcmb-color-ink);
+  font-family: var(--gcmb-font-family);
+  line-height: var(--gcmb-line-height);
   background: #340c36 url('../../../assets/images/login.png') center center / cover no-repeat;
 }
 
@@ -36,9 +37,9 @@
 .auth-card {
   width: 350px;
   max-width: 100%;
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 16px 60px #16021b38;
+  border-radius: var(--gcmb-radius-auth);
+  background: var(--gcmb-color-panel);
+  box-shadow: var(--gcmb-shadow-lg);
   overflow: hidden;
 }
 
@@ -60,7 +61,7 @@
   font-size: 18px;
   font-weight: 600;
   line-height: 1.4;
-  color: #504659;
+  color: var(--gcmb-color-ink);
   letter-spacing: 0;
 }
 
@@ -69,7 +70,7 @@
 }
 
 .auth-field {
-  margin: 0 0 15px;
+  margin: 0 0 var(--gcmb-space-4);
 }
 
 .auth-field:last-child {
@@ -78,11 +79,11 @@
 
 .auth-field label {
   display: block;
-  font-size: 12px;
+  font-size: var(--gcmb-font-size-sm);
   font-weight: 500;
   line-height: 1.4;
   margin-bottom: 6px;
-  color: #6b6174;
+  color: var(--gcmb-color-text);
 }
 
 .auth-input-wrap {
@@ -94,13 +95,15 @@
   width: 100%;
   min-height: 42px;
   padding: 10px 12px;
-  border: 1px solid #bcb1c6;
-  border-radius: 9px;
-  background: #fff;
-  color: #342a3d;
+  border: 1px solid #96899f;
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-panel);
+  color: var(--gcmb-color-ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--gcmb-font-size-base);
   outline: none;
+  caret-color: #9341a0;
+  transition: border-color .16s ease, box-shadow .16s ease;
 }
 
 .auth-field input[type='password'], .auth-input-wrap:has(.auth-eye) input {
@@ -108,13 +111,13 @@
 }
 
 .auth-field input::placeholder {
-  color: #9a91a1;
+  color: #766c7e;
   opacity: 1;
 }
 
 .auth-field input:focus {
   border-color: #a94ab4;
-  box-shadow: 0 0 0 3px #bd62c31c;
+  box-shadow: 0 0 0 3px rgb(169 74 180 / 18%);
 }
 
 .auth-field input[aria-invalid='true'] {
@@ -132,7 +135,7 @@
   padding: 8px;
   background: transparent;
   border: 0;
-  color: #94879f;
+  color: #766c7e;
   cursor: pointer;
 }
 
@@ -146,8 +149,8 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
-  margin-top: 17px;
+  font-size: var(--gcmb-font-size-sm);
+  margin-top: var(--gcmb-space-4);
 }
 
 .auth-options label {
@@ -167,6 +170,7 @@
 .auth-page a {
   color: #9341a0;
   text-decoration: none;
+  text-underline-offset: 2px;
 }
 
 .auth-page a:hover {
@@ -189,7 +193,7 @@
   background: #67cbd9;
   color: #173e47;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--gcmb-font-size-md);
   font-weight: 700;
   cursor: pointer;
   min-height: 47px;
@@ -216,38 +220,38 @@
 
 .auth-hint, .auth-intro {
   color: #766c7e;
-  font-size: 12px;
+  font-size: var(--gcmb-font-size-sm);
   line-height: 1.6;
   margin: 7px 0 0;
   overflow-wrap: anywhere;
 }
 
 .auth-intro {
-  margin: 0 0 17px;
+  margin: 0 0 var(--gcmb-space-4);
 }
 
 .auth-error {
-  margin: 7px 0 0;
-  font-size: 12px;
+  margin: var(--gcmb-space-2) 0 0;
+  font-size: var(--gcmb-font-size-sm);
   line-height: 1.5;
-  color: #b12642;
+  color: var(--gcmb-color-danger);
 }
 
 .auth-form-error {
-  background: #fff0f3;
-  border-radius: 7px;
-  padding: 10px;
-  margin-top: 15px;
+  background: var(--gcmb-color-danger-soft);
+  border-radius: var(--gcmb-radius-control);
+  padding: var(--gcmb-space-3);
+  margin-top: var(--gcmb-space-3);
 }
 
 .auth-success {
-  background: #eaf8f2;
+  background: var(--gcmb-color-success-soft);
   color: #24624c;
-  font-size: 12px;
-  padding: 10px;
-  border-radius: 7px;
+  font-size: var(--gcmb-font-size-sm);
+  padding: var(--gcmb-space-3);
+  border-radius: var(--gcmb-radius-control);
   line-height: 1.5;
-  margin: 0 0 15px;
+  margin: 0 0 var(--gcmb-space-4);
 }
 
 .auth-resend {
@@ -256,18 +260,19 @@
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--gcmb-font-size-sm);
 }
 
 .auth-resend button, .auth-retry {
   font: inherit;
-  font-size: 12px;
+  font-size: var(--gcmb-font-size-sm);
   background: transparent;
   border: 0;
   padding: 3px 0;
   color: #9341a0;
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .auth-footer {
@@ -278,7 +283,7 @@
   padding: 0;
   background: transparent;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--gcmb-font-size-sm);
   font-weight: 400;
   line-height: 1.5;
   color: #f8edf8;
