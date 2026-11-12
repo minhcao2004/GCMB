@@ -287,9 +287,8 @@ public class FinanceService {
         return AccountantFund.balance(db);
     }
     private String attach(String type, UUID owner, String kind, MultipartFile file, UUID actor) {
-        // Finance evidence is stored on the backend's configured local attachment volume.
-        // The shared file reader still supports legacy gdrive: keys for existing records.
-        StoredFile stored=files.store(file);
+        // HuyDV / BR-115/116: dịch vụ chung lưu Cloudinary khi bật; giữ phân quyền và metadata chứng từ.
+        StoredFile stored=files.store(file, "thu-chi");
         try {
             db.update("INSERT INTO gcmb.finance_attachment(id,owner_type,owner_id,kind,object_key,original_name,mime_type,byte_size,sha256,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 stored.id(),type,owner,kind,stored.objectKey(),stored.originalName(),stored.mimeType(),stored.byteSize(),stored.sha256(),actor);

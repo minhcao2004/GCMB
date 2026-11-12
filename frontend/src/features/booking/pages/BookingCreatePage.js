@@ -236,13 +236,13 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
 
   return <div className="booking-create-page">
     <div className="booking-page-heading">
-      <div><h1>Tạo booking</h1><p>Đặt phòng qua điện thoại, Facebook hoặc Zalo</p></div>
+      <div><h1>Tạo booking</h1></div>
       <button type="button" className="booking-button booking-button-secondary" onClick={onBack}>← Quay lại</button>
     </div>
     {(optionsError || formError) && <div className="booking-inline-error" role="alert">{formError || optionsError}</div>}
     {optionsLoading ? <div className="booking-empty-state">Đang tải hạng phòng và gói dịch vụ…</div> : <form className="booking-create-layout" onSubmit={submit}>
       <section className="booking-create-card">
-        <header className="booking-card-heading"><h2>Thông tin khách &amp; lịch đặt</h2><p>Các trường có dấu * là bắt buộc</p></header>
+        <header className="booking-card-heading"><h2>Thông tin khách &amp; lịch đặt</h2></header>
 
         <div className="booking-form-grid booking-customer-grid">
           <Field label="Họ tên khách *" className={showContactNameError ? 'is-invalid' : ''}>

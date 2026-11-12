@@ -202,11 +202,7 @@ export default function BranchManagementPage({ onAccounts }) {
       <header className="ba-heading">
         <div>
           <h1>{selected ? selected.branchName : 'Cơ sở'}</h1>
-          <p>
-            {selected
-              ? `${selected.code} · Thông tin cơ sở và quản lý phụ trách`
-              : 'Quản lý thông tin và hoạt động của các cơ sở trong chuỗi'}
-          </p>
+          {selected && <p>{selected.code}</p>}
         </div>
         {selected ? (
           <Status value={selected.status} />

@@ -147,11 +147,6 @@ export default function AccountProfileDialog({ onClose }) {
       <div className="account-drawer-heading">
         <div>
           <h2 id="profile-title">Thông tin tài khoản</h2>
-          <p>
-            {editing
-              ? 'Cập nhật thông tin cá nhân của bạn'
-              : 'Thông tin cá nhân và phạm vi truy cập'}
-          </p>
         </div>
         <button onClick={onClose} disabled={busy} aria-label="Đóng">
           ×
@@ -277,15 +272,9 @@ export default function AccountProfileDialog({ onClose }) {
                     </p>
                   </div>
                 )}
-                <p className="account-access-note">
-                  Tên đăng nhập, vai trò, cơ sở và trạng thái do hệ thống quản lý.
-                </p>
                 {profile.linkedEmployee && (
                   <section className="profile-payroll-section" aria-labelledby="profile-payroll-title">
                     <h3 id="profile-payroll-title">Tài khoản nhận lương</h3>
-                    <p className="account-access-note">
-                      Kế toán sử dụng thông tin này để trả lương. Vui lòng kiểm tra đúng ngân hàng và số tài khoản.
-                    </p>
                     {[
                       ['bankName', 'Ngân hàng', 200],
                       ['bankAccount', 'Số tài khoản', 60],

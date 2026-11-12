@@ -140,7 +140,7 @@ public class EquipmentAssetService {
     public View uploadImage(Identity actor, UUID branchId, UUID id, MultipartFile image) {
         UUID authorizedBranch = scope(actor, branchId);
         if (repository.get(authorizedBranch, id) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
-        EquipmentAssetFileStorageService.StoredFile stored = fileStorage.store(image);
+        EquipmentAssetFileStorageService.StoredFile stored = fileStorage.store(image, "thiet-bi");
         try {
             repository.insertImage(stored, actor.id());
             if (!repository.setImage(authorizedBranch, id, stored.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");

@@ -298,7 +298,7 @@ export default function AccountantRefundPage() {
     breadcrumb="Hoàn tiền cọc" activeTab="deposit" audience="accountant" hideSearch>
     <div className="deposit-page accounting-refund-page">
       <header className="deposit-page-heading">
-        <div><h1>Hoàn tiền cọc</h1><p>Đối chiếu người nhận và ghi nhận giao dịch hoàn cọc cho khách.</p></div>
+        <div><h1>Hoàn tiền cọc</h1></div>
       </header>
       {notice && <p className="booking-live-notice" role="status"><span aria-hidden="true">✓</span>{notice}</p>}
       {loadError && <p className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setRetryQueue((value) => value + 1)}>Tải lại</button></p>}

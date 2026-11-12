@@ -7,6 +7,8 @@
  */
 package com.gcmb.backend.inventory.service;
 
+import com.gcmb.backend.booking.service.CloudinaryStorageService;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,6 +21,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,14 +31,26 @@ import org.springframework.web.server.ResponseStatusException;
 public class EquipmentAssetFileStorageService {
     private static final long MAX_BYTES = 20_000_000L;
     private final Path storageRoot;
+    private final CloudinaryStorageService cloudinary;
 
     // BR-116: Tất cả chứng từ tài sản dùng cùng thư mục quản lý file đã cấu hình cho ứng dụng.
     public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory) {
-        storageRoot = Path.of(directory).toAbsolutePath().normalize();
+        this(directory, null);
     }
 
-    // BR-115/BR-116: File tải mới luôn được lưu local để API phân quyền phục vụ cho các vai trò.
+    @Autowired
+    public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory,
+                                           CloudinaryStorageService cloudinary) {
+        storageRoot = Path.of(directory).toAbsolutePath().normalize();
+        this.cloudinary = cloudinary;
+    }
+
+    // HuyDV / BR-115/116: file mới dùng Cloudinary khi bật; API vẫn kiểm tra quyền trước khi đọc.
     public StoredFile store(MultipartFile file) {
+        return store(file, "khac");
+    }
+
+    public StoredFile store(MultipartFile file, String area) {
         if (file == null || file.isEmpty() || file.getSize() > MAX_BYTES)
             throw invalid("Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB."); // BR-116 / MSG79
         String declaredType = file.getContentType();
@@ -56,6 +71,10 @@ public class EquipmentAssetFileStorageService {
         UUID id = UUID.randomUUID();
         String sourceName = sourceName(file);
         String objectKey = id + "." + type.extension;
+        if (cloudinary != null && cloudinary.enabled()) {
+            objectKey = cloudinary.store(type.mime, bytes, area);
+            return new StoredFile(id, objectKey, sourceName, type.mime, bytes.length, sha256(bytes), bytes);
+        }
         try {
             Files.createDirectories(storageRoot);
             Files.write(resolve(objectKey), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
@@ -71,6 +90,7 @@ public class EquipmentAssetFileStorageService {
 
     // BR-115: Chỉ đọc file theo khóa lưu nội bộ, không nhận đường dẫn tùy ý từ request.
     public byte[] read(String objectKey) throws IOException {
+        if (cloudinary != null && cloudinary.owns(objectKey)) return cloudinary.read(objectKey);
         if (objectKey != null && objectKey.startsWith("gdrive:"))
             throw new IOException("Chứng từ cũ chưa có bản lưu local. Vui lòng tải lại chứng từ lên hệ thống.");
         return Files.readAllBytes(resolve(objectKey));
@@ -79,7 +99,10 @@ public class EquipmentAssetFileStorageService {
     // BR-118: Dọn file mới tải lên nếu giao dịch ghi metadata hoặc liên kết tài sản thất bại.
     public void deleteQuietly(String objectKey) {
         if (objectKey != null && objectKey.startsWith("gdrive:")) return;
-        try { Files.deleteIfExists(resolve(objectKey)); } catch (IOException ignored) { /* cleanup best effort */ }
+        try {
+            if (cloudinary != null && cloudinary.owns(objectKey)) cloudinary.delete(objectKey);
+            else Files.deleteIfExists(resolve(objectKey));
+        } catch (IOException | RuntimeException ignored) { /* cleanup best effort */ }
     }
 
     // BR-115: Chặn object key thoát khỏi thư mục file đã cấu hình.

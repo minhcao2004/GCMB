@@ -433,7 +433,6 @@ export default function MenuItemsPage({ user }) {
     <header className="menu-heading">
       <div>
         <h1>Thực đơn F&amp;B</h1>
-        <p>Cơ sở {user.branchName || 'được phân quyền'} · Thực đơn F&amp;B</p>
       </div>
       <button ref={createButtonRef} type="button" className="menu-create-button" data-menu-focus-key="create-menu"
         onClick={openCreate} disabled={loading || Boolean(error)}>+ Thêm món / dịch vụ</button>

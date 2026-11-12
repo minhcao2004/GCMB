@@ -86,7 +86,6 @@ export default function AccountsPage({
       <div className="accounts-heading">
         <div>
           <h1 id="accounts-title">Tài khoản</h1>
-          <p>Quản lý vai trò và phạm vi truy cập của nhân viên</p>
         </div>
         <button
           className="account-primary"
@@ -370,7 +369,6 @@ function CreateAccountDrawer({ branchScope, options, onClose, onCreated, onView 
       <div className="account-drawer-heading">
         <div>
           <h2 id="create-account-title">Tạo tài khoản nhân viên</h2>
-          <p>Liên kết với hồ sơ nhân sự đã có</p>
         </div>
         <button aria-label="Đóng bảng tạo tài khoản" disabled={busy} onClick={onClose}>
           ×

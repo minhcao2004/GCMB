@@ -134,7 +134,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
                     : active === 'Kho hàng' ? <InventoryPage user={{ ...user, readOnly }} />
                       : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage user={{ ...user, readOnly }} />
                         : active === 'Chi phí & đề nghị' ? <FinancePage user={{ ...user, readOnly }} />
-                        : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
+                        : <div className="br-placeholder"><h1>{active}</h1></div>}
       </section>
     </div>
   </div>;
