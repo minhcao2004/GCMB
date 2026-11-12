@@ -147,7 +147,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
     || branches.find((item) => (item.branchId || item.id) === branchId)?.name || user?.branchName || 'Cơ sở được phân quyền';
   const lockedInTransit = editing?.status === 'IN_TRANSIT';
   return <main className="equipment-assets">
-    <div className="ea-heading"><div><p className="ea-breadcrumb">Quản lý cơ sở / Thiết bị &amp; sự cố</p><h1>Danh sách thiết bị</h1><p>{branchName} · Thiết bị &amp; sự cố</p></div>
+    <div className="ea-heading"><div><h1>Danh sách thiết bị</h1></div>
       <button className="ea-primary" onClick={() => openDrawer()} disabled={busy || (headOffice && !branchId)}>＋ Thêm thiết bị</button></div>
     <section className="ea-filters" aria-label="Tìm kiếm và lọc thiết bị">
       <label className="ea-search">Tìm theo mã, tên hoặc nội dung<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." /></label>

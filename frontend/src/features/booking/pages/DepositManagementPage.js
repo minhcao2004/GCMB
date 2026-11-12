@@ -351,7 +351,7 @@ export default function DepositManagementPage() {
     breadcrumb="Tiền cọc" activeTab="deposit" search={search} onSearchChange={(value) => { setSearch(value); setPage(0); }} fitViewport>
     <div className="deposit-page">
       <header className="deposit-page-heading">
-        <div><h1>Tiền cọc</h1><p>Theo dõi tiền cọc gắn với booking tại {data?.branchName || 'chi nhánh hiện tại'}</p></div>
+        <div><h1>Tiền cọc</h1></div>
       </header>
 
       {loadError && <div className="deposit-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Tải lại</button></div>}

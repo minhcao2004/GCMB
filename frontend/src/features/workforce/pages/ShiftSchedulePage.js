@@ -149,13 +149,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     <section className="shift-page" aria-labelledby="shift-title">
       <header className="shift-heading">
         <div>
-          <p className="shift-eyebrow">CA LÀM VIỆC · {data?.branchName || user.branchName}</p>
           <h1 id="shift-title">{manager ? 'Lịch ca tuần' : 'Đăng ký ca làm'}</h1>
-          {!manager && (
-            <p>
-              Đăng ký ca tuần tới tại cơ sở của bạn từ thứ Hai đến trước 22:00 Chủ nhật.
-            </p>
-          )}
         </div>
       </header>
       {notice && (
@@ -309,12 +303,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                 if (event.target === event.currentTarget &&
                                     (event.key === 'Enter' || event.key === ' ')) {
                                   event.preventDefault();
-                                  openAttendance(s);
+                                  open('detail', s);
                                 }
                               } : undefined}
                               style={manager && s ? { cursor: 'pointer' } : undefined}
                               onClick={manager && s ? (event) => {
-                                if (!event.target.closest('button')) openAttendance(s);
+                                if (!event.target.closest('button')) open('detail', s);
                               } : undefined}
                             >
                               {s ? (
@@ -356,9 +350,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     <button
                                       type="button"
                                       className="shift-slot-action"
-                                      onClick={() => open('detail', s)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openAttendance(s);
+                                      }}
                                     >
-                                      Chi tiết / làm thay
+                                      Chấm công
                                     </button>
                                     </>
                                   ) : (

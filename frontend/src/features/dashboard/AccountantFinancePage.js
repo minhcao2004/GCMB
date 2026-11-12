@@ -244,7 +244,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
 
   const content = <section className="performance-dashboard accountant-finance" aria-labelledby="finance-title">
     <header className="finance-heading">
-      <div><h1 id="finance-title">Tài chính &amp; báo cáo</h1><p>Kiểm tra số liệu trong kỳ, theo dõi chốt quỹ và xử lý giao dịch.</p></div>
+      <div><h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
       {<div className="finance-filters">
         <label className="finance-month">Kỳ báo cáo<input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></label>
         {['report', 'expenses'].includes(tab) && <label className="finance-month">Cơ sở<select value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">Tất cả cơ sở</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>}

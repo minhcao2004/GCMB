@@ -167,9 +167,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
     <section className="booking-modal booking-form-modal" role="dialog" aria-modal="true" aria-labelledby="booking-form-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}>
       <div className="booking-modal-heading">
         <div>
-          <p className="booking-eyebrow">QUẢN LÝ BOOKING</p>
           <h2 id="booking-form-title">{editing ? 'Cập nhật booking' : 'Tạo booking mới'}</h2>
-          <p>{editing ? 'Thông tin giá đã chốt được giữ nguyên trong lần cập nhật này.' : 'Kiểm tra thời gian, phòng trống và giá dự kiến trước khi xác nhận.'}</p>
         </div>
         <button className="booking-icon-button" type="button" aria-label="Đóng" onClick={onClose}>×</button>
       </div>
@@ -291,7 +289,7 @@ export function BookingCancelDialog({ booking, onClose, onConfirm }) {
   return <div className="booking-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="booking-modal booking-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="booking-cancel-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}>
       <div className="booking-modal-heading">
-        <div><p className="booking-eyebrow">XÁC NHẬN THAY ĐỔI</p><h2 id="booking-cancel-title">Hủy booking</h2><p>{booking.id} · {booking.customerName}</p></div>
+        <div><h2 id="booking-cancel-title">Hủy booking</h2><p>{booking.id} · {booking.customerName}</p></div>
         <button className="booking-icon-button" type="button" aria-label="Đóng" onClick={onClose}>×</button>
       </div>
       <div className="booking-cancel-summary">

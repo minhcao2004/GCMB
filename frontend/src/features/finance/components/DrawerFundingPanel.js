@@ -127,7 +127,6 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   const validAmount = /^\d+$/.test(amount) && Number(amount) >= 500000 && Number(amount) <= 1000000;
   return <section className="finance-card">
     <h2>{accounting ? 'Cấp tiền két cơ sở' : 'Yêu cầu cấp tiền két'}</h2>
-    <p>Mỗi lần cấp từ <strong>500.000đ đến 1.000.000đ</strong>. Cấp két là chuyển quỹ nội bộ, không phải doanh thu bán hàng.</p>
     {error && <p className="finance-error" role="alert">{error}</p>}
     {notice && <p className="finance-success" role="status">{notice}</p>}
     {loading ? <p role="status">Đang tải yêu cầu cấp két…</p> : data && <>
@@ -141,12 +140,11 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
       </div> : <>
         <p>Két hiện tại: <strong>{vnd(data.drawerBalance)}</strong></p>
         <RecipientDetails recipient={data.recipient} />
-        <p className="finance-muted">Thông tin nhận tiền được lưu cùng yêu cầu mới. Nếu thông tin của yêu cầu đã gửi bị sai, cần từ chối và tạo yêu cầu mới.</p>
         {!hasRecipient(data.recipient) && <p className="finance-warning">
           Bạn cần cập nhật ngân hàng, số tài khoản và chủ tài khoản tại Thông tin tài khoản → Chỉnh sửa thông tin.
         </p>}
         {pending ? <p className="finance-info">Đã có yêu cầu chờ kế toán thanh toán. Không tạo thêm yêu cầu trùng.</p>
-          : Number(data.drawerBalance) !== 0 ? <p className="finance-warning">Nộp hết tiền trong két để số dư về 0đ, sau đó tạo yêu cầu cấp lại.</p>
+          : Number(data.drawerBalance) !== 0 ? null
             : <form onSubmit={create}>
               <fieldset disabled={busy || user.readOnly}>
                 <label>Số tiền đề nghị cấp két *<MoneyInput required value={amount} onValueChange={setAmount} /><small>Tối thiểu 500.000đ, tối đa 1.000.000đ.</small></label>

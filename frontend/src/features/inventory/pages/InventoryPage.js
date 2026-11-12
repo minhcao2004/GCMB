@@ -416,7 +416,7 @@ export default function InventoryPage({ user }) {
   };
 
   const heading = (title, subtitle, actions = null) => <div className="inv-heading">
-    <div><h1>{title}</h1><p>{subtitle}</p></div>
+    <div><h1>{title}</h1></div>
     {actions && <div className="inv-heading-actions">{actions}</div>}
   </div>;
 

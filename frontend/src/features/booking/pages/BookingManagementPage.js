@@ -651,7 +651,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         }
       }}>
         <header className="booking-gift-picker-heading">
-          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2><p>Tìm theo tên món hoặc lọc danh mục và tồn kho.</p></div>
+          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2></div>
           <button type="button" aria-label="Đóng danh sách món" onClick={closeGiftPicker}>×</button>
         </header>
         <label className="booking-gift-picker-search"><span>Tìm món</span><input autoFocus value={giftSearch} onChange={(event) => setGiftSearch(event.target.value)} placeholder="Nhập tên món…" /></label>
@@ -1188,7 +1188,7 @@ export default function BookingManagementPage() {
   const closeCheckIn = () => navigate('/le-tan/bookings');
   const mainContent = incidentsMode ? <EquipmentIncidentsPage user={user} /> : createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
-      <div><h1>Booking</h1><p>Theo dõi lịch đặt và check-in khách trong ca</p></div>
+      <div><h1>Booking</h1></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
     </div>
     {notice && <div className={`booking-live-notice${noticeKind === 'warning' ? ' is-warning' : ''}`} role={noticeKind === 'warning' ? 'alert' : 'status'}><span>{noticeKind === 'warning' ? '!' : '✓'}</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}

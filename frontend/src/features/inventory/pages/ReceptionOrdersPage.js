@@ -233,7 +233,7 @@ export default function ReceptionOrdersPage() {
 
   return <AppShell user={user} branchName={user.branchName} busy={busy} onLogout={logout} breadcrumb="Order & yêu cầu món" activeTab="orders" hideSearch>
     <div className="food-orders-staff">
-      <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1><p>Xác nhận yêu cầu QR, thêm món vào booking và cập nhật tiến độ phục vụ.</p></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
+      <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
       {soundError && <div className="food-sound-note" role="status">{soundError}</div>}
       {error && <div className="food-alert" role="alert">{error}</div>}
       {notice && <div className="food-alert food-alert--success" role="status">{notice}</div>}

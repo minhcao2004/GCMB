@@ -168,7 +168,6 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
 
   return <section className="finance-page cash-closing-page">
     <h1>{accounting ? 'Đối soát báo cáo cuối ngày' : 'Chốt quỹ cuối ngày'}</h1>
-    <p className="finance-muted">{accounting ? 'Đối chiếu tiền mặt thực đếm với số dư két theo sổ; ghi kết luận hoặc yêu cầu bổ sung.' : user.branchName}</p>
     <nav className="finance-tabs" aria-label="Báo cáo thu ngân">
       {!accounting && <button aria-current={tab === 'create' ? 'page' : undefined} onClick={() => setTab('create')}>Báo cáo cuối ngày</button>}
       <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => setTab('history')}>Lịch sử báo cáo</button>
@@ -202,7 +201,6 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         : null}
       <form className="finance-card" onSubmit={submit}>
         <h2>Ghi nhận khoản tiền đã nộp khỏi két</h2>
-        <p>Chỉ ghi khi tiền đã thực sự được nộp ra khỏi két. Giao dịch được ghi theo ngày nộp thực tế; báo cáo đã gửi vẫn giữ nguyên lịch sử.</p>
         {remittanceBlocked ? <p className="finance-warning">Ngày cũ đã chốt hoặc đã có ngày chốt mới hơn. Vui lòng ghi khoản nộp vào đúng ngày thực tế.</p> : <fieldset disabled={busy || readOnly}>
           {date === today() && <button type="button" disabled={Number(preview.currentBalance) <= 0} onClick={() => { setAmount(String(preview.currentBalance)); setFullSweep(true); setConfirm(false); if (!reason.trim()) setReason('Nộp toàn bộ tiền mặt khỏi két cơ sở.'); }}>Nộp hết tiền trong két ({vnd(preview.currentBalance)})</button>}
           <label>Số tiền đã nộp *<MoneyInput required value={amount} onValueChange={(v) => { setAmount(v); setFullSweep(false); setConfirm(false); }} /></label>

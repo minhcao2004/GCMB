@@ -101,7 +101,8 @@ public class CashClosingService {
     result.put("currentBalance",current.get("expected"));
     result.put("cashCycle",cashCycle((UUID)result.get("accountId"),zone(branch),current));
     result.put("pendingHandovers",db.queryForObject(
-      "SELECT count(*) FROM gcmb.shift_cash_handover WHERE branch_id=? AND status='DISCREPANCY'",Integer.class,branch));
+      "SELECT (SELECT count(*) FROM gcmb.shift_cash_handover WHERE branch_id=? AND status='DISCREPANCY') "
+      +"+ (SELECT count(*) FROM gcmb.shift_cash_dispatch WHERE branch_id=? AND status='DISCREPANCY')",Integer.class,branch,branch));
     return result;
   }
 
@@ -263,7 +264,7 @@ public class CashClosingService {
   }
 
   private void storeEvidence(UUID id,int version,MultipartFile evidence) {
-    var stored=storage.store(evidence);
+    var stored=storage.store(evidence, "chot-quy");
     TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
       @Override public void afterCompletion(int status) {
         if(status!=STATUS_COMMITTED) storage.deleteQuietly(stored.objectKey());

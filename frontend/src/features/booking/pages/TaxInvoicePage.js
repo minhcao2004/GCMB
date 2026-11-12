@@ -227,12 +227,6 @@ export default function TaxInvoicePage({ accounting = false }) {
         <header className="staff-heading">
           <div>
             <h1>Yêu cầu hóa đơn thuế</h1>
-            <p>
-              {accounting
-                ? 'Tiếp nhận yêu cầu từ lễ tân và cập nhật tiến độ, kết quả giao hóa đơn thực tế.'
-                : 'Gửi yêu cầu cho kế toán và xem tiến độ xử lý.'}{' '}
-              Phát hành và giao hóa đơn thực hiện bên ngoài GCMB.
-            </p>
           </div>
           <button
             onClick={() => (bookingId ? open(null) : setRevision((v) => v + 1))}

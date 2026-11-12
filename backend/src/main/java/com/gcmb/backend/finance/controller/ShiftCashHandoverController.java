@@ -1,4 +1,4 @@
-/** Author: HuyDV. Lễ tân nhận bàn giao; QLCS xem và ghi kết quả xử lý chênh lệch. */
+/** Author: HuyDV. Lễ tân ca trước giao, ca sau nhận; QLCS xử lý chênh lệch ở cả hai bước. */
 package com.gcmb.backend.finance.controller;
 
 import com.gcmb.backend.auth.dto.Identity;
@@ -23,6 +23,12 @@ public class ShiftCashHandoverController {
   public Map<String,Object> receive(@AuthenticationPrincipal Identity actor,
       @RequestBody ShiftCashHandoverService.Receive command) {
     return service.receive(actor,command);
+  }
+
+  @PostMapping("/api/v1/reception/cash-handovers/dispatch")
+  public Map<String,Object> dispatch(@AuthenticationPrincipal Identity actor,
+      @RequestBody ShiftCashHandoverService.Receive command) {
+    return service.dispatch(actor,command);
   }
 
   @PostMapping("/api/v1/branch-management/cash-handovers/{id}/resolve")

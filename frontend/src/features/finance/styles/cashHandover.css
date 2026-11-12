@@ -17,6 +17,9 @@
 .cash-handover-shift dt { font-size: 13px; color: #526781; }
 .cash-handover-shift dd { margin: 0 0 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cash-handover-shift button { margin-top: auto; align-self: start; }
+.cash-handover-step { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid #dce5ef; }
+.cash-handover-step h4 { margin: 0; font-size: 14px; }
+.cash-handover-step dl { margin-top: 4px; }
 .cash-handover .cash-handover-form { display: grid; gap: 20px; margin-top: 24px; max-width: 760px; }
 .cash-handover-form h3, .cash-handover-form p { margin: 0; }
 .cash-handover-form textarea { min-height: 96px; }

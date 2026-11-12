@@ -321,7 +321,6 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
           <header className="staff-heading">
             <div>
               <h1 id="staff-page-title">{branchScope ? 'Nhân sự cơ sở' : 'Nhân sự toàn chuỗi'}</h1>
-              <p>Hồ sơ nhân viên và lịch sử phân công cơ sở</p>
             </div>
             <button
               type="button"
