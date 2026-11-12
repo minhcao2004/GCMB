@@ -1,0 +1,30 @@
+/* Author: HuyDV. Bốn ca cùng một két; bố cục gọn và không sát lề trên màn nhỏ. */
+.cash-handover { min-width: 0; margin: 24px 0; color: #25364f; }
+.cash-handover-heading { display: flex; justify-content: space-between; align-items: start; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
+.cash-handover-heading h2 { margin: 0 0 10px; font-size: 24px; }
+.cash-handover-heading p { margin: 0; line-height: 1.6; }
+.cash-handover-date { display: flex; align-items: end; gap: 12px; }
+.cash-handover label:not(.cash-handover-check) { display: grid; gap: 8px; }
+.cash-handover-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.cash-handover .finance-card { margin: 0; min-width: 0; }
+.cash-handover-shift { border: 1px solid #dce5ef; display: flex; flex-direction: column; gap: 14px; }
+.cash-handover-shift.is-selected { border: 2px solid #bf1476; }
+.cash-handover-shift header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.cash-handover-shift h3 { margin: 0; }
+.cash-handover-shift p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.cash-handover-status { font-weight: 600; }
+.cash-handover-shift dl { margin: 0; display: grid; gap: 8px; }
+.cash-handover-shift dt { font-size: 13px; color: #526781; }
+.cash-handover-shift dd { margin: 0 0 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cash-handover-shift button { margin-top: auto; align-self: start; }
+.cash-handover .cash-handover-form { display: grid; gap: 20px; margin-top: 24px; max-width: 760px; }
+.cash-handover-form h3, .cash-handover-form p { margin: 0; }
+.cash-handover-form textarea { min-height: 96px; }
+.cash-handover-check { display: flex; align-items: start; gap: 10px; line-height: 1.6; }
+.cash-handover-check input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 3px; accent-color: #c31476; }
+.cash-handover .cash-handover-pending { margin-bottom: 24px; border: 1px solid #e8cfa9; }
+.cash-handover-pending-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 0; border-top: 1px solid #e5eaf1; }
+.cash-handover-pending-row p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.cash-handover button:focus-visible, .cash-handover input:focus-visible, .cash-handover textarea:focus-visible { outline: 2px solid #087d98; outline-offset: 3px; }
+@media (max-width: 1100px) { .cash-handover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .cash-handover-grid { grid-template-columns: 1fr; } .cash-handover-pending-row { flex-direction: column; align-items: start; } }

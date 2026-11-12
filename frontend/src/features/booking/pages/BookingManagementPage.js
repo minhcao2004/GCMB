@@ -17,6 +17,7 @@ import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage
 
 const navigation = [
   ['Ca làm việc', 'shifts'],
+  ['Bàn giao tiền mặt', 'handover'],
   ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
   ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Báo sự cố', 'issues'],
@@ -53,6 +54,7 @@ const vietnameseBanks = [
 ];
 
 const iconPaths = {
+  handover: <><path d="M3 7h14m-4-4 4 4-4 4M21 17H7m4-4-4 4 4 4"/></>,
   shifts: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 4h3m3 0h3m-9 4h3"/></>,
   tax: <><path d="M6 3h9l4 4v14l-3-2-3 2-3-2-4 2V3Z"/><path d="M14 3v5h5M9 11h7M9 15h5"/></>,
   overview: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -295,6 +297,7 @@ export function AppShell({
   }
 
   function selectTab(icon) {
+    if (icon === 'handover') navigate('/le-tan/ban-giao-tien');
     if (icon === 'shifts') navigate('/le-tan/ca-lam');
     if (icon === 'tax') navigate('/le-tan/hoa-don-thue');
     if (icon === 'booking') {
@@ -327,7 +330,7 @@ export function AppShell({
                   aria-label={label}
                   title={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts', 'issues'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts', 'issues', 'handover'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>
