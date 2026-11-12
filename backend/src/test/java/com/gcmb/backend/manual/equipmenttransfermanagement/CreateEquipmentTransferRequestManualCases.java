@@ -18,7 +18,7 @@ import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.server.ResponseStatusException;
 
-final class Uc74CreateEquipmentTransferRequestCases {
+final class CreateEquipmentTransferRequestManualCases {
     private static final UUID HOM_ID = UUID.fromString("47570000-0000-4000-8000-000000000005");
     private static final UUID BRANCH_MANAGER_ID = UUID.fromString("47570000-0000-4000-8000-000000000003");
     private static final UUID RECEPTIONIST_ID = UUID.fromString("47570000-0000-4000-8000-000000000001");
@@ -30,7 +30,7 @@ final class Uc74CreateEquipmentTransferRequestCases {
     private static final String TITLE = "UC-74 Create Equipment Transfer Request";
     private static final String SOURCE = "UC-74; BR-48, BR-111; MSG02, MSG24; V1, V14, V31; EquipmentIncidentService.transfer";
 
-    private Uc74CreateEquipmentTransferRequestCases() {
+    private CreateEquipmentTransferRequestManualCases() {
     }
 
     static List<ManualCase> cases() {

@@ -66,9 +66,9 @@ public final class EquipmentTransferManagementManualRunner {
 
     private static List<ManualCase> allCases() {
         List<ManualCase> cases = new ArrayList<>();
-        cases.addAll(Uc74CreateEquipmentTransferRequestCases.cases());
-        cases.addAll(Uc75ConfirmEquipmentHandoverCases.cases());
-        cases.addAll(Uc76ConfirmEquipmentReceiptCases.cases());
+        cases.addAll(CreateEquipmentTransferRequestManualCases.cases());
+        cases.addAll(ConfirmEquipmentHandoverManualCases.cases());
+        cases.addAll(ConfirmEquipmentReceiptManualCases.cases());
         return List.copyOf(cases);
     }
 

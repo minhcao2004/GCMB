@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.web.server.ResponseStatusException;
 
-final class Uc76ConfirmEquipmentReceiptCases {
+final class ConfirmEquipmentReceiptManualCases {
     private static final UUID HOM_ID = UUID.fromString("47570000-0000-4000-8000-000000000005");
     private static final UUID SOURCE_MANAGER_ID = UUID.fromString("47570000-0000-4000-8000-000000000003");
     private static final UUID DESTINATION_MANAGER_ID = UUID.fromString("47570000-0000-4000-8000-000000000004");
@@ -32,7 +32,7 @@ final class Uc76ConfirmEquipmentReceiptCases {
     private static final String TITLE = "UC-76 Confirm Equipment Receipt";
     private static final String SOURCE = "UC-76; BR-49, BR-50, BR-51, BR-111, BR-200; MSG02, MSG24, MSG82; V1, V14; EquipmentIncidentService.receive";
 
-    private Uc76ConfirmEquipmentReceiptCases() {
+    private ConfirmEquipmentReceiptManualCases() {
     }
 
     static List<ManualCase> cases() {
