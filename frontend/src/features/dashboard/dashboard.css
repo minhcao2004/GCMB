@@ -188,6 +188,28 @@
 .finance-period-dialog-actions button,.finance-period-dialog-primary { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:8px 13px; border:1px solid #dce3eb; border-radius:8px; color:#3d4a60; background:#fff; font:inherit; font-size:12px; font-weight:700; text-decoration:none; cursor:pointer; }
 .finance-period-dialog-actions .finance-period-dialog-primary { border-color:#bd287b; color:#fff; background:#bd287b; }
 .finance-period-dialog-actions .finance-period-dialog-primary:hover { background:#720b47; }
+.finance-period-dialog label { display:grid; gap:6px; margin-top:16px; color:#3d4a60; font-size:12px; font-weight:700; }
+.finance-period-dialog textarea { min-height:76px; padding:9px; border:1px solid #dce3eb; border-radius:8px; font:inherit; resize:vertical; }
+.finance-period-readiness { margin:18px 0; padding:18px; border:1px solid #e3e8ef; border-radius:12px; background:#fff; }
+.finance-period-readiness .finance-section-heading { margin:0; align-items:center; }
+.finance-period-readiness .finance-section-heading h2 { margin:0; font-size:17px; }
+.finance-period-readiness .finance-section-heading p { margin:5px 0 0; color:#64748b; font-size:12px; }
+.finance-period-readiness .finance-section-heading button { min-height:38px; padding:8px 14px; border:0; border-radius:8px; color:#fff; background:#720b47; font:inherit; font-weight:700; cursor:pointer; }
+.finance-period-readiness .finance-section-heading button:disabled { background:#aab3c0; cursor:not-allowed; }
+.finance-period-checks { display:grid; gap:8px; margin:16px 0 0; padding:0; list-style:none; }
+.finance-period-checks li { display:grid; grid-template-columns:90px minmax(180px,1fr) 90px; gap:6px 12px; align-items:center; padding:10px 12px; border-radius:8px; background:#f7f9fc; font-size:13px; }
+.finance-period-checks li > span:first-child { font-weight:700; }
+.finance-period-checks .is-passed > span:first-child { color:#18794e; }
+.finance-period-checks .is-pending > span:first-child { color:#b42318; }
+.finance-period-checks li small { grid-column:2/4; color:#64748b; line-height:1.45; }
+.finance-period-guidance-trigger { grid-column:2/4; justify-self:start; margin-top:3px; padding:0; border:0; background:transparent; color:#8f0e5a; font:inherit; font-size:12px; font-weight:700; text-align:left; cursor:pointer; }
+.finance-period-guidance-trigger:hover { text-decoration:underline; }
+.finance-period-guidance-trigger:focus-visible { outline:2px solid #8f0e5a; outline-offset:3px; border-radius:2px; }
+.finance-period-guidance-dialog { display:grid; gap:12px; }
+.finance-period-guidance-dialog > p + p { padding-top:9px; border-top:1px solid #e4e9f0; }
+.finance-period-guidance-dialog > p strong { color:#273248; }
+.finance-period-limitation { margin:12px 0 0; color:#7a4d00; font-size:12px; line-height:1.5; }
+@media (max-width:640px) { .finance-period-checks li { grid-template-columns:1fr auto; } .finance-period-checks li strong,.finance-period-checks li small,.finance-period-guidance-trigger { grid-column:1/-1; } }
 .finance-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .finance-section-heading h2 { margin: 0 0 4px; font-size: 19px; }
 .finance-section-heading p { margin: 0; color: #536277; font-size: 13px; }

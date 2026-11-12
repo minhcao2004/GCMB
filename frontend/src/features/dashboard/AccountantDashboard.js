@@ -4,6 +4,7 @@ import api from '../../api/client';
 import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
 import './accountantDashboard.css';
+import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 
 const monthNow = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
@@ -31,7 +32,6 @@ export default function AccountantDashboard() {
   const [branchId, setBranchId] = useState('');
   const [branches, setBranches] = useState([]);
   const [report, setReport] = useState(null);
-  const [expenses, setExpenses] = useState([]);
   const [refunds, setRefunds] = useState([]);
   const [requests, setRequests] = useState([]);
   const [fundBalance, setFundBalance] = useState(null);
@@ -44,6 +44,10 @@ export default function AccountantDashboard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [exceptionFilter, setExceptionFilter] = useState('UNRESOLVED');
+  const [resolutionTarget, setResolutionTarget] = useState(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolutionBusy, setResolutionBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,7 +67,6 @@ export default function AccountantDashboard() {
     const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
     Promise.allSettled([
       api.get('/accounting/reports/monthly', { params }),
-      api.get('/accounting/reports/expense-breakdown', { params }),
       api.get('/accounting/deposits/refund-requests'),
       api.get('/accounting/finance'),
       api.get('/accounting/cash-closing', { params: { from, to: end, ...(branchId ? { branchId } : {}) } }),
@@ -73,13 +76,12 @@ export default function AccountantDashboard() {
       api.get('/accounting/dashboard-details', { params }),
     ]).then((results) => {
       if (!active) return;
-      const [summary, cost, refund, finance, cash, payrollResult, transactionResult, periodResult, details] = results;
+      const [summary, refund, finance, cash, payrollResult, transactionResult, periodResult, details] = results;
       if (summary.status === 'fulfilled') {
         setReport(summary.value.data);
         const list = summary.value.data.results || [];
         setBranches((current) => current.length ? current : list.map((row) => ({ id: row.id, name: row.name })));
       } else { setReport(null); setError(errorText(summary.reason)); }
-      setExpenses(cost.status === 'fulfilled' ? cost.value.data.rows || [] : []);
       setRefunds(refund.status === 'fulfilled' ? refund.value.data.items || [] : []);
       setRequests(finance.status === 'fulfilled' ? finance.value.data.requests || [] : []);
       setFundBalance(finance.status === 'fulfilled' ? finance.value.data.balance : null);
@@ -108,6 +110,7 @@ export default function AccountantDashboard() {
   const payrollPaid = payrollRows.filter((row) => row.paid).reduce((sum, row) => sum + Number(row.netAmount || row.net_amount || 0), 0);
   const currentPeriod = periods.find((row) => String(row.month).slice(0, 7) === month);
   const exceptions = sepayExceptions;
+  const visibleExceptions = exceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter);
   const adjustments = selectedTransactions.filter((row) => row.kind === 'ADJUSTMENT');
   const fundByBranch = [...closings].sort((a, b) => String(b.businessDate || b.business_date || '').localeCompare(String(a.businessDate || a.business_date || '')))
     .reduce((map, row) => { const name = row.branchName || 'Cơ sở'; if (!map.has(name)) map.set(name, Number(row.actual ?? row.actual_closing) || 0); return map; }, new Map());
@@ -119,11 +122,11 @@ export default function AccountantDashboard() {
     paymentOffset += paymentTotal ? Number(item.value || 0) / paymentTotal * 100 : 0;
     return `${['#168b87', '#6a3ee8', '#df9b28'][index % 3]} ${start}% ${paymentOffset}%`;
   }).join(', ');
-  const categories = useMemo(() => expenses.reduce((map, row) => {
-    const key = row.categoryName || 'Chưa phân loại';
+  const categories = useMemo(() => (report?.expenseGroups || []).reduce((map, row) => {
+    const key = row.category || 'Chưa phân loại';
     map.set(key, (map.get(key) || 0) + Number(row.amount || 0));
     return map;
-  }, new Map()), [expenses]);
+  }, new Map()), [report]);
   const branchLabel = branchId ? branches.find((item) => item.id === branchId)?.name || 'Cơ sở đang chọn' : 'Toàn chuỗi';
 
   async function logout() {
@@ -133,11 +136,25 @@ export default function AccountantDashboard() {
     finally { setBusy(false); }
   }
 
+  async function resolveSePayException() {
+    if (!resolutionTarget || !resolutionNote.trim()) return;
+    setResolutionBusy(true); setError('');
+    try {
+      const { data: csrf } = await api.get('/auth/csrf');
+      const { data: resolved } = await api.post(`/accounting/sepay-exceptions/${resolutionTarget.id}/resolve`,
+        { resolutionNote }, { headers: { [csrf.headerName]: csrf.token } });
+      setSepayExceptions((current) => current.map((item) => item.id === resolved.id ? { ...item, ...resolved } : item));
+      setResolutionTarget(null); setResolutionNote('');
+    } catch (e) { setError(errorText(e)); }
+    finally { setResolutionBusy(false); }
+  }
+
   return <AppShell user={user} branchName="toàn chuỗi" busy={busy} onLogout={logout} breadcrumb="Tổng quan kế toán" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>
     <main className="accountant-dash" aria-labelledby="accountant-dash-title">
       <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1><p>Số liệu thực tế từ sổ kế toán và nghiệp vụ đã ghi nhận.</p></div><div className="accountant-dash-filters"><label>Kỳ tài chính<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>Cơ sở<select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">Tất cả cơ sở</option>{branches.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div></header>
       <p className="accountant-dash-demo-note">{month.slice(5, 7)}/{month.slice(0, 4)} · {branchLabel}</p>
       {error && <p className="accountant-dash-error" role="alert">{error}</p>}{loading && <p role="status">Đang tải số liệu…</p>}
+      {report && <MonthlyPerformanceSummary report={report} month={month} branchId={branchId} />}
       <section className="accountant-kpis" aria-label="Chỉ số tài chính trong kỳ">{[
         ['Tổng thu', totals.revenue, 'Bill đã hoàn tất'], ['Tổng chi', totals.expenses, 'Chi phí đã trả và lương'], ['Lợi nhuận', totals.profit, 'Theo báo cáo kỳ'], ['Số dư quỹ', fundBalance, 'Số dư quỹ hiện tại từ API'], ['Hoàn cọc chờ xử lý', refundAmount, `${selectedRefunds.length} yêu cầu từ API`], ['Chi phí chờ chi trả', pendingAmount, `${selectedRequests.length} yêu cầu từ API`],
       ].map(([label, value, note]) => <article className="accountant-kpi" key={label}><span>{label}</span><strong>{money(value)}</strong><small>{note}</small></article>)}</section>
@@ -150,7 +167,11 @@ export default function AccountantDashboard() {
       <DataTable title="Kết quả theo cơ sở" columns={['Cơ sở', 'Bill hoàn tất', 'Tổng thu', 'Tổng chi', 'Lợi nhuận', 'Dòng tiền thuần']} rows={rows} renderRow={(row) => <tr key={row.id}><td>{row.name}</td><td>{row.billCount}</td><td>{money(row.revenue)}</td><td>{money(row.expenses)}</td><td>{money(row.profit)}</td><td>{money(row.netCashFlow)}</td></tr>} />
       <DataTable title="Đối soát tiền mặt" columns={['Cơ sở', 'Ngày', 'Tiền hệ thống', 'Tiền thực tế', 'Chênh lệch']} rows={closings} renderRow={(row) => <tr key={row.id}><td>{row.branchName || '—'}</td><td>{dateVi(row.businessDate || row.business_date || row.date)}</td><td>{money(row.expected ?? row.expected_closing)}</td><td>{money(row.actual ?? row.actual_closing)}</td><td className={Number(row.variance || 0) ? 'accountant-deviation' : 'accountant-matched'}>{money(row.variance)}</td></tr>} />
       <div className="accountant-dash-grid">
-        <DataTable title="Giao dịch SePay ngoại lệ" columns={['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Nội dung chuyển khoản']} rows={exceptions} renderRow={(row) => <tr key={row.externalId}><td>{row.externalId}</td><td>{row.branchName}</td><td>{dateVi(row.occurredAt)}</td><td>{money(row.amount)}</td><td>{row.status}</td><td>{row.reason || '—'}</td></tr>} />
+        <section className="accountant-dash-panel accountant-table-panel">
+          <div className="accountant-panel-heading"><h2>Giao dịch SePay ngoại lệ</h2><span>{visibleExceptions.length} mục</span></div>
+          <label className="accountant-exception-filter">Trạng thái xử lý<select value={exceptionFilter} onChange={(event) => setExceptionFilter(event.target.value)}><option value="UNRESOLVED">Chưa xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="ALL">Tất cả</option></select></label>
+          {visibleExceptions.length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Lý do ngoại lệ', 'Nội dung chuyển khoản', 'Người xử lý', 'Thời điểm xử lý', 'Ghi chú xử lý', 'Thao tác'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{visibleExceptions.map((row) => <tr key={row.id}><td>{row.externalId}</td><td>{row.branchName}</td><td>{dateVi(row.occurredAt)}</td><td>{money(row.amount)}</td><td>{row.status}</td><td>{row.exceptionReason || '—'}</td><td>{row.reason || '—'}</td><td>{row.resolvedBy || '—'}</td><td>{row.resolvedAt ? new Date(row.resolvedAt).toLocaleString('vi-VN') : '—'}</td><td>{row.resolutionNote || '—'}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? <button type="button" onClick={() => { setResolutionTarget(row); setResolutionNote(''); }}>Đánh dấu đã xử lý</button> : 'Đã xử lý'}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch ngoại lệ theo bộ lọc.</p>}
+        </section>
         <DataTable title="Hoàn cọc chờ xử lý" columns={['Mã booking', 'Cơ sở', 'Ngày yêu cầu', 'Trạng thái', 'Số tiền']} rows={selectedRefunds} renderRow={(row) => <tr key={row.id}><td>{row.bookingCode || row.id}</td><td>{row.branchName || '—'}</td><td>{dateVi(row.requestedAt)}</td><td>{row.status}</td><td>{money(row.amount)}</td></tr>} />
       </div>
       <div className="accountant-dash-grid">
@@ -164,6 +185,7 @@ export default function AccountantDashboard() {
       ].map(([label, status], index) => <li className={`is-${status}`} key={label}><span className="accountant-step-node">{status === 'done' ? '✓' : index + 1}</span><div><strong>{label}</strong><small>{status === 'done' ? 'Hoàn tất theo hệ thống' : status === 'active' ? 'Cần xử lý' : 'Đang chờ'}</small></div></li>)}</ol></section>
       <DataTable title="Điều chỉnh giao dịch gần nhất" columns={['Ngày', 'Loại', 'Lý do', 'Số tiền']} rows={adjustments} renderRow={(row) => <tr key={row.id}><td>{dateVi(row.bookingDate || row.booking_date)}</td><td>{row.kind}</td><td>{row.reason || '—'}</td><td>{money(row.amount)}</td></tr>} />
       <div className="accountant-dash-shortcuts"><Link to="/ke-toan/bao-cao">Mở báo cáo và giao dịch chi tiết</Link><Link to="/ke-toan/hoan-coc">Xử lý hoàn cọc</Link><Link to="/ke-toan/chot-quy">Đối soát chốt quỹ</Link></div>
+      {resolutionTarget && <div className="accountant-exception-backdrop" role="presentation"><section className="accountant-exception-dialog" role="dialog" aria-modal="true" aria-labelledby="resolve-sepay-title"><h2 id="resolve-sepay-title">Đánh dấu ngoại lệ đã xử lý</h2><p>Giao dịch {resolutionTarget.externalId} · {money(resolutionTarget.amount)}. Thao tác chỉ ghi nhận trạng thái và ghi chú, không tạo bút toán tiền.</p><label>Ghi chú xử lý<textarea value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} maxLength={1000} required /></label><div><button type="button" disabled={resolutionBusy} onClick={() => setResolutionTarget(null)}>Hủy</button><button type="button" disabled={resolutionBusy || !resolutionNote.trim()} onClick={resolveSePayException}>{resolutionBusy ? 'Đang lưu…' : 'Xác nhận đã xử lý'}</button></div></section></div>}
     </main>
   </AppShell>;
 }

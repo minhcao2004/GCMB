@@ -67,6 +67,7 @@ export const financeApi = {
   confirmFund: (id) => mutate('post',`/accounting/finance/fund-transfers/${id}/confirm`),
   createCategory: (value) => mutate('post','/accounting/finance/categories',value),
   updateCategory: (id, value) => mutate('put',`/accounting/finance/categories/${id}`,value),
+  setCategoryActive: (id, active) => mutate('put',`/accounting/finance/categories/${id}/status`,{active}),
   deleteCategory: (id) => mutate('delete',`/accounting/finance/categories/${id}`),
   createRequest: (values) => mutate('post','/branch-management/finance/requests',values),
   uploadRequestAttachment: (id, kind, file) => mutate('post',`/branch-management/finance/requests/${id}/attachments?kind=${kind}`,form({file}),true),

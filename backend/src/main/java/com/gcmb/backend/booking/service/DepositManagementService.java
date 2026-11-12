@@ -7,6 +7,7 @@ import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
 import com.gcmb.backend.booking.repository.DepositRepository;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.booking.repository.DepositRepository.RefundEvidenceRow;
 import com.gcmb.backend.booking.repository.DepositRepository.RefundRequestRow;
 import java.io.IOException;
@@ -33,12 +34,14 @@ public class DepositManagementService {
     private final BookingRepository bookings;
     private final DepositRepository deposits;
     private final RefundEvidenceStorageService evidenceStorage;
+    private final FinancialPeriodService periods;
 
     public DepositManagementService(BookingRepository bookings, DepositRepository deposits,
-                                    RefundEvidenceStorageService evidenceStorage) {
+                                    RefundEvidenceStorageService evidenceStorage, FinancialPeriodService periods) {
         this.bookings = bookings;
         this.deposits = deposits;
         this.evidenceStorage = evidenceStorage;
+        this.periods = periods;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +86,7 @@ public class DepositManagementService {
 
     @Transactional
     public DepositDtos.RefundRequestResult createRefundRequest(Identity identity, DepositDtos.CreateRefundRequest request) {
+        periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "tạo yêu cầu hoàn cọc");
         if (request == null || request.bookingId() == null)
             throw new BookingFailure(400, "bookingId", "Vui lòng bổ sung booking cần yêu cầu hoàn cọc.");
         BranchScope branch = branch(identity);
@@ -125,6 +129,7 @@ public class DepositManagementService {
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
                                                                String externalReference, MultipartFile image) {
         requireAccountant(identity);
+        periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận hoàn cọc");
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
         // Tạm thời cho phép kế toán ghi nhận hoàn cọc khi chưa đính kèm tệp minh chứng.
         String normalizedReference = externalReference == null ? "" : externalReference.trim();

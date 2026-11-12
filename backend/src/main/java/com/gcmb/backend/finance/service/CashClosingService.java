@@ -25,17 +25,20 @@ public class CashClosingService {
   private final FinanceAccess access;
   private final ObjectMapper json;
   private final RefundEvidenceStorageService storage;
+  private final FinancialPeriodService periods;
 
   public CashClosingService(
     JdbcTemplate db,
     FinanceAccess access,
     ObjectMapper json,
-    RefundEvidenceStorageService storage
+    RefundEvidenceStorageService storage,
+    FinancialPeriodService periods
   ) {
     this.db = db;
     this.access = access;
     this.json = json;
     this.storage = storage;
+    this.periods = periods;
   }
 
   public record Submit(LocalDate date, BigDecimal actual, String explanation, String revision) {}
@@ -140,6 +143,7 @@ public class CashClosingService {
     access.lock();
     UUID branch = access.branch(actor, true);
     LocalDate date = day(input.date());
+    periods.requireOpen(date, "chốt quỹ tiền mặt");
     BigDecimal actual = money(input.actual(), "Tiền mặt đếm thực tế", false);
     var preview = source(branch, date);
     if (!Objects.equals(input.revision(), preview.get("revision"))) throw conflict(
@@ -267,6 +271,9 @@ public class CashClosingService {
   public Map<String, Object> reconcile(Identity actor, UUID id, Review input) {
     access.accountant(actor);
     access.lock();
+    java.sql.Date businessDate = db.queryForObject("SELECT business_date FROM gcmb.daily_cash_closing WHERE id=?", java.sql.Date.class, id);
+    if (businessDate == null) throw bad("Không tìm thấy phiếu chốt quỹ.");
+    periods.requireOpen(businessDate.toLocalDate(), "đối soát phiếu chốt quỹ");
     var old = detail(actor, id);
     if ("RECONCILED".equals(old.get("status"))) throw conflict("Bản chốt quỹ đã được đối soát.");
     if (!input.resolved()) throw bad(

@@ -1,6 +1,7 @@
 package com.gcmb.backend.finance.controller;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.audit.service.MutationAudit;
 import com.gcmb.backend.finance.service.FinanceService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +20,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/v1")
 public class FinanceController {
     private final FinanceService finance;
-    public FinanceController(FinanceService finance) { this.finance=finance; }
+    private final MutationAudit audit;
+    public FinanceController(FinanceService finance, MutationAudit audit) { this.finance=finance; this.audit=audit; }
 
     @GetMapping("/head-office/finance")
     public Map<String,Object> headOffice(@AuthenticationPrincipal Identity who) { return finance.headOfficeSummary(who); }
@@ -43,14 +45,26 @@ public class FinanceController {
     public Object categories(@AuthenticationPrincipal Identity who) { return finance.accountantCategories(who); }
     @PostMapping("/accounting/finance/categories")
     public Map<String,Object> createCategory(@AuthenticationPrincipal Identity who,@RequestBody Category body) {
-        return finance.saveCategory(who,null,body.name(),body.description());
+        return audit.record("CREATE_FINANCE_EXPENSE_CATEGORY","FINANCE_EXPENSE_CATEGORY",null,
+            () -> finance.saveCategory(who,null,body.name(),body.description(),body.costType()), result -> (UUID) result.get("id"));
     }
     @PutMapping("/accounting/finance/categories/{id}")
     public Map<String,Object> updateCategory(@AuthenticationPrincipal Identity who,@PathVariable UUID id,@RequestBody Category body) {
-        return finance.saveCategory(who,id,body.name(),body.description());
+        return audit.record("UPDATE_FINANCE_EXPENSE_CATEGORY","FINANCE_EXPENSE_CATEGORY",id,
+            () -> finance.saveCategory(who,id,body.name(),body.description(),body.costType()), result -> (UUID) result.get("id"));
+    }
+    @PutMapping("/accounting/finance/categories/{id}/status")
+    public Map<String,Object> categoryStatus(@AuthenticationPrincipal Identity who,@PathVariable UUID id,@RequestBody CategoryStatus body) {
+        return audit.record(body.active()?"REACTIVATE_FINANCE_EXPENSE_CATEGORY":"DEACTIVATE_FINANCE_EXPENSE_CATEGORY",
+            "FINANCE_EXPENSE_CATEGORY",id,() -> finance.setCategoryActive(who,id,body.active()), result -> (UUID) result.get("id"));
     }
     @DeleteMapping("/accounting/finance/categories/{id}")
-    public void deleteCategory(@AuthenticationPrincipal Identity who,@PathVariable UUID id) { finance.deleteCategory(who,id); }
+    public void deleteCategory(@AuthenticationPrincipal Identity who,@PathVariable UUID id) {
+        audit.record("DELETE_FINANCE_EXPENSE_CATEGORY","FINANCE_EXPENSE_CATEGORY",id,() -> {
+            finance.deleteCategory(who,id);
+            return id;
+        }, null);
+    }
     @GetMapping("/accounting/finance/requests")
     public Object accountantRequests(@AuthenticationPrincipal Identity who) { return finance.listRequests(who); }
     @PostMapping("/accounting/finance/requests/{id}/review")
@@ -84,7 +98,8 @@ public class FinanceController {
             .header(HttpHeaders.CACHE_CONTROL,"private, no-store").header("X-Content-Type-Options","nosniff").body((byte[])f.get("bytes"));
     }
 
-    public record Category(String name,String description) {}
+    public record Category(String name,String description,String costType) {}
+    public record CategoryStatus(boolean active) {}
     public record Review(boolean approve,String note) {}
     public record FundTransfer(BigDecimal amount,LocalDate sentOn,String reference) {}
     public record ExpenseRequest(String kind,UUID categoryId,BigDecimal amount,LocalDate expenseOn,

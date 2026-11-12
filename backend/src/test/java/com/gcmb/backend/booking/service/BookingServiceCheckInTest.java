@@ -6,6 +6,7 @@ import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.AllocationRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -27,7 +28,7 @@ class BookingServiceCheckInTest {
     void rejectsRegularCheckInWhenRoomIsStillOccupied() {
         BookingRepository repository = mock(BookingRepository.class);
         BookingService service = new BookingService(repository, mock(BookingPricingService.class), mock(ObjectMapper.class),
-            mock(FoodOrderService.class));
+            mock(FoodOrderService.class), mock(FinancialPeriodService.class));
         UUID actorId = UUID.randomUUID();
         UUID branchId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();

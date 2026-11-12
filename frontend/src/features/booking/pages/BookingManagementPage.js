@@ -219,9 +219,9 @@ export function AppShell({
     const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
-      month: '2-digit',
+      month: 'long',
       year: 'numeric',
-    }).format(now);
+    }).format(now).replace(/^tháng/u, 'Tháng');
 
     return (
       <>
@@ -278,7 +278,7 @@ export function AppShell({
                 onToggleSidebar={toggleSidebar}
                 sidebarExpanded={!sidebarCollapsed}
               >
-                {showCurrentMonth && <span className="booking-topbar-datetime">Tháng {currentMonth}</span>}
+                {showCurrentMonth && <span className="booking-topbar-datetime">{currentMonth}</span>}
               </DashboardTopbar>
               <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
             </div>

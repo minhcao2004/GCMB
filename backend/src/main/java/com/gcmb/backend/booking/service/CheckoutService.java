@@ -8,9 +8,11 @@
 package com.gcmb.backend.booking.service;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
@@ -40,6 +42,7 @@ public class CheckoutService {
     private final SePaySettings sepay;
     private final ObjectMapper json;
     private final FoodOrderService foodOrders;
+    private final FinancialPeriodService periods;
 
     public CheckoutService(
         JdbcTemplate db,
@@ -47,7 +50,8 @@ public class CheckoutService {
         BookingService bookings,
         SePaySettings sepay,
         ObjectMapper json,
-        FoodOrderService foodOrders
+        FoodOrderService foodOrders,
+        FinancialPeriodService periods
     ) {
         this.db = db;
         this.repository = repository;
@@ -55,6 +59,7 @@ public class CheckoutService {
         this.sepay = sepay;
         this.json = json;
         this.foodOrders = foodOrders;
+        this.periods = periods;
     }
 
     private Map<String, Object> depositStatus(Identity actor, UUID bookingId) {
@@ -91,6 +96,7 @@ public class CheckoutService {
         var accounts = db.queryForList("SELECT id FROM gcmb.financial_account WHERE kind='BANK' AND active AND (branch_id IS NULL OR branch_id=?) ORDER BY code", UUID.class, branchId);
         if (accounts.size() != 1) throw fail(409, "Cần cấu hình đúng một tài khoản ngân hàng nhận tiền cho cơ sở.");
         java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        periods.requireOpen(day, "ghi nhận tiền cọc");
         db.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", day.withDayOfMonth(1));
         var period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE month=? FOR SHARE", day.withDayOfMonth(1));
         if (!"OPEN".equals(period.get("status"))) throw fail(409, "Kỳ tài chính đã đóng, chưa thể ghi nhận cọc.");
@@ -198,6 +204,7 @@ public class CheckoutService {
             at.isBefore(now.minusSeconds(300)) ||
             at.isBefore(booking.actualCheckin())
         ) throw fail(409, "Báo giá đã hết hiệu lực. Vui lòng cập nhật tiền phòng và xác nhận lại.");
+        periods.requireOpen(at.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "lập bill");
         var overtime = bookings.checkoutOvertime(actor, bookingId, at);
         BigDecimal overtimeAmount = overtime
             .stream()
@@ -420,6 +427,7 @@ public class CheckoutService {
     public Map<String, Object> plan(Identity actor, UUID id, PaymentPlan input) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
+        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "cập nhật thanh toán bill");
         if (
             input == null || !List.of("CASH", "BANK_TRANSFER", "MIXED").contains(input.method())
         ) throw fail(400, "Chọn phương thức thanh toán hợp lệ.");
@@ -504,6 +512,7 @@ public class CheckoutService {
     public Map<String, Object> complete(Identity actor, UUID id) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
+        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "hoàn tất bill");
         BigDecimal received = decimal(bill, "paid");
         BigDecimal cash = decimal(bill, "plannedCash");
         if (
@@ -595,6 +604,7 @@ public class CheckoutService {
     @Transactional
     public Map<String, Object> renew(Identity actor, UUID id) {
         var bill = lockBill(actor, id);
+        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "gia hạn mã thanh toán bill");
         // Gia hạn cùng mã tham chiếu; không tạo mã thứ hai có thể nhận tiền trùng.
         int changed = db.update(
             """
@@ -620,6 +630,7 @@ public class CheckoutService {
     public Map<String, Object> changeMethod(Identity actor, UUID id) {
         // Khóa cùng thứ tự với webhook: giao dịch đã ghi nhận sẽ chặn đổi phương thức.
         var bill = lockBill(actor, id);
+        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "đổi phương thức thanh toán bill");
         if (!"ISSUED".equals(bill.get("status"))) {
             throw fail(409, "Chỉ đổi phương thức cho bill đang chờ thanh toán.");
         }
@@ -705,6 +716,22 @@ public class CheckoutService {
                 .toInstant();
         } catch (RuntimeException e) {
             throw fail(400, "Ngày giao dịch SePay không hợp lệ.");
+        }
+        if (!db.queryForList("SELECT id FROM gcmb.bank_transaction WHERE provider='SEPAY' AND account_id=? AND external_id=?",
+                UUID.class, account, payload.id().toString()).isEmpty()) return;
+        try {
+            periods.requireOpen(occurred.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "ghi nhận giao dịch SePay");
+        } catch (AuthFailure failure) {
+            if (failure.status() != 409) throw failure;
+            db.update("""
+                INSERT INTO gcmb.bank_transaction(id,account_id,provider,external_id,direction,amount,transfer_content,
+                  occurred_at,match_status,raw_payload,exception_reason)
+                VALUES (?,?,'SEPAY',?,?,?,?,?,'EXCEPTION',CAST(? AS jsonb),'PERIOD_CLOSED')
+                ON CONFLICT(provider,account_id,external_id) DO NOTHING
+                """, UUID.randomUUID(), account, payload.id().toString(),
+                "in".equals(payload.transferType()) ? "IN" : "OUT", payload.transferAmount(), content,
+                Timestamp.from(occurred), json.writeValueAsString(payload));
+            return;
         }
         UUID transaction = UUID.randomUUID();
         int inserted = db.update(
@@ -798,6 +825,10 @@ public class CheckoutService {
                 bookingId
             )
             .isEmpty();
+    }
+
+    private static java.time.LocalDate businessDay(Timestamp value) {
+        return value.toInstant().atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate();
     }
 
     private UUID bankAccount() {

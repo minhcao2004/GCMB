@@ -1,11 +1,16 @@
 package com.gcmb.backend.dashboard;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.audit.service.MutationAudit;
+import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
+import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService.StoredFile;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -24,50 +30,40 @@ import org.springframework.http.HttpStatus;
 @RequestMapping("/api/v1/accounting")
 public class FinancialController {
     private final JdbcTemplate db;
+    private final MutationAudit mutationAudit;
+    private final EquipmentAssetFileStorageService files;
+    private final FinancialPeriodService periods;
+    private final MonthlyPerformanceService performance;
 
-    public FinancialController(JdbcTemplate db) { this.db = db; }
+    public FinancialController(JdbcTemplate db, MutationAudit mutationAudit, EquipmentAssetFileStorageService files,
+                               FinancialPeriodService periods, MonthlyPerformanceService performance) {
+        this.db = db;
+        this.mutationAudit = mutationAudit;
+        this.files = files;
+        this.periods = periods;
+        this.performance = performance;
+    }
 
     @GetMapping("/reports/monthly")
     @Transactional(readOnly = true)
     public Map<String, Object> monthlyReport(@AuthenticationPrincipal Identity actor, @RequestParam String month,
                                              @RequestParam(required = false) UUID branchId) {
         requireReportRole(actor);
-        LocalDate start = month(month);
-        // BR-102/103/104/105/106/107/108/109/211: doanh thu bill, chi đã trả, cọc tịch thu riêng, dòng tiền từ sổ tiền.
-        List<Map<String, Object>> rows = db.queryForList("""
-            SELECT b.id,b.code,b.name,
-              COALESCE(revenue.amount,0) revenue,COALESCE(revenue.bills,0) "billCount",
-              COALESCE(cost.opex,0)+COALESCE(salary.amount,0) expenses,COALESCE(salary.amount,0) salary,COALESCE(cost.capex,0) investment,
-              COALESCE(forfeiture.amount,0) "forfeitedDeposits",
-              COALESCE(cash.net,0) "netCashFlow",
-              COALESCE(revenue.amount,0)-COALESCE(cost.opex,0)-COALESCE(salary.amount,0) profit,
-              CASE WHEN COALESCE(revenue.amount,0)>0 THEN
-                (revenue.amount-COALESCE(cost.opex,0)-COALESCE(salary.amount,0))*100/revenue.amount ELSE NULL END margin
-            FROM gcmb.branch b
-            LEFT JOIN LATERAL (SELECT sum(x.net_amount) amount,count(*) bills FROM gcmb.bill x
-              WHERE x.branch_id=b.id AND x.status='SETTLED'
-                AND (x.completed_at AT TIME ZONE b.timezone)::date>=? AND (x.completed_at AT TIME ZONE b.timezone)::date<?) revenue ON true
-            LEFT JOIN LATERAL (SELECT sum(p.amount) FILTER (WHERE e.class_snapshot='OPEX') opex,
-                sum(p.amount) FILTER (WHERE e.class_snapshot='CAPEX') capex
-              FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
-              WHERE e.branch_id=b.id AND p.status='PAID'
-                AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?) cost ON true
-            LEFT JOIN LATERAL (SELECT sum(-fe.amount_signed) amount FROM gcmb.financial_transaction ft
-              JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
-              WHERE ft.kind IN ('SALARY','ADVANCE') AND fe.branch_id=b.id AND fe.amount_signed<0
-                AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) salary ON true
-            -- BR-108: báo cáo cọc tịch thu riêng; không cộng vào doanh thu bill.
-            LEFT JOIN LATERAL (SELECT sum(de.amount) amount FROM gcmb.deposit_entry de
-              JOIN gcmb.deposit d ON d.id=de.deposit_id JOIN gcmb.booking bk ON bk.id=d.booking_id
-              WHERE bk.branch_id=b.id AND de.kind='FORFEIT'
-                AND (de.created_at AT TIME ZONE b.timezone)::date>=? AND (de.created_at AT TIME ZONE b.timezone)::date<?) forfeiture ON true
-            LEFT JOIN LATERAL (SELECT sum(fe.amount_signed) net FROM gcmb.financial_entry fe
-              JOIN gcmb.financial_transaction ft ON ft.id=fe.transaction_id
-              WHERE fe.branch_id=b.id AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=?
-                AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) cash ON true
-            WHERE (?::uuid IS NULL OR b.id=?::uuid) ORDER BY b.name,b.id
-            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), branchId, branchId);
-        return Map.of("month", month, "results", rows, "totals", totals(rows));
+        return performance.report(actor,month(month),branchId);
+    }
+
+    @GetMapping("/reports/monthly-performance/export")
+    @Transactional
+    public ResponseEntity<byte[]> exportMonthlyPerformance(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+                                                            @RequestParam(required = false) UUID branchId,
+                                                            @RequestParam(defaultValue = "csv") String format) {
+        byte[] bytes=performance.export(actor,month(month),branchId,format);
+        String extension=format.toLowerCase(java.util.Locale.ROOT);
+        MediaType type="xlsx".equals(extension)
+            ? MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            : new MediaType("text","csv",StandardCharsets.UTF_8);
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=gcmb-monthly-performance-"+month+"."+extension)
+            .contentType(type).body(bytes);
     }
 
     @GetMapping("/reports/expense-breakdown")
@@ -110,12 +106,14 @@ public class FinancialController {
             ) SELECT method AS label,SUM(net_amount) AS value FROM bills GROUP BY method ORDER BY method
             """, start, start.plusMonths(1), branchId, branchId);
         List<Map<String, Object>> exceptions = db.queryForList("""
-            SELECT bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
-              bt.match_status AS status,bt.transfer_content AS reason,
-              COALESCE(b.name,'Tài khoản chung') AS "branchName"
+            SELECT bt.id,bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
+              bt.match_status AS status,bt.exception_reason AS "exceptionReason",bt.transfer_content AS reason,
+              bt.resolution_status AS "resolutionStatus",bt.resolved_at AS "resolvedAt",u.username AS "resolvedBy",
+              bt.resolution_note AS "resolutionNote",COALESCE(b.name,'Tài khoản chung') AS "branchName"
             FROM gcmb.bank_transaction bt JOIN gcmb.financial_account a ON a.id=bt.account_id
             LEFT JOIN gcmb.payment p ON p.bank_transaction_id=bt.id
             LEFT JOIN gcmb.branch b ON b.id=COALESCE(p.branch_id,a.branch_id)
+            LEFT JOIN gcmb.user_account u ON u.id=bt.resolved_by
             WHERE bt.provider='SEPAY' AND bt.match_status='EXCEPTION' AND bt.occurred_at>=? AND bt.occurred_at<?
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
@@ -124,113 +122,151 @@ public class FinancialController {
         return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
     }
 
+    @PostMapping("/sepay-exceptions/{id}/resolve")
+    public Map<String, Object> resolveSePayException(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
+                                                      @RequestBody(required = false) ResolveSePayExceptionCommand command) {
+        return periods.resolveSePayException(actor, id, command == null ? null : command.resolutionNote());
+    }
+
     @GetMapping("/financial-periods")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> periods(@AuthenticationPrincipal Identity actor) {
-        requireAccountant(actor);
-        return db.queryForList("""
-            WITH months AS (
-              SELECT "month" FROM gcmb.financial_period
-              UNION SELECT date_trunc('month',business_date)::date FROM gcmb.daily_cash_closing
-              UNION SELECT date_trunc('month',booking_date)::date FROM gcmb.financial_transaction
-              UNION SELECT date_trunc('month',CURRENT_DATE)::date
-            )
-            SELECT p.id,m."month"::text AS "month",COALESCE(p.status,'OPEN') AS status,p.closed_at "closedAt",u.username "closedBy",
-              count(c.id) FILTER (WHERE c.status<>'RECONCILED') "unreconciledClosings"
-            FROM months m LEFT JOIN gcmb.financial_period p ON p."month"=m."month"
-            LEFT JOIN gcmb.user_account u ON u.id=p.closed_by
-            LEFT JOIN gcmb.daily_cash_closing c ON date_trunc('month',c.business_date)::date=m."month"
-            GROUP BY p.id,m."month",p.status,p.closed_at,u.username ORDER BY m."month" DESC
-            """);
+        return periods.list(actor);
+    }
+
+    @GetMapping("/financial-periods/{month}/readiness")
+    public Map<String, Object> periodReadiness(@AuthenticationPrincipal Identity actor, @PathVariable String month) {
+        return periods.readiness(actor, month(month));
     }
 
     @PostMapping("/financial-periods/{month}/close")
-    @Transactional
     public Map<String, Object> closePeriod(@AuthenticationPrincipal Identity actor, @PathVariable String month,
-                                           @RequestBody(required = false) Map<String, Object> confirmation) {
-        requireAccountant(actor);
-        LocalDate start = month(month);
-        Boolean available = db.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE "month"=?
-              UNION SELECT 1 FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<?
-              UNION SELECT 1 FROM gcmb.financial_transaction WHERE booking_date>=? AND booking_date<?
-              UNION SELECT 1 WHERE date_trunc('month',CURRENT_DATE)::date=?)
-            """, Boolean.class, start, start, start.plusMonths(1), start, start.plusMonths(1), start);
-        if (!Boolean.TRUE.equals(available)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu kỳ tài chính cần chốt.");
-        db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", start);
-        Map<String, Object> period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE \"month\"=? FOR UPDATE", start);
-        if ("CLOSED".equals(period.get("status"))) throw conflict("Kỳ tài chính này đã được chốt.");
-        Long unresolved = db.queryForObject("SELECT count(*) FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<? AND status<>'RECONCILED'", Long.class, start, start.plusMonths(1));
-        if (unresolved != null && unresolved > 0) throw conflict("Chưa thể chốt kỳ tài chính vì còn " + unresolved + " phiếu chốt quỹ chưa đối soát. Vui lòng hoàn tất đối soát tất cả phiếu trong kỳ."); // BR-99, MSG102.
-        if (confirmation == null || !Boolean.TRUE.equals(confirmation.get("confirmed"))) throw bad("Vui lòng xác nhận khóa kỳ tài chính.");
-        db.update("UPDATE gcmb.financial_period SET status='CLOSED',closed_by=?,closed_at=CURRENT_TIMESTAMP WHERE id=? AND status='OPEN'", actor.id(), period.get("id"));
-        return db.queryForMap("SELECT p.id,p.\"month\"::text AS \"month\",p.status,p.closed_at \"closedAt\",u.username \"closedBy\" FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?", period.get("id"));
+                                           @RequestBody(required = false) ClosePeriodCommand command) {
+        return periods.close(actor, month(month), command != null && command.confirmed(), command == null ? "" : command.note());
     }
 
     @GetMapping("/transactions")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> transactions(@AuthenticationPrincipal Identity actor, @RequestParam String month) {
+    public List<Map<String, Object>> transactions(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+                                                  @RequestParam(required=false) UUID branchId,
+                                                  @RequestParam(defaultValue="") String kind,
+                                                  @RequestParam(defaultValue="") String q) {
         requireAccountant(actor);
         LocalDate start = month(month);
+        if (!kind.isBlank() && !List.of("PAYMENT", "REFUND", "EXPENSE", "SALARY", "ADVANCE", "TRANSFER", "OPENING", "ADJUSTMENT").contains(kind))
+            throw bad("Loại giao dịch không hợp lệ.");
+        if (q.trim().length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         return db.queryForList("""
-            SELECT t.id,t.kind,t.booking_date "bookingDate",t.occurred_at "occurredAt",t.reason,
-              COALESCE(e.amount,0) amount,COALESCE(e."entryCount",0) "entryCount",
-              COALESCE(a."adjustmentCount",0) "adjustmentCount",COALESCE(a.adjustments::text,'[]') adjustments,
-              p.status "periodStatus"
-            FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
-            LEFT JOIN LATERAL (SELECT sum(amount_signed) amount,count(*) "entryCount" FROM gcmb.financial_entry WHERE transaction_id=t.id) e ON true
-            LEFT JOIN LATERAL (
-              SELECT count(*) "adjustmentCount",
-                json_agg(json_build_object('reason',x.reason,'createdBy',u.username,'createdAt',x.occurred_at,'amount',v.amount) ORDER BY x.occurred_at DESC) adjustments
-              FROM gcmb.financial_transaction x LEFT JOIN gcmb.user_account u ON u.id=x.created_by
-              LEFT JOIN LATERAL (SELECT sum(amount_signed) amount FROM gcmb.financial_entry WHERE transaction_id=x.id) v ON true
-              WHERE x.adjusts_transaction_id=t.id
-            ) a ON true
-            WHERE t.booking_date>=? AND t.booking_date<? ORDER BY t.occurred_at DESC,t.id
-            """, start, start.plusMonths(1));
+            WITH transaction_rows AS (
+              SELECT t.id,t.kind,t.booking_date "bookingDate",t.occurred_at "occurredAt",t.reason,
+                p."month"::text "periodMonth",p.status "periodStatus",scope.branch_id "branchId",scope.branch_name "branchName",
+                COALESCE(e.amount,0) "originalAmount",COALESCE(a.adjustmentAmount,0) "adjustmentAmount",
+                COALESCE(e.amount,0)+COALESCE(a.adjustmentAmount,0) amount,
+                COALESCE(e."entryCount",0) "entryCount",COALESCE(a."adjustmentCount",0) "adjustmentCount",
+                COALESCE(a.adjustments::text,'[]') adjustments
+              FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
+              LEFT JOIN LATERAL (SELECT e.branch_id,b.name branch_name FROM gcmb.financial_entry e
+                LEFT JOIN gcmb.branch b ON b.id=e.branch_id WHERE e.transaction_id=t.id ORDER BY e.id LIMIT 1) scope ON true
+              LEFT JOIN LATERAL (SELECT sum(amount_signed) amount,count(*) "entryCount" FROM gcmb.financial_entry WHERE transaction_id=t.id) e ON true
+              LEFT JOIN LATERAL (
+                SELECT count(*) "adjustmentCount",COALESCE(sum(v.amount),0) adjustmentAmount,
+                  json_agg(json_build_object('reason',x.reason,'createdBy',u.username,'createdAt',x.occurred_at,
+                    'amount',v.amount,'periodMonth',xp."month"::text,'periodStatus',xp.status,'attachments',COALESCE(f.files,'[]'::json)) ORDER BY x.occurred_at DESC,x.id) adjustments
+                FROM gcmb.financial_transaction x JOIN gcmb.financial_period xp ON xp.id=x.period_id
+                LEFT JOIN gcmb.user_account u ON u.id=x.created_by
+                LEFT JOIN LATERAL (SELECT sum(amount_signed) amount FROM gcmb.financial_entry WHERE transaction_id=x.id) v ON true
+                LEFT JOIN LATERAL (SELECT json_agg(json_build_object('id',id,'name',original_name,'mimeType',mime_type)) files
+                  FROM gcmb.finance_attachment WHERE owner_type='FINANCIAL_TRANSACTION' AND owner_id=x.id) f ON true
+                WHERE x.adjusts_transaction_id=t.id
+              ) a ON true
+              WHERE t.booking_date>=? AND t.booking_date<?
+              UNION ALL
+              -- UC-120: paid requests are cash outflows even though they are not linked to the legacy expense ledger.
+              SELECT r.id,'EXPENSE'::varchar(25),(r.paid_at AT TIME ZONE b.timezone)::date,r.paid_at,
+                concat_ws(' · ',r.code,c.name,r.description),date_trunc('month',r.paid_at AT TIME ZONE b.timezone)::date::text,
+                COALESCE(p.status,'OPEN'),r.branch_id,b.name,-r.amount,0::numeric,-r.amount,0::bigint,0::bigint,'[]'::text
+              FROM gcmb.finance_expense_request r JOIN gcmb.branch b ON b.id=r.branch_id
+              JOIN gcmb.finance_expense_category c ON c.id=r.category_id
+              LEFT JOIN gcmb.financial_period p ON p."month"=date_trunc('month',r.paid_at AT TIME ZONE b.timezone)::date
+              WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE b.timezone)::date>=?
+                AND (r.paid_at AT TIME ZONE b.timezone)::date<?
+            )
+            SELECT * FROM transaction_rows
+            WHERE (?::uuid IS NULL OR "branchId"=?::uuid)
+              AND (?='' OR kind=?)
+              AND (?='' OR lower(concat_ws(' ',reason,kind,id::text,"branchName")) LIKE '%'||lower(?)||'%')
+            ORDER BY "occurredAt" DESC,id
+            """, start, start.plusMonths(1), start, start.plusMonths(1), branchId, branchId, kind.trim(), kind.trim(), q.trim(), q.trim());
     }
 
-    @PostMapping("/transactions/{id}/adjustments")
-    @Transactional
+    @PostMapping(value="/transactions/{id}/adjustments", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> adjust(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
-                                      @RequestBody(required = false) Map<String, Object> input) {
+                                      @RequestPart("command") AdjustmentCommand input,
+                                      @RequestPart(value="evidence", required=false) MultipartFile evidence) {
         requireAccountant(actor);
-        String reason = input == null ? "" : String.valueOf(input.getOrDefault("reason", "")).trim();
+        String reason = input == null || input.reason() == null ? "" : input.reason().trim();
         if (reason.isEmpty() || reason.length() > 500) throw bad("Vui lòng nhập lý do điều chỉnh (tối đa 500 ký tự).");
         BigDecimal amount;
-        try { amount = new BigDecimal(String.valueOf(input.get("amountSigned"))); }
+        try { amount = new BigDecimal(String.valueOf(input.amountSigned())); }
         catch (RuntimeException ex) { throw bad("Số tiền điều chỉnh không hợp lệ."); }
         if (amount.signum() == 0 || amount.stripTrailingZeros().scale() > 0 || amount.abs().compareTo(new BigDecimal("999999999999999999")) > 0) throw bad("Số tiền điều chỉnh phải là số nguyên VND khác 0.");
-        List<Map<String, Object>> originals = db.queryForList("""
-            SELECT t.kind,t.reason,t.booking_date,t.period_id,p.status period_status,
-              count(e.id) entry_count,min(e.account_id::text) account_id,min(e.branch_id::text) branch_id
-            FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
-            LEFT JOIN gcmb.financial_entry e ON e.transaction_id=t.id WHERE t.id=?
-            GROUP BY t.id,p.status
-            """, id);
-        if (originals.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch cần điều chỉnh.");
-        Map<String, Object> original = originals.get(0);
-        // shortcut: one-entry adjustments only; add multi-account corrections after their accounting rule is defined.
-        if ("TRANSFER".equals(original.get("kind")) || "OPENING".equals(original.get("kind")) || "ADJUSTMENT".equals(original.get("kind")) || ((Number) original.get("entry_count")).intValue() != 1)
-            throw bad("Chỉ có thể điều chỉnh giao dịch gốc có một dòng sổ tiền.");
-        LocalDate today = LocalDate.now();
-        LocalDate periodMonth = today.withDayOfMonth(1);
-        db.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", periodMonth);
-        UUID adjustment = UUID.randomUUID();
-        List<UUID> openPeriods = db.query("SELECT id FROM gcmb.financial_period WHERE month=? AND status='OPEN' FOR UPDATE", (rs, rowNum) -> rs.getObject(1, UUID.class), periodMonth);
-        if (openPeriods.isEmpty()) throw conflict("Kỳ hiện tại đã khóa. Không thể ghi điều chỉnh vào kỳ đã chốt.");
-        UUID periodId = openPeriods.get(0);
-        String branchValue = (String) original.get("branch_id");
-        UUID branchId = branchValue == null ? null : UUID.fromString(branchValue);
-        db.update("""
-            INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,adjusts_transaction_id,reason,created_by,idempotency_key)
-            VALUES (?,?,?,CURRENT_TIMESTAMP,'ADJUSTMENT',?,?,?,?)
-            """, adjustment, periodId, today, id, reason, actor.id(), adjustment.toString()); // BR-100/101.
-        db.update("""
-            INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed)
-            VALUES (?,?,?,?)
-            """, adjustment, UUID.fromString((String) original.get("account_id")), branchId, amount);
-        return db.queryForMap("SELECT id,kind,adjusts_transaction_id \"adjustsTransactionId\",reason,occurred_at \"occurredAt\" FROM gcmb.financial_transaction WHERE id=?", adjustment);
+        StoredFile[] stored = new StoredFile[1];
+        try {
+            UUID adjustment = mutationAudit.record("ADJUST_FINANCIAL_TRANSACTION", "FINANCIAL_TRANSACTION", null, () -> {
+                List<Map<String, Object>> locked = db.queryForList("""
+                    SELECT t.kind,t.adjusts_transaction_id,t.booking_date,p.status period_status
+                    FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
+                    WHERE t.id=? FOR UPDATE OF t
+                    """, id);
+                if (locked.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch cần điều chỉnh.");
+                Map<String, Object> original = locked.get(0);
+                if ("ADJUSTMENT".equals(original.get("kind")) || original.get("adjusts_transaction_id") != null)
+                    throw bad("Chỉ được điều chỉnh giao dịch gốc, không thể điều chỉnh một bút toán điều chỉnh.");
+                List<Map<String, Object>> entries = db.queryForList("SELECT account_id,branch_id,amount_signed FROM gcmb.financial_entry WHERE transaction_id=? ORDER BY id", id);
+                if (List.of("TRANSFER", "OPENING").contains(original.get("kind")) || entries.size() != 1)
+                    throw bad("Chỉ có thể điều chỉnh giao dịch gốc có một dòng sổ tiền.");
+                Map<String, Object> entry = entries.get(0);
+                BigDecimal originalAmount = (BigDecimal) entry.get("amount_signed");
+                BigDecimal previousAdjustments = db.queryForObject("""
+                    SELECT COALESCE(sum(e.amount_signed),0) FROM gcmb.financial_transaction t
+                    JOIN gcmb.financial_entry e ON e.transaction_id=t.id WHERE t.adjusts_transaction_id=?
+                    """, BigDecimal.class, id);
+                BigDecimal adjustedAmount = originalAmount.add(previousAdjustments).add(amount);
+                if ((originalAmount.signum() > 0 && adjustedAmount.signum() < 0)
+                    || (originalAmount.signum() < 0 && adjustedAmount.signum() > 0))
+                    throw conflict("Tổng điều chỉnh vượt giá trị giao dịch gốc; số tiền sau điều chỉnh không được đổi chiều thu/chi.");
+
+                LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                LocalDate periodMonth = today.withDayOfMonth(1);
+                db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", periodMonth);
+                List<UUID> openPeriods = db.query("SELECT id FROM gcmb.financial_period WHERE \"month\"=? AND status='OPEN' FOR UPDATE", (rs, rowNum) -> rs.getObject(1, UUID.class), periodMonth);
+                if (openPeriods.isEmpty()) throw conflict("Kỳ hiện tại đã khóa. Không thể ghi điều chỉnh vào kỳ đã chốt.");
+                UUID newId = UUID.randomUUID();
+                db.update("""
+                    INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,adjusts_transaction_id,reason,created_by,idempotency_key)
+                    VALUES (?,?,?,CURRENT_TIMESTAMP,'ADJUSTMENT',?,?,?,?)
+                    """, newId, openPeriods.get(0), today, id, reason, actor.id(), newId.toString());
+                db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
+                    newId, entry.get("account_id"), entry.get("branch_id"), amount);
+                if (evidence != null && !evidence.isEmpty()) {
+                    stored[0] = files.store(evidence);
+                    StoredFile file = stored[0];
+                    db.update("""
+                        INSERT INTO gcmb.finance_attachment(id,owner_type,owner_id,kind,object_key,original_name,mime_type,byte_size,sha256,created_by)
+                        VALUES (?,'FINANCIAL_TRANSACTION',?,'ADJUSTMENT_EVIDENCE',?,?,?,?,?,?)
+                        """, file.id(), newId, file.objectKey(), file.originalName(), file.mimeType(), file.byteSize(), file.sha256(), actor.id());
+                }
+                return newId;
+            }, value -> value);
+            return db.queryForMap("""
+                SELECT t.id,t.kind,t.adjusts_transaction_id \"adjustsTransactionId\",t.reason,t.occurred_at \"occurredAt\",
+                  p.\"month\"::text \"periodMonth\",p.status \"periodStatus\"
+                FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id WHERE t.id=?
+                """, adjustment);
+        } catch (RuntimeException failure) {
+            if (stored[0] != null) files.deleteQuietly(stored[0].objectKey());
+            throw failure;
+        }
     }
 
     @GetMapping("/tax-data.csv")
@@ -249,10 +285,18 @@ public class FinancialController {
             WHERE t.booking_date>=? AND t.booking_date<? AND (?='ALL' OR (?='INFLOW' AND e.amount_signed>0) OR (?='OUTFLOW' AND e.amount_signed<0))
             ORDER BY t.booking_date,t.occurred_at,t.id,e.account_id
             """, start, start.plusMonths(1), scope, scope, scope);
-        StringBuilder csv = new StringBuilder("\uFEFFtransaction_id,original_transaction_id,booking_date,occurred_at,kind,reason,branch,account,amount_signed\r\n");
+        @SuppressWarnings("unchecked") Map<String,Object> revenue = (Map<String,Object>) performance.report(actor,start,null).get("totals");
+        StringBuilder csv = new StringBuilder("\uFEFFtransaction_id,original_transaction_id,booking_date,occurred_at,kind,reason,branch,account,amount_signed,report_bill_revenue,report_forfeited_deposits,report_total_revenue\r\n");
+        // UC-125: attach the shared operating-revenue figures as a clearly marked summary row, not as a ledger transaction.
+        csv.append(csv("")).append(',').append(csv("")).append(',').append(csv(start)).append(',').append(csv(""))
+            .append(',').append(csv("REPORT_REVENUE_SUMMARY")).append(',').append(csvText("Doanh thu vận hành theo báo cáo tháng; không phải giao dịch sổ tiền"))
+            .append(',').append(csvText("Toàn chuỗi")).append(',').append(csv("")).append(',').append(csv(""))
+            .append(',').append(csv(revenue.get("billRevenue"))).append(',').append(csv(revenue.get("forfeitedDeposits")))
+            .append(',').append(csv(revenue.get("revenue"))).append("\r\n");
         for (Map<String, Object> row : rows) csv.append(csv(row.get("id"))).append(',').append(csv(row.get("adjusts_transaction_id"))).append(',')
             .append(csv(row.get("booking_date"))).append(',').append(csv(row.get("occurred_at"))).append(',').append(csv(row.get("kind"))).append(',').append(csvText(row.get("reason"))).append(',')
-            .append(csvText(row.get("branch_code"))).append(',').append(csvText(row.get("account_code"))).append(',').append(csv(row.get("amount_signed"))).append("\r\n");
+            .append(csvText(row.get("branch_code"))).append(',').append(csvText(row.get("account_code"))).append(',').append(csv(row.get("amount_signed")))
+            .append(",,,\r\n");
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=gcmb-accounting-" + month + ".csv")
             .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8)).body(csv.toString().getBytes(StandardCharsets.UTF_8));
     }
@@ -274,4 +318,7 @@ public class FinancialController {
     private static LocalDate month(String value) { try { if (!value.matches("\\d{4}-\\d{2}")) throw new IllegalArgumentException(); return YearMonth.parse(value).atDay(1); } catch (RuntimeException e) { throw bad("Tháng báo cáo không hợp lệ."); } }
     private static ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST,message); }
     private static ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT,message); }
+    public record AdjustmentCommand(BigDecimal amountSigned, String reason) {}
+    public record ClosePeriodCommand(boolean confirmed, String note) {}
+    public record ResolveSePayExceptionCommand(String resolutionNote) {}
 }

@@ -5,6 +5,7 @@ import static com.gcmb.backend.finance.service.FinanceAccess.*;
 
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.finance.service.FinanceAccess;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import java.math.*;
 import java.sql.Timestamp;
 import java.time.*;
@@ -21,6 +22,7 @@ public class PayrollService {
   private final JdbcTemplate db;
   private final FinanceAccess access;
   private final ObjectMapper json;
+  private final FinancialPeriodService periods;
   private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
   public record BranchSettlement(UUID employeeId, BigDecimal bonus, BigDecimal penalty,
@@ -143,6 +145,12 @@ public class PayrollService {
     if (name.length() > 200 || holder.length() > 200 || !account.matches("[A-Za-z0-9]{3,60}")) {
       throw bad("Ngân hàng và chủ tài khoản tối đa 200 ký tự; số tài khoản gồm 3–60 chữ hoặc số.");
     }
+    var affectedMonths = db.queryForList("""
+      SELECT DISTINCT q.month FROM gcmb.payroll_entry e JOIN gcmb.payroll_period q ON q.id=e.period_id
+      WHERE e.employee_id=? AND NOT EXISTS(
+        SELECT 1 FROM gcmb.salary_payment p WHERE p.payroll_entry_id=e.id AND p.status='PAID')
+      """, LocalDate.class, input.employeeId());
+    for (LocalDate affectedMonth : affectedMonths) periods.requireOpen(affectedMonth, "cập nhật thông tin nhận lương");
     var before = db.queryForMap("SELECT bank_name,bank_account,bank_holder FROM gcmb.employee WHERE id=?", input.employeeId());
     db.update("UPDATE gcmb.employee SET bank_name=?,bank_account=?,bank_holder=?,version=version+1 WHERE id=?", name, account, holder, input.employeeId());
     // BR-77: không đổi thông tin lịch sử của khoản đã thanh toán.
@@ -204,6 +212,7 @@ public class PayrollService {
     if (send) access.lock();
     UUID branch = access.branch(actor, send);
     LocalDate m = month(value);
+    if (send) periods.requireOpen(m, "chốt dữ liệu payroll tại cơ sở");
     if (!m.isBefore(LocalDate.now(ZONE).withDayOfMonth(1))) throw bad("Chỉ chốt lương cho tháng đã kết thúc.");
     requireSettlementEmployee(actor, value, input.employeeId());
     // BR-64 / MSG87: tất cả công của tháng phải được chốt trước khi tổng hợp.
@@ -318,10 +327,11 @@ public class PayrollService {
       """, entry, employee, period.get("id"));
   }
 
-  public PayrollService(JdbcTemplate db, FinanceAccess access, ObjectMapper json) {
+  public PayrollService(JdbcTemplate db, FinanceAccess access, ObjectMapper json, FinancialPeriodService periods) {
     this.db = db;
     this.access = access;
     this.json = json;
+    this.periods = periods;
   }
 
   public record Setting(
@@ -387,10 +397,13 @@ public class PayrollService {
   }
 
   private Map<String, Object> period(LocalDate month, boolean create) {
-    if (create) db.update(
-      "INSERT INTO gcmb.payroll_period(month,status) VALUES (?,'DRAFT') ON CONFLICT(month) DO NOTHING",
-      month
-    );
+    if (create) {
+      periods.requireOpen(month, "tạo hoặc cập nhật bảng lương");
+      db.update(
+        "INSERT INTO gcmb.payroll_period(month,status) VALUES (?,'DRAFT') ON CONFLICT(month) DO NOTHING",
+        month
+      );
+    }
     var rows = db.queryForList("SELECT * FROM gcmb.payroll_period WHERE month=?", month);
     return rows.isEmpty() ? null : rows.get(0);
   }
@@ -872,6 +885,7 @@ public class PayrollService {
     access.accountant(actor);
     access.lock();
     LocalDate m = month(value);
+    periods.requireOpen(m, "ghi nhận ứng lương cho kỳ này");
     var p = period(m, true);
     validatePay(input);
     var repeated = db.queryForList(
@@ -1120,6 +1134,7 @@ public class PayrollService {
         " đ. Vui lòng kiểm tra lại nguồn tiền hoặc số tiền."
     ); // MSG93.
     LocalDate today = LocalDate.now(ZONE);
+    periods.requireOpen(today, "ghi nhận chi trả payroll");
     db.update(
       "INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING",
       today.withDayOfMonth(1)

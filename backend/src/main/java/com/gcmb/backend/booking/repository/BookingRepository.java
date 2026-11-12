@@ -710,11 +710,14 @@ public class BookingRepository {
     }
 
     // Ghi bút toán giữ cọc với khóa chống ghi lặp.
-    public void forfeitDeposit(UUID bookingId, UUID actorId, BigDecimal amount, String reason, String idempotencyKey) {
+    public void forfeitDeposit(UUID bookingId, UUID actorId, String reason, String idempotencyKey) {
         db.update("""
             INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,actor_id,reason,idempotency_key)
-            SELECT id,'FORFEIT',?,?,?,? FROM gcmb.deposit WHERE booking_id=?
-            """, amount, actorId, reason, idempotencyKey, bookingId);
+            SELECT d.id,'FORFEIT',v.balance,?,?,?
+            FROM gcmb.deposit d JOIN gcmb.v_deposit_balance v ON v.id=d.id
+            WHERE d.booking_id=? AND v.balance>0
+            ON CONFLICT (idempotency_key) DO NOTHING
+            """, actorId, reason, idempotencyKey, bookingId);
     }
 
     // Lưu sự kiện và chi tiết JSON để đối soát lịch sử booking.

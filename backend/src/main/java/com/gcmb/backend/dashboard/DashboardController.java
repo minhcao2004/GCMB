@@ -1,7 +1,6 @@
 package com.gcmb.backend.dashboard;
 
 import com.gcmb.backend.auth.dto.Identity;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
@@ -16,22 +15,23 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class DashboardController {
     private final JdbcTemplate db;
-    public DashboardController(JdbcTemplate db) { this.db = db; }
+    private final MonthlyPerformanceService performance;
+    public DashboardController(JdbcTemplate db, MonthlyPerformanceService performance) { this.db = db; this.performance = performance; }
 
     @GetMapping("/api/v1/head-office/dashboard")
     @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
     public Map<String, Object> chain(@AuthenticationPrincipal Identity actor, @RequestParam String month, @RequestParam(required = false) UUID branchId) {
         requireRole(actor, "HEAD_OFFICE_MANAGER");
         LocalDate start = month(month);
-        if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')", Boolean.class, branchId)))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cơ sở đang chọn không hoạt động hoặc không tồn tại.");
         List<Map<String, Object>> options = db.queryForList("SELECT id, name, code FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name, id");
-        List<Map<String, Object>> rows = results(start, branchId);
-        Map<String, Object> previousTotals = totals(results(start.minusMonths(1), branchId));
-        return Map.of("month", month, "branches", options, "results", rows, "totals", totals(rows),
-            "previousTotals", previousTotals,
-            "dailyRevenue", dailyRevenue(start, branchId), "revenueMix", revenueMix(start, branchId),
-            "occupancyByBranch", occupancy(branchId));
+        Map<String, Object> report = performance.report(actor,start,branchId);
+        List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
+        return Map.ofEntries(Map.entry("month",month),Map.entry("branches",options),Map.entry("results",rows),
+            Map.entry("totals",report.get("totals")),Map.entry("previousTotals",report.get("previousTotals")),
+            Map.entry("changes",report.get("changes")),Map.entry("revenueGroups",report.get("revenueGroups")),
+            Map.entry("expenseGroups",report.get("expenseGroups")),Map.entry("dailyRevenue",dailyRevenue(start,branchId)),
+            Map.entry("revenueMix",revenueMix(start,branchId)),Map.entry("occupancyByBranch",rows));
     }
 
     @GetMapping("/api/v1/branch-management/dashboard")
@@ -42,7 +42,8 @@ public class DashboardController {
         if (actor.branchId() == null || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
         LocalDate start = month(month);
-        List<Map<String, Object>> rows = results(start, actor.branchId());
+        Map<String,Object> report = performance.report(actor,start,actor.branchId());
+        List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
         Map<String, Object> operational = db.queryForMap("""
             SELECT count(*) FILTER (WHERE r.operating_status <> 'INACTIVE') AS "roomCount",
@@ -86,18 +87,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> dailyRevenue(LocalDate start, UUID branchId) {
-        return db.queryForList("""
-            SELECT (b.completed_at AT TIME ZONE br.timezone)::date AS date,
-                COALESCE(SUM(bl.amount) FILTER (WHERE bl.order_line_id IS NULL),0) AS "roomRevenue",
-                COALESCE(SUM(bl.amount) FILTER (WHERE bl.order_line_id IS NOT NULL),0) AS "fnbRevenue",
-                COALESCE(SUM(bl.amount),0) AS revenue
-            FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
-            JOIN gcmb.bill_line bl ON bl.bill_id=b.id
-            WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date >= ?
-              AND (b.completed_at AT TIME ZONE br.timezone)::date < ?
-              AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
-            GROUP BY (b.completed_at AT TIME ZONE br.timezone)::date ORDER BY date
-            """, start, start.plusMonths(1), branchId, branchId);
+        return performance.dailyRevenue(start,branchId);
     }
 
     private List<Map<String, Object>> revenueMix(LocalDate start, UUID branchId) {
@@ -113,8 +103,17 @@ public class DashboardController {
                 AND (b.completed_at AT TIME ZONE br.timezone)::date < ?
                 AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
               GROUP BY b.id,b.net_amount
-            ) SELECT method AS label, SUM(net_amount) AS value FROM bill_methods GROUP BY method ORDER BY method
-            """, start, start.plusMonths(1), branchId, branchId);
+            ), revenue_mix AS (
+              SELECT method AS label, SUM(net_amount) AS value FROM bill_methods GROUP BY method
+              UNION ALL
+              SELECT 'Cọc tịch thu', COALESCE(SUM(de.amount),0)
+              FROM gcmb.deposit_entry de JOIN gcmb.deposit d ON d.id=de.deposit_id
+              JOIN gcmb.booking bk ON bk.id=d.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
+              WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
+                AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (CAST(? AS uuid) IS NULL OR bk.branch_id=?)
+            ) SELECT label,value FROM revenue_mix ORDER BY label
+            """, start, start.plusMonths(1), branchId, branchId,
+                start, start.plusMonths(1), branchId, branchId);
     }
 
     private List<Map<String, Object>> occupancy(UUID branchId) {
@@ -226,57 +225,4 @@ public class DashboardController {
         catch (DateTimeParseException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tháng báo cáo không hợp lệ."); }
     }
 
-    private List<Map<String, Object>> results(LocalDate start, UUID selected) {
-        // BR-102, BR-211: bill hoàn tất, theo thời điểm hoàn tất tại múi giờ của cơ sở; tiền cọc chưa dùng không phải doanh thu.
-        // BR-103, BR-107: cộng OPEX, lương và ứng lương đã trả; tách CAPEX, loại chuyển quỹ khỏi chi phí vận hành.
-        // BR-104, BR-105: lợi nhuận trừ chi vận hành và lương; biên chỉ tính khi thu > 0.
-        // BR-106: dòng tiền thuần lấy tổng bút toán thu vào trừ bút toán thu ra trong sổ tiền.
-        // BR-108: cọc tịch thu được báo cáo riêng, không nhập vào doanh thu dịch vụ.
-        return db.queryForList("""
-            SELECT b.id, b.code, b.name, b.address, b.status, b.timezone,
-                COALESCE(revenue.amount,0) AS revenue, COALESCE(revenue.bills,0) AS "billCount",
-                COALESCE(cost.opex,0)+COALESCE(salary.amount,0) AS expenses, COALESCE(salary.amount,0) AS salary,
-                COALESCE(cost.capex,0) AS investment, COALESCE(cost.payments,0)+COALESCE(salary.payments,0) AS "expenseCount",
-                COALESCE(forfeiture.amount,0) AS "forfeitedDeposits",
-                COALESCE(cash.net,0) AS "netCashFlow",
-                COALESCE(revenue.amount,0)-COALESCE(cost.opex,0)-COALESCE(salary.amount,0) AS profit,
-                CASE WHEN COALESCE(revenue.amount,0)>0 THEN (revenue.amount-COALESCE(cost.opex,0)-COALESCE(salary.amount,0))*100/revenue.amount ELSE NULL END AS margin
-            FROM gcmb.branch b
-            LEFT JOIN LATERAL (SELECT sum(x.net_amount) amount, count(*) bills FROM gcmb.bill x
-                WHERE x.branch_id=b.id AND x.status='SETTLED' AND (x.completed_at AT TIME ZONE b.timezone)::date>=? AND (x.completed_at AT TIME ZONE b.timezone)::date<?) revenue ON true
-            LEFT JOIN LATERAL (SELECT sum(p.amount) FILTER (WHERE e.class_snapshot='OPEX') opex, sum(p.amount) FILTER (WHERE e.class_snapshot='CAPEX') capex, count(*) payments
-                FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
-                WHERE e.branch_id=b.id AND p.status='PAID' AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?) cost ON true
-            LEFT JOIN LATERAL (SELECT sum(-fe.amount_signed) amount,count(*) payments
-                FROM gcmb.financial_transaction ft JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
-                WHERE ft.kind IN ('SALARY','ADVANCE') AND fe.branch_id=b.id AND fe.amount_signed<0
-                  AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) salary ON true
-            -- BR-108: tách tiền cọc tịch thu khỏi doanh thu bill và dòng tiền nhận cọc.
-            LEFT JOIN LATERAL (SELECT sum(de.amount) amount FROM gcmb.deposit_entry de
-                JOIN gcmb.deposit d ON d.id=de.deposit_id JOIN gcmb.booking bk ON bk.id=d.booking_id
-                WHERE bk.branch_id=b.id AND de.kind='FORFEIT'
-                  AND (de.created_at AT TIME ZONE b.timezone)::date>=? AND (de.created_at AT TIME ZONE b.timezone)::date<?) forfeiture ON true
-            LEFT JOIN LATERAL (SELECT sum(fe.amount_signed) net FROM gcmb.financial_entry fe
-                JOIN gcmb.financial_transaction ft ON ft.id=fe.transaction_id
-                WHERE fe.branch_id=b.id AND (ft.occurred_at AT TIME ZONE b.timezone)::date>=? AND (ft.occurred_at AT TIME ZONE b.timezone)::date<?) cash ON true
-            WHERE (?::uuid IS NULL OR b.id=?::uuid) ORDER BY b.name,b.id
-            """, start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), start, start.plusMonths(1), selected, selected);
-    }
-    private Map<String, Object> totals(List<Map<String, Object>> rows) {
-        // BR-109: lợi nhuận chuỗi bằng tổng lợi nhuận các cơ sở trong kỳ.
-        BigDecimal revenue=BigDecimal.ZERO, expenses=BigDecimal.ZERO, salary=BigDecimal.ZERO, investment=BigDecimal.ZERO, forfeitedDeposits=BigDecimal.ZERO, profit=BigDecimal.ZERO, cash=BigDecimal.ZERO;
-        long bills=0, payments=0, loss=0;
-        for (Map<String,Object> row : rows) {
-            revenue=revenue.add((BigDecimal)row.get("revenue")); expenses=expenses.add((BigDecimal)row.get("expenses"));
-            investment=investment.add((BigDecimal)row.get("investment")); profit=profit.add((BigDecimal)row.get("profit"));
-            cash=cash.add((BigDecimal)row.get("netCashFlow"));
-            salary=salary.add((BigDecimal)row.get("salary"));
-            forfeitedDeposits=forfeitedDeposits.add((BigDecimal)row.get("forfeitedDeposits"));
-            bills+=((Number)row.get("billCount")).longValue(); payments+=((Number)row.get("expenseCount")).longValue(); if (((BigDecimal)row.get("profit")).signum()<0) loss++;
-        }
-        Map<String,Object> result=new LinkedHashMap<>();
-        result.put("revenue",revenue); result.put("expenses",expenses); result.put("salary",salary); result.put("investment",investment); result.put("forfeitedDeposits",forfeitedDeposits); result.put("profit",profit); result.put("netCashFlow",cash);
-        result.put("billCount",bills); result.put("expenseCount",payments); result.put("lossBranches",loss); result.put("branchCount",rows.size());
-        return result;
-    }
 }

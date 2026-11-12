@@ -34,7 +34,11 @@ public class MutationAudit {
         Map.entry("ASSET_CATEGORY", "asset_category"),
         Map.entry("ASSET", "asset"),
         Map.entry("INCIDENT", "asset_incident"),
-        Map.entry("TRANSFER", "asset_transfer"));
+        Map.entry("TRANSFER", "asset_transfer"),
+        Map.entry("FINANCIAL_TRANSACTION", "financial_transaction"),
+        Map.entry("BANK_TRANSACTION", "bank_transaction"),
+        Map.entry("FINANCIAL_PERIOD", "financial_period"),
+        Map.entry("FINANCE_EXPENSE_CATEGORY", "finance_expense_category"));
 
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;
@@ -91,17 +95,29 @@ public class MutationAudit {
         if ("INVENTORY_ITEM".equals(type)) extra = " || jsonb_build_object('stockBalance',"
             + "(SELECT jsonb_build_object('quantity',quantity,'minimum_quantity',minimum_quantity,'version',version)"
             + " FROM gcmb.stock_balance WHERE inventory_item_id=t.id))";
+        if ("FINANCIAL_TRANSACTION".equals(type)) extra = " || jsonb_build_object('branch_id',"
+            + "(SELECT e.branch_id FROM gcmb.financial_entry e WHERE e.transaction_id=t.id ORDER BY e.id LIMIT 1),"
+            + "'entries',(SELECT jsonb_agg(jsonb_build_object('account_id',e.account_id,'branch_id',e.branch_id,'amount_signed',e.amount_signed) ORDER BY e.id)"
+            + " FROM gcmb.financial_entry e WHERE e.transaction_id=t.id),"
+            + "'attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'kind',a.kind,'original_name',a.original_name,'mime_type',a.mime_type,'byte_size',a.byte_size) ORDER BY a.created_at,a.id)"
+            + " FROM gcmb.finance_attachment a WHERE a.owner_type='FINANCIAL_TRANSACTION' AND a.owner_id=t.id))";
+        if ("FINANCIAL_PERIOD".equals(type)) extra = " || jsonb_build_object('month',t.\"month\",'close_note',t.close_note)";
+        if ("BANK_TRANSACTION".equals(type)) extra = " || jsonb_build_object('branch_id',(SELECT branch_id FROM gcmb.financial_account a WHERE a.id=t.account_id))";
+        if ("FINANCE_EXPENSE_CATEGORY".equals(type)) extra = " || jsonb_build_object('request_count',(SELECT count(*) FROM gcmb.finance_expense_request r WHERE r.category_id=t.id))";
         List<String> snapshots = db.queryForList("""
             SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
                 WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description','category_id','room_id','location_note','serial_number','purchase_date','purchase_value','warranty_expiry','image_attachment_id',
                     'address','phone','notes','updated_at','closed_on','floor_number','operating_status','status_reason','expected_ready_at','active','version',
                     'valid_from','valid_to','minute_from','minute_to','weekdays','day_kind','specific_date',
                     'hourly_price','overtime_hourly_price','billing_step_minutes','priority','price',
-                    'duration_minutes','deposit_required','day_group','min_guests','included_description',
+                    'duration_minutes','deposit_required','day_group','min_guests','included_description','cost_type',
                     'status','contact_name','contact_phone','guest_count','planned_start','planned_end',
                     'actual_checkin','actual_checkout','note','channel','pricing_mode','category','kind',
                     'inventory_item_id','sale_price','description','image_original_name','image_mime_type',
                     'sku','unit_id','tracking_mode',
+                    'period_id','booking_date','occurred_at','adjusts_transaction_id','reason','created_by','idempotency_key',
+                    'closed_by','closed_at','close_note','external_id','direction','amount','match_status',
+                    'exception_reason','resolution_status','resolved_at','resolved_by','resolution_note',
                     'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
                     'accepted_by','accepted_at','served_at')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);

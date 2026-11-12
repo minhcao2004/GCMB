@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './dashboard.css';
+import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 
 const currentMonth = () => {
   const now = new Date();
@@ -13,12 +14,13 @@ const amount = (value) => Number(value) || 0;
 function Results({ rows, onSelect }) {
   const maxRevenue = Math.max(1, ...rows.map((row) => amount(row.revenue)));
   return <div className="performance-table-wrap"><table className="performance-table">
-    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu</th><th scope="col">Chi đã trả</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên LN</th></tr></thead>
+    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu từ bill</th><th scope="col">Thu từ cọc tịch thu</th><th scope="col">Tổng doanh thu</th><th scope="col">Chi đã trả</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên LN</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id}>
       <td data-label="Cơ sở" className="performance-branch-cell">{onSelect && row.status === 'ACTIVE'
         ? <button className="performance-link" onClick={() => onSelect(row.id)}>{row.name}<span aria-hidden="true"> ↗</span></button>
         : <strong>{row.name}</strong>}<small>{row.code}{row.status !== 'ACTIVE' ? ' · Không hoạt động' : ''}</small></td>
-      <td data-label="Doanh thu"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
+      <td data-label="Doanh thu từ bill">{money(row.billRevenue)}</td><td data-label="Thu từ cọc tịch thu">{money(row.forfeitedDeposits)}</td>
+      <td data-label="Tổng doanh thu"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
       <td data-label="Chi đã trả">{money(row.expenses)}</td><td data-label="Lương">{money(row.salary)}</td>
       <td data-label="Lợi nhuận" className={amount(row.profit) < 0 ? 'negative' : 'positive'}>{money(row.profit)}</td>
       <td data-label="Biên lợi nhuận">{percent(row.margin)}</td>
@@ -42,17 +44,19 @@ function BranchContext({ branch }) {
 
 function FinanceStrip({ totals, isChain, branchSelected }) {
   const metrics = isChain ? [
-    ['Doanh thu dịch vụ', money(totals.revenue), `${amount(totals.billCount)} bill hoàn tất`],
+    ['Doanh thu từ bill', money(totals.billRevenue), `${amount(totals.billCount)} bill SETTLED`],
+    ['Thu từ cọc tịch thu', money(totals.forfeitedDeposits), 'Theo ngày ghi FORFEIT, múi giờ cơ sở'],
+    ['Tổng doanh thu', money(totals.revenue), 'Bill SETTLED + cọc tịch thu'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Đã gồm lương và ứng lương'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Chưa gồm chi đầu tư'],
     ['Dòng tiền thuần', money(totals.netCashFlow), 'Theo sổ giao dịch'],
-    ['Cọc tịch thu', money(totals.forfeitedDeposits), 'Trình bày riêng, không cộng doanh thu'],
   ] : [
-    ['Doanh thu dịch vụ', money(totals.revenue), `${amount(totals.billCount)} bill hoàn tất`],
+    ['Doanh thu từ bill', money(totals.billRevenue), `${amount(totals.billCount)} bill SETTLED`],
+    ['Thu từ cọc tịch thu', money(totals.forfeitedDeposits), 'Theo ngày ghi FORFEIT, múi giờ cơ sở'],
+    ['Tổng doanh thu', money(totals.revenue), 'Bill SETTLED + cọc tịch thu'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Chưa gồm chi đầu tư'],
-    ['Lợi nhuận vận hành', money(totals.profit), 'Doanh thu trừ chi vận hành'],
-    ['Biên lợi nhuận', percent(totals.margin), 'Tính khi doanh thu lớn hơn 0'],
-    ['Cọc tịch thu', money(totals.forfeitedDeposits), 'Trình bày riêng, không cộng doanh thu'],
+    ['Lợi nhuận vận hành', money(totals.profit), 'Tổng doanh thu − chi vận hành đã trả'],
+    ['Biên lợi nhuận vận hành', percent(totals.margin), 'Lợi nhuận vận hành ÷ Tổng doanh thu'],
   ];
   return <section className="performance-summary" aria-label="Kết quả tài chính trong kỳ">
     <div className="performance-summary-heading"><h2>Kết quả tài chính</h2><span>{isChain ? branchSelected ? 'Cơ sở đang chọn' : 'Toàn hệ thống' : 'Cơ sở được phân quyền'}</span></div>
@@ -159,6 +163,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
       {branch && <BranchContext branch={branch} />}
       {Number(totals.billCount) === 0 && Number(totals.expenseCount) === 0 && <div className="performance-note" role="status">Chưa có bill hoàn tất hoặc khoản chi đã thanh toán trong kỳ này.</div>}
       <FinanceStrip totals={totals} isChain={isChain} branchSelected={Boolean(branchId)} />
+      {isChain && <MonthlyPerformanceSummary report={data} month={month} branchId={branchId} />}
       {isChain ? <div className="performance-grid performance-grid-chain">
         <article className="performance-panel performance-branches"><div className="performance-panel-heading"><div><h2>Kết quả theo cơ sở</h2><p>{branchId ? 'Kết quả của cơ sở đang chọn' : 'Chọn cơ sở đang hoạt động để xem riêng'}</p></div><span>{rows.length} cơ sở</span></div>
           <div className="performance-chart" aria-label="Biểu đồ doanh thu theo cơ sở">
@@ -174,7 +179,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
         <BranchFinance totals={totals} />
         <BranchOperations operations={data.operations} onNavigate={onNavigate} />
       </div>}
-      <p className="performance-explanation">Doanh thu tính theo bill hoàn tất; chi phí và tiền lương tính theo khoản đã trả trong kỳ, theo múi giờ từng cơ sở. Chi đầu tư được trình bày riêng.</p>
+      <p className="performance-explanation">Tổng doanh thu = bill SETTLED + cọc FORFEIT theo ngày ghi nhận và múi giờ cơ sở. Lợi nhuận vận hành = Tổng doanh thu − chi vận hành đã trả; biên lợi nhuận = lợi nhuận vận hành ÷ Tổng doanh thu. Cọc APPLY, chưa sử dụng và chờ hoàn không cộng; hoàn cọc đã chi không là chi phí vận hành. Chi đầu tư được trình bày riêng.</p>
     </>}
   </section>;
 }
