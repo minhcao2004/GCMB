@@ -255,9 +255,9 @@ public class PayrollService {
     UUID branch = access.branch(actor, send);
     LocalDate m = month(value);
     if (send) periods.requireOpen(m, "chốt dữ liệu payroll tại cơ sở");
-    if (!m.isBefore(LocalDate.now(ZONE).withDayOfMonth(1))) throw bad("Chỉ chốt lương cho tháng đã kết thúc.");
+    if (m.isAfter(LocalDate.now(ZONE).withDayOfMonth(1))) throw bad("Không thể chốt lương cho tháng tương lai.");
     requireSettlementEmployee(actor, value, input.employeeId());
-    // BR-64 / MSG87: tất cả công của tháng phải được chốt trước khi tổng hợp.
+    // HuyDV / BR-64 / MSG87: cho chốt lương sớm khi công nhân viên đã khóa cả tháng, kể cả ở cơ sở khác.
     var allRows = work(input.employeeId(), m, true);
     var rows = allRows.stream().filter(r -> branch.equals(r.get("branch_id"))).toList();
     var earnings = branchEarnings(input.employeeId(), rows, false);

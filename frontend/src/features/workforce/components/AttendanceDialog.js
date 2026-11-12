@@ -371,10 +371,6 @@ export default function AttendanceDialog({
                   </section>
                 )}
               </fieldset>
-              <p className="attendance-alert">
-                Đi làm tính đủ giờ của ca. Vắng mặt tính 0 giờ. Đi muộn hoặc về sớm ghi vào
-                ghi chú để QLCS xem xét cuối tháng.
-              </p>
               {review && (
                 <div className="attendance-summary" role="status">
                   <strong>Xác nhận cập nhật bản ghi chấm công?</strong>

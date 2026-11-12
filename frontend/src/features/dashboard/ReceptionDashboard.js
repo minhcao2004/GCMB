@@ -67,7 +67,7 @@ export default function ReceptionDashboard({ user }) {
   const detailItems = selected?.kind === 'rooms' ? selected.group.items : selected?.kind === 'bookings' ? selected.group.items : [];
 
   return <section className="manager-content performance-dashboard is-reception" aria-labelledby="reception-dashboard-title">
-    <header className="performance-heading"><div><h1 id="reception-dashboard-title">Tổng quan lễ tân</h1><p>{user.branchName || 'Cơ sở hiện tại'} · Tình hình phòng và booking đang có.</p></div>
+    <header className="performance-heading"><div><h1 id="reception-dashboard-title">Tổng quan lễ tân</h1></div>
       <div className="performance-dashboard-actions"><span>Số liệu hiện tại · tự cập nhật mỗi 90 giây</span><button type="button" onClick={refresh} disabled={loading}>Làm mới</button></div>
     </header>
     {loading && <p className="performance-state" role="status">Đang tải số liệu hiện tại…</p>}

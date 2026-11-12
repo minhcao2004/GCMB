@@ -145,7 +145,6 @@ export default function PayrollPage() {
   return (
     <section className="finance-page">
       <h1>Lương nhân viên</h1>
-      <p className="finance-muted">Tiếp nhận bảng lương đã chốt và ghi nhận thanh toán · Phạm vi toàn chuỗi</p>
       {error && (
         <p role="alert" className="finance-error">
           {error}

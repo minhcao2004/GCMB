@@ -165,7 +165,7 @@ public class DrawerFundingService {
     if(reference.isBlank() && !hasProof) throw bad("Vui lòng nhập mã giao dịch hoặc tải minh chứng thanh toán.");
     EquipmentAssetFileStorageService.StoredFile stored=null;
     if(hasProof) {
-      stored=storage.store(proof);
+      stored=storage.store(proof, "cap-ket");
       String key=stored.objectKey();
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
         @Override public void afterCompletion(int status) {

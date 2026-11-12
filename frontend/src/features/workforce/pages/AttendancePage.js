@@ -120,19 +120,11 @@ export default function AttendancePage({
     <section className="shift-page attendance-page" aria-labelledby="attendance-title">
       <header className="shift-heading">
         <div>
-          <p className="shift-eyebrow">
-            {data?.branchName || 'Cơ sở đang quản lý'} · CA LÀM & CHẤM CÔNG
-          </p>
           <h1 id="attendance-title">
             {monthly
               ? 'Bảng công và lương tháng'
               : 'Chấm công theo ngày / ca'}
           </h1>
-          <p>
-            {monthly
-              ? 'Tiền công theo chấm công đã ghi nhận. Chọn Chi tiết để xem ghi chú, điều chỉnh thưởng/phạt và chốt lương.'
-              : 'Ghi nhận ngày giờ vào / ra thực tế và kiểm tra ngoại lệ của từng phân ca.'}
-          </p>
         </div>
         {!monthly && (
           <button
@@ -310,7 +302,6 @@ export default function AttendancePage({
                         <td>{e.absences}</td>
                         <td className="monthly-money">
                           {pay?.wage == null ? '—' : vnd(pay.wage)}
-                          {pay?.calculationError && <small className="attendance-warning">{pay.calculationError}</small>}
                         </td>
                         <td className="monthly-money">
                           {pay ? <>
@@ -337,7 +328,6 @@ export default function AttendancePage({
                         <td>
                           {e.closed ? 'Công đã chốt' : 'Công chưa chốt'}
                           {pay?.submitted && <small>{pay.paid ? 'Đã thanh toán' : pay.ready ? 'Đã gửi kế toán' : 'Chờ cơ sở khác chốt'}</small>}
-                          {!e.closed && !e.canClose && <small>{e.closeBlockReason}</small>}
                         </td>
                         <td>
                           <button

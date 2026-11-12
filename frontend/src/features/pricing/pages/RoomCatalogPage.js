@@ -280,7 +280,6 @@ export default function RoomCatalogPage() {
     <div className="room-catalog-title-row">
       <div>
         <h1>{title}</h1>
-        <p>{tab === 'Hạng phòng' ? 'Chuẩn hóa hạng phòng và thông tin dùng chung' : tab === 'Giá theo thời gian' ? 'Cấu hình mức giá theo hạng phòng, ngày và khung giờ' : 'Quản lý gói dịch vụ áp dụng cho booking mới'}</p>
       </div>
       <button className="catalog-primary" onClick={add}>{tab === 'Hạng phòng' ? 'Thêm hạng phòng' : tab === 'Giá theo thời gian' ? 'Thêm quy tắc giá' : 'Thêm combo'}</button>
     </div>
@@ -485,7 +484,6 @@ function EditorPage({
       <div className="catalog-editor-header">
         <div>
           <h1>{heading}</h1>
-          <p>{isRoom ? 'Cấu hình dùng chung trong hệ thống' : isRule ? 'Cấu hình theo hạng phòng, ngày và khung giờ áp dụng' : 'Chọn thành phần và giá gói phù hợp với dịch vụ'}</p>
         </div>
         <button type="button" className="catalog-modal-close" aria-label="Đóng" disabled={busy} onClick={onCancel}>×</button>
       </div>

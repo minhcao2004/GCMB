@@ -38,7 +38,9 @@ gcmb:
       region: ${GCMB_S3_REGION:us-east-1}
       endpoint: ${GCMB_S3_ENDPOINT:}
       path-style: ${GCMB_S3_PATH_STYLE:false}
-  google-drive:
-    credentials-file: ${GOOGLE_DRIVE_CREDENTIALS_FILE:}
-    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
+  cloudinary:
+    enabled: ${CLOUDINARY_ENABLED:false}
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
 

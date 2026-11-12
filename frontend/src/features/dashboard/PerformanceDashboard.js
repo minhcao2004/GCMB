@@ -148,7 +148,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
 
   return <section className={`manager-content performance-dashboard${isChain ? ' is-chain' : ' is-branch'}`} aria-labelledby="performance-title">
     <header className="performance-heading"><div><h1 id="performance-title">{isChain ? 'Hiệu quả kinh doanh chuỗi' : 'Tổng quan cơ sở'}</h1>
-      <p>{isChain ? 'Kết quả tài chính và mức đóng góp theo từng cơ sở.' : `${user.branchName || 'Cơ sở được phân quyền'} · Kết quả kinh doanh và tình hình vận hành.`}</p></div>
+      </div>
       <div className="performance-filters">
         <span className="performance-current-period">Số liệu tháng hiện tại · tự cập nhật mỗi 90 giây</span>
         {isChain && <label><span>Phạm vi cơ sở</span><select value={branchId} onChange={(event) => { setBranchId(event.target.value); setSelectedChartBranch(null); }}>

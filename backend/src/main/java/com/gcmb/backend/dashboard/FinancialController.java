@@ -330,7 +330,7 @@ public class FinancialController {
                 db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
                     newId, entry.get("account_id"), entry.get("branch_id"), amount);
                 if (evidence != null && !evidence.isEmpty()) {
-                    stored[0] = files.store(evidence);
+                    stored[0] = files.store(evidence, "thu-chi");
                     StoredFile file = stored[0];
                     db.update("""
                         INSERT INTO gcmb.finance_attachment(id,owner_type,owner_id,kind,object_key,original_name,mime_type,byte_size,sha256,created_by)

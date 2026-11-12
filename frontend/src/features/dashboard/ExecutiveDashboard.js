@@ -97,7 +97,7 @@ export default function ExecutiveDashboard() {
 
   return <section className="manager-content executive-dashboard" aria-labelledby="executive-title" aria-busy={loading}>
     <header className="executive-heading">
-      <div><h1 id="executive-title">Tổng quan toàn chuỗi</h1><p>Hiệu quả kinh doanh, sức chứa và các việc cần theo dõi tại tất cả cơ sở.</p></div>
+      <div><h1 id="executive-title">Tổng quan toàn chuỗi</h1></div>
       <div className="executive-filters">
         <label className="executive-period">Kỳ báo cáo<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
         <label className="executive-period">Phạm vi báo cáo<select value={reportBranchId} onChange={(event) => setReportBranchId(event.target.value)}><option value="">Toàn chuỗi</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>

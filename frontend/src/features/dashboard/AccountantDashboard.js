@@ -154,7 +154,7 @@ export default function AccountantDashboard() {
 
   return <AppShell user={user} branchName="toàn chuỗi" busy={busy} onLogout={logout} breadcrumb="Tổng quan kế toán" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>
     <main className="accountant-dash" aria-labelledby="accountant-dash-title">
-      <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1><p>Số liệu thực tế từ sổ kế toán và nghiệp vụ đã ghi nhận.</p></div><div className="accountant-dash-filters"><label>Kỳ tài chính<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>Cơ sở<select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">Tất cả cơ sở</option>{branches.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div></header>
+      <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1></div><div className="accountant-dash-filters"><label>Kỳ tài chính<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>Cơ sở<select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">Tất cả cơ sở</option>{branches.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div></header>
       <p className="accountant-dash-demo-note">{month.slice(5, 7)}/{month.slice(0, 4)} · {branchLabel}</p>
       {error && <p className="accountant-dash-error" role="alert">{error}</p>}{loading && <p role="status">Đang tải số liệu…</p>}
       <section className="accountant-kpis" aria-label="Chỉ số tài chính trong kỳ">{[
