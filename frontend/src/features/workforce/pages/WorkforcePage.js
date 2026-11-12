@@ -19,8 +19,8 @@ export default function WorkforcePage(props) {
         {[
           ['schedule', 'Lịch ca tuần'],
           ['daily', 'Chấm công ngày / ca'],
-          ['month', 'Bảng công tháng'],
-          ['payroll', 'Đơn giá và chốt lương'],
+          ['month', 'Bảng công và lương tháng'],
+          ['payroll', 'Đơn giá giờ'],
         ].map(([key, label]) => (
           <button
             key={key}

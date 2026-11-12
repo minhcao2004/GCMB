@@ -44,6 +44,8 @@ export default function AttendanceDialog({
   const [errors, setErrors] = useState({});
   const [stale, setStale] = useState(false);
   const row = data.rows.find((r) => r.assignmentId === assignmentId);
+  const locked = readOnly || row?.periodStatus === 'CLOSED';
+  const closingEmployees = (data.employees || []).filter((e) => !dialog.employeeIds || dialog.employeeIds.includes(e.employeeId));
   const issues = data.issues.filter((i) => i.assignmentId === assignmentId);
   const minutes = previewMinutes(status, actualIn, actualOut);
   const shiftPay = status === 'ABSENT' ? 0 : row?.hourlyRate == null || minutes == null
@@ -61,7 +63,7 @@ export default function AttendanceDialog({
     ? 'Xác nhận chốt bảng công'
     : employee
       ? `Công tháng · ${dialog.employee.fullName}`
-      : readOnly
+      : locked
         ? 'Chi tiết chấm công'
         : 'Ghi nhận chấm công';
 
@@ -93,9 +95,10 @@ export default function AttendanceDialog({
 
   async function submit(event) {
     event.preventDefault();
-    if (sending.current || readOnly || stale) return;
+    if (sending.current || locked || stale) return;
     const found = {};
     if (closing) {
+      if (!closingEmployees.length) found.employeeIds = 'Vui lòng chọn nhân viên cần chốt.';
       if (!confirmed)
         found.confirmedCorrect = 'Vui lòng xác nhận không còn bản ghi chấm công chưa đúng.';
     } else {
@@ -123,7 +126,7 @@ export default function AttendanceDialog({
       const result = closing
         ? await attendanceApi.close(
             data.month,
-            { revision: data.revision, confirmedCorrect: confirmed },
+            { revision: data.revision, confirmedCorrect: confirmed, employeeIds: closingEmployees.map((e) => e.employeeId) },
             scope
           )
         : await attendanceApi.record(
@@ -243,20 +246,20 @@ export default function AttendanceDialog({
                 </div>
                 <div>
                   <dt>Nhân viên</dt>
-                  <dd>{data.employees.length} người</dd>
+                  <dd>{closingEmployees.length} người</dd>
                 </div>
                 <div>
                   <dt>Giờ công thực tế</dt>
-                  <dd>{hoursLabel(data.workedMinutes)}</dd>
+                  <dd>{hoursLabel(closingEmployees.reduce((sum, e) => sum + e.workedMinutes, 0))}</dd>
                 </div>
                 <div>
                   <dt>Vấn đề cần xử lý</dt>
-                  <dd>{data.missing + data.invalid + data.openIssues}</dd>
+                  <dd>{closingEmployees.reduce((sum, e) => sum + e.missing + e.invalid + e.openIssues, 0)}</dd>
                 </div>
               </dl>
               <p className="attendance-alert">
-                Sau xác nhận, bảng công bị khóa để tính lương. Quản lý cơ sở không có thao tác mở
-                khóa kỳ đã chốt.
+                Sau xác nhận, công cả tháng của các nhân viên được chọn bị khóa để tính lương.
+                Những nhân viên khác vẫn được chấm công bình thường. Không có thao tác mở khóa.
               </p>
               <label className="attendance-check">
                 <input
@@ -272,7 +275,7 @@ export default function AttendanceDialog({
           ) : (
             <>
               <fieldset
-                disabled={busy || stale || readOnly || review}
+                disabled={busy || stale || locked || review}
                 className="attendance-fields"
               >
                 <label>
@@ -283,7 +286,7 @@ export default function AttendanceDialog({
                     onChange={(e) => select(e.target.value)}
                   >
                     <option value="">Chọn nhân viên và ca đã phân công</option>
-                    {data.rows.map((r) => (
+                    {data.rows.filter((r) => locked || r.periodStatus !== 'CLOSED').map((r) => (
                       <option key={r.assignmentId} value={r.assignmentId}>
                         {r.code} · {r.fullName} · {dateTimeLabel(r.startsAt, data.timezone)}
                       </option>
@@ -410,7 +413,7 @@ export default function AttendanceDialog({
           <button type="button" disabled={busy} onClick={review ? () => setReview(false) : onClose}>
             {review ? 'Quay lại sửa' : 'Đóng'}
           </button>
-          {!employee && !readOnly && (
+          {!employee && !locked && (
             <button
               type="submit"
               className="shift-primary"

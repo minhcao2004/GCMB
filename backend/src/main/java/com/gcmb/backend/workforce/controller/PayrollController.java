@@ -38,6 +38,12 @@ public class PayrollController {
     return service.branchHistory(actor, month);
   }
 
+  @GetMapping("/branch-management/payroll/{month}/summary")
+  public List<Map<String, Object>> branchSummary(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month) {
+    return service.branchSummary(actor, month);
+  }
+
   @PostMapping("/branch-management/payroll/bank-details")
   public void branchBank(@AuthenticationPrincipal Identity actor, @RequestBody BankDetails input) {
     service.branchBank(actor, input);
@@ -150,7 +156,8 @@ public class PayrollController {
   @GetMapping("/accounting/payroll/{month}/export")
   public ResponseEntity<byte[]> export(
     @AuthenticationPrincipal Identity actor,
-    @PathVariable String month
+    @PathVariable String month,
+    @RequestParam(required = false) UUID branchId
   ) {
     return ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
@@ -160,6 +167,6 @@ public class PayrollController {
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
       )
-      .body(PayrollExport.xlsx(service.export(actor, month)));
+      .body(PayrollExport.xlsx(service.export(actor, month, branchId)));
   }
 }

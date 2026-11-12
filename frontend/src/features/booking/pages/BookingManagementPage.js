@@ -17,7 +17,7 @@ const navigation = [
   ['Ca làm việc', 'shifts'],
   ['Hóa đơn thuế', 'tax'],
   ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
-  ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Kho hàng', 'inventory'], ['Báo sự cố', 'issues'],
+  ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
   ['Hóa đơn thuế', 'tax'],

@@ -1,487 +1,295 @@
-/** Author: HuyDV. UC-98..101 / BR-95..98/208, MSG01/21: theo mockup chốt quỹ. */
+/** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
 import MoneyInput from '../components/MoneyInput';
+import DrawerFundingPanel from '../components/DrawerFundingPanel';
 import '../styles/finance.css';
 
-const statusLabel = { SUBMITTED: 'Chờ đối soát', RECONCILED: 'Đã đối soát', DRAFT: 'Chưa gửi' };
-const kinds = {
-  DEPOSIT: 'Thu cọc tiền mặt',
-  CHECKOUT: 'Thu thanh toán tiền mặt',
-  REFUND: 'Hoàn tiền mặt',
-  EXPENSE: 'Chi tiền mặt',
-  OPENING: 'Bổ sung số dư đầu kỳ',
-  TRANSFER: 'Chuyển quỹ',
-  ADJUSTMENT: 'Điều chỉnh',
-  SALARY: 'Trả lương',
-  ADVANCE: 'Ứng lương',
-};
+const labels = { SUBMITTED: 'Chờ kế toán đối soát', NEEDS_EXPLANATION: 'Cần bổ sung', RECONCILED: 'Đã đối soát' };
+const message = (e) => Object.values(apiErrors(e)).join(' ');
+const displayDate = (value) => String(value || '').split('-').reverse().join('/');
+
 export default function CashClosingPage({ user, accounting = false, readOnly = false }) {
   const base = accounting ? '/accounting/cash-closing' : '/branch-management/cash-closing';
   const branch = accounting ? undefined : user.branchId;
   const [tab, setTab] = useState(accounting ? 'history' : 'create');
-  const [date, setDate] = useState(today()),
-    [from, setFrom] = useState(today().slice(0, 7) + '-01'),
-    [to, setTo] = useState(today());
-  const [status, setStatus] = useState(''),
-    [search, setSearch] = useState('');
-  const [preview, setPreview] = useState(null),
-    [rows, setRows] = useState([]),
-    [detail, setDetail] = useState(null);
-  const [actual, setActual] = useState(''),
-    [explanation, setExplanation] = useState(''),
-    [evidence, setEvidence] = useState(null);
-  const [conclusion, setConclusion] = useState(''),
-    [resolved, setResolved] = useState(false);
-  const [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [loading, setLoading] = useState(true),
-    [revision, setRevision] = useState(0);
-  const [sources, setSources] = useState(false),
-    [confirm, setConfirm] = useState(false);
+  const [date, setDate] = useState(today());
+  const [from, setFrom] = useState(today().slice(0, 7) + '-01');
+  const [to, setTo] = useState(today());
+  const [status, setStatus] = useState(accounting ? 'SUBMITTED' : '');
+  const [search, setSearch] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [saved, setSaved] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [detail, setDetail] = useState(null);
+  const [actual, setActual] = useState('');
+  const [explanation, setExplanation] = useState('');
+  const [evidence, setEvidence] = useState(null);
+  const [conclusion, setConclusion] = useState('');
+  const [resolved, setResolved] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [fullSweep, setFullSweep] = useState(false);
+  const [reason, setReason] = useState('');
+  const [reference, setReference] = useState('');
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const [confirm, setConfirm] = useState(false);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError('');
     setDetail(null);
-    setConfirm(false);
+    setSaved(null);
     setPreview(null);
-    const request =
-      tab === 'create'
-        ? api.get(`${base}/preview`, { date }, branch)
-        : api.get(base, { from, to, status, alerts: tab === 'alerts' }, branch);
-    request
-      .then((result) => {
-        if (active) tab === 'create' ? setPreview(result) : setRows(result);
-      })
-      .catch((e) => active && setError(Object.values(apiErrors(e)).join(' ')))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
+    setConfirm(false);
+    const load = async () => {
+      try {
+        if (tab === 'create' || tab === 'remit') {
+          const data = await api.get(base + '/preview', { date }, branch);
+          if (!active) return;
+          setPreview(data);
+          if (data.existing.length) {
+            const report = await api.get(base + '/' + data.existing[0].id, {}, branch);
+            if (!active) return;
+            setSaved(report);
+            if (report.status === 'NEEDS_EXPLANATION') {
+              setActual(String(report.actual_closing));
+              setExplanation(report.explanation || '');
+            }
+          }
+        } else {
+          const result = await api.get(base, { from, to, status }, branch);
+          if (active) setRows(result);
+        }
+      } catch (e) {
+        if (active) setError(message(e));
+      } finally {
+        if (active) setLoading(false);
+      }
     };
-  }, [base, branch, tab, date, from, to, status, revision]);
+    load();
+    return () => { active = false; };
+  }, [base, branch, tab, date, from, to, status, refresh]);
+
   const open = async (id) => {
     setBusy(true);
     setError('');
-    setResolved(false);
     setConclusion('');
-    try {
-      setDetail(await api.get(`${base}/${id}`, {}, branch));
-    } catch (e) {
-      setError(Object.values(apiErrors(e)).join(' '));
-    } finally {
-      setBusy(false);
-    }
+    setResolved(false);
+    try { setDetail(await api.get(base + '/' + id, {}, branch)); }
+    catch (e) { setError(message(e)); }
+    finally { setBusy(false); }
+  };
+  const edit = (report) => {
+    setEvidence(null);
+    setConfirm(false);
+    setDate(String(report.business_date).slice(0, 10));
+    setTab('create');
+    setRefresh((n) => n + 1);
+  };
+  const changeDate = (value) => {
+    setDate(value);
+    setActual('');
+    setExplanation('');
+    setEvidence(null);
+    setConfirm(false);
+    setRequestId(crypto.randomUUID());
+    setFullSweep(false);
   };
   const submit = async (event) => {
     event.preventDefault();
-    if (!confirm) {
-      setConfirm(true);
-      return;
-    }
+    if (!confirm) { setConfirm(true); return; }
     setBusy(true);
     setError('');
+    setNotice('');
     try {
-      const body = new FormData();
-      body.append(
-        'command',
-        new Blob(
-          [
-            JSON.stringify({
-              date,
-              actual: Number(actual),
-              explanation,
-              revision: preview.revision,
-            }),
-          ],
-          { type: 'application/json' },
-        ),
-      );
-      if (evidence) body.append('evidence', evidence);
-      await api.post(base, body, branch);
-      setActual('');
-      setExplanation('');
-      setEvidence(null);
-      setTab('history');
-      setRevision((n) => n + 1);
-    } catch (e) {
-      setError(Object.values(apiErrors(e)).join(' '));
+      if (tab === 'remit') {
+        await api.post(base + '/remittances', { date, amount: Number(amount), reason, reference, requestId, fullSweep }, branch);
+        setNotice('Đã ghi khoản nộp tiền khỏi két. Khoản này được trừ riêng trong báo cáo ngày.');
+        setAmount('');
+        setReason('');
+        setReference('');
+        setRequestId(crypto.randomUUID());
+        setFullSweep(false);
+      } else {
+        const body = new FormData();
+        body.append('command', new Blob([JSON.stringify({
+          date, actual: Number(actual), explanation,
+          revision: preview.revision, reportVersion: saved?.report_version,
+        })], { type: 'application/json' }));
+        if (evidence) body.append('evidence', evidence);
+        await api.post(base, body, branch);
+        setNotice('Đã gửi báo cáo cho kế toán đối soát. Gửi chốt không tự trừ tiền khỏi két.');
+        setActual('');
+        setExplanation('');
+        setEvidence(null);
+        setFrom(date);
+        setTo(date);
+        setStatus('');
+        setTab('history');
+      }
       setConfirm(false);
-    } finally {
-      setBusy(false);
-    }
+      setRefresh((n) => n + 1);
+    } catch (e) { setError(message(e)); setConfirm(false); }
+    finally { setBusy(false); }
   };
-  const variance = actual === '' || !preview ? null : Number(actual) - Number(preview.expected);
-  const shown = rows.filter((r) =>
-    `${r.branchName} ${r.business_date} ${r.explanation || ''}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
-  return (
-    <section className="finance-page cash-closing-page">
-      <h1>
-        {tab === 'create'
-          ? 'Chốt quỹ cuối ngày'
-          : tab === 'alerts'
-            ? 'Cảnh báo chênh lệch quỹ'
-            : 'Lịch sử chốt quỹ'}
-      </h1>
-      <p className="finance-muted">
-        {accounting ? 'Toàn chuỗi · Kế toán đối soát và ghi nhận kết luận' : user.branchName}
-      </p>
-      <nav className="finance-tabs" aria-label="Chốt quỹ">
-        {!accounting && (
-          <button
-            onClick={() => setTab('create')}
-            aria-current={tab === 'create' ? 'page' : undefined}
-          >
-            Chốt cuối ngày
-          </button>
-        )}
-        <button
-          onClick={() => setTab('history')}
-          aria-current={tab === 'history' ? 'page' : undefined}
-        >
-          Lịch sử chốt quỹ
-        </button>
-        <button
-          onClick={() => setTab('alerts')}
-          aria-current={tab === 'alerts' ? 'page' : undefined}
-        >
-          Chênh lệch quỹ
-        </button>
-      </nav>
-      {error && (
-        <p className="finance-error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="finance-toolbar">
-        {tab === 'create' ? (
-          <label>
-            Ngày chốt
-            <input
-              type="date"
-              value={date}
-              max={today()}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setActual('');
-                setExplanation('');
-                setEvidence(null);
-              }}
-            />
-          </label>
-        ) : (
-          <>
-            <label>
-              Tìm kiếm
-              <input
-                placeholder="Cơ sở, ngày, giải trình…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <label>
-              Từ ngày
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </label>
-            <label>
-              Đến ngày
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </label>
-            <label>
-              Trạng thái
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">Tất cả</option>
-                <option value="SUBMITTED">Chờ đối soát</option>
-                <option value="RECONCILED">Đã đối soát</option>
-              </select>
-            </label>
-          </>
-        )}
-        <button disabled={busy || loading} onClick={() => setRevision((n) => n + 1)}>
-          Tải lại
-        </button>
-      </div>
-      {loading ? (
-        <p role="status">Đang tải…</p>
-      ) : tab === 'create' && preview ? (
-        <div className="finance-columns">
-          <article className="finance-card">
-            <h2>Số liệu tiền mặt từ hệ thống</h2>
-            <div className="finance-line">
-              <span>Số dư đầu ngày</span>
-              <strong>{vnd(preview.opening)}</strong>
-            </div>
-            {Object.entries(kinds).map(([key, label]) => {
-              const amount = preview.movements
-                .filter((r) => r.kind === key)
-                .reduce((s, r) => s + Number(r.amount), 0);
-              return (
-                amount !== 0 && (
-                  <div className="finance-line" key={key}>
-                    <span>{label}</span>
-                    <strong>
-                      {amount > 0 ? '+' : ''}
-                      {vnd(amount)}
-                    </strong>
-                  </div>
-                )
-              );
-            })}
-            <div className="finance-info">
-              <span>Tiền mặt dự kiến cuối ngày</span>
-              <strong className="finance-total">{vnd(preview.expected)}</strong>
-            </div>
-            <p className="finance-muted">
-              Chỉ cộng/trừ giao dịch tiền mặt. Không cộng lại phần cọc đã khấu trừ vào bill.
-            </p>
-            <button onClick={() => setSources(!sources)}>
-              {sources ? 'Ẩn' : 'Xem'} giao dịch nguồn
-            </button>
-            {sources && <MovementTable rows={preview.movements} />}
-          </article>
-          <form className="finance-card" onSubmit={submit}>
-            <h2>Kiểm đếm thực tế</h2>
-            {preview.existing.length ? (
-              <>
-                <p className="finance-info">Ngày này đã được gửi chốt quỹ.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTab('history');
-                    setFrom(date);
-                    setTo(date);
-                  }}
-                >
-                  Về lịch sử chốt quỹ
-                </button>
-              </>
-            ) : (
-              <fieldset disabled={busy || readOnly}>
-                <label>
-                  Tiền mặt đếm thực tế *
-                  <MoneyInput
-                    required
-                    value={actual}
-                    onValueChange={(value) => {
-                      setActual(value);
-                      setConfirm(false);
-                    }}
-                  />
-                </label>
-                {variance !== null && (
-                  <div className={variance === 0 ? 'finance-success' : 'finance-warning'}>
-                    <span>Chênh lệch = thực tế − dự kiến</span>
-                    <strong className="finance-total">
-                      {vnd(variance)} ·{' '}
-                      {variance === 0 ? 'Khớp quỹ' : variance < 0 ? 'Thiếu quỹ' : 'Thừa quỹ'}
-                    </strong>
-                  </div>
-                )}
-                {variance !== null && variance !== 0 && (
-                  <p className="finance-muted">
-                    Tiền kiểm đếm chênh lệch {vnd(variance)} so với số tiền dự kiến. Vui lòng kiểm
-                    tra lại và nhập lý do chênh lệch trước khi xác nhận chốt quỹ.
-                  </p>
-                )}
-                <label>
-                  Giải trình {variance !== null && variance !== 0 ? '*' : '(không bắt buộc)'}
-                  <textarea
-                    required={variance !== null && variance !== 0}
-                    maxLength={2000}
-                    value={explanation}
-                    onChange={(e) => {
-                      setExplanation(e.target.value);
-                      setConfirm(false);
-                    }}
-                  />
-                </label>
-                <label>
-                  Minh chứng (không bắt buộc)
-                  <input
-                    key={date}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
-                    onChange={(e) => {
-                      setEvidence(e.target.files[0] || null);
-                      setConfirm(false);
-                    }}
-                  />
-                  <small>Tối đa 20 MB. JPEG, PNG, WebP, HEIC, HEIF hoặc PDF.</small>
-                </label>
-                {confirm && (
-                  <p className="finance-info">
-                    Xác nhận gửi số kiểm đếm {vnd(actual)}? Sau khi gửi, số liệu gốc được giữ nguyên
-                    để đối soát.
-                  </p>
-                )}
-                <div className="finance-actions">
-                  {confirm && (
-                    <button type="button" onClick={() => setConfirm(false)}>
-                      Quay lại
-                    </button>
-                  )}
-                  <button className="finance-primary">
-                    {busy ? 'Đang gửi…' : confirm ? 'Xác nhận gửi chốt quỹ' : 'Gửi chốt quỹ'}
-                  </button>
-                </div>
-              </fieldset>
-            )}
-          </form>
-        </div>
-      ) : (
-        tab !== 'create' && (
-          <div className={detail ? 'finance-columns' : ''}>
-            <article className="finance-card finance-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ngày / cơ sở</th>
-                    <th>Dự kiến</th>
-                    <th>Thực tế</th>
-                    <th>Chênh lệch</th>
-                    <th>Trạng thái</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        {r.business_date}
-                        <small>{r.branchName}</small>
-                      </td>
-                      <td>{vnd(r.expected_closing)}</td>
-                      <td>{vnd(r.actual_closing)}</td>
-                      <td>{vnd(r.variance)}</td>
-                      <td>{statusLabel[r.status]}</td>
-                      <td>
-                        <button disabled={busy} onClick={() => open(r.id)}>
-                          Chi tiết
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!shown.length && <p>{emptyMessage}</p>}
-            </article>
-            {detail && (
-              <article className="finance-card">
-                <div className="finance-actions">
-                  <h2>
-                    {detail.business_date} · {detail.branchName}
-                  </h2>
-                  <button onClick={() => setDetail(null)}>Đóng</button>
-                </div>
-                <p>
-                  Người chốt: <strong>{detail.submittedBy}</strong>
-                </p>
-                <p>
-                  Trạng thái: <strong>{statusLabel[detail.status]}</strong>
-                </p>
-                <div
-                  className={Number(detail.variance) === 0 ? 'finance-success' : 'finance-warning'}
-                >
-                  Chênh lệch gốc: <strong>{vnd(detail.variance)}</strong>
-                </div>
-                <p>Giải trình: {detail.explanation || 'Không có chênh lệch cần giải trình.'}</p>
-                {detail.evidence.map((f) => (
-                  <button
-                    key={f.name}
-                    onClick={async () => {
-                      try {
-                        await api.download(`${base}/${detail.id}/evidence`, f.name, branch);
-                      } catch (e) {
-                        setError('Không thể tải minh chứng.');
-                      }
-                    }}
-                  >
-                    Tải minh chứng: {f.name}
-                  </button>
-                ))}
-                <details>
-                  <summary>Giao dịch nguồn tại lúc chốt</summary>
-                  <MovementTable rows={detail.source.movements || []} />
-                </details>
-                {detail.reviews.map((r) => (
-                  <div className="finance-info" key={r.id}>
-                    {r.username} · {r.note}
-                  </div>
-                ))}
-                {accounting && detail.status === 'SUBMITTED' && (
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setBusy(true);
-                      setError('');
-                      try {
-                        await api.post(`${base}/${detail.id}/reconcile`, { resolved, conclusion });
-                        setRevision((n) => n + 1);
-                      } catch (e) {
-                        setError(Object.values(apiErrors(e)).join(' '));
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    <label>
-                      Kết luận đối soát *
-                      <textarea
-                        required
-                        maxLength={2000}
-                        value={conclusion}
-                        onChange={(e) => setConclusion(e.target.value)}
-                      />
-                    </label>
-                    <label className="finance-check">
-                      <input
-                        required
-                        type="checkbox"
-                        checked={resolved}
-                        onChange={(e) => setResolved(e.target.checked)}
-                      />
-                      Tôi đã kiểm tra chứng từ và xử lý xong chênh lệch.
-                    </label>
-                    <button className="finance-primary" disabled={busy}>
-                      Xác nhận đối soát
-                    </button>
-                  </form>
-                )}
-              </article>
-            )}
+  const review = async (returned) => {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await api.post(base + '/' + detail.id + (returned ? '/return' : '/reconcile'), { resolved, conclusion });
+      setNotice(returned ? 'Đã yêu cầu QLCS bổ sung báo cáo.' : 'Đã hoàn tất đối soát. Không phát sinh thao tác nhận hoặc nộp tiền.');
+      setRefresh((n) => n + 1);
+    } catch (e) { setError(message(e)); }
+    finally { setBusy(false); }
+  };
+  const cashVariance = preview && actual !== '' ? Number(actual) - Number(preview.expected) : null;
+  const needsExplanation = cashVariance !== null && cashVariance !== 0;
+  const shown = rows.filter((r) => (r.branchName + ' ' + r.business_date + ' ' + (r.explanation || '')).toLowerCase().includes(search.toLowerCase()));
+  const canCorrect = saved?.status === 'NEEDS_EXPLANATION';
+  const remittanceBlocked = preview?.closingBlocked || (!!saved && date !== today());
+
+  return <section className="finance-page cash-closing-page">
+    <h1>{accounting ? 'Đối soát báo cáo cuối ngày' : 'Chốt quỹ cuối ngày'}</h1>
+    <p className="finance-muted">{accounting ? 'Đối chiếu tiền mặt thực đếm với số dư két theo sổ; ghi kết luận hoặc yêu cầu bổ sung.' : user.branchName}</p>
+    <nav className="finance-tabs" aria-label="Báo cáo thu ngân">
+      {!accounting && <button aria-current={tab === 'create' ? 'page' : undefined} onClick={() => setTab('create')}>Báo cáo cuối ngày</button>}
+      <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => setTab('history')}>Lịch sử báo cáo</button>
+      {!accounting && <button aria-current={tab === 'remit' ? 'page' : undefined} onClick={() => setTab('remit')}>Nộp tiền khỏi két</button>}
+    </nav>
+    {error && <p className="finance-error" role="alert">{error}</p>}
+    {notice && <p className="finance-success" role="status">{notice}</p>}
+    <div className="finance-toolbar">
+      {tab === 'create' || tab === 'remit' ? <label>Ngày
+        <input type="date" value={date} max={today()} onChange={(e) => changeDate(e.target.value)} />
+      </label> : <>
+        <label>Tìm kiếm<input value={search} placeholder="Cơ sở, ngày, giải trình…" onChange={(e) => setSearch(e.target.value)} /></label>
+        <label>Từ ngày<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label>Đến ngày<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label>Trạng thái<select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Tất cả</option>
+          {Object.entries(labels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+        </select></label>
+      </>}
+      <button disabled={loading || busy} onClick={() => setRefresh((n) => n + 1)}>Tải lại</button>
+    </div>
+    {loading ? <p role="status">Đang tải…</p> : preview && (tab === 'create' || tab === 'remit') ? <>
+      {tab === 'remit' ? <section className="cash-drawer-workspace" aria-label="Nộp tiền và cấp lại tiền két">
+      {preview.cashCycle?.due ? <p className="finance-warning" role="alert">Đã {preview.cashCycle.elapsedDays} ngày từ đầu chu kỳ giữ tiền. Đến hạn 5 ngày: QLCS cần nộp hết tiền trong két, rồi yêu cầu cấp lại tiền lẻ.</p>
+        : null}
+      <form className="finance-card" onSubmit={submit}>
+        <h2>Ghi nhận khoản tiền đã nộp khỏi két</h2>
+        <p>Chỉ ghi khi tiền đã thực sự được nộp ra khỏi két. Giao dịch được ghi theo ngày nộp thực tế; báo cáo đã gửi vẫn giữ nguyên lịch sử.</p>
+        {remittanceBlocked ? <p className="finance-warning">Ngày cũ đã chốt hoặc đã có ngày chốt mới hơn. Vui lòng ghi khoản nộp vào đúng ngày thực tế.</p> : <fieldset disabled={busy || readOnly}>
+          {date === today() && <button type="button" disabled={Number(preview.currentBalance) <= 0} onClick={() => { setAmount(String(preview.currentBalance)); setFullSweep(true); setConfirm(false); if (!reason.trim()) setReason('Nộp toàn bộ tiền mặt khỏi két cơ sở.'); }}>Nộp hết tiền trong két ({vnd(preview.currentBalance)})</button>}
+          <label>Số tiền đã nộp *<MoneyInput required value={amount} onValueChange={(v) => { setAmount(v); setFullSweep(false); setConfirm(false); }} /></label>
+          <label>Nội dung / nơi hoặc người nhận *<textarea required maxLength={2000} value={reason} onChange={(e) => { setReason(e.target.value); setConfirm(false); }} /></label>
+          <label>Mã chứng từ (không bắt buộc)<input maxLength={200} value={reference} onChange={(e) => { setReference(e.target.value); setConfirm(false); }} /></label>
+          {confirm && <p className="finance-warning">Xác nhận đã nộp {vnd(amount)}? Khoản này sẽ giảm số dư két và được giữ trong lịch sử.</p>}
+          <ConfirmButtons confirm={confirm} busy={busy} cancel={() => setConfirm(false)} label="Ghi nhận đã nộp tiền" />
+        </fieldset>}
+      </form>
+      <DrawerFundingPanel user={user} refreshKey={refresh} onChange={() => setRefresh((n) => n + 1)} />
+      </section> : <div className="finance-columns">
+        <article className="finance-card">
+          <h2>Số liệu hệ thống · {displayDate(date)}</h2>
+          <ReportSummary source={preview} />
+          <details><summary>Giao dịch tiền mặt trong ngày</summary><MovementTable rows={preview.movements} /></details>
+        </article>
+        <form className="finance-card" onSubmit={submit}>
+          <h2>{canCorrect ? 'Bổ sung báo cáo' : 'Đối chiếu thực tế'}</h2>
+          {saved && !canCorrect ? <>
+            <p className="finance-info">{labels[saved.status]} · Tiền mặt thực đếm: {vnd(saved.actual_closing)}</p>
+            <button type="button" onClick={() => { setTab('history'); setFrom(date); setTo(date); setStatus(''); }}>Xem báo cáo đã gửi</button>
+          </> : preview.closingBlocked && !canCorrect ? <p className="finance-warning">Ngày này chỉ được xem. Không được chốt lùi trước ngày {displayDate(preview.lastClosingDate)}.</p> : <fieldset disabled={busy || readOnly}>
+            {canCorrect && <div className="finance-warning">
+              {saved.reviews.filter((r) => r.decision === 'NEEDS_EXPLANATION').slice(-1).map((r) => <p key={r.id}>Kế toán yêu cầu: {r.note}</p>)}
+              <p>Lưu thành phiên bản mới; giữ nguyên báo cáo và minh chứng đã gửi trước đó.</p>
+            </div>}
+            <label>Tiền mặt thực đếm cuối ngày *<MoneyInput required value={actual} onValueChange={(v) => { setActual(v); setConfirm(false); }} /></label>
+            {cashVariance !== null && <Difference label="Chênh lệch tiền mặt" value={cashVariance} />}
+            <label>Giải trình {needsExplanation ? '*' : '(không bắt buộc)'}<textarea required={needsExplanation} maxLength={2000} value={explanation} onChange={(e) => { setExplanation(e.target.value); setConfirm(false); }} /></label>
+            <label>Minh chứng (không bắt buộc)<input key={date + '-' + refresh} type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf" onChange={(e) => { setEvidence(e.target.files[0] || null); setConfirm(false); }} /><small>Tối đa 20 MB. Ảnh hoặc PDF.</small></label>
+            {confirm && <p className="finance-info">Xác nhận gửi tiền mặt thực đếm {vnd(actual)} cho kế toán đối soát?</p>}
+            <ConfirmButtons confirm={confirm} busy={busy} cancel={() => setConfirm(false)} label="Gửi kế toán đối soát" />
+          </fieldset>}
+        </form>
+      </div>}
+    </> : <div className={detail ? 'finance-columns' : ''}>
+      <article className="finance-card finance-table-wrap"><table>
+        <thead><tr><th>Ngày / cơ sở</th><th>Thực đếm</th><th>Chênh lệch tiền mặt</th><th>Trạng thái</th><th /></tr></thead>
+        <tbody>{shown.map((r) => <tr key={r.id}>
+          <td>{displayDate(r.business_date)}<small>{r.branchName}</small></td>
+          <td>{vnd(r.actual_closing)}</td><td>{vnd(r.variance)}</td>
+          <td>{labels[r.status]}</td><td><button disabled={busy} onClick={() => open(r.id)}>Chi tiết</button></td>
+        </tr>)}</tbody>
+      </table>{!shown.length && <p>{emptyMessage}</p>}</article>
+      {detail && <article className="finance-card">
+        <div className="finance-actions"><h2>{displayDate(detail.business_date)} · {detail.branchName}</h2><button onClick={() => setDetail(null)}>Đóng</button></div>
+        <p>{labels[detail.status]} · Người gửi: {detail.submittedBy} · Phiên bản {detail.report_version || 'cũ'}</p>
+        <ReportSummary source={detail.source} />
+        <Line label="Tiền mặt thực đếm" value={detail.actual_closing} />
+        <Difference label="Chênh lệch tiền mặt" value={detail.variance} />
+        <p>Giải trình: {detail.explanation || 'Không có.'}</p>
+        {detail.evidence.map((f) => <button key={f.revision} onClick={async () => {
+          try { await api.download(base + '/' + detail.id + '/evidence?revision=' + f.revision, f.name, branch); }
+          catch (e) { setError(message(e)); }
+        }}>Minh chứng phiên bản {f.revision || 'cũ'}: {f.name}</button>)}
+        <details><summary>Giao dịch nguồn lúc gửi</summary><MovementTable rows={detail.source.movements || []} /></details>
+        {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{detail.versions.map((v) => <div key={v.revision} className="finance-info">
+          <strong>Phiên bản {v.revision} · {v.username} · {new Date(v.submitted_at).toLocaleString('vi-VN')}</strong>
+          <p>Thực đếm {vnd(v.payload.actual_closing)} · Chênh lệch {vnd(v.payload.variance)}</p>
+          <p>{v.payload.explanation || 'Không có giải trình.'}</p>
+        </div>)}</details>}
+        {detail.reviews.map((r) => <div className="finance-info" key={r.id}><strong>{r.decision === 'RECONCILED' ? 'Kết luận đối soát' : 'Yêu cầu bổ sung'} · {r.username}</strong><p>{r.note}</p></div>)}
+        {!accounting && detail.status === 'NEEDS_EXPLANATION' && !readOnly && <button className="finance-primary" onClick={() => edit(detail)}>Bổ sung báo cáo</button>}
+        {accounting && detail.status === 'SUBMITTED' && <form onSubmit={(e) => { e.preventDefault(); review(false); }}>
+          <label>Kết luận / nội dung cần bổ sung (không bắt buộc)<textarea maxLength={2000} value={conclusion} onChange={(e) => setConclusion(e.target.value)} /></label>
+          <label className="finance-check"><input type="checkbox" checked={resolved} onChange={(e) => setResolved(e.target.checked)} />Tôi đã kiểm tra số liệu, minh chứng và giải quyết chênh lệch.</label>
+          <div className="finance-actions">
+            <button type="button" disabled={busy} onClick={() => review(true)}>Yêu cầu bổ sung</button>
+            <button className="finance-primary" disabled={busy || !resolved}>Hoàn tất đối soát</button>
           </div>
-        )
-      )}
-    </section>
-  );
+        </form>}
+      </article>}
+    </div>}
+  </section>;
+}
+
+function ConfirmButtons({ confirm, busy, cancel, label }) {
+  return <div className="finance-actions">
+    {confirm && <button type="button" onClick={cancel}>Quay lại</button>}
+    <button className="finance-primary" disabled={busy}>{busy ? 'Đang gửi…' : confirm ? 'Xác nhận · ' + label : label}</button>
+  </div>;
+}
+function Line({ label, value }) {
+  return <div className="finance-line"><span>{label}</span><strong>{vnd(value)}</strong></div>;
+}
+function Difference({ label, value }) {
+  return <p className={Number(value) === 0 ? 'finance-success' : 'finance-warning'}>{label}: <strong>{vnd(value)}</strong></p>;
+}
+function ReportSummary({ source }) {
+  return <>
+    <h3>Tiền mặt</h3>
+    <Line label="Tồn đầu ngày" value={source.opening} />
+    <Line label="Thu tiền mặt trong ngày" value={source.cashReceipts ?? source.cashIn} />
+    {Number(source.drawerFunding) > 0 && <Line label="Tiền được kế toán cấp vào két" value={source.drawerFunding} />}
+    <Line label="Tiền đã nộp khỏi két trong ngày" value={source.remitted ?? 0} />
+    {Number(source.countAdjustment) !== 0 && source.countAdjustment != null && <Line label="Điều chỉnh kiểm đếm đã đối soát (không phải khoản thu/chi mới)" value={source.countAdjustment} />}
+    <Line label="Tiền mặt dự kiến cuối ngày" value={source.expected} />
+
+  </>;
 }
 function MovementTable({ rows }) {
-  return (
-    <div className="finance-table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Giao dịch</th>
-            <th>Số tiền</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td>
-                {r.description}
-                <small>{new Date(r.time).toLocaleString('vi-VN')}</small>
-              </td>
-              <td>{vnd(r.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}
-    </div>
-  );
+  return <div className="finance-table-wrap"><table>
+    <thead><tr><th>Giao dịch</th><th>Số tiền</th></tr></thead>
+    <tbody>{rows.map((r) => <tr key={r.id}><td>{r.description}<small>{new Date(r.time).toLocaleString('vi-VN')}</small></td><td>{vnd(r.amount)}</td></tr>)}</tbody>
+  </table>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
 }

@@ -137,6 +137,141 @@
 .attendance-actions > button {
   min-width: 200px;
 }
+.attendance-selection {
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0 16px;
+}
+.attendance-selection > button {
+  min-width: 0;
+}
+.attendance-table input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #ed138a;
+  cursor: pointer;
+}
+.attendance-table input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+.monthly-payroll-table {
+  min-width: 1180px;
+}
+.monthly-payroll-table th {
+  color: #526077;
+}
+.monthly-payroll-table td:first-child {
+  min-width: 0;
+  width: 44px;
+}
+.monthly-payroll-table .monthly-employee {
+  min-width: 160px;
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+.monthly-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.monthly-money .attendance-warning {
+  white-space: normal;
+  min-width: 140px;
+  max-width: 210px;
+}
+.monthly-payroll-table td:nth-last-child(2) {
+  max-width: 240px;
+}
+.monthly-payroll-dialog {
+  width: min(1000px, calc(100vw - 32px));
+  max-width: 1000px;
+}
+.monthly-payroll-dialog .shift-dialog-body {
+  max-height: 65dvh;
+}
+.monthly-payroll-dialog footer {
+  flex-wrap: wrap;
+}
+.monthly-payroll-dialog footer button {
+  max-width: 100%;
+}
+.monthly-payroll-table small,
+.monthly-payroll-dialog small,
+.monthly-payroll-dialog header p {
+  color: #5c6c82;
+}
+.monthly-payroll-dialog .attendance-table td:first-child {
+  min-width: 155px;
+}
+.monthly-attendance-detail,
+.monthly-close-attendance,
+.monthly-adjustments,
+.monthly-pay-breakdown {
+  margin: 24px 0 0;
+}
+.monthly-attendance-detail > summary {
+  cursor: pointer;
+  color: #526077;
+  font-weight: 600;
+  padding: 10px 0;
+}
+.monthly-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 180px;
+}
+.monthly-payroll-dialog .monthly-adjustments {
+  padding: 0;
+  border: 0;
+  margin-top: 24px;
+  min-width: 0;
+}
+.monthly-adjustments legend {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.monthly-adjustment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.monthly-adjustments label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: #526077;
+}
+.monthly-adjustments textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+.monthly-pay-breakdown dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf0f5;
+}
+.monthly-pay-breakdown dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.monthly-pay-net {
+  font-weight: 700;
+  color: #116681;
+}
+@media (max-width: 600px) {
+  .monthly-adjustment-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
 .attendance-closed {
   margin-top: 24px;
   color: #159263;
