@@ -173,12 +173,12 @@ function RefundDetails({ item, busy, error, onComplete }) {
     <div className="deposit-details-scroll">
       <header className="deposit-details-heading">
         <div><h2>Chi tiết yêu cầu</h2><strong>{item.bookingCode} · {item.customerName}</strong></div>
-        <span className={statusClass(item.status)}>{statusLabels[item.status] || item.status}</span>
+        <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span>
       </header>
       <section className="deposit-details-amount">
         <span>Số tiền yêu cầu hoàn</span>
         <strong>{formatVnd(item.amount)}</strong>
-        <small>Booking đã hủy</small>
+        <small>Đặt phòng đã hủy</small>
       </section>
       <dl className="deposit-detail-list">
         <div><dt>Số điện thoại</dt><dd>{item.phone || '—'}</dd></div>
@@ -286,7 +286,7 @@ export default function AccountantRefundPage() {
       setFilter('all');
       const proofNotice = image ? ' và lưu tệp minh chứng.'
         : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
-      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode}${proofNotice}`);
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho đặt phòng ${item.bookingCode}${proofNotice}`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error)); }
     finally { setBusy(false); }
@@ -322,14 +322,14 @@ export default function AccountantRefundPage() {
         </div>
         <label className="accounting-refund-search">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.4 4.4"/></svg>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm booking, khách hàng, ngân hàng..." aria-label="Tìm yêu cầu hoàn cọc" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã đặt phòng, khách hàng, ngân hàng..." aria-label="Tìm yêu cầu hoàn cọc" />
         </label>
       </div>
       <div className="accounting-refund-content-grid">
         <section className="deposit-table-card" aria-label="Danh sách yêu cầu hoàn cọc">
           <div className="deposit-table-scroll">
             <table className="deposit-table accounting-refund-table">
-              <thead><tr><th>Booking</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
+              <thead><tr><th>Mã đặt phòng</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
               <tbody>
                 {loading && <tr><td className="deposit-table-message" colSpan="4">Đang tải yêu cầu hoàn cọc…</td></tr>}
                 {!loading && loadError && <tr><td className="deposit-table-message deposit-table-message--error" colSpan="4">Danh sách chưa tải được.</td></tr>}
@@ -342,7 +342,7 @@ export default function AccountantRefundPage() {
                   <td><strong>{item.bookingCode}</strong><small>{item.branchName} · {dateTimeText(item.requestedAt)}</small></td>
                   <td><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></td>
                   <td><strong>{formatVnd(item.amount)}</strong></td>
-                  <td><span className={statusClass(item.status)}>{statusLabels[item.status] || item.status}</span></td>
+                    <td><span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></td>
                 </tr>)}
               </tbody>
             </table>

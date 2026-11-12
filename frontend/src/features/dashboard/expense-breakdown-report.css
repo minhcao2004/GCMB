@@ -1,0 +1,181 @@
+.expense-breakdown-report .expense-report-heading {
+  align-items: start;
+  gap: 24px;
+}
+
+.expense-report-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px 12px;
+  min-width: min(680px, 58vw);
+}
+
+.expense-report-filters > .finance-month { min-width: 0; }
+.expense-report-filters input,
+.expense-report-filters select { box-sizing: border-box; width: 100%; min-width: 0; }
+
+.expense-report-search {
+  grid-column: span 2;
+}
+
+.expense-report-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.expense-report-totals > div {
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid #e2e6ef;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.expense-report-totals .is-opex { border-top: 3px solid #168b87; }
+.expense-report-totals .is-capex { border-top: 3px solid #6a3ee8; }
+
+.expense-report-totals dt {
+  color: #59657a;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.expense-report-totals dd {
+  margin: 7px 0 4px;
+  color: #1c2535;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 750;
+}
+
+.expense-report-totals small,
+.expense-report-reference {
+  display: block;
+  color: #69758a;
+  font-size: 12px;
+}
+
+.expense-report-table-scroll,
+.expense-report-detail-scroll {
+  overflow-x: auto;
+  border: 1px solid #e2e6ef;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.expense-report-table,
+.expense-report-detail-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.expense-report-table caption {
+  padding: 14px 16px;
+  color: #59657a;
+  font-size: 13px;
+  text-align: left;
+}
+
+.expense-report-table th,
+.expense-report-table td,
+.expense-report-detail-scroll th,
+.expense-report-detail-scroll td {
+  padding: 12px 14px;
+  border-top: 1px solid #edf0f5;
+  vertical-align: top;
+}
+
+.expense-report-table th,
+.expense-report-detail-scroll th {
+  color: #59657a;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.expense-report-table td,
+.expense-report-detail-scroll td { color: #263247; font-size: 13px; }
+.expense-report-number { text-align: right !important; white-space: nowrap; }
+
+.expense-report-type {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.expense-report-type.is-opex { color: #08746f; background: #e8f7f5; }
+.expense-report-type.is-capex { color: #5730c3; background: #f0ebff; }
+
+.expense-report-detail-button,
+.expense-report-footer button,
+.expense-report-evidence button {
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #3f2a91;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.expense-report-detail-row > td { padding: 0; background: #f8f9fc; }
+.expense-report-detail-content { padding: 18px; }
+.expense-report-detail-content h3 { margin: 0 0 12px; font-size: 15px; }
+.expense-report-detail-scroll { max-height: 420px; }
+.expense-report-detail-scroll table { min-width: 850px; }
+.expense-report-evidence { display: grid; gap: 6px; min-width: 190px; }
+.expense-report-evidence button { color: #4c5870; font-size: 12px; text-align: left; overflow-wrap: anywhere; }
+.expense-report-empty { margin: 18px 0; color: #59657a; }
+
+.expense-report-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 0;
+}
+
+.expense-report-preview-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(16 22 34 / 55%);
+}
+
+.expense-report-preview {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 96vw);
+  height: min(780px, 90vh);
+  padding: 16px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(16 22 34 / 25%);
+}
+
+.expense-report-preview header { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.expense-report-preview h2 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.expense-report-preview img,
+.expense-report-preview iframe { flex: 1; min-height: 0; width: 100%; margin: 12px 0; border: 0; object-fit: contain; }
+.expense-report-preview a { align-self: end; color: #4c34aa; }
+
+@media (max-width: 950px) {
+  .expense-report-filters { min-width: 0; grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  .expense-breakdown-report .expense-report-heading { flex-direction: column; }
+}
+
+@media (max-width: 600px) {
+  .expense-report-filters { width: 100%; grid-template-columns: 1fr; }
+  .expense-report-search { grid-column: auto; }
+  .expense-report-totals { grid-template-columns: 1fr; }
+  .expense-report-footer { align-items: flex-start; gap: 12px; }
+  .expense-report-preview-backdrop { padding: 10px; }
+}

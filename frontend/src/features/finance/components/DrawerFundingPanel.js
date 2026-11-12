@@ -12,7 +12,7 @@ const hasRecipient = (row) => ['recipient_name', 'recipient_bank_name', 'recipie
 function RecipientDetails({ recipient }) {
   return <dl className="drawer-recipient-details">
     {[
-      ['recipient_name', 'QLCS nhận tiền'],
+      ['recipient_name', 'Quản lý cơ sở nhận tiền'],
       ['recipient_bank_name', 'Ngân hàng'],
       ['recipient_bank_account', 'Số tài khoản'],
       ['recipient_bank_holder', 'Chủ tài khoản'],
@@ -80,7 +80,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
       }
       await api.post(base + '/' + selected.id + (reject ? '/reject' : '/pay'), body);
       setSelected(null);
-      setNotice(reject ? 'Đã từ chối yêu cầu cấp két.' : 'Đã ghi nhận thanh toán cho QLCS, trừ quỹ kế toán và cộng tiền vào két cơ sở.');
+      setNotice(reject ? 'Đã từ chối yêu cầu cấp két.' : 'Đã ghi nhận thanh toán cho quản lý cơ sở, trừ quỹ kế toán và cộng tiền vào két cơ sở.');
       setProof(null);
       setVersion((n) => n + 1);
       onChange?.();
@@ -159,7 +159,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
         <h3>{selected.code} · {selected.branchName}</h3>
         <p>Thanh toán cấp két: <strong>{vnd(selected.amount)}</strong></p>
         <RecipientDetails recipient={selected} />
-        {!hasRecipient(selected) && <p className="finance-warning">Yêu cầu cũ chưa lưu thông tin nhận tiền. QLCS đã gửi cần bổ sung tại phần lịch sử yêu cầu cấp két trước khi thanh toán.</p>}
+        {!hasRecipient(selected) && <p className="finance-warning">Yêu cầu cũ chưa lưu thông tin nhận tiền. Quản lý cơ sở gửi yêu cầu cần bổ sung thông tin tại phần lịch sử yêu cầu cấp két trước khi thanh toán.</p>}
         <label>Mã giao dịch / chứng từ<input required={!proof} maxLength={200} value={reference} onChange={(e) => setReference(e.target.value)} /></label>
         <label>Minh chứng thanh toán (ảnh/PDF)
           <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif"
@@ -174,10 +174,10 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
                 setError('');
               }
             }} />
-          <small>Nhập mã giao dịch hoặc tải minh chứng để tham chiếu khoản đã chuyển cho QLCS.</small>
+          <small>Nhập mã giao dịch hoặc tải minh chứng để tham chiếu khoản đã chuyển cho quản lý cơ sở.</small>
         </label>
         <label>Ghi chú / lý do từ chối<textarea maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        <label className="finance-check"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã thực tế thanh toán đủ tiền cấp két cho QLCS nhận tiền ở trên.</label>
+        <label className="finance-check"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi xác nhận đã thanh toán đủ tiền cấp két cho quản lý cơ sở nhận tiền ở trên.</label>
         <div className="finance-actions">
           <button type="button" disabled={busy} onClick={() => setSelected(null)}>Đóng</button>
           <button type="button" disabled={busy || !note.trim()} onClick={() => settle(true)}>Từ chối yêu cầu</button>

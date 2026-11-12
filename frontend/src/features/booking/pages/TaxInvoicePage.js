@@ -272,7 +272,7 @@ export default function TaxInvoicePage({ accounting = false }) {
           <section className="staff-card">
             <input
               aria-label="Tìm yêu cầu"
-              placeholder="Mã booking / khách / cơ sở"
+              placeholder="Mã đặt phòng / khách hàng / cơ sở"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -280,7 +280,7 @@ export default function TaxInvoicePage({ accounting = false }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Booking / khách</th>
+                    <th>Đặt phòng / khách hàng</th>
                     <th>Cơ sở</th>
                     <th>Tiến độ</th>
                     <th>Thao tác</th>
@@ -326,7 +326,7 @@ export default function TaxInvoicePage({ accounting = false }) {
                   </>
                 ) : (
                   <p>{detail.bill === null
-                    ? 'Booking chưa có hóa đơn thanh toán.'
+                    ? 'Đặt phòng chưa có hóa đơn thanh toán.'
                     : 'Máy chủ chưa trả thông tin hóa đơn. Vui lòng tải lại sau khi cập nhật backend.'}</p>
                 )}
               </details>
@@ -358,11 +358,11 @@ export default function TaxInvoicePage({ accounting = false }) {
                     className="staff-link"
                     onClick={() => navigate(`/le-tan/bookings/${bookingId}/checkout`)}
                   >
-                    Về checkout
+                    Quay lại thanh toán
                   </button>
                 </div>
               )}
-              {accounting && !detail.request && <p>Booking chưa có yêu cầu hóa đơn từ lễ tân.</p>}
+              {accounting && !detail.request && <p>Đặt phòng chưa có yêu cầu hóa đơn từ lễ tân.</p>}
               {((accounting && detail.request) || (!accounting && !detail.request)) && (
                 <form onSubmit={submit}>
                   <fieldset
@@ -440,7 +440,7 @@ export default function TaxInvoicePage({ accounting = false }) {
                         </p>
                         <p>
                           {detail.request
-                            ? 'Lưu tiến độ và kết quả xử lý bên ngoài. Tiền booking và thanh toán giữ nguyên.'
+                            ? 'Lưu tiến độ và kết quả xử lý bên ngoài. Tiền đặt phòng và khoản thanh toán vẫn giữ nguyên.'
                             : 'Ghi nhận yêu cầu và gửi thông báo trong hệ thống cho kế toán.'}
                         </p>
                       </div>

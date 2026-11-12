@@ -15,6 +15,7 @@ const componentNames = {
   ADDITION: 'Thưởng đã duyệt',
   DEDUCTION: 'Khấu trừ đã duyệt',
 };
+const paymentStatusNames = { PAID: 'Đã thanh toán', FAILED: 'Không thành công', PENDING: 'Chờ xác nhận' };
 const requestId = () => window.crypto.randomUUID();
 export default function PayrollPage() {
   const [month, setMonth] = useState(today().slice(0, 7));
@@ -434,7 +435,7 @@ export default function PayrollPage() {
                       <td>{vnd(r.deduction_amount)}</td>
                       <td>{vnd(r.advances)}</td>
                       <td>{vnd(r.net_amount)}</td>
-                      <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'QLCS đã gửi' : 'Chưa trả'}</td>
+                      <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
                       <td>
                         <button onClick={() => setDetail(r)}>Chi tiết</button>
                       </td>
@@ -501,7 +502,7 @@ export default function PayrollPage() {
                           {a.code} · {a.name}
                         </td>
                         <td>{vnd(a.amount)}</td>
-                        <td>{a.status === 'PAID' ? 'Đã trả' : a.status}</td>
+                        <td>{paymentStatusNames[a.status] || 'Chưa xác định'}</td>
                         <td>{a.external_reference}</td>
                       </tr>
                     ))}
@@ -525,7 +526,7 @@ function SalaryBankDetails({ entry }) {
       <span>Số tài khoản: <strong>{entry.bank_account_snapshot || 'Chưa có'}</strong></span>
       <span>Chủ tài khoản: <strong>{entry.bank_holder_snapshot || 'Chưa có'}</strong></span>
       {!complete && !entry.paid && <small>
-        Chưa đủ thông tin nhận lương. Liên hệ QLCS bổ sung, rồi bấm Tải lại trước khi chuyển khoản.
+        Chưa đủ thông tin nhận lương. Liên hệ quản lý cơ sở để bổ sung, rồi bấm Tải lại trước khi chuyển khoản.
       </small>}
     </div>
   );

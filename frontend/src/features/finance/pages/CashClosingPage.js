@@ -155,7 +155,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     setNotice('');
     try {
       await api.post(base + '/' + detail.id + (returned ? '/return' : '/reconcile'), { resolved, conclusion });
-      setNotice(returned ? 'Đã yêu cầu QLCS bổ sung báo cáo.' : 'Đã hoàn tất đối soát. Không phát sinh thao tác nhận hoặc nộp tiền.');
+      setNotice(returned ? 'Đã yêu cầu quản lý cơ sở bổ sung báo cáo.' : 'Đã hoàn tất đối soát. Không phát sinh thao tác nhận hoặc nộp tiền.');
       setRefresh((n) => n + 1);
     } catch (e) { setError(message(e)); }
     finally { setBusy(false); }
@@ -198,7 +198,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     </div>
     {loading ? <p role="status">Đang tải…</p> : preview && (tab === 'create' || tab === 'remit') ? <>
       {tab === 'remit' ? <section className="cash-drawer-workspace" aria-label="Nộp tiền và cấp lại tiền két">
-      {preview.cashCycle?.due ? <p className="finance-warning" role="alert">Đã {preview.cashCycle.elapsedDays} ngày từ đầu chu kỳ giữ tiền. Đến hạn 5 ngày: QLCS cần nộp hết tiền trong két, rồi yêu cầu cấp lại tiền lẻ.</p>
+      {preview.cashCycle?.due ? <p className="finance-warning" role="alert">Đã {preview.cashCycle.elapsedDays} ngày từ đầu chu kỳ giữ tiền. Đến hạn 5 ngày: quản lý cơ sở cần nộp hết tiền trong két, rồi yêu cầu cấp lại tiền lẻ.</p>
         : null}
       <form className="finance-card" onSubmit={submit}>
         <h2>Ghi nhận khoản tiền đã nộp khỏi két</h2>

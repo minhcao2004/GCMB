@@ -11,7 +11,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class MonthlyPerformanceService {
@@ -56,12 +55,63 @@ public class MonthlyPerformanceService {
     }
     db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,?,?,'REPORT',?::jsonb)",
       actor.id(),branchId,"EXPORT_MONTHLY_PERFORMANCE",String.format(Locale.ROOT,"{\"month\":\"%s\",\"format\":\"%s\"}",YearMonth.from(month),format));
-    return "xlsx".equals(format) ? MonthlyPerformanceExport.xlsx(rows) : MonthlyPerformanceExport.csv(rows);
+    if (!"xlsx".equals(format)) return MonthlyPerformanceExport.csv(rows);
+    List<Map<String, Object>> details = "ACCOUNTANT".equals(actor.role())
+      ? accountingEntries(YearMonth.from(month), branchId == null ? List.of() : List.of(branchId)) : null;
+    String scope = branchId == null ? "Toàn chuỗi" : source.isEmpty() ? "Cơ sở đã chọn" : String.valueOf(source.get(0).get("name"));
+    return MonthlyPerformanceExport.xlsx(rows, YearMonth.from(month).toString(), scope,
+      String.valueOf(data.get("periodStatus")), details);
+  }
+
+  @Transactional(readOnly = true)
+  List<Map<String, Object>> accountingEntries(YearMonth month, List<UUID> branchIds) {
+    String branchFilter = branchIds == null || branchIds.isEmpty() ? "" : " AND e.branch_id IN (" + String.join(",", Collections.nCopies(branchIds.size(), "?")) + ")";
+    var args = new ArrayList<Object>(List.of(month.atDay(1), month.plusMonths(1).atDay(1)));
+    if (branchIds != null) args.addAll(branchIds);
+    return db.queryForList("""
+      SELECT t.id transaction_id,e.id entry_id,t.payment_id,t.refund_id,t.expense_payment_id,
+        t.salary_payment_id,t.salary_advance_id,t.fund_transfer_id,t.adjusts_transaction_id,
+        COALESCE(t.payment_id,t.refund_id,t.expense_payment_id,t.salary_payment_id,
+          t.salary_advance_id,t.fund_transfer_id)::text source_id,
+        t.booking_date,t.occurred_at,t.kind,t.reason,COALESCE(b.name,'Toàn chuỗi') branch_name,b.code branch_code,
+        COALESCE(pay.booking_id,refund.booking_id) booking_id,bk.code booking_code,bill.number bill_number,
+        CASE WHEN e.amount_signed>0 THEN 'THU' ELSE 'CHI' END flow_type,
+        COALESCE(CASE WHEN pay.id IS NOT NULL THEN pay.purpose
+          WHEN refund.id IS NOT NULL THEN refund.kind
+          WHEN ep.id IS NOT NULL THEN concat_ws(' · ',expense.class_snapshot,expense_category.name)
+          WHEN t.salary_payment_id IS NOT NULL THEN 'Lương'
+          WHEN t.salary_advance_id IS NOT NULL THEN 'Ứng lương'
+          WHEN t.fund_transfer_id IS NOT NULL THEN 'Chuyển quỹ'
+          WHEN t.adjusts_transaction_id IS NOT NULL THEN 'Điều chỉnh' END,t.kind) item_category,
+        a.code account_code,e.amount_signed,pay.method payment_method,
+        COALESCE(payment_request.reference_code,refund.external_reference,ep.external_reference,
+          salary_payment.external_reference,salary_advance.external_reference,fund_transfer.transfer_reference) source_reference,
+        (SELECT string_agg(fa.kind || ': ' || fa.original_name,'; ' ORDER BY fa.created_at,fa.id)
+          FROM gcmb.finance_attachment fa
+          WHERE fa.owner_type='FINANCIAL_TRANSACTION' AND fa.owner_id=t.id) documents
+      FROM gcmb.financial_transaction t
+      JOIN gcmb.financial_period fp ON fp.id=t.period_id
+      JOIN gcmb.financial_entry e ON e.transaction_id=t.id
+      JOIN gcmb.financial_account a ON a.id=e.account_id
+      LEFT JOIN gcmb.branch b ON b.id=e.branch_id
+      LEFT JOIN gcmb.payment pay ON pay.id=t.payment_id
+      LEFT JOIN gcmb.payment_request payment_request ON payment_request.id=pay.request_id
+      LEFT JOIN gcmb.bill bill ON bill.id=pay.bill_id
+      LEFT JOIN gcmb.refund_request refund ON refund.id=t.refund_id
+      LEFT JOIN gcmb.expense_payment ep ON ep.id=t.expense_payment_id
+      LEFT JOIN gcmb.expense expense ON expense.id=ep.expense_id
+      LEFT JOIN gcmb.expense_category expense_category ON expense_category.id=expense.category_id
+      LEFT JOIN gcmb.salary_payment salary_payment ON salary_payment.id=t.salary_payment_id
+      LEFT JOIN gcmb.salary_advance salary_advance ON salary_advance.id=t.salary_advance_id
+      LEFT JOIN gcmb.fund_transfer fund_transfer ON fund_transfer.id=t.fund_transfer_id
+      LEFT JOIN gcmb.booking bk ON bk.id=COALESCE(pay.booking_id,refund.booking_id)
+      WHERE t.booking_date>=? AND t.booking_date<?
+      """ + branchFilter + " ORDER BY t.booking_date,t.occurred_at,t.id,e.id", args.toArray());
   }
 
   public List<Map<String,Object>> dailyRevenue(LocalDate start, UUID branchId) {
     return db.queryForList("""
-      WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date day,b.net_amount,
+      WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS report_date,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='OVERTIME'),0) overtime
@@ -69,21 +119,21 @@ public class MonthlyPerformanceService {
         LEFT JOIN gcmb.bill_line l ON l.bill_id=b.id LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
         WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date>=?
           AND (b.completed_at AT TIME ZONE br.timezone)::date<? AND (?::uuid IS NULL OR b.branch_id=?)
-        GROUP BY b.id,b.branch_id,day,b.net_amount), forfeitures AS (
-        SELECT bk.branch_id,(de.created_at AT TIME ZONE br.timezone)::date day,sum(de.amount) amount
+        GROUP BY b.id,b.branch_id,report_date,b.net_amount), forfeitures AS (
+        SELECT bk.branch_id,(de.created_at AT TIME ZONE br.timezone)::date AS report_date,sum(de.amount) amount
         FROM gcmb.deposit_entry de JOIN gcmb.deposit d ON d.id=de.deposit_id
         JOIN gcmb.booking bk ON bk.id=d.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
         WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
           AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (?::uuid IS NULL OR bk.branch_id=?)
-        GROUP BY bk.branch_id,day)
-      SELECT day date,sum(room) "roomRevenue",sum(fnb) "fnbRevenue",sum(overtime) "overtimeRevenue",
+        GROUP BY bk.branch_id,report_date)
+      SELECT bills.report_date AS date,sum(room) "roomRevenue",sum(fnb) "fnbRevenue",sum(overtime) "overtimeRevenue",
         sum(net_amount-room-fnb-overtime) "otherRevenue",sum(net_amount) "billRevenue",
-        COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.day=bills.day),0) "forfeitedDeposits",
-        sum(net_amount)+COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.day=bills.day),0) revenue
-      FROM bills GROUP BY day
+        COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) "forfeitedDeposits",
+        sum(net_amount)+COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) revenue
+      FROM bills GROUP BY bills.report_date
       UNION ALL
-      SELECT f.day,0,0,0,0,0,sum(f.amount),sum(f.amount) FROM forfeitures f
-      WHERE NOT EXISTS (SELECT 1 FROM bills WHERE bills.day=f.day) GROUP BY f.day
+      SELECT f.report_date,0,0,0,0,0,sum(f.amount),sum(f.amount) FROM forfeitures f
+      WHERE NOT EXISTS (SELECT 1 FROM bills WHERE bills.report_date=f.report_date) GROUP BY f.report_date
       ORDER BY date
       """,start,start.plusMonths(1),branchId,branchId,start,start.plusMonths(1),branchId,branchId);
   }
@@ -247,7 +297,7 @@ public class MonthlyPerformanceService {
       """,start,start.plusMonths(1),start,start.plusMonths(1),branchId,branchId);
   }
 
-  private Map<String,Object> totals(List<Map<String,Object>> rows) {
+  Map<String,Object> totals(List<Map<String,Object>> rows) {
     var result = new LinkedHashMap<String,Object>();
     for (String key : MONEY_METRICS) result.put(key, BigDecimal.ZERO);
     for (String key : COUNT_METRICS) result.put(key, 0L);

@@ -32,7 +32,7 @@ const accountingNavigation = [
 
   ['Hoàn tiền cọc', 'deposit'],
   ['Lương nhân viên', 'booking'],
-  ['Báo cáo tài chính', 'orders', true],
+  ['Báo cáo tài chính', 'orders'],
   ['Danh mục chi phí', 'inventory'],
 ];
 const cancellationReasons = [
@@ -255,6 +255,7 @@ export function AppShell({
                       if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
                       if (icon === 'overview') navigate('/ke-toan');
                       if (icon === 'report') navigate('/ke-toan/bao-cao');
+                      if (icon === 'orders') navigate('/ke-toan/bao-cao-chi-phi');
                       if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
                       if (['payments', 'plus', 'inventory'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
                     }}
