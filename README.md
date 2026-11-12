@@ -85,7 +85,8 @@ The backend is deployed as one application. Its ten peer feature packages are `a
 ## Project Structure
 
 
-The tree below reflects the current repository structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
+The tree below reflects the current repositcd D:\DO_AN_2026\GCMB\frontend
+npm.cmd startory structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
 
 ```text
 GCMB/
