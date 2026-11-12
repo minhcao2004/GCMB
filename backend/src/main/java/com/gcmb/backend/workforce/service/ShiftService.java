@@ -92,7 +92,7 @@ public class ShiftService {
                 if (repo.slot(actor.branchId(), templateId, day) != null || repo.closedPeriod(actor.branchId(), day)) continue;
                 ZonedDateTime midnight = day.atStartOfDay(zone);
                 repo.publish(actor.branchId(), templateId, day, midnight.plusMinutes(start).toInstant(),
-                    midnight.plusMinutes(end).toInstant(), 2, "OPEN", actor.id(), null);
+                    midnight.plusMinutes(end).toInstant(), 3, "OPEN", actor.id(), null);
             }
         }
     }
@@ -153,6 +153,7 @@ public class ShiftService {
         if (!manager) shifts.forEach(shift -> shift.remove("hasAttendance")); // BR-60: chỉ quản lý cần trạng thái khóa công của cả ca.
         result.put("editableSlots", editable);
         result.put("assignments", repo.assignments(actor.branchId(), week, employee));
+        if(manager) result.put("employeeClosings",repo.employeeClosings(actor.branchId(),week));
         result.put("history", manager ? repo.history(actor.branchId(), week) : List.of());
         result.put("employees", manager ? repo.employees(actor.branchId()) : List.of());
         result.put("readOnly", !"ACTIVE".equals(branch.get("status")));
@@ -197,9 +198,9 @@ public class ShiftService {
             );
             var old = repo.slot(actor.branchId(), slot.templateId(), slot.date());
             if (old == null && !slot.open()) continue;
-            if (slot.capacity() == null || slot.capacity() < 1) throw bad(
+            if (slot.capacity() == null || slot.capacity() != 3) throw bad(
                 "capacity",
-                "Số chỗ phải là số nguyên lớn hơn 0."
+                "Mỗi ca làm việc có sức chứa 3 nhân viên."
             );
             if (
                 old == null
@@ -296,9 +297,10 @@ public class ShiftService {
             branch
         );
         if (repo.closedPeriod(actor.branchId(), date)) throw locked();
+        if (repo.employeeClosed(actor.branchId(),employee,date)) throw locked();
         long registered = repo.registered(shift);
         // BR-56 / MSG19: khóa ca trước khi kiểm tra chỗ; đăng ký đủ điều kiện tự xác nhận, không duyệt tay.
-        if (registered >= ((Number) row.get("capacity")).longValue()) throw new AuthFailure(
+        if (registered >= Math.min(3, ((Number) row.get("capacity")).longValue())) throw new AuthFailure(
             409,
             "form",
             "Ca " +
@@ -323,7 +325,7 @@ public class ShiftService {
         return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
     }
 
-    // HuyDV / UC-86: quản lý bổ sung người cho ca đang trống.
+    // HuyDV / UC-86, BR-56: bổ sung người đến đủ ba chỗ, không chỉ ca chưa có ai.
     public Map<String, Object> assignEmpty(Identity actor, UUID shift, UUID employee) {
         var branch = scope(actor, true, true);
         var row = repo.shift(shift, actor.branchId());
@@ -332,18 +334,21 @@ public class ShiftService {
         Instant start = time(row, "starts_at");
         Instant end = time(row, "ends_at");
         Instant now = Instant.now();
-        if (!end.isAfter(now) || repo.closedPeriod(actor.branchId(), date) || repo.hasAttendance(shift)) {
+        if (!end.isAfter(now) || repo.closedPeriod(actor.branchId(), date)) {
             throw locked();
         }
-        if (repo.registered(shift) != 0) throw stale();
+        if (repo.registered(shift) >= Math.min(3,((Number)row.get("capacity")).longValue()))
+            throw bad("form","Ca đã đủ người. Không thể phân công thêm.");
         if (employee == null || !repo.belongs(employee, actor.branchId(), start.isAfter(now) ? start : now, end)) {
             throw bad("employeeId", "Vui lòng chọn lễ tân đang hoạt động tại cơ sở của ca.");
         }
+        if (repo.employeeClosed(actor.branchId(),employee,date)) throw locked();
+        if (repo.already(employee,shift)) throw bad("employeeId","Nhân viên đã được phân công trong ca này.");
         if (repo.overlap(employee, shift, start, end)) {
             throw bad("employeeId", "Nhân viên đã có ca trùng thời gian.");
         }
         requireDailyLimit(employee, shift);
-        UUID assignment = repo.assign(shift, employee, actor.id(), "MANAGER", "Phân công ca trống");
+        UUID assignment = repo.assign(shift, employee, actor.id(), "MANAGER", "Bổ sung nhân viên cho ca còn chỗ");
         repo.audit(actor.id(), actor.branchId(), shift, "ASSIGN_EMPTY_SHIFT",
             Map.of("assignmentId", assignment, "employeeId", employee));
         return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
@@ -393,6 +398,7 @@ public class ShiftService {
             "employeeId",
             "Vui lòng chọn lễ tân đang hoạt động và được phân công tại cơ sở của ca."
         );
+        if (repo.employeeClosed(actor.branchId(),input.employeeId(),date)) throw locked();
         if (repo.overlap(input.employeeId(), shift, start, end)) throw bad(
             "employeeId",
             "Nhân viên làm thay đã có ca trùng thời gian."

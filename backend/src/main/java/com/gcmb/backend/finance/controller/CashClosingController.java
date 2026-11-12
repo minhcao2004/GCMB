@@ -63,6 +63,17 @@ public class CashClosingController {
     return service.detail(actor, id);
   }
 
+  @PostMapping("/api/v1/branch-management/cash-closing/remittances")
+  public Map<String,Object> remit(@AuthenticationPrincipal Identity actor, @RequestBody Remittance body) {
+    return service.remit(actor, body);
+  }
+
+  @PostMapping("/api/v1/accounting/cash-closing/{id}/return")
+  public Map<String,Object> returnReport(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
+    @RequestBody Review body) {
+    return service.returnReport(actor, id, body);
+  }
+
   @PostMapping("/api/v1/accounting/cash-closing/{id}/reconcile")
   public Map<String, Object> reconcile(
     @AuthenticationPrincipal Identity actor,
@@ -78,9 +89,10 @@ public class CashClosingController {
   })
   public ResponseEntity<byte[]> evidence(
     @AuthenticationPrincipal Identity actor,
-    @PathVariable UUID id
+    @PathVariable UUID id,
+    @RequestParam(defaultValue = "0") int revision
   ) {
-    var value = service.evidence(actor, id);
+    var value = service.evidence(actor, id, revision);
     return ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
       .contentType(MediaType.parseMediaType((String) value.get("mime_type")))

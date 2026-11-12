@@ -5,6 +5,7 @@ import apiClient from '../../../api/client';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { financeApi } from '../services/financeApi';
 import '../styles/finance.css';
+import DrawerFundingPanel from '../components/DrawerFundingPanel';
 
 const statusName = { WAITING_CONFIRMATION:'Chờ kế toán xác nhận', RECEIVED:'Đã nhận', WAITING_ACCOUNTANT:'Chờ kế toán duyệt', WAITING_HEAD_OFFICE:'Chờ quản lý cấp cao duyệt', APPROVED_TO_PAY:'Đã duyệt · chờ thanh toán', REJECTED:'Từ chối', PAID:'Đã thanh toán' };
 const historyName = { SUBMITTED:'Đã gửi đề nghị', APPROVED:'Đã duyệt', REJECTED:'Đã từ chối', PAID:'Đã thanh toán' };
@@ -174,8 +175,7 @@ function FinanceWorkspace({ user }) {
   const waitingTotal=transfers.filter((item)=>item.status==='WAITING_CONFIRMATION').reduce((sum,item)=>sum+Number(item.amount||0),0);
   const openRequests=requests.filter((item)=>!['PAID','REJECTED'].includes(item.status));
   const closedRequests=requests.filter((item)=>['PAID','REJECTED'].includes(item.status));
-  const accountantFundTabs=[['incoming','Tiền vào'],['outgoing','Tiền ra'],['categories','Hạng mục chi phí']];
-  const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['history','Lịch sử thanh toán và hoàn ứng']];
+  const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['drawer','Cấp tiền két'],['history','Lịch sử thanh toán và hoàn ứng']];
   const headOfficeTabs=[['fund','Cấp quỹ'],['expense_requests','Đề nghị thanh toán và hoàn ứng']];
 
   return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}`}>
@@ -183,22 +183,22 @@ function FinanceWorkspace({ user }) {
     {notice&&<p className="finance-notice" role="status">{notice}</p>}{error&&<p className="finance-error" role="alert">{error}</p>}
 
     {role==='ACCOUNTANT'&&accountantSection==='payments'&&<>
-      <section className="finance-balance"><div><span>Số dư quỹ kế toán dùng chung toàn chuỗi</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div><p>Quỹ được cộng khi kế toán xác nhận đã nhận khoản chuyển từ quản lý cấp cao.</p></section>
-      <nav className="finance-tabs" aria-label="Thu và cấp quỹ">{accountantFundTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>setAccountTab(key)}>{label}</button>)}</nav>
+      <section className="finance-balance"><div><span>Quỹ chi của kế toán (toàn chuỗi)</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div><p>Nguồn chi lương và chi phí là quỹ QLCC cấp cho kế toán. Quỹ này tách biệt với báo cáo thu ngân cuối ngày của cơ sở.</p></section>
       {accountTab==='incoming'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">THU & CẤP QUỸ</span><h2>Lịch sử tiền vào</h2><p>Các khoản quản lý cấp cao gửi sang và trạng thái kế toán xác nhận.</p></div><div className="finance-mini-total"><span>Đã xác nhận</span><strong>{money(receivedTotal)}</strong></div><div className="finance-mini-total pending"><span>Chờ xác nhận</span><strong>{money(waitingTotal)}</strong></div></div>
         <FundTransferTable rows={transfers} busy={busy} onConfirm={(id)=>act(()=>financeApi.confirmFund(id),'Đã xác nhận nhận tiền; số dư quỹ đã cập nhật.')}/>
       </section>}
-      {accountTab==='outgoing'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">THU & CẤP QUỸ</span><h2>Đề nghị thanh toán</h2><p>Đề nghị thanh toán và hoàn ứng đang chờ kế toán xử lý.</p></div><div className="finance-mini-total pending"><span>Đang chờ xử lý</span><strong>{openRequests.length} đề nghị</strong></div></div><RequestTable rows={openRequests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/></section>}
-      {accountTab==='categories'&&<section className="finance-panel"><div className="finance-section-heading"><div><h2>Hạng mục chi phí</h2><p>Tạo, chỉnh sửa và cập nhật các hạng mục dùng chung.</p></div><div className="finance-mini-total"><span>Hạng mục đang dùng</span><strong>{categories.filter((item)=>item.active).length}</strong></div></div>
+    </>}
+      {role==='ACCOUNTANT'&&accountantSection==='inventory'&&<section className="finance-panel"><div className="finance-section-heading"><div><h2>Hạng mục chi phí</h2><p>Tạo, chỉnh sửa và cập nhật các hạng mục dùng chung.</p></div><div className="finance-mini-total"><span>Hạng mục đang dùng</span><strong>{categories.filter((item)=>item.active).length}</strong></div></div>
       <form className="finance-form finance-category-form" onSubmit={saveCategory}><label>Tên hạng mục *<input required maxLength="120" value={categoryName} onChange={(event)=>setCategoryName(event.target.value)}/></label><label>Mô tả<input maxLength="500" value={categoryDescription} onChange={(event)=>setCategoryDescription(event.target.value)}/></label><button disabled={busy}>{categoryEdit?'Cập nhật hạng mục':'Tạo hạng mục'}</button>{categoryEdit&&<button type="button" onClick={()=>{setCategoryEdit(null);setCategoryName('');setCategoryDescription('');}}>Hủy</button>}</form>
       <div className="finance-category-list">{categories.map((item)=><div key={item.id}><span><strong>{item.name}</strong><small>{item.description||'Không có mô tả'}{!item.active?' · Đã ngừng dùng':''}</small></span>{item.active&&<><button type="button" onClick={()=>editCategory(item)}>Sửa</button><button type="button" onClick={()=>window.confirm(`Ngừng sử dụng “${item.name}”? Lịch sử chi cũ vẫn được giữ.`)&&act(()=>financeApi.deleteCategory(item.id),'Đã ngừng hạng mục; lịch sử chi cũ vẫn được giữ.')}>Xóa</button></>}</div>)}{!categories.length&&<p className="finance-empty">Chưa có hạng mục chi phí.</p>}</div>
       </section>}
-    </>}
+
     {role==='ACCOUNTANT'&&accountantSection==='plus'&&<>
       <nav className="finance-tabs" aria-label="Chi và hoàn ứng">{accountantExpenseTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>setAccountTab(key)}>{label}</button>)}</nav>
       {accountTab==='requests'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">CHI & HOÀN ỨNG</span><h2>Đề nghị chờ xử lý</h2><p>Đề nghị thanh toán và hoàn ứng do quản lý cơ sở gửi.</p></div><div className="finance-mini-total pending"><span>Đang chờ xử lý</span><strong>{branchRequests.filter((item)=>!['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
         <RequestTable rows={branchRequests.filter((item)=>!['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
       </section>}
+      {accountTab==='drawer'&&<DrawerFundingPanel user={user} onChange={reload}/>}
       {accountTab==='history'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><span className="finance-section-eyebrow">CHI & HOÀN ỨNG</span><h2>Lịch sử thanh toán và hoàn ứng</h2><p>Lịch sử xử lý đề nghị của tất cả cơ sở.</p></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
         <RequestTable rows={branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
       </section>}

@@ -23,5 +23,9 @@ public final class AttendanceDtos {
         String resolution
     ) {}
 
-    public record CloseCommand(String revision, boolean confirmedCorrect) {}
+    public record CloseCommand(String revision, boolean confirmedCorrect, List<UUID> employeeIds) {
+        public CloseCommand(String revision, boolean confirmedCorrect) {
+            this(revision, confirmedCorrect, null);
+        }
+    }
 }

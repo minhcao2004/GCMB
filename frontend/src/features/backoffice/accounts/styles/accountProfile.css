@@ -78,6 +78,15 @@
 .profile-fields input:disabled {
   background: #f5f7fa;
 }
+.profile-payroll-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e7eaf0;
+}
+.profile-payroll-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
 
 .profile-dialog .account-access-note {
   margin-bottom: 20px;
