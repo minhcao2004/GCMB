@@ -19,7 +19,10 @@ const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đ�
 export default function AccountProfileDialog({ onClose }) {
   const dialog = useRef(null);
   const [profile, setProfile] = useState(null);
-  const [form, setForm] = useState({ fullName: '', phone: '', email: '', currentPassword: '' });
+  const [form, setForm] = useState({
+    fullName: '', phone: '', email: '', currentPassword: '',
+    bankName: '', bankAccount: '', bankHolder: '',
+  });
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState('profile');
   const [busy, setBusy] = useState(false);
@@ -27,6 +30,7 @@ export default function AccountProfileDialog({ onClose }) {
   const [notice, setNotice] = useState('');
   const [retry, setRetry] = useState(0);
   const emailChanged = profile && form.email.trim().toLowerCase() !== profile.account.email;
+  const hasBankDetails = !!(form.bankName.trim() || form.bankAccount.trim() || form.bankHolder.trim());
 
   useEffect(() => {
     const element = dialog.current;
@@ -65,6 +69,9 @@ export default function AccountProfileDialog({ onClose }) {
       phone: profile.phone || '',
       email: profile.account.email,
       currentPassword: '',
+      bankName: profile.bankName || '',
+      bankAccount: profile.bankAccount || '',
+      bankHolder: profile.bankHolder || '',
     });
     setNotice('');
     setErrors({});
@@ -88,6 +95,9 @@ export default function AccountProfileDialog({ onClose }) {
         phone: profile.linkedEmployee ? form.phone : null,
         email: form.email,
         currentPassword: emailChanged ? form.currentPassword : null,
+        bankName: profile.linkedEmployee ? form.bankName : null,
+        bankAccount: profile.linkedEmployee ? form.bankAccount : null,
+        bankHolder: profile.linkedEmployee ? form.bankHolder : null,
       });
       setProfile(data);
       setEditing(false);
@@ -116,6 +126,11 @@ export default function AccountProfileDialog({ onClose }) {
         ['Vai trò', roleNames[profile.account.role] || profile.account.role],
         ['Phạm vi cơ sở', profile.account.branchName],
         ['Trạng thái', statuses[profile.account.status] || profile.account.status],
+        ...(profile.linkedEmployee ? [
+          ['Ngân hàng nhận lương', profile.bankName || 'Chưa cập nhật'],
+          ['Số tài khoản nhận lương', profile.bankAccount || 'Chưa cập nhật'],
+          ['Tên chủ tài khoản', profile.bankHolder || 'Chưa cập nhật'],
+        ] : []),
       ]
     : [];
 
@@ -265,6 +280,28 @@ export default function AccountProfileDialog({ onClose }) {
                 <p className="account-access-note">
                   Tên đăng nhập, vai trò, cơ sở và trạng thái do hệ thống quản lý.
                 </p>
+                {profile.linkedEmployee && (
+                  <section className="profile-payroll-section" aria-labelledby="profile-payroll-title">
+                    <h3 id="profile-payroll-title">Tài khoản nhận lương</h3>
+                    <p className="account-access-note">
+                      Kế toán sử dụng thông tin này để trả lương. Vui lòng kiểm tra đúng ngân hàng và số tài khoản.
+                    </p>
+                    {[
+                      ['bankName', 'Ngân hàng', 200],
+                      ['bankAccount', 'Số tài khoản', 60],
+                      ['bankHolder', 'Tên chủ tài khoản', 200],
+                    ].map(([key, label, max]) => (
+                      <div className="account-field" key={key}>
+                        <label htmlFor={'profile-' + key}>{label}</label>
+                        <input id={'profile-' + key} name={key} type="text"
+                          value={form[key]} onChange={change} maxLength={max}
+                          required={hasBankDetails}
+                          pattern={key === 'bankAccount' ? '[A-Za-z0-9 ]{3,60}' : undefined}
+                          autoComplete="off" />
+                      </div>
+                    ))}
+                  </section>
+                )}
               </fieldset>
             )}
           </div>

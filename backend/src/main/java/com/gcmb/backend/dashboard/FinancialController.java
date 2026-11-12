@@ -8,6 +8,7 @@ import com.gcmb.backend.finance.service.FinancialPeriodService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -117,8 +118,8 @@ public class FinancialController {
             WHERE bt.provider='SEPAY' AND bt.match_status='EXCEPTION' AND bt.occurred_at>=? AND bt.occurred_at<?
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
-            """, start.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
-                start.plusMonths(1).atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), branchId, branchId);
+            """, Timestamp.from(start.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()),
+                Timestamp.from(start.plusMonths(1).atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()), branchId, branchId);
         return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
     }
 

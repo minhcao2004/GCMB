@@ -148,6 +148,19 @@ public class ShiftRepository {
         );
     }
 
+    public boolean employeeClosed(UUID branch,UUID employee,LocalDate date) {
+        return Boolean.TRUE.equals(db.queryForObject("SELECT gcmb.employee_month_closed(?,?,?)",
+            Boolean.class,branch,employee,date));
+    }
+
+    public List<Map<String,Object>> employeeClosings(UUID branch,LocalDate week) {
+        return db.queryForList("""
+            SELECT c.employee_id AS "employeeId",p.month::text AS month
+            FROM gcmb.employee_attendance_closing c JOIN gcmb.attendance_period p ON p.id=c.period_id
+            WHERE p.branch_id=? AND p.month BETWEEN ? AND ?
+            """,branch,week.withDayOfMonth(1),week.plusDays(6).withDayOfMonth(1));
+    }
+
     public UUID linkedEmployee(UUID user) {
         var ids = db.queryForList(
             "SELECT id FROM gcmb.employee WHERE user_id=? AND status='ACTIVE'",

@@ -4,8 +4,10 @@ package com.gcmb.backend.workforce.service;
 import static com.gcmb.backend.finance.service.FinanceAccess.*;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
+import com.gcmb.backend.finance.service.AccountantFund;
 import java.math.*;
 import java.sql.Timestamp;
 import java.time.*;
@@ -132,35 +134,75 @@ public class PayrollService {
 
   public record BankDetails(UUID employeeId, String month, String bankName, String bankAccount, String bankHolder) {}
 
-  // HuyDV | UC-97: nhận lương ngoài GCMB; lưu thông tin nhận, không thực hiện chuyển tiền.
+  // HuyDV | UC-89/91/95, BR-63/64/67/77: xem công và tiền cùng màn hình; chỉ lương đã gửi dùng snapshot.
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> branchSummary(Identity actor, String value) {
+    UUID branch = access.branch(actor, false);
+    LocalDate m = month(value);
+    var history = branchHistory(actor, value);
+    var result = new ArrayList<Map<String, Object>>();
+    for (var employee : settlementEmployees(actor, value)) {
+      UUID id = (UUID) employee.get("id");
+      var item = new LinkedHashMap<String, Object>();
+      item.put("employeeId", id);
+      var saved = history.stream().filter(h -> id.equals(h.get("employee_id"))).findFirst().orElse(null);
+      item.put("submitted", saved != null);
+      item.put("ready", saved != null && Boolean.TRUE.equals(saved.get("ready")));
+      item.put("paid", saved != null && Boolean.TRUE.equals(saved.get("paid")));
+      item.put("bonus", saved == null ? BigDecimal.ZERO : saved.get("bonus"));
+      item.put("penalty", saved == null ? BigDecimal.ZERO : saved.get("penalty"));
+      item.put("reason", saved == null ? "" : Objects.toString(saved.get("reason"), ""));
+      try {
+        if (saved != null) {
+          var calculations = db.queryForList("""
+            SELECT (s.source_snapshot->'calculation'->>'reward')::numeric AS reward,
+              (s.source_snapshot->'calculation'->>'advance')::numeric AS advance,
+              (s.source_snapshot->'calculation'->>'net')::numeric AS net,
+              (s.source_snapshot->'calculation'->>'multipleBranches')::boolean AS multiple
+            FROM gcmb.branch_payroll_submission s JOIN gcmb.payroll_period p ON p.id=s.period_id
+            WHERE s.branch_id=? AND s.employee_id=? AND p.month=?
+            """, branch, id, m);
+          var calculation = calculations.isEmpty() ? Map.<String, Object>of() : calculations.get(0);
+          item.put("wage", saved.get("wage"));
+          item.put("reward", Objects.requireNonNullElse(calculation.get("reward"), BigDecimal.ZERO));
+          item.put("advance", Objects.requireNonNullElse(calculation.get("advance"), BigDecimal.ZERO));
+          boolean multiple = Boolean.TRUE.equals(calculation.get("multiple"));
+          item.put("multipleBranches", multiple);
+          item.put("finalNet", saved.get("final_net"));
+          item.put("net", Boolean.TRUE.equals(saved.get("ready")) && !multiple ? saved.get("final_net")
+              : Objects.requireNonNullElse(calculation.get("net"), saved.get("branch_amount")));
+        } else {
+          var rows = work(id, m, false).stream().filter(r -> branch.equals(r.get("branch_id"))).toList();
+          var earnings = branchEarnings(id, rows, false);
+          boolean multiple = db.queryForObject("""
+            SELECT count(DISTINCT s.branch_id)>1 FROM gcmb.shift_assignment x
+            JOIN gcmb.scheduled_shift s ON s.id=x.shift_id WHERE x.employee_id=?
+              AND s.work_date>=? AND s.work_date<? AND x.status='CONFIRMED' AND s.status<>'CANCELLED'
+            """, Boolean.class, id, m, m.plusMonths(1));
+          BigDecimal wage = (BigDecimal) earnings.get("wage");
+          BigDecimal reward = !multiple && (long) earnings.get("minutes") > 6000
+              ? BigDecimal.valueOf(100000) : BigDecimal.ZERO;
+          var period = period(m, false);
+          BigDecimal advance = multiple || period == null ? BigDecimal.ZERO : advances(id, (UUID) period.get("id"));
+          item.put("wage", wage);
+          item.put("reward", reward);
+          item.put("advance", advance);
+          item.put("multipleBranches", multiple);
+          item.put("net", wage.add(reward).subtract(advance));
+        }
+      } catch (AuthFailure failure) {
+        // Một nhân viên thiếu đơn giá không được làm mất bảng công của cả cơ sở.
+        item.put("calculationError", failure.getMessage());
+      }
+      result.add(item);
+    }
+    return result;
+  }
+
+  // HuyDV | UC-97: nguồn tài khoản nhận lương là thông tin cá nhân; chặn API QLCS cũ.
   public void branchBank(Identity actor, BankDetails input) {
-    access.lock();
-    UUID branch = access.branch(actor, true);
-    if (branchEmployees(actor).stream().noneMatch(e -> e.get("id").equals(input.employeeId()))) {
-      requireSettlementEmployee(actor, input.month(), input.employeeId());
-    }
-    String name = text(input.bankName(), "Ngân hàng", true);
-    String account = text(input.bankAccount(), "Số tài khoản", true).replace(" ", "");
-    String holder = text(input.bankHolder(), "Chủ tài khoản", true);
-    if (name.length() > 200 || holder.length() > 200 || !account.matches("[A-Za-z0-9]{3,60}")) {
-      throw bad("Ngân hàng và chủ tài khoản tối đa 200 ký tự; số tài khoản gồm 3–60 chữ hoặc số.");
-    }
-    var affectedMonths = db.queryForList("""
-      SELECT DISTINCT q.month FROM gcmb.payroll_entry e JOIN gcmb.payroll_period q ON q.id=e.period_id
-      WHERE e.employee_id=? AND NOT EXISTS(
-        SELECT 1 FROM gcmb.salary_payment p WHERE p.payroll_entry_id=e.id AND p.status='PAID')
-      """, LocalDate.class, input.employeeId());
-    for (LocalDate affectedMonth : affectedMonths) periods.requireOpen(affectedMonth, "cập nhật thông tin nhận lương");
-    var before = db.queryForMap("SELECT bank_name,bank_account,bank_holder FROM gcmb.employee WHERE id=?", input.employeeId());
-    db.update("UPDATE gcmb.employee SET bank_name=?,bank_account=?,bank_holder=?,version=version+1 WHERE id=?", name, account, holder, input.employeeId());
-    // BR-77: không đổi thông tin lịch sử của khoản đã thanh toán.
-    var periods = db.queryForList("""
-      UPDATE gcmb.payroll_entry e SET bank_name_snapshot=?,bank_account_snapshot=?,bank_holder_snapshot=?
-      WHERE employee_id=? AND NOT EXISTS(SELECT 1 FROM gcmb.salary_payment p WHERE p.payroll_entry_id=e.id AND p.status='PAID')
-      RETURNING period_id
-      """, UUID.class, name, account, holder, input.employeeId());
-    for (UUID period : periods) db.update("UPDATE gcmb.payroll_period SET version=version+1 WHERE id=?", period);
-    access.audit(actor, branch, input.employeeId(), "UPDATE_PAYROLL_BANK", before, input);
+    access.branch(actor, true);
+    throw new AuthFailure(403, "form", "Nhân viên tự cập nhật tài khoản nhận lương trong Thông tin tài khoản.");
   }
 
   private void requireSettlementEmployee(Identity actor, String month, UUID employee) {
@@ -424,9 +466,12 @@ public class PayrollService {
     return Map.of(
       "employees",
       db.queryForList("SELECT id,code,full_name AS name,status FROM gcmb.employee ORDER BY code"),
+      "branches",
+      db.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name"),
       "funds",
       db.queryForList(
-        "SELECT a.id,a.name,b.balance FROM gcmb.financial_account a JOIN gcmb.v_account_balance b ON b.id=a.id WHERE a.kind='CENTRAL_FUND' AND a.active ORDER BY a.code"
+        "SELECT id,name,CAST(? AS numeric) AS balance FROM gcmb.financial_account WHERE kind='CENTRAL_FUND' AND active ORDER BY code",
+        AccountantFund.balance(db)
       ),
       "settings",
       db.queryForList("SELECT * FROM gcmb.payroll_setting ORDER BY effective_from DESC"),
@@ -489,7 +534,7 @@ public class PayrollService {
       row.put(
         "components",
         db.queryForList(
-          "SELECT c.kind,c.amount,c.reason,b.name AS branch_name,c.calculation_snapshot::text AS detail FROM gcmb.payroll_component c JOIN gcmb.branch b ON b.id=c.branch_id WHERE c.payroll_entry_id=? ORDER BY c.created_at,c.id",
+          "SELECT c.kind,c.amount,c.reason,c.branch_id,b.name AS branch_name,c.calculation_snapshot::text AS detail FROM gcmb.payroll_component c JOIN gcmb.branch b ON b.id=c.branch_id WHERE c.payroll_entry_id=? ORDER BY c.created_at,c.id",
           row.get("id")
         )
       );
@@ -502,7 +547,7 @@ public class PayrollService {
       );
     }
     p.put("pendingBranches", db.queryForList("""
-      SELECT e.code,e.full_name AS name,b.name AS branch_name,s.submitted_at
+      SELECT e.code,e.full_name AS name,s.branch_id,b.name AS branch_name,s.submitted_at
       FROM gcmb.branch_payroll_submission s JOIN gcmb.employee e ON e.id=s.employee_id
       JOIN gcmb.branch b ON b.id=s.branch_id WHERE s.period_id=? AND NOT EXISTS(
         SELECT 1 FROM gcmb.payroll_entry x WHERE x.period_id=s.period_id AND x.employee_id=s.employee_id
@@ -531,7 +576,8 @@ public class PayrollService {
   private List<Map<String, Object>> work(UUID employee, LocalDate m, boolean closed) {
     var rows = db.queryForList(
       """
-      SELECT a.*,s.starts_at,s.ends_at,s.branch_id,b.timezone,p.status AS period_status,s.work_date
+      SELECT a.*,s.starts_at,s.ends_at,s.branch_id,b.timezone,
+        CASE WHEN gcmb.employee_month_closed(s.branch_id,x.employee_id,s.work_date) THEN 'CLOSED' ELSE p.status END AS period_status,s.work_date
       FROM gcmb.attendance a JOIN gcmb.shift_assignment x ON x.id=a.assignment_id
       JOIN gcmb.scheduled_shift s ON s.id=x.shift_id JOIN gcmb.branch b ON b.id=s.branch_id
       JOIN gcmb.attendance_period p ON p.id=a.period_id
@@ -548,7 +594,7 @@ public class PayrollService {
         SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment x JOIN gcmb.scheduled_shift s ON s.id=x.shift_id
           LEFT JOIN gcmb.attendance a ON a.assignment_id=x.id LEFT JOIN gcmb.attendance_period p ON p.id=a.period_id
           WHERE x.employee_id=? AND s.work_date>=? AND s.work_date<? AND x.status='CONFIRMED' AND s.status<>'CANCELLED'
-            AND (a.id IS NULL OR p.status<>'CLOSED'))
+            AND (a.id IS NULL OR NOT gcmb.employee_month_closed(s.branch_id,x.employee_id,s.work_date)))
         """,
         Boolean.class,
         employee,
@@ -1119,11 +1165,7 @@ public class PayrollService {
       account
     );
     if (accounts.isEmpty()) throw bad("Vui lòng chọn quỹ kế toán đang hoạt động.");
-    BigDecimal balance = db.queryForObject(
-      "SELECT balance FROM gcmb.v_account_balance WHERE id=?",
-      BigDecimal.class,
-      account
-    );
+    BigDecimal balance = AccountantFund.balance(db);
     if (balance.compareTo(amount) < 0) throw conflict(
       "Quỹ " +
         accounts.get(0).get("name") +
@@ -1169,9 +1211,18 @@ public class PayrollService {
   }
 
   public List<Map<String, Object>> export(Identity actor, String value) {
+    return export(actor, value, null);
+  }
+
+  public List<Map<String, Object>> export(Identity actor, String value, UUID branch) {
     var result = view(actor, value);
     @SuppressWarnings("unchecked")
     var rows = (List<Map<String, Object>>) result.get("rows");
+    if (branch != null) rows = rows.stream().filter(row -> {
+      if (branch.equals(row.get("submitted_branch_id"))) return true;
+      var components = (List<?>) row.get("components");
+      return components.stream().anyMatch(c -> branch.equals(((Map<?, ?>) c).get("branch_id")));
+    }).toList();
     if ("CONFIRMED".equals(result.get("status"))) return rows;
     var submitted = rows.stream().filter(row -> row.get("submitted_branch_id") != null).toList();
     if (submitted.isEmpty()) throw conflict(

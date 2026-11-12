@@ -463,7 +463,15 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           onSaved={(next, message) => {
             setData(next);
             setWeek(next.week);
-            setDialog(null);
+            if (dialog.type === 'detail') {
+              setDialog({
+                ...dialog,
+                data: { ...next, readOnly: readonly },
+                shift: next.shifts.find((s) => s.id === dialog.shift.id),
+              });
+            } else {
+              setDialog(null);
+            }
             setNotice(message);
           }}
         />

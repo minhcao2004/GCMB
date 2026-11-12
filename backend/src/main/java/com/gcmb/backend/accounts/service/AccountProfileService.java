@@ -47,11 +47,38 @@ public class AccountProfileService {
     @Transactional
     public Profile update(UUID actor, UpdateProfile input) {
         String email = AuthValidation.email(input.email());
+        boolean bankProvided = input.bankName() != null || input.bankAccount() != null || input.bankHolder() != null;
+        if (bankProvided) repository.lockPayroll();
         String hash = repository.lockActiveAccount(actor);
         if (hash == null) {
             throw new AuthFailure(403, "form", "Tài khoản không còn hoạt động");
         }
         Profile before = repository.find(actor);
+        String bankName = before.bankName();
+        String bankAccount = before.bankAccount();
+        String bankHolder = before.bankHolder();
+        if (bankProvided) {
+            if (!before.linkedEmployee()) throw new AuthFailure(
+                409, "form", "Tài khoản chưa liên kết hồ sơ nhân viên để lưu thông tin nhận lương."
+            );
+            bankName = Objects.toString(input.bankName(), "").strip();
+            bankAccount = Objects.toString(input.bankAccount(), "").replace(" ", "").strip();
+            bankHolder = Objects.toString(input.bankHolder(), "").strip();
+            if (!bankName.isEmpty() || !bankAccount.isEmpty() || !bankHolder.isEmpty()) {
+                bankName = AuthValidation.required(bankName, "bankName", "ngân hàng", 200, true);
+                bankHolder = AuthValidation.required(bankHolder, "bankHolder", "tên chủ tài khoản", 200, true);
+                if (!bankAccount.matches("[A-Za-z0-9]{3,60}")) throw new AuthFailure(
+                    400, "bankAccount", "Số tài khoản gồm 3–60 chữ hoặc số."
+                );
+            } else {
+                bankName = null;
+                bankAccount = null;
+                bankHolder = null;
+            }
+        }
+        boolean bankChanged = !Objects.equals(bankName, before.bankName())
+            || !Objects.equals(bankAccount, before.bankAccount())
+            || !Objects.equals(bankHolder, before.bankHolder());
         String fullName = null;
         String phone = null;
         if (before.linkedEmployee()) {
@@ -94,7 +121,7 @@ public class AccountProfileService {
             }
         }
         if (
-            !emailChanged &&
+            !emailChanged && !bankChanged &&
             Objects.equals(fullName, before.fullName()) &&
             Objects.equals(phone, before.phone())
         ) {
@@ -102,6 +129,7 @@ public class AccountProfileService {
         }
         try {
             repository.update(actor, fullName, phone, email, emailChanged);
+            if (bankChanged) repository.updateBank(actor, bankName, bankAccount, bankHolder);
         } catch (DuplicateKeyException exception) {
             throw new AuthFailure(409, "email", "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
         }

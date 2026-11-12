@@ -8,6 +8,8 @@ import { apiErrors } from '../../auth/services/authApi';
 import { today } from '../services/shiftApi';
 import { attendanceApi, hoursLabel, dateTimeLabel } from '../services/attendanceApi';
 import AttendanceDialog from '../components/AttendanceDialog';
+import MonthlyPayrollDialog from '../components/MonthlyPayrollDialog';
+import { financeApi, vnd } from '../../finance/services/financeApi';
 import '../styles/shifts.css';
 import '../styles/attendance.css';
 
@@ -30,6 +32,23 @@ export default function AttendancePage({
   const [filter, setFilter] = useState('ALL');
   const [revision, setRevision] = useState(0);
   const [dialog, setDialog] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [payroll, setPayroll] = useState([]);
+  const [payrollError, setPayrollError] = useState('');
+  const [drafts, setDrafts] = useState({});
+  useEffect(() => {
+    setPayroll([]);
+    setDrafts({});
+    setDialog(null);
+  }, [branchScope, month]);
+  useEffect(() => setSelected([]), [branchScope, month]);
+  useEffect(() => {
+    if (data) {
+      setSelected((old) => old.filter((id) =>
+        data.employees?.some((e) => e.employeeId === id && e.canClose)
+      ));
+    }
+  }, [data]);
   const modal = useRef(null);
   modal.current = dialog;
 
@@ -44,11 +63,18 @@ export default function AttendancePage({
         setError('');
       }
       try {
-        const result = monthly
-          ? await attendanceApi.monthly(month, branchScope)
-          : await attendanceApi.daily(date, branchScope);
+        const [result, salaries] = await Promise.all([
+          monthly ? attendanceApi.monthly(month, branchScope) : attendanceApi.daily(date, branchScope),
+          monthly ? financeApi.get(`/branch-management/payroll/${month}/summary`, {}, branchScope)
+            .then((rows) => ({ rows }))
+            .catch((failure) => ({ error: Object.values(apiErrors(failure)).join(' ') })) : null,
+        ]);
         if (active) {
           setData(result);
+          if (monthly) {
+            setPayroll(salaries.rows || []);
+            setPayrollError(salaries.error || '');
+          }
           setError('');
         }
       } catch (e) {
@@ -87,6 +113,7 @@ export default function AttendancePage({
             : row.status === filter))
   );
   const employees = (data?.employees || []).filter(matches);
+  const selectedEmployees = (data?.employees || []).filter((e) => selected.includes(e.employeeId) && e.canClose);
   const openRecord = (row = null) => setDialog({ type: 'record', row });
 
   return (
@@ -98,19 +125,19 @@ export default function AttendancePage({
           </p>
           <h1 id="attendance-title">
             {monthly
-              ? `Bảng công tháng · ${closed ? 'Đã chốt' : 'Chưa chốt'}`
+              ? 'Bảng công và lương tháng'
               : 'Chấm công theo ngày / ca'}
           </h1>
           <p>
             {monthly
-              ? 'Tổng hợp giờ thực tế đã ghi nhận, không quy đổi giờ đăng ký thành công.'
+              ? 'Tiền công theo chấm công đã ghi nhận. Chọn Chi tiết để xem ghi chú, điều chỉnh thưởng/phạt và chốt lương.'
               : 'Ghi nhận ngày giờ vào / ra thực tế và kiểm tra ngoại lệ của từng phân ca.'}
           </p>
         </div>
         {!monthly && (
           <button
             className="shift-primary"
-            disabled={loading || readonly || !data?.rows.length}
+            disabled={loading || readonly || !data?.rows.some((r) => r.periodStatus !== 'CLOSED')}
             onClick={() => openRecord()}
           >
             Ghi nhận chấm công
@@ -118,13 +145,19 @@ export default function AttendancePage({
         )}
         {monthly && (
           <span className={`attendance-badge ${closed ? 'closed' : ''}`}>
-            {closed ? 'Đã chốt' : 'Chưa chốt'}
+            {closed ? 'Đã chốt công cả cơ sở' : 'Đã chốt công ' + (data?.closedCount || 0) + '/' + (data?.employees.length || 0) + ' nhân viên'}
           </span>
         )}
       </header>
       {notice && (
         <p className="shift-message success" role="status">
           {notice}
+        </p>
+      )}
+      {monthly && payrollError && (
+        <p className="shift-message error" role="alert">
+          Không tải được tiền lương: {payrollError}
+          <button type="button" onClick={() => setRevision((value) => value + 1)}>Tải lại</button>
         </p>
       )}
       {error && (
@@ -206,34 +239,89 @@ export default function AttendancePage({
                 tiếp bản ghi chấm công này.
               </p>
             )}
+            {monthly && !closed && (
+              <div className="attendance-actions attendance-selection">
+                <button
+                  type="button"
+                  disabled={readonly || !employees.some((e) => e.canClose)}
+                  onClick={() => setSelected((old) => [...new Set([
+                    ...old,
+                    ...employees.filter((e) => e.canClose).map((e) => e.employeeId),
+                  ])])}
+                >
+                  Chọn tất cả nhân viên đủ điều kiện
+                </button>
+                <button type="button" disabled={!selected.length} onClick={() => setSelected([])}>
+                  Bỏ chọn tất cả
+                </button>
+                <span>Đã chọn {selectedEmployees.length} nhân viên</span>
+              </div>
+            )}
             <div className="attendance-table-scroll">
               {monthly ? (
-                <table className="attendance-table">
+                <table className="attendance-table monthly-payroll-table">
                   <thead>
                     <tr>
+                      <th>Chọn</th>
                       <th>Nhân viên</th>
                       <th>Số ca</th>
                       <th>Giờ thực tế</th>
                       <th>Ca vắng</th>
-                      <th>Ca có ngoại lệ</th>
+                      <th>Tiền công</th>
+                      <th>Thưởng / phạt</th>
+                      <th>Thực nhận</th>
                       <th>Cần xử lý</th>
+                      <th>Trạng thái</th>
                       <th>Chi tiết</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {employees.map((e) => (
+                    {employees.map((e) => {
+                      const pay = payroll.find((item) => item.employeeId === e.employeeId);
+                      const adjustment = drafts[e.employeeId] || pay;
+                      const net = pay?.net == null ? null : Number(pay.net)
+                        + Number(adjustment?.bonus || 0) - Number(pay.bonus || 0)
+                        - Number(adjustment?.penalty || 0) + Number(pay.penalty || 0);
+                      return (
                       <tr key={e.employeeId}>
                         <td>
-                          <strong>
-                            {e.code} · {e.fullName}
-                          </strong>
+                          <input
+                            type="checkbox"
+                            aria-label={'Chọn chốt công ' + e.code}
+                            disabled={readonly || !e.canClose}
+                            checked={selected.includes(e.employeeId)}
+                            onChange={(event) => setSelected((old) => event.target.checked
+                              ? [...old, e.employeeId]
+                              : old.filter((id) => id !== e.employeeId)
+                            )}
+                          />
                         </td>
-                        <td>{e.shiftCount}</td>
+                        <td className="monthly-employee">
+                          <strong>{e.fullName}</strong>
+                          <small>{e.code}</small>
+                        </td>
+                        <td>
+                          {Math.max(0, e.shiftCount - e.missing - e.invalid - e.absences)}
+                          <small>/ {e.shiftCount} ca đã phân</small>
+                        </td>
                         <td>
                           <strong>{hoursLabel(e.workedMinutes)}</strong>
                         </td>
                         <td>{e.absences}</td>
-                        <td>{e.exceptions}</td>
+                        <td className="monthly-money">
+                          {pay?.wage == null ? '—' : vnd(pay.wage)}
+                          {pay?.calculationError && <small className="attendance-warning">{pay.calculationError}</small>}
+                        </td>
+                        <td className="monthly-money">
+                          {pay ? <>
+                            <span>+{vnd(Number(adjustment?.bonus || 0) + Number(pay.reward || 0))}</span>
+                            <small>−{vnd(adjustment?.penalty)}</small>
+                          </> : '—'}
+                        </td>
+                        <td className="monthly-money">
+                          <strong>{net == null ? '—' : vnd(net)}</strong>
+                          <small>{pay?.multipleBranches ? 'Phần lương cơ sở' : pay?.ready ? 'Đã chốt lương' : 'Tạm tính'}</small>
+                        </td>
                         <td>
                           <span
                             className={
@@ -247,15 +335,21 @@ export default function AttendancePage({
                           {e.openIssues > 0 && <small>{e.openIssues} phản ánh đang mở</small>}
                         </td>
                         <td>
+                          {e.closed ? 'Công đã chốt' : 'Công chưa chốt'}
+                          {pay?.submitted && <small>{pay.paid ? 'Đã thanh toán' : pay.ready ? 'Đã gửi kế toán' : 'Chờ cơ sở khác chốt'}</small>}
+                          {!e.closed && !e.canClose && <small>{e.closeBlockReason}</small>}
+                        </td>
+                        <td>
                           <button
                             className="attendance-link"
-                            onClick={() => setDialog({ type: 'employee', employee: e })}
+                            onClick={() => setDialog({ type: 'payroll', employee: e })}
                           >
-                            Xem công
+                            Chi tiết
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               ) : (
@@ -315,7 +409,7 @@ export default function AttendancePage({
                         </td>
                         <td>
                           <button className="attendance-link" onClick={() => openRecord(row)}>
-                            {readonly ? 'Chi tiết' : row.attendanceId ? 'Xem / sửa' : 'Ghi nhận'}
+                            {readonly || row.periodStatus === 'CLOSED' ? 'Chi tiết' : row.attendanceId ? 'Xem / sửa' : 'Ghi nhận'}
                           </button>
                         </td>
                       </tr>
@@ -333,7 +427,7 @@ export default function AttendancePage({
               <>
                 {!closed && !data.monthEnded && (
                   <p className="attendance-help">
-                    Chỉ chốt khi tháng và các ca cuối tháng đã kết thúc.
+                    Có thể chốt sớm theo nhân viên. Cần hoàn tất các ca và xử lý phản ánh; nhân viên đã chốt sẽ bị khóa công cả tháng.
                   </p>
                 )}
                 {closed ? (
@@ -345,10 +439,10 @@ export default function AttendancePage({
                   <div className="attendance-actions">
                     <button
                       className="shift-primary"
-                      disabled={readOnly || !data.canClose}
-                      onClick={() => setDialog({ type: 'close' })}
+                      disabled={readonly || selectedEmployees.length === 0}
+                      onClick={() => setDialog({ type: 'close', employeeIds: selectedEmployees.map((e) => e.employeeId) })}
                     >
-                      Chốt bảng công
+                      Chốt công nhân viên đã chọn
                     </button>
                   </div>
                 )}
@@ -357,7 +451,36 @@ export default function AttendancePage({
           </>
         )
       )}
-      {dialog && data && (
+      {dialog?.type === 'payroll' && data && (
+        <MonthlyPayrollDialog
+          key={dialog.employee.employeeId + '/' + month + '/' + branchScope}
+          data={data}
+          employee={data.employees.find((e) => e.employeeId === dialog.employee.employeeId) || dialog.employee}
+          financial={payroll.find((item) => item.employeeId === dialog.employee.employeeId)}
+          draft={drafts[dialog.employee.employeeId]}
+          scope={branchScope}
+          readOnly={readOnly || data.readOnly}
+          onDraft={(draft) => setDrafts((old) => ({ ...old, [dialog.employee.employeeId]: draft }))}
+          onClose={() => setDialog(null)}
+          onDaily={(day) => { setDialog(null); onDaily(day); }}
+          onAttendanceClosed={(result) => {
+            setData(result);
+            setRevision((value) => value + 1);
+            setNotice('Đã chốt công cả tháng cho nhân viên. Có thể xem trước và chốt lương.');
+          }}
+          onSubmitted={(message) => {
+            setDrafts((old) => {
+              const next = { ...old };
+              delete next[dialog.employee.employeeId];
+              return next;
+            });
+            setDialog(null);
+            setNotice(message);
+            setRevision((value) => value + 1);
+          }}
+        />
+      )}
+      {dialog && dialog.type !== 'payroll' && data && (
         <AttendanceDialog
           dialog={dialog}
           data={data}
@@ -374,11 +497,12 @@ export default function AttendancePage({
           }}
           onSaved={(result) => {
             setData(result);
+            setSelected([]);
             setDialog(null);
             // MSG11/12: thông báo lưu và đổi trạng thái theo mẫu tài liệu.
             setNotice(
               monthly
-                ? `Đã chuyển trạng thái của bảng công tháng ${result.month.split('-').reverse().join('/')} thành “Đã chốt”.`
+                ? `Đã chốt công cả tháng cho các nhân viên được chọn trong tháng ${result.month.split('-').reverse().join('/')}.`
                 : 'Đã cập nhật bản ghi chấm công.'
             );
           }}

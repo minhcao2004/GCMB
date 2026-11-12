@@ -101,6 +101,7 @@ public class FinanceService {
         List<Map<String,Object>> transfers=db.query("SELECT sent_on FROM gcmb.finance_fund_transfer WHERE id=?",(r,n)->row(r),id);
         if(transfers.isEmpty()) conflict("Khoản chuyển không còn chờ xác nhận hoặc không tồn tại.");
         periods.requireOpen(day(transfers.get(0).get("sent_on")), "xác nhận giao dịch cấp quỹ");
+        AccountantFund.lock(db);
         int changed=db.update("UPDATE gcmb.finance_fund_transfer SET status='RECEIVED',received_by=?,received_at=CURRENT_TIMESTAMP WHERE id=? AND status='WAITING_CONFIRMATION'",who.id(),id);
         if(changed==0) conflict("Khoản chuyển không còn chờ xác nhận hoặc không tồn tại.");
         return fundTransfer(id);
@@ -223,7 +224,7 @@ public class FinanceService {
         periods.requireOpen(day(item.get("expense_on")), "ghi nhận thanh toán đề nghị chi hoặc hoàn ứng");
         if(!"APPROVED_TO_PAY".equals(item.get("status"))) conflict("Chỉ được thanh toán đề nghị đã duyệt.");
         if(proof==null||proof.isEmpty()) bad("Vui lòng tải lên chứng từ chuyển khoản thực tế.");
-        db.execute("SELECT pg_advisory_xact_lock(8111020)");
+        AccountantFund.lock(db);
         BigDecimal available=balance(); BigDecimal amount=(BigDecimal)item.get("amount");
         if(available.compareTo(amount)<0) conflict("Số dư quỹ kế toán không đủ để thanh toán. Số dư hiện tại: "+available.toPlainString()+"đ.");
         int changed=db.update("UPDATE gcmb.finance_expense_request SET status='PAID',paid_by=?,paid_at=CURRENT_TIMESTAMP,paid_reference=? WHERE id=? AND status='APPROVED_TO_PAY'",
@@ -283,7 +284,7 @@ public class FinanceService {
         rows.forEach(r->{UUID id=(UUID)r.get("id");r.put("attachments",attachments(id));r.put("history",history(id));}); return rows;
     }
     private BigDecimal balance() {
-        return db.queryForObject("SELECT COALESCE((SELECT SUM(amount) FROM gcmb.finance_fund_transfer WHERE status='RECEIVED'),0)-COALESCE((SELECT SUM(amount) FROM gcmb.finance_expense_request WHERE status='PAID'),0)",BigDecimal.class);
+        return AccountantFund.balance(db);
     }
     private String attach(String type, UUID owner, String kind, MultipartFile file, UUID actor) {
         // Finance evidence is stored on the backend's configured local attachment volume.
