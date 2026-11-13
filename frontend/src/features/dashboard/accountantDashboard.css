@@ -36,3 +36,33 @@
 .accountant-live-chart-svg .accountant-live-profit-dot.is-even{fill:var(--ad-muted)}
 .accountant-period-status{display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--ad-line);border-radius:10px;background:#fff;color:var(--ad-copy);font-size:12px}.accountant-period-status strong{color:var(--ad-ink)}.accountant-period-status a{margin-left:auto;color:#8f0e5a;font-weight:700}
 @media(max-width:600px){.accountant-period-status{align-items:flex-start;flex-direction:column}.accountant-period-status a{margin-left:0}}
+
+/* Accountant dashboard uses the shared backoffice palette and contrast-safe semantic text. */
+.accountant-dash {
+  --ad-ink: var(--gcmb-color-ink, #1a1a2e);
+  --ad-copy: var(--gcmb-color-text, #536071);
+  --ad-muted: var(--gcmb-color-text, #536071);
+  --ad-line: var(--gcmb-color-line, #e5e8ed);
+  --ad-green: #177452;
+  --ad-green: color-mix(in srgb, var(--gcmb-color-success, #168b5b) 80%, var(--gcmb-color-ink, #1a1a2e));
+  --ad-red: var(--gcmb-color-danger, #b12642);
+  --ad-yellow: #91631f;
+  --ad-yellow: color-mix(in srgb, var(--gcmb-color-warning, #d18a17) 65%, var(--gcmb-color-ink, #1a1a2e));
+  font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif);
+  color: var(--ad-ink);
+}
+.accountant-dash ::selection { color: var(--ad-ink); background: var(--gcmb-color-primary-soft, #fdecf5); }
+.accountant-dash :focus-visible { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 3px; }
+.accountant-dash :is(.accountant-kpis, .accountant-dash-panel, .accountant-period-status) { border-color: var(--ad-line); border-radius: var(--gcmb-radius-panel, 12px); background-color: var(--gcmb-color-panel, #fff); }
+.accountant-dash :is(.accountant-dash-filters input, .accountant-dash-filters select, .accountant-exception-filter select, .accountant-exception-dialog textarea) { border-color: var(--ad-line); border-radius: var(--gcmb-radius-control, 8px); color: var(--ad-ink); font-family: inherit; }
+.accountant-dash :is(.accountant-table-scroll th, .accountant-table-scroll td) { border-color: var(--ad-line); }
+.accountant-dash .accountant-table-scroll th { color: var(--ad-copy); background: var(--gcmb-color-bg, #f5f7fa); }
+.accountant-dash .accountant-table-scroll tbody tr:hover { background: var(--gcmb-color-primary-soft, #fdecf5); }
+.accountant-dash .accountant-status { border-radius: var(--gcmb-radius-control, 8px); color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
+.accountant-dash .accountant-status.is-good { color: var(--ad-green); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.accountant-dash .accountant-status.is-warning { color: var(--ad-yellow); background: var(--gcmb-color-warning-soft, #fff5e5); }
+.accountant-dash .accountant-status.is-bad { color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
+.accountant-dash :is(.accountant-dash-shortcuts a, .accountant-period-status a) { color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); }
+.accountant-dash .accountant-table-panel td button { border-color: var(--gcmb-color-primary, #ed188d); border-radius: var(--gcmb-radius-control, 8px); color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); }
+.accountant-dash .accountant-exception-dialog { border: 0; border-radius: var(--gcmb-radius-panel, 12px); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); }
+.accountant-dash .accountant-exception-dialog button:last-child { border-color: var(--gcmb-color-primary, #ed188d); color: var(--gcmb-color-on-primary, #000); background: var(--gcmb-color-primary, #ed188d); }

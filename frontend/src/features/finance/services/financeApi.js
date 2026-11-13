@@ -64,6 +64,12 @@ export const financeApi = {
   load: (role) => apiClient.get(route[role]).then(({ data }) => data),
   sendFund: (values) => mutate('post','/head-office/finance/fund-transfers',values),
   uploadFundProof: (id, proof) => mutate('post',`/head-office/finance/fund-transfers/${id}/proof`,form({proof}),true),
+  financialOverview: (params) => apiClient.get('/accounting/reports/financial-overview', {
+    params, paramsSerializer: { indexes: null },
+  }).then(({ data }) => data),
+  exportFinancialOverview: (params) => apiClient.get('/accounting/reports/financial-overview/export', {
+    params, paramsSerializer: { indexes: null }, responseType: 'blob',
+  }).then(({ data }) => data),
   confirmFund: (id) => mutate('post',`/accounting/finance/fund-transfers/${id}/confirm`),
   createCategory: (value) => mutate('post','/accounting/finance/categories',value),
   updateCategory: (id, value) => mutate('put',`/accounting/finance/categories/${id}`,value),

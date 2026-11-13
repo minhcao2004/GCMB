@@ -5,13 +5,13 @@ import com.gcmb.backend.audit.service.MutationAudit;
 import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
 import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService.StoredFile;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
+import com.gcmb.backend.finance.service.FinanceAccess;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,16 +51,18 @@ public class FinancialController {
     private final FinancialPeriodService periods;
     private final MonthlyPerformanceService performance;
     private final AccountingWorkbookService accountingWorkbook;
+    private final FinanceAccess financeAccess;
 
     public FinancialController(JdbcTemplate db, MutationAudit mutationAudit, EquipmentAssetFileStorageService files,
                                FinancialPeriodService periods, MonthlyPerformanceService performance,
-                               AccountingWorkbookService accountingWorkbook) {
+                               AccountingWorkbookService accountingWorkbook, FinanceAccess financeAccess) {
         this.db = db;
         this.mutationAudit = mutationAudit;
         this.files = files;
         this.periods = periods;
         this.performance = performance;
         this.accountingWorkbook = accountingWorkbook;
+        this.financeAccess = financeAccess;
     }
 
     @GetMapping("/reports/monthly")
@@ -69,6 +71,43 @@ public class FinancialController {
                                              @RequestParam(required = false) UUID branchId) {
         requireReportRole(actor);
         return performance.report(actor,month(month),branchId);
+    }
+
+    @GetMapping("/reports/financial-overview")
+    @Transactional(readOnly = true)
+    public Map<String, Object> financialOverview(@AuthenticationPrincipal Identity actor,
+                                                  @RequestParam String from, @RequestParam String to,
+                                                  @RequestParam(required = false) List<UUID> branchIds,
+                                                  @RequestParam(defaultValue = "prev") String compare,
+                                                  @RequestParam(defaultValue = "day") String granularity) {
+        requireOverviewRole(actor);
+        return performance.overview(actor, date(from), date(to), branchIds, compare, granularity);
+    }
+
+    @GetMapping("/reports/financial-overview/export")
+    @Transactional
+    public ResponseEntity<byte[]> exportFinancialOverview(@AuthenticationPrincipal Identity actor,
+                                                            @RequestParam String from, @RequestParam String to,
+                                                            @RequestParam(required = false) List<UUID> branchIds,
+                                                            @RequestParam(defaultValue = "prev") String compare,
+                                                            @RequestParam(defaultValue = "day") String granularity,
+                                                            @RequestParam(defaultValue = "csv") String format) {
+        requireOverviewRole(actor);
+        if (!List.of("csv", "xlsx").contains(format.toLowerCase(java.util.Locale.ROOT))) throw bad("Định dạng xuất chỉ nhận csv hoặc xlsx.");
+        LocalDate start = date(from), end = date(to);
+        Map<String, Object> data = performance.overview(actor, start, end, branchIds, compare, granularity);
+        byte[] bytes = "xlsx".equalsIgnoreCase(format) ? MonthlyPerformanceExport.overviewXlsx(data) : MonthlyPerformanceExport.overviewCsv(data);
+        db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_FINANCIAL_OVERVIEW','REPORT',?::jsonb)",
+            actor.id(), String.format(java.util.Locale.ROOT,
+              "{\"from\":\"%s\",\"to\":\"%s\",\"compare\":\"%s\",\"granularity\":\"%s\",\"format\":\"%s\"}",
+              start, end, compare, granularity, format.toLowerCase(java.util.Locale.ROOT)));
+        String extension = format.toLowerCase(java.util.Locale.ROOT);
+        MediaType type = "xlsx".equals(extension)
+            ? MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            : new MediaType("text", "csv", StandardCharsets.UTF_8);
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=gcmb-financial-overview-" + start + "-" + end + "." + extension)
+            .contentType(type).body(bytes);
     }
 
     @GetMapping("/reports/monthly-performance/export")
@@ -87,17 +126,37 @@ public class FinancialController {
 
     @GetMapping("/reports/expense-breakdown")
     @Transactional(readOnly = true)
-    public Map<String, Object> expenseBreakdown(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+    public Map<String, Object> expenseBreakdown(@AuthenticationPrincipal Identity actor,
+                                                @RequestParam(required = false) String month,
+                                                @RequestParam(required = false) String from,
+                                                @RequestParam(required = false) String to,
+                                                @RequestParam(required = false) List<UUID> branchIds,
                                                 @RequestParam(required = false) UUID branchId,
                                                 @RequestParam(defaultValue = "") String costType,
                                                 @RequestParam(required = false) UUID categoryId,
                                                 @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
-        LocalDate start = month(month);
+        List<LocalDate> range = reportDateRange(month, from, to);
+        LocalDate start = range.get(0), endExclusive = range.get(1);
         String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
         if (!type.isEmpty() && !List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
+        List<UUID> selectedBranches = performance.validateReportBranchIds(branchIds);
+        if (selectedBranches.isEmpty() && branchId != null) performance.validateReportBranchIds(List.of(branchId));
+        String branchFilter;
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(start); args.add(endExclusive);
+        if (!selectedBranches.isEmpty()) {
+            branchFilter = " AND branch_id IN (" + String.join(",", java.util.Collections.nCopies(selectedBranches.size(), "?")) + ")";
+            args.addAll(selectedBranches);
+        } else {
+            branchFilter = " AND (?::uuid IS NULL OR branch_id=?)";
+            args.add(branchId); args.add(branchId);
+        }
+        branchFilter += " AND (?='' OR cost_type=?) AND (?::uuid IS NULL OR category_id=?)"
+            + " AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')";
+        args.add(type); args.add(type); args.add(categoryId); args.add(categoryId); args.add(search); args.add(search);
         // BR-103: chỉ tính thanh toán PAID trong kỳ; loại chuyển quỹ nội bộ khỏi tập chi.
         // BR-107: dùng loại chi phí đã chốt và giữ OPEX/CAPEX ở các nhóm riêng.
         List<Map<String, Object>> rows = db.queryForList(PAID_EXPENSES_CTE + """
@@ -105,31 +164,35 @@ public class FinancialController {
               branch_id "branchId",branch_name "branchName",sum(amount) amount,count(*) "paymentCount"
             FROM paid_expenses
             WHERE (paid_at AT TIME ZONE timezone)::date>=? AND (paid_at AT TIME ZONE timezone)::date<?
-              AND (?::uuid IS NULL OR branch_id=?) AND (?='' OR cost_type=?)
-              AND (?::uuid IS NULL OR category_id=?)
-              AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')
+            """ + branchFilter + """
             GROUP BY cost_type,category_id,category_name,branch_id,branch_name
             ORDER BY cost_type,category_name,branch_name
-            """, start, start.plusMonths(1), branchId, branchId, type, type, categoryId, categoryId, search, search);
+            """, args.toArray());
         List<Map<String, Object>> branches = db.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name");
         List<Map<String, Object>> categories = db.queryForList("""
             SELECT id,name FROM gcmb.expense_category
             UNION SELECT id,name FROM gcmb.finance_expense_category
             ORDER BY name
             """);
-        return Map.of("month", month, "branches", branches, "categories", categories, "rows", rows);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("month", month); result.put("from", start.toString()); result.put("to", endExclusive.minusDays(1).toString());
+        result.put("branches", branches); result.put("categories", categories); result.put("rows", rows);
+        return result;
     }
 
     @GetMapping("/reports/expense-breakdown/details")
     @Transactional(readOnly = true)
     public Map<String, Object> expenseBreakdownDetails(@AuthenticationPrincipal Identity actor,
-                                                        @RequestParam String month,
+                                                        @RequestParam(required = false) String month,
+                                                        @RequestParam(required = false) String from,
+                                                        @RequestParam(required = false) String to,
                                                         @RequestParam UUID branchId,
                                                         @RequestParam UUID categoryId,
                                                         @RequestParam String costType,
                                                         @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
-        LocalDate start = month(month);
+        List<LocalDate> range = reportDateRange(month, from, to);
+        LocalDate start = range.get(0), endExclusive = range.get(1);
         String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
         if (!List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
@@ -143,7 +206,7 @@ public class FinancialController {
               AND branch_id=? AND category_id=? AND cost_type=?
               AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')
             ORDER BY paid_at DESC,expense_code
-            """, start, start.plusMonths(1), branchId, categoryId, type, search, search);
+            """, start, endExclusive, branchId, categoryId, type, search, search);
         List<UUID> requestIds = new java.util.ArrayList<>();
         for (Map<String, Object> row : rows) {
             if ("EXPENSE_REQUEST".equals(row.get("sourceType"))) requestIds.add((UUID) row.get("expenseId"));
@@ -198,8 +261,8 @@ public class FinancialController {
             WHERE bt.provider='SEPAY' AND bt.match_status='EXCEPTION' AND bt.occurred_at>=? AND bt.occurred_at<?
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
-            """, Timestamp.from(start.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()),
-                Timestamp.from(start.plusMonths(1).atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()), branchId, branchId);
+            """, Timestamp.from(start.atStartOfDay(FinancialPeriodService.ZONE).toInstant()),
+                Timestamp.from(start.plusMonths(1).atStartOfDay(FinancialPeriodService.ZONE).toInstant()), branchId, branchId);
         return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
     }
 
@@ -317,7 +380,7 @@ public class FinancialController {
                     || (originalAmount.signum() < 0 && adjustedAmount.signum() > 0))
                     throw conflict("Tổng điều chỉnh vượt giá trị giao dịch gốc; số tiền sau điều chỉnh không được đổi chiều thu/chi.");
 
-                LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                LocalDate today = LocalDate.now(FinancialPeriodService.ZONE);
                 LocalDate periodMonth = today.withDayOfMonth(1);
                 db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", periodMonth);
                 List<UUID> openPeriods = db.query("SELECT id FROM gcmb.financial_period WHERE \"month\"=? AND status='OPEN' FOR UPDATE", (rs, rowNum) -> rs.getObject(1, UUID.class), periodMonth);
@@ -407,8 +470,29 @@ public class FinancialController {
     private static String csv(Object value) { String s=value == null ? "" : value.toString(); return "\""+s.replace("\"","\"\"")+"\""; }
     private static String csvText(Object value) { String s=value == null ? "" : value.toString(); if (!s.isEmpty() && "=+-@".indexOf(s.charAt(0)) >= 0) s="'"+s; return csv(s); }
     private static void requireReportRole(Identity actor) { if (actor==null || !List.of("HEAD_OFFICE_MANAGER","ACCOUNTANT").contains(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền xem đối với báo cáo tài chính."); }
+    private void requireOverviewRole(Identity actor) {
+        if (actor == null || !List.of("ACCOUNTANT", "HEAD_OFFICE_MANAGER").contains(actor.role()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với báo cáo tài chính.");
+        financeAccess.role(actor, actor.role());
+    }
     private static void requireAccountant(Identity actor) { if (actor==null || !"ACCOUNTANT".equals(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền thực hiện đối với nghiệp vụ kế toán."); }
     private static LocalDate month(String value) { try { if (!value.matches("\\d{4}-\\d{2}")) throw new IllegalArgumentException(); return YearMonth.parse(value).atDay(1); } catch (RuntimeException e) { throw bad("Tháng báo cáo không hợp lệ."); } }
+    private static LocalDate date(String value) { try { return LocalDate.parse(value); } catch (RuntimeException e) { throw bad("Ngày báo cáo không hợp lệ."); } }
+    private static List<LocalDate> reportDateRange(String month, String from, String to) {
+        if ((from == null || from.isBlank()) && (to == null || to.isBlank())) {
+            if (month == null || month.isBlank()) throw bad("Cần chọn tháng hoặc khoảng ngày báo cáo.");
+            LocalDate start = month(month);
+            if (start.isAfter(LocalDate.now(FinancialPeriodService.ZONE).withDayOfMonth(1)))
+                throw bad("Không thể xem báo cáo của tháng chưa diễn ra.");
+            return List.of(start, start.plusMonths(1));
+        }
+        if (from == null || from.isBlank() || to == null || to.isBlank()) throw bad("Cần chọn đủ ngày bắt đầu và ngày kết thúc.");
+        LocalDate start = date(from), end = date(to);
+        if (start.isAfter(end)) throw bad("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+        if (end.isAfter(LocalDate.now(FinancialPeriodService.ZONE))) throw bad("Không thể xem báo cáo đến ngày trong tương lai.");
+        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > 366) throw bad("Khoảng ngày báo cáo tối đa là 366 ngày.");
+        return List.of(start, end.plusDays(1));
+    }
     private static ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST,message); }
     private static ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT,message); }
     public record AdjustmentCommand(BigDecimal amountSigned, String reason) {}

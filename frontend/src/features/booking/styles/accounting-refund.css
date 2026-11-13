@@ -216,3 +216,47 @@
   .accounting-refund-upload { flex-wrap: wrap; }
   .accounting-refund-upload-action { margin-left: 33px; }
 }
+
+.accounting-refund-page .accounting-refund-metric,
+.accounting-refund-page .deposit-table-card,
+.accounting-refund-page .accounting-refund-details {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  box-shadow: none;
+}
+
+.accounting-refund-page .accounting-refund-metric span,
+.accounting-refund-page .accounting-refund-summary-heading p,
+.accounting-refund-page .accounting-refund-search input::placeholder {
+  color: var(--gcmb-color-text);
+}
+
+.accounting-refund-page .accounting-refund-metric--pending strong {
+  color: #946513;
+}
+
+.accounting-refund-page .accounting-refund-metric--paid strong {
+  color: #087b50;
+}
+
+.accounting-refund-page .deposit-status--requested,
+.accounting-refund-page .deposit-status--approved,
+.accounting-refund-page .deposit-status--processing {
+  color: #946513;
+  background: var(--gcmb-color-warning-soft);
+}
+
+.accounting-refund-page .deposit-status--paid {
+  color: #087b50;
+  background: var(--gcmb-color-success-soft);
+}
+
+.accounting-refund-page .deposit-status--rejected,
+.accounting-refund-page .deposit-status--failed {
+  color: var(--gcmb-color-danger);
+  background: var(--gcmb-color-danger-soft);
+}
+
+.accounting-refund-page :focus-visible {
+  outline-color: var(--gcmb-color-info);
+}

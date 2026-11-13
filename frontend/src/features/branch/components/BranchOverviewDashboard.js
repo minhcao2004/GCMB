@@ -28,7 +28,7 @@ function DataTable({ headings, rows, labels }) {
 }
 
 export default function BranchOverviewDashboard({ user, onNavigate }) {
-  const [period, setPeriod] = useState(7);
+  const period = 7;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

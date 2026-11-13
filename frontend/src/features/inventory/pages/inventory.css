@@ -466,3 +466,31 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   .inv-line-cost { grid-column: 2; grid-row: 3; }
   .inv-pack-size { flex-wrap: wrap; }
 }
+
+/* Backoffice token alignment for stock, receipt and adjustment states. */
+.inventory-page {
+  --inv-ink: var(--gcmb-color-ink);
+  --inv-copy: var(--gcmb-color-text);
+  --inv-muted: var(--gcmb-color-text);
+  --inv-line: var(--gcmb-color-line);
+  --inv-canvas: var(--gcmb-color-bg);
+  --inv-pink: var(--gcmb-color-primary);
+  --inv-pink-hover: var(--gcmb-color-primary-hover);
+  --inv-pink-soft: var(--gcmb-color-primary-soft);
+  --inv-cyan: var(--gcmb-color-info);
+  font-family: var(--gcmb-font-family);
+}
+.inventory-page .inv-button-primary { color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); }
+.inventory-page .inv-button-primary:hover:not(:disabled) { color: var(--gcmb-color-on-primary-hover); background: var(--gcmb-color-primary-hover); }
+.inventory-page .inv-button-manage { border-color: var(--gcmb-color-line); color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); }
+.inventory-page .inv-alert-error { border-color: var(--gcmb-color-danger-soft); color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.inventory-page .inv-alert-info { border-color: var(--gcmb-color-info-soft); color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); }
+.inventory-page .inv-alert-warning { color: #78550b; background: var(--gcmb-color-warning-soft); }
+.inventory-page .inv-toast { color: var(--gcmb-color-success); background: var(--gcmb-color-success-soft); }
+.inventory-page .inv-table-scroll { overscroll-behavior-inline: contain; scrollbar-color: var(--gcmb-color-muted) transparent; }
+.inventory-page .inv-status { color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); }
+.inventory-page .inv-status.low { color: #78550b; background: var(--gcmb-color-warning-soft); }
+.inventory-page .inv-status.out { color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.inventory-page .inv-positive { color: var(--gcmb-color-success) !important; }
+.inventory-page .inv-negative { color: var(--gcmb-color-danger) !important; }
+.inventory-page ::selection { color: var(--gcmb-color-ink); background: var(--gcmb-color-primary-soft); }

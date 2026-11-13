@@ -195,3 +195,27 @@
   .food-draft-price { grid-column: 1; }
   .food-draft-lines > div > strong { grid-column: 2; grid-row: 2; }
 }
+
+/* Reception styling stays inside its backoffice shell; guest ordering keeps its own palette. */
+.booking-app--reception .food-orders-staff {
+  --food-ink: var(--gcmb-color-ink);
+  --food-copy: var(--gcmb-color-text);
+  --food-muted: var(--gcmb-color-text);
+  --food-line: var(--gcmb-color-line);
+  --food-pink: var(--gcmb-color-primary);
+  --food-cyan: var(--gcmb-color-info);
+  font-family: var(--gcmb-font-family);
+}
+.booking-app--reception .food-staff-add,
+.booking-app--reception .food-staff-queue { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); }
+.booking-app--reception .food-staff-order { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); }
+.booking-app--reception .food-staff-order > header { border-bottom-color: var(--gcmb-color-line); }
+.booking-app--reception .food-staff-order > footer { border-top-color: var(--gcmb-color-line); }
+.booking-app--reception .food-filter-tabs button { min-height: 40px; border-color: var(--gcmb-color-line); }
+.booking-app--reception .food-filter-tabs button.is-active { border-color: var(--gcmb-color-primary); color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); }
+.booking-app--reception .food-secondary { border-color: var(--gcmb-color-line); color: var(--gcmb-color-info); border-radius: var(--gcmb-radius-control); }
+.booking-app--reception .food-primary { color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); border-radius: var(--gcmb-radius-control); }
+.booking-app--reception .food-primary:hover:not(:disabled) { color: var(--gcmb-color-on-primary-hover); background: var(--gcmb-color-primary-hover); }
+.booking-app--reception .food-orders-staff :where(input, select) { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-ink); font-family: var(--gcmb-font-family); }
+.booking-app--reception .food-orders-staff :where(button, input, select):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }
+.booking-app--reception .food-orders-staff .food-empty { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }

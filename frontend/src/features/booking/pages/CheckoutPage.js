@@ -195,7 +195,10 @@ export default function CheckoutPage() {
         (method === 'CASH' && Number(cashTendered) < paymentDue))
     ) {
       setError(
-        'Nhập số tiền mặt hợp lệ; nếu trả toàn bộ bằng tiền mặt thì tiền khách đưa phải đủ số cần thu.'
+        method === 'CASH' && Number.isSafeInteger(Number(cashTendered)) &&
+        Number(cashTendered) >= 0 && Number(cashTendered) < paymentDue
+          ? `Tiền khách đưa chưa đủ. Cần thu ít nhất ${formatVnd(paymentDue).replace(/đ$/, ' đ')}.`
+          : 'Nhập số tiền mặt hợp lệ; nếu trả toàn bộ bằng tiền mặt thì tiền khách đưa phải đủ số cần thu.'
       );
       return;
     }
@@ -765,7 +768,7 @@ export default function CheckoutPage() {
                           }
                         >
                           {data.request.status === 'SETTLED'
-                            ? '✓ SePay đã xác nhận đúng số tiền và nội dung.'
+                            ? `Đã nhận ${formatVnd(data.request.amount).replace(/đ$/, ' đ')} tiền thanh toán bill cho booking ${data.bookingCode}.`
                             : data.request.expired
                               ? 'QR đã hết hạn. Chưa xác nhận thu tiền; cần kiểm tra giao dịch trước khi tiếp tục.'
                               : `Đang chờ xác nhận chuyển khoản ${formatVnd(data.request.amount).replace(/đ$/, '')} đ ` +

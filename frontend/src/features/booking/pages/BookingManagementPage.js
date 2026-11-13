@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import { EmptyState } from '../../../shared/components/Feedback';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -1211,7 +1212,7 @@ export default function BookingManagementPage() {
           })}</tbody>
         </table>
         {listLoading && <div className="booking-table-message" role="status">Đang tải booking…</div>}
-        {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
+        {!listLoading && !visibleRows.length && <EmptyState className="booking-table-message" description="Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc." />}
         </div>
         {bookingPageCount > 1 && <nav className="booking-pagination" aria-label="Trang danh sách booking">
           <button type="button" disabled={currentBookingPage === 0} onClick={() => setBookingPage(currentBookingPage - 1)}>Trang trước</button>

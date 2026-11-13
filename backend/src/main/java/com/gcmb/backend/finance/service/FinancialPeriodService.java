@@ -20,7 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class FinancialPeriodService {
-    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter LABEL = DateTimeFormatter.ofPattern("MM/yyyy");
     private static final List<String> ROLES = List.of("ACCOUNTANT");
 
@@ -56,7 +56,7 @@ public class FinancialPeriodService {
               UNION SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date FROM gcmb.refund_request
               UNION SELECT date_trunc('month',occurred_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
                 FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status='EXCEPTION'
-              UNION SELECT date_trunc('month',CURRENT_DATE)::date
+              UNION SELECT date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
             )
             SELECT p.id,m.month::text AS month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",
               u.username "closedBy",p.close_note "closeNote",
@@ -82,7 +82,7 @@ public class FinancialPeriodService {
         String closeNote = note == null ? "" : note.trim();
         if (closeNote.length() > 1000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ghi chú chỉ được chứa tối đa 1000 ký tự.");
         LocalDate start = firstOfMonth(month);
-        if (!periodEnded(start)) throw new AuthFailure(409, "form", "Chỉ có thể khóa kỳ sau khi tháng đã kết thúc theo giờ Việt Nam.");
+        if (!periodEnded(start)) throw new AuthFailure(409, "form", "Chỉ có thể khóa kỳ sau khi tháng đã kết thúc.");
         db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", start);
         UUID id = db.queryForObject("SELECT id FROM gcmb.financial_period WHERE \"month\"=? FOR UPDATE", UUID.class, start);
         UUID closedId = audit.record("CLOSE_FINANCIAL_PERIOD", "FINANCIAL_PERIOD", id, () -> {
@@ -143,7 +143,7 @@ public class FinancialPeriodService {
 
         List<Map<String, Object>> checks = new ArrayList<>();
         checks.add(check("periodEnded", "Kỳ đã kết thúc", periodEndPending,
-            "Chỉ khóa sau khi đã sang tháng tiếp theo theo giờ Việt Nam."));
+            "Chỉ khóa sau khi đã sang tháng tiếp theo."));
         checks.add(check("cashReconciliation", "Đối soát tiền mặt", cashPending,
             "Tính các phiếu chưa đối soát và ngày, quỹ có phát sinh dòng tiền nhưng chưa có phiếu đối soát."));
         checks.add(check("attendance", "Chốt công tháng", attendancePending,

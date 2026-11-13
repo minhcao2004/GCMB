@@ -4,8 +4,7 @@ import './dashboard.css';
 import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
 };
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}%`;
@@ -14,12 +13,12 @@ const amount = (value) => Number(value) || 0;
 function Results({ rows, onSelect }) {
   const maxRevenue = Math.max(1, ...rows.map((row) => amount(row.revenue)));
   return <div className="performance-table-wrap"><table className="performance-table">
-    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu từ bill</th><th scope="col">Thu từ cọc tịch thu</th><th scope="col">Tổng doanh thu</th><th scope="col">Chi đã trả</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên LN</th></tr></thead>
+    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu hóa đơn</th><th scope="col">Cọc bị tịch thu</th><th scope="col">Thu nhập vận hành</th><th scope="col">Chi phí đã thanh toán</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên lợi nhuận</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id}>
       <td data-label="Cơ sở" className="performance-branch-cell">{onSelect && row.status === 'ACTIVE'
         ? <button className="performance-link" onClick={() => onSelect(row.id)}>{row.name}<span aria-hidden="true"> ↗</span></button>
         : <strong>{row.name}</strong>}<small>{row.code}{row.status !== 'ACTIVE' ? ' · Không hoạt động' : ''}</small></td>
-      <td data-label="Doanh thu từ bill">{money(row.billRevenue)}</td><td data-label="Thu từ cọc tịch thu">{money(row.forfeitedDeposits)}</td>
+      <td data-label="Doanh thu hóa đơn">{money(row.billRevenue)}</td><td data-label="Cọc bị tịch thu">{money(row.forfeitedDeposits)}</td>
       <td data-label="Tổng doanh thu"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
       <td data-label="Chi đã trả">{money(row.expenses)}</td><td data-label="Lương">{money(row.salary)}</td>
       <td data-label="Lợi nhuận" className={amount(row.profit) < 0 ? 'negative' : 'positive'}>{money(row.profit)}</td>
@@ -44,16 +43,16 @@ function BranchContext({ branch }) {
 
 function FinanceStrip({ totals, isChain, branchSelected }) {
   const metrics = isChain ? [
-    ['Doanh thu từ bill', money(totals.billRevenue), `${amount(totals.billCount)} bill SETTLED`],
-    ['Thu từ cọc tịch thu', money(totals.forfeitedDeposits), 'Theo ngày ghi FORFEIT, múi giờ cơ sở'],
-    ['Tổng doanh thu', money(totals.revenue), 'Bill SETTLED + cọc tịch thu'],
+    ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Hóa đơn hoàn tất + cọc bị tịch thu'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Đã gồm lương và ứng lương'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Chưa gồm chi đầu tư'],
     ['Dòng tiền thuần', money(totals.netCashFlow), 'Theo sổ giao dịch'],
   ] : [
-    ['Doanh thu từ bill', money(totals.billRevenue), `${amount(totals.billCount)} bill SETTLED`],
-    ['Thu từ cọc tịch thu', money(totals.forfeitedDeposits), 'Theo ngày ghi FORFEIT, múi giờ cơ sở'],
-    ['Tổng doanh thu', money(totals.revenue), 'Bill SETTLED + cọc tịch thu'],
+    ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Hóa đơn hoàn tất + cọc bị tịch thu'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Chưa gồm chi đầu tư'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Tổng doanh thu − chi vận hành đã trả'],
     ['Biên lợi nhuận vận hành', percent(totals.margin), 'Lợi nhuận vận hành ÷ Tổng doanh thu'],
@@ -161,7 +160,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
     {error && <div className="performance-state performance-error" role="alert"><strong>Không tải được báo cáo</strong><span>{error}</span></div>}
     {data && totals && <>
       {branch && <BranchContext branch={branch} />}
-      {Number(totals.billCount) === 0 && Number(totals.expenseCount) === 0 && <div className="performance-note" role="status">Chưa có bill hoàn tất hoặc khoản chi đã thanh toán trong kỳ này.</div>}
+      {Number(totals.billCount) === 0 && Number(totals.expenseCount) === 0 && <div className="performance-note" role="status">Chưa có hóa đơn hoàn tất hoặc khoản chi đã thanh toán trong kỳ này.</div>}
       <FinanceStrip totals={totals} isChain={isChain} branchSelected={Boolean(branchId)} />
       {isChain && <MonthlyPerformanceSummary report={data} month={month} branchId={branchId} />}
       {isChain ? <div className="performance-grid performance-grid-chain">
@@ -179,7 +178,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
         <BranchFinance totals={totals} />
         <BranchOperations operations={data.operations} onNavigate={onNavigate} />
       </div>}
-      <p className="performance-explanation">Tổng doanh thu = bill SETTLED + cọc FORFEIT theo ngày ghi nhận và múi giờ cơ sở. Lợi nhuận vận hành = Tổng doanh thu − chi vận hành đã trả; biên lợi nhuận = lợi nhuận vận hành ÷ Tổng doanh thu. Cọc APPLY, chưa sử dụng và chờ hoàn không cộng; hoàn cọc đã chi không là chi phí vận hành. Chi đầu tư được trình bày riêng.</p>
+      <p className="performance-explanation">Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu; cọc đang giữ hoặc chờ hoàn không được tính. Chi phí vận hành chỉ gồm khoản đã thanh toán. Chi đầu tư được trình bày riêng.</p>
     </>}
   </section>;
 }

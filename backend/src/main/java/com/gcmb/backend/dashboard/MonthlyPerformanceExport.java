@@ -5,6 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,11 +20,11 @@ final class MonthlyPerformanceExport {
   private MonthlyPerformanceExport() {}
 
   static final List<String> KEYS = List.of("name","billRevenue","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue","expenses","salary","investment","profit","margin","netCashFlow","bookingCount","completedBookings","cancelledNoShowBookings","occupancyRate","periodStatus");
-  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu từ bill","Thu từ cọc tịch thu","Tổng doanh thu","Tiền phòng","F&B","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Đầu tư","Lợi nhuận vận hành (Tổng doanh thu − chi vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số booking","Hoàn tất","Hủy/no-show","Lấp đầy (%)","Kỳ");
+  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu hóa đơn hoàn tất","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Chi đầu tư","Lợi nhuận vận hành (Thu nhập vận hành − chi phí vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng");
   private static final String[] SUMMARY_HEADERS = {
-    "Cơ sở","Mã cơ sở","Doanh thu bill","Thu cọc tịch thu","Tổng thu","Tiền phòng","F&B","Phụ phí quá giờ","Khác",
-    "Chi vận hành đã trả","Lương/ứng lương","Tổng chi","Đầu tư (CAPEX)","Lợi nhuận vận hành","Biên lợi nhuận (%)",
-    "Dòng tiền thuần","Số bill","Số booking","Hoàn tất","Hủy/no-show","Lấp đầy (%)","Kỳ","Trạng thái kỳ"
+    "Cơ sở","Mã cơ sở","Doanh thu hóa đơn hoàn tất","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác",
+    "Chi phí vận hành đã thanh toán","Lương và ứng lương","Tổng chi phí vận hành","Chi đầu tư","Lợi nhuận vận hành","Biên lợi nhuận vận hành (%)",
+    "Dòng tiền thuần","Số hóa đơn","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng","Trạng thái kỳ"
   };
   private static final String[] SUMMARY_KEYS = {
     "name","code","billRevenue","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue",
@@ -30,7 +33,7 @@ final class MonthlyPerformanceExport {
   };
   private static final String[] DETAIL_HEADERS = {
     "Ngày ghi sổ","Thời điểm phát sinh","Cơ sở","Mã giao dịch","Mã dòng sổ","Mã giao dịch nguồn",
-    "Mã giao dịch gốc","Mã booking","Số bill","Loại thu/chi","Loại giao dịch (mã)","Hạng mục","Diễn giải",
+    "Mã giao dịch gốc","Mã lượt đặt","Số hóa đơn","Loại thu/chi","Loại giao dịch","Hạng mục","Diễn giải",
     "Mã tài khoản","Số tiền (+ thu / − chi)","Phương thức thanh toán","Tham chiếu / chứng từ"
   };
 
@@ -38,6 +41,72 @@ final class MonthlyPerformanceExport {
     var out = new StringBuilder("\uFEFF").append(String.join(",", HEADERS.stream().map(MonthlyPerformanceExport::cell).toList())).append("\r\n");
     for (var row : rows) out.append(String.join(",", KEYS.stream().map(key -> cell(safe(row.get(key)))).toList())).append("\r\n");
     return out.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  static byte[] overviewCsv(Map<String,Object> report) {
+    String[] headers = overviewHeaders();
+    var out = new StringBuilder("\uFEFF").append(String.join(",", Arrays.stream(headers).map(MonthlyPerformanceExport::cell).toList())).append("\r\n");
+    for (var row : overviewRows(report)) out.append(String.join(",", overviewValues(row, report).stream().map(MonthlyPerformanceExport::cell).toList())).append("\r\n");
+    return out.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  static byte[] overviewXlsx(Map<String,Object> report) {
+    try (var wb = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+      Styles styles = new Styles(wb);
+      Sheet sheet = wb.createSheet("Tổng hợp");
+      String[] headers = overviewHeaders();
+      int lastColumn = headers.length - 1;
+      title(sheet, "BÁO CÁO THU NHẬP VẬN HÀNH · " + report.get("from") + " – " + report.get("to"), lastColumn, styles.title);
+      note(sheet, "Kỳ so sánh: " + report.get("comparisonFrom") + " – " + report.get("comparisonTo")
+        + " · Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu; chi đầu tư trình bày riêng, không trừ vào lợi nhuận vận hành.", lastColumn, styles.note);
+      Row header = sheet.createRow(3);
+      for (int c = 0; c < headers.length; c++) set(header, c, headers[c], styles.header);
+      List<Map<String,Object>> rows = overviewRows(report);
+      for (int i = 0; i < rows.size(); i++) {
+        Row row = sheet.createRow(4 + i);
+        List<Object> values = overviewValues(rows.get(i), report);
+        for (int c = 0; c < values.size(); c++) {
+          Object value = values.get(c);
+          CellStyle style = c == 16 || c == 12 ? styles.percent : c >= 4 && c <= 15 ? styles.money : styles.text;
+          if ((c == 12 || c == 16) && value != null) value = percentValue(value);
+          set(row, c, value, style);
+        }
+      }
+      int lastDataRow = Math.max(4, 3 + rows.size());
+      sheet.setAutoFilter(new CellRangeAddress(3, lastDataRow, 0, lastColumn));
+      sheet.createFreezePane(1, 4);
+      sheet.setZoom(85);
+      int[] widths = {28,14,14,14,18,18,18,18,18,18,18,18,18,18,18,18,18};
+      for (int c = 0; c < widths.length; c++) sheet.setColumnWidth(c, widths[c] * 256);
+      wb.write(out);
+      return out.toByteArray();
+    } catch (Exception ex) { throw new IllegalStateException("Không thể tạo tệp Excel báo cáo.", ex); }
+  }
+
+  private static String[] overviewHeaders() {
+    return new String[]{"Cơ sở", "Từ ngày", "Đến ngày", "Kỳ so sánh", "Doanh thu hóa đơn hoàn tất", "Cọc bị tịch thu", "Thu nhập vận hành",
+      "Chi phí vận hành đã thanh toán", "Lương và ứng lương", "Tổng chi phí vận hành", "Chi đầu tư", "Lợi nhuận vận hành", "Biên lợi nhuận vận hành",
+      "Thu nhập kỳ so sánh", "Chi phí kỳ so sánh", "Lợi nhuận kỳ so sánh", "Biên lợi nhuận kỳ so sánh"};
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<Map<String,Object>> overviewRows(Map<String,Object> report) {
+    var rows = new ArrayList<Map<String,Object>>((List<Map<String,Object>>) report.getOrDefault("branches", List.of()));
+    Map<String,Object> total = new LinkedHashMap<>((Map<String,Object>) report.get("totals"));
+    Map<String,Object> prior = (Map<String,Object>) report.get("comparisonTotals");
+    total.put("name", "Toàn phạm vi");
+    total.put("comparisonRevenue", prior.get("revenue")); total.put("comparisonExpenses", prior.get("expenses"));
+    total.put("comparisonProfit", prior.get("profit")); total.put("comparisonMargin", prior.get("margin"));
+    rows.add(total);
+    return rows;
+  }
+
+  private static List<Object> overviewValues(Map<String,Object> row, Map<String,Object> report) {
+    return Arrays.asList(row.get("name"), report.get("from"), report.get("to"),
+      report.get("comparisonFrom") + " – " + report.get("comparisonTo"), row.get("billRevenue"), row.get("forfeitedDeposits"),
+      row.get("revenue"), row.get("operatingExpense"), row.get("salary"), row.get("expenses"), row.get("investment"),
+      row.get("profit"), row.get("margin"), row.get("comparisonRevenue"), row.get("comparisonExpenses"),
+      row.get("comparisonProfit"), row.get("comparisonMargin"));
   }
 
   static byte[] xlsx(List<Map<String,Object>> summaryRows, String month, String scope, String periodStatus,
@@ -58,7 +127,7 @@ final class MonthlyPerformanceExport {
     int lastColumn = SUMMARY_HEADERS.length - 1;
     title(sheet, "BÁO CÁO HIỆU QUẢ · " + month, lastColumn, styles.title);
     note(sheet, "Kỳ: " + month + " · Phạm vi: " + scope + " · Trạng thái kỳ: " + status(periodStatus)
-      + " · Tổng chi = OPEX đã trả + lương/ứng lương; CAPEX được trình bày riêng, không trừ vào lợi nhuận.", lastColumn, styles.note);
+      + " · Tổng chi phí vận hành gồm chi phí vận hành đã thanh toán, lương và ứng lương; chi đầu tư trình bày riêng, không trừ vào lợi nhuận vận hành.", lastColumn, styles.note);
     Row header = sheet.createRow(3);
     for (int c = 0; c < SUMMARY_HEADERS.length; c++) set(header, c, SUMMARY_HEADERS[c], styles.header);
     for (int i = 0; i < rows.size(); i++) {
@@ -76,7 +145,7 @@ final class MonthlyPerformanceExport {
     }
     if (rows.isEmpty()) {
       Row empty = sheet.createRow(4);
-      set(empty, 0, "Không có dữ liệu trong phạm vi đã chọn.", styles.text);
+      set(empty, 0, "Chưa có dữ liệu trong phạm vi đã chọn.", styles.text);
       sheet.addMergedRegion(new CellRangeAddress(4, 4, 0, lastColumn));
     }
     int lastDataRow = Math.max(4, 3 + rows.size());
@@ -90,8 +159,8 @@ final class MonthlyPerformanceExport {
   private static void writeDetails(Sheet sheet, List<Map<String,Object>> rows, int summaryRowCount, String month,
                                    String scope, Styles styles) {
     int lastColumn = DETAIL_HEADERS.length - 1;
-    title(sheet, "CHI TIẾT KẾ TOÁN · " + month, lastColumn, styles.title);
-    note(sheet, "Phạm vi: " + scope + ". Dữ liệu bút toán đã ghi sổ trong kỳ, lọc theo ngày ghi sổ. Số tiền giữ dấu theo sổ; phương thức và chứng từ chỉ hiện khi nguồn có lưu. Đây là dữ liệu đối soát, không phải tờ khai hay hồ sơ thuế chính thức.", lastColumn, styles.note);
+    title(sheet, "CHI TIẾT GHI SỔ · " + month, lastColumn, styles.title);
+    note(sheet, "Phạm vi: " + scope + ". Dữ liệu đã ghi sổ trong kỳ, lọc theo ngày ghi sổ. Số tiền giữ nguyên dấu theo sổ; phương thức và chứng từ chỉ hiện khi nguồn có lưu. Đây là dữ liệu đối soát, không phải tờ khai hay hồ sơ thuế chính thức.", lastColumn, styles.note);
     Row header = sheet.createRow(3);
     for (int c = 0; c < DETAIL_HEADERS.length; c++) set(header, c, DETAIL_HEADERS[c], styles.header);
     for (int i = 0; i < rows.size(); i++) {
@@ -111,14 +180,14 @@ final class MonthlyPerformanceExport {
     }
     if (rows.isEmpty()) {
       Row empty = sheet.createRow(4);
-      set(empty, 0, "Không có bút toán trong kỳ và phạm vi đã chọn.", styles.text);
+      set(empty, 0, "Chưa có giao dịch ghi sổ trong kỳ và phạm vi đã chọn.", styles.text);
       sheet.addMergedRegion(new CellRangeAddress(4, 4, 0, lastColumn));
     }
 
     int lastDataExcelRow = 4 + rows.size();
     int totalRowIndex = 4 + Math.max(rows.size(), 1);
     Row total = sheet.createRow(totalRowIndex);
-    set(total, 0, "TỔNG BÚT TOÁN", styles.totalText);
+    set(total, 0, "TỔNG SỐ TIỀN GHI SỔ", styles.totalText);
     String amountColumn = "O";
     if (rows.isEmpty()) {
       set(total, 14, 0, styles.totalMoney);
@@ -133,18 +202,18 @@ final class MonthlyPerformanceExport {
 
     int section = totalRowIndex + 3;
     Row reconcileTitle = sheet.createRow(section);
-    set(reconcileTitle, 0, "ĐỐI CHIẾU VỚI SHEET TỔNG HỢP", styles.totalText);
+    set(reconcileTitle, 0, "ĐỐI CHIẾU VỚI BẢNG TỔNG HỢP", styles.totalText);
     sheet.addMergedRegion(new CellRangeAddress(section, section, 0, 2));
     int totalSummaryExcelRow = 4 + summaryRowCount;
     String[] labels = {
-      "Tổng thu theo bút toán UC-125","Tổng chi theo bút toán UC-125","Dòng tiền ròng theo bút toán UC-125",
-      "Tổng thu theo UC-123","Tổng chi vận hành theo UC-123","Lợi nhuận vận hành theo UC-123",
-      "Đầu tư CAPEX theo UC-123 (tách riêng)","Dòng tiền thuần theo UC-123",
-      "Chênh lệch thu bút toán − tổng thu UC-123 (tham khảo)",
-      "Chênh lệch chi bút toán − tổng chi UC-123 (tham khảo)",
-      "Chênh lệch dòng tiền UC-125 − UC-123 (tham khảo)",
-      "Lương/ứng lương theo bút toán UC-125","Lương/ứng lương theo UC-123",
-      "Chênh lệch lương/ứng lương (tham khảo)"
+      "Tổng tiền thu theo sổ kế toán","Tổng tiền chi theo sổ kế toán","Dòng tiền ròng theo sổ kế toán",
+      "Thu nhập vận hành theo báo cáo hiệu quả","Tổng chi phí vận hành theo báo cáo hiệu quả","Lợi nhuận vận hành theo báo cáo hiệu quả",
+      "Chi đầu tư theo báo cáo hiệu quả","Dòng tiền thuần theo báo cáo hiệu quả",
+      "Chênh lệch tiền thu theo sổ và thu nhập vận hành (tham khảo)",
+      "Chênh lệch tiền chi theo sổ và tổng chi phí vận hành (tham khảo)",
+      "Chênh lệch dòng tiền giữa hai báo cáo (tham khảo)",
+      "Lương và ứng lương theo sổ kế toán","Lương và ứng lương theo báo cáo hiệu quả",
+      "Chênh lệch lương và ứng lương (tham khảo)"
     };
     for (int i = 0; i < labels.length; i++) {
       Row row = sheet.createRow(section + 1 + i);
@@ -169,7 +238,7 @@ final class MonthlyPerformanceExport {
       else setFormula(row, 1, formula, styles.money);
     }
     Row explanation = sheet.createRow(section + labels.length + 2);
-    set(explanation, 0, "Chênh lệch chỉ để đối chiếu phạm vi, không kết luận sai lệch kế toán: UC-123 lấy bill/cọc/chi trả theo ngày ghi nhận tại cơ sở và lương theo occurred_at; UC-125 lọc financial_transaction/financial_entry theo booking_date. Một số nguồn như finance_expense_request, thanh toán bill hoặc cọc SePay có thể chưa có bút toán liên kết; chi tiết cũng có thể gồm hoàn tiền, chuyển quỹ hoặc điều chỉnh ngoài lợi nhuận. Hệ thống chưa lưu phân loại thuế hay số hóa đơn thuế đã phát hành.", styles.note);
+    set(explanation, 0, "Chênh lệch chỉ dùng để đối chiếu phạm vi dữ liệu, không kết luận sai lệch kế toán. Sổ kế toán lọc theo ngày ghi sổ; báo cáo hiệu quả lấy doanh thu hóa đơn, cọc bị tịch thu và khoản chi đã thanh toán theo ngày phát sinh tại cơ sở, cùng lương theo ngày ghi nhận. Một số khoản chi, thanh toán hóa đơn hoặc cọc có thể chưa liên kết với chứng từ sổ kế toán. Chi tiết sổ có thể gồm hoàn tiền, chuyển quỹ hoặc điều chỉnh ngoài lợi nhuận. Hệ thống chưa lưu phân loại thuế hay số hóa đơn thuế đã phát hành.", styles.note);
     sheet.addMergedRegion(new CellRangeAddress(section + labels.length + 2, section + labels.length + 3, 0, lastColumn));
     explanation.setHeightInPoints(50);
   }

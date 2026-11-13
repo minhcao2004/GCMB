@@ -1,11 +1,11 @@
 package com.gcmb.backend.dashboard;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.*;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellReference;
@@ -19,7 +19,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AccountingWorkbookService {
-  private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
   private static final BigDecimal ZERO = BigDecimal.ZERO;
   private static final String NOTE = "Nguồn không có: TINGBOX, TK HKD, ẢNH SAO KÊ, NỘP KÉT MINI. CHI KÉT lấy từ payment_source=BRANCH_FUND (luồng cũ); CHI CK gồm các khoản còn lại và toàn bộ luồng chi mới (không có trường phương thức chi). Hoàn cọc chỉ tham khảo, không phải chi phí/lợi nhuận. CAPEX tách riêng, không trừ vào lợi nhuận.";
 
@@ -246,7 +245,7 @@ public class AccountingWorkbookService {
   private static BigDecimal decimal(Object v){return v==null?ZERO:v instanceof BigDecimal b?b:new BigDecimal(v.toString());}
   private static LocalDate localDate(Object v){return v instanceof java.sql.Date d?d.toLocalDate():v instanceof LocalDate d?d:LocalDate.parse(v.toString());}
   private static void requireAccountant(Identity actor){if(actor==null||!"ACCOUNTANT".equals(actor.role()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền thực hiện đối với nghiệp vụ kế toán.");}
-  private static YearMonth validateMonth(LocalDate date){YearMonth m=YearMonth.from(date);if(m.isAfter(YearMonth.now(ZONE)))throw bad("Không thể xuất báo cáo cho tháng trong tương lai.");return m;}
+  private static YearMonth validateMonth(LocalDate date){YearMonth m=YearMonth.from(date);if(m.isAfter(YearMonth.now(FinancialPeriodService.ZONE)))throw bad("Không thể xuất báo cáo cho tháng trong tương lai.");return m;}
   private static ResponseStatusException bad(String message){return new ResponseStatusException(HttpStatus.BAD_REQUEST,message);}
   private static List<String> warnings(String status,long exceptions){List<String> values=new ArrayList<>();if(!"CLOSED".equals(status))values.add("Kỳ chưa khóa; số liệu có thể thay đổi.");if(exceptions>0)values.add("Còn "+exceptions+" giao dịch SePay EXCEPTION chưa xử lý.");return values;}
   private static String branchIdsJson(List<Branch> branches){return "["+String.join(",",branches.stream().map(b->"\""+b.id+"\"").toList())+"]";}

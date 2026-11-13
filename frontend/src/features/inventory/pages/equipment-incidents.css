@@ -3,4 +3,70 @@
 /** Copyright (c) 2026 SEP490-G12. Author: TrongNV. Created: 28/10. Description: Bố cục form và thao tác điều chuyển UC74–UC76. */
 .ei-transfer-form{margin:0 0 20px;padding:20px;border:1px solid #edf0f5;border-radius:16px;background:#fff}.ei-transfer-form h2{margin:0 0 16px;font-size:17px}.ei-transfer-form>div{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;align-items:end}.ei-transfer-form label{display:flex;flex-direction:column;gap:7px;color:#66738a;font-size:12px;font-weight:650}.ei-transfer-form input,.ei-transfer-form select,.ei-table-wrap td select{box-sizing:border-box;width:100%;height:42px;border:1px solid #dce3ec;border-radius:9px;padding:0 10px;background:#fff;color:#3e4b62;font:inherit}.ei-transfer-form .ei-primary{min-height:42px}.ei-table-wrap td button{border:1px solid #dce3ec;border-radius:8px;padding:8px 10px;background:#fff;color:#48566e;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}.ei-table-wrap td button:hover{border-color:#e9158b;color:#c90b72}.ei-table-wrap td button:disabled{opacity:.6}@media(max-width:900px){.ei-transfer-form>div{grid-template-columns:1fr 1fr}}@media(max-width:560px){.ei-transfer-form>div{grid-template-columns:1fr}}
 
+/* Reception-only incident styling; branch and head-office incident screens keep their existing treatment. */
+.booking-app--reception .equipment-incidents { color: var(--gcmb-color-text); }
+.booking-app--reception .ei-heading h1 { color: var(--gcmb-color-ink); font-size: var(--gcmb-font-size-2xl); line-height: var(--gcmb-line-height); }
+.booking-app--reception .ei-heading p,
+.booking-app--reception .ei-heading span,
+.booking-app--reception .ei-filters label,
+.booking-app--reception .ei-filters small,
+.booking-app--reception .ei-footnote,
+.booking-app--reception .ei-drawer header p,
+.booking-app--reception .ei-doc-preview small { color: var(--gcmb-color-text); }
+.booking-app--reception .ei-heading .ei-primary,
+.booking-app--reception .ei-primary { border-color: var(--gcmb-color-primary); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); font: 600 var(--gcmb-font-size-sm) / var(--gcmb-line-height) var(--gcmb-font-family); }
+.booking-app--reception .ei-primary:hover:not(:disabled) { border-color: var(--gcmb-color-primary-hover); color: var(--gcmb-color-on-primary-hover); background: var(--gcmb-color-primary-hover); }
+.booking-app--reception .ei-filters,
+.booking-app--reception .ei-table-wrap { border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); background: var(--gcmb-color-panel); }
+.booking-app--reception .ei-filters { gap: var(--gcmb-space-3); padding: var(--gcmb-space-4); }
+.booking-app--reception .ei-filters input,
+.booking-app--reception .ei-filters select,
+.booking-app--reception .ei-fields input:not([type='checkbox']):not([type='file']),
+.booking-app--reception .ei-fields select,
+.booking-app--reception .ei-fields textarea { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-ink); font: 400 var(--gcmb-font-size-base) / var(--gcmb-line-height) var(--gcmb-font-family); }
+.booking-app--reception .ei-filters input::placeholder,
+.booking-app--reception .ei-fields input::placeholder,
+.booking-app--reception .ei-fields textarea::placeholder { color: var(--gcmb-color-text); opacity: 1; }
+.booking-app--reception .ei-table-wrap table { color: var(--gcmb-color-text); font-size: var(--gcmb-font-size-sm); }
+.booking-app--reception .ei-table-wrap th { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); font-size: var(--gcmb-font-size-xs); }
+.booking-app--reception .ei-table-wrap td { border-bottom-color: var(--gcmb-color-line); }
+.booking-app--reception .ei-table-wrap td small { color: var(--gcmb-color-text); }
+.booking-app--reception .ei-status { border-radius: var(--gcmb-radius-control); font-size: var(--gcmb-font-size-xs); }
+.booking-app--reception .ei-empty { color: var(--gcmb-color-text); }
+.booking-app--reception .ei-error { border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.booking-app--reception .ei-drawer { border-radius: var(--gcmb-radius-panel); color: var(--gcmb-color-ink); font-family: var(--gcmb-font-family); }
+.booking-app--reception .ei-drawer header { border-bottom-color: var(--gcmb-color-line); }
+.booking-app--reception .ei-drawer footer { border-top-color: var(--gcmb-color-line); }
+.booking-app--reception .ei-drawer footer button:not(.ei-primary) { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-ink); }
+.booking-app--reception .equipment-incidents :where(button, input, select, textarea):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }
+
 .ei-doc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:12px}.ei-doc-preview{display:flex;min-width:0;flex-direction:column;gap:8px;padding:12px;border:1px solid #e8edf4;border-radius:12px;background:#fbfcfe}.ei-doc-preview img{display:block;max-width:100%;max-height:320px;object-fit:contain;border-radius:8px;background:#f2f4f7}.ei-doc-preview iframe{width:100%;height:300px;border:0;border-radius:8px;background:#fff}.ei-doc-preview small{color:#7b8798}.ei-doc-preview>a:last-child{font-size:12px;color:#b20e6d}@media(max-width:560px){.ei-doc-grid{grid-template-columns:1fr}}
+
+/* Equipment manager screens are shared by branch and head-office roles; reception remains separately scoped above. */
+.equipment-management .equipment-incidents { color: var(--gcmb-color-ink); font-family: var(--gcmb-font-family); }
+.equipment-management .ei-heading h1 { color: var(--gcmb-color-ink); font-size: var(--gcmb-font-size-2xl); line-height: var(--gcmb-line-height); }
+.equipment-management .ei-heading p,
+.equipment-management .ei-heading span,
+.equipment-management .ei-filters label,
+.equipment-management .ei-filters small,
+.equipment-management .ei-footnote,
+.equipment-management .ei-drawer header p { color: var(--gcmb-color-text); }
+.equipment-management .ei-primary { border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); }
+.equipment-management .ei-primary:hover:not(:disabled) { color: var(--gcmb-color-on-primary-hover); background: var(--gcmb-color-primary-hover); }
+.equipment-management .ei-filters,
+.equipment-management .ei-table-wrap,
+.equipment-management .ei-transfer-form { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); background: var(--gcmb-color-panel); }
+.equipment-management .ei-filters input,
+.equipment-management .ei-filters select,
+.equipment-management .ei-fields :where(input, select, textarea),
+.equipment-management .ei-transfer-form :where(input, select) { border-color: var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-ink); font-family: var(--gcmb-font-family); }
+.equipment-management .ei-table-wrap th { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
+.equipment-management .ei-table-wrap td { border-bottom-color: var(--gcmb-color-line); }
+.equipment-management .ei-table-wrap tbody tr:hover { background: var(--gcmb-color-primary-soft); }
+.equipment-management .ei-empty { color: var(--gcmb-color-text); }
+.equipment-management .ei-error { border: 1px solid var(--gcmb-color-danger-soft); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.equipment-management .ei-drawer { border-radius: var(--gcmb-radius-panel) 0 0 var(--gcmb-radius-panel); color: var(--gcmb-color-ink); font-family: var(--gcmb-font-family); }
+.equipment-management .ei-drawer header { border-bottom-color: var(--gcmb-color-line); }
+.equipment-management .ei-drawer footer { border-top-color: var(--gcmb-color-line); }
+.equipment-management :where(button, input, select, textarea):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }
+@media (max-width: 600px) { .equipment-management .ei-drawer { border-radius: 0; } }
