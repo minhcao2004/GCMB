@@ -155,12 +155,12 @@ GCMB/
 | `shared` (frontend) | Shared admin `AppShell` for the head-office manager, branch manager, receptionist, and accountant with per-audience collapsed-sidebar persistence; presentational UI primitives for buttons, form controls, overlays, data tables, feedback, and page composition, styled with centralized design tokens and without business logic. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
+| `booking` | Reservations, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
 | `dashboard` | Head-office chain overview with period filters, KPIs, interactive Recharts, branch ranking, pending approvals and operational alerts; shared accountant/head-office financial reports with selectable two-month performance comparison and a date-range income/expense overview, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; branch performance summaries with bill and forfeited-deposit revenue; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
-| `finance` (frontend) | Accountant fund and expense workflows, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
-| `finance` (backend) | Chain-wide funds, expenses, approvals, reimbursements, cash reconciliation, financial transactions, and period closing. |
+| `finance` (frontend) | Accountant fund and expense workflows, configurable expense categories, one-time direct expenses, recurring expense templates and monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
+| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, reimbursements, cash reconciliation, financial transactions, and period closing. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -300,6 +300,12 @@ spring:
 ```
 
 Set the active profile through `SPRING_PROFILES_ACTIVE`. Backend `.env` files are not loaded automatically by Spring Boot; supply variables through the terminal, IDE run configuration, or deployment environment.
+
+The boolean setting `gcmb.finance.period-close.allow-early-close` reads `GCMB_ALLOW_EARLY_PERIOD_CLOSE`. Its fallback is `false`; `application-dev.yml` explicitly defaults it to `true` for demos. Set the environment variable to `true` to enable early closing or `false` to disable it. Outside the development profile, it defaults to `false`.
+
+Set the variable before starting the backend; restart the backend after changing it. PowerShell: set `$env:GCMB_ALLOW_EARLY_PERIOD_CLOSE = "true"` to enable or `"false"` to disable. On macOS/Linux, use `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=true` or `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=false`.
+
+Do not enable early period closing in production. Keep it false and do not set the production environment variable to `true`.
 
 Keep database passwords and SePay, email, and cloud-storage credentials outside source control. Frontend `REACT_APP_*` variables are exposed in the browser bundle and must contain only public configuration.
 

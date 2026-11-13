@@ -58,8 +58,6 @@
 .accounting-refund-evidence-message { margin: 0; color: #738194; font-size: 10px; line-height: 1.5; }
 .accounting-refund-evidence-message--error { color: #a52b43; }
 .accounting-refund-completed { margin-top: 13px; }
-.accounting-refund-refresh { border: 0; padding: 5px 8px; color: var(--booking-cyan); background: transparent; font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
-.accounting-refund-refresh:disabled { cursor: wait; opacity: .55; }
 .accounting-refund-page :focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 
 @media (max-width: 850px) {
@@ -151,7 +149,6 @@
 .accounting-refund-upload-copy small { color: #536071; font-size: 11px; line-height: 1.45; }
 .accounting-refund-upload-action { min-height: 34px; display: inline-flex; align-items: center; font-size: 11px; }
 .accounting-refund-image-preview button { min-height: 36px; font-size: 11px; }
-.accounting-refund-refresh { min-height: 40px; font-size: 12px; }
 .accounting-refund-back { display: none; }
 
 @media (max-width: 1199px) {

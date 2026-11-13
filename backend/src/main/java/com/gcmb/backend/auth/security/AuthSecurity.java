@@ -76,12 +76,14 @@ config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIO
                         path.startsWith("/api/v1/head-office/accounts/") ||
                         path.equals("/api/v1/branch-management/accounts") ||
                         path.startsWith("/api/v1/branch-management/accounts/");
-                    if (accounts && !(e instanceof CsrfException)) {
+                    if (e instanceof CsrfException) {
+                        response.getWriter().write("{\"message\":\"Mã bảo vệ đã hết hạn hoặc không hợp lệ. Vui lòng tải lại trang\"}");
+                    } else if (accounts) {
                         String action = path.endsWith("/role") ? "phân quyền" :
                             path.endsWith("/deactivate") || path.endsWith("/reactivate") ? "đổi trạng thái" :
                             "GET".equals(request.getMethod()) ? "xem" : "tạo";
                         response.getWriter().write("{\"message\":\"Bạn không có quyền " + action + " đối với tài khoản.\"}");
-                    } else response.getWriter().write("{\"message\":\"Yêu cầu không được phép hoặc mã bảo vệ đã hết hạn. Vui lòng tải lại trang\"}");
+                    } else response.getWriter().write("{\"message\":\"Bạn không có quyền thực hiện yêu cầu này.\"}");
                 }))
             .addFilterBefore(new SessionFilter(auth), UsernamePasswordAuthenticationFilter.class).build();
     }

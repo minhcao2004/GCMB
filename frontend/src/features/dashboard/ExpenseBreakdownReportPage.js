@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
+import BranchFilterSelect from './BranchFilterSelect';
 import './dashboard.css';
 import './expense-breakdown-report.css';
 
@@ -23,6 +24,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState(initialUser);
   const [data, setData] = useState(null);
+  const [branchOptions, setBranchOptions] = useState([]);
   const [dataKey, setDataKey] = useState('');
   const [details, setDetails] = useState([]);
   const [expanded, setExpanded] = useState(null);
@@ -43,8 +45,9 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const branchId = searchParams.get('branchId') || '';
   const costType = searchParams.get('costType') || '';
   const categoryId = searchParams.get('categoryId') || '';
+  const basis = searchParams.get('basis') || 'ALLOCATION';
   const query = searchParams.get('q') || '';
-  const requestKey = JSON.stringify([month, from, to, branchIds, branchId, costType, categoryId, query]);
+  const requestKey = JSON.stringify([month, from, to, branchIds, branchId, costType, categoryId, basis, query]);
   const currentData = dataKey === requestKey ? data : null;
 
   function updateFilter(key, value) {
@@ -56,11 +59,10 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     setSearchParams(next, { replace: true });
   }
 
-  function updateBranches(event) {
-    const selected = Array.from(event.target.selectedOptions, (option) => option.value);
+  function updateBranches(selected) {
     const next = new URLSearchParams(searchParams);
     next.delete('branchId'); next.delete('branchIds'); next.delete('tab');
-    if (!selected.includes('__ALL__')) selected.forEach((id) => next.append('branchIds', id));
+    selected.forEach((id) => next.append('branchIds', id));
     setData(null); setDataKey(''); setSearchParams(next, { replace: true });
   }
 
@@ -98,20 +100,22 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
       ...(branchIds.length ? { branchIds } : branchId ? { branchId } : {}),
       ...(costType ? { costType } : {}),
       ...(categoryId ? { categoryId } : {}),
+      basis,
       ...(query ? { q: query } : {}),
     } }).then(({ data: result }) => {
       if (active) {
+        setBranchOptions(result.branches || []);
         setData({ ...result, branches: result.branches || [], categories: result.categories || [], rows: result.rows || [] });
         setDataKey(requestKey);
       }
     }).catch((e) => { if (active) setError(errorText(e)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [user, month, from, to, hasDateRange, branchIds, branchId, costType, categoryId, query, requestKey, revision]);
+  }, [user, month, from, to, hasDateRange, branchIds, branchId, costType, categoryId, basis, query, requestKey, revision]);
 
   useEffect(() => {
     setExpanded(null); setDetails([]); setDetailsError('');
-  }, [month, from, to, branchIds, branchId, costType, categoryId, query]);
+  }, [month, from, to, branchIds, branchId, costType, categoryId, basis, query]);
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -120,12 +124,13 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     api.get('/accounting/reports/expense-breakdown/details', { params: {
       ...(hasDateRange ? { from, to } : { month }),
       branchId: expanded.branchId, categoryId: expanded.categoryId, costType: expanded.costType,
+      basis,
       ...(query ? { q: query } : {}),
     } }).then(({ data: result }) => { if (active) setDetails(result.rows || []); })
       .catch((e) => { if (active) setDetailsError(errorText(e)); })
       .finally(() => { if (active) setDetailsLoading(false); });
     return () => { active = false; };
-  }, [expanded, month, from, to, hasDateRange, query]);
+  }, [expanded, month, from, to, hasDateRange, basis, query]);
 
   useEffect(() => {
     if (!preview) return undefined;
@@ -165,16 +170,23 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
 
   // BR-103/107: tổng OPEX và CAPEX luôn được tính, hiển thị riêng theo loại đã chốt.
   const rows = currentData?.rows || [];
+  const recognitionMonth = (value) => {
+    if (Array.isArray(value) && value.length >= 2) return `${String(value[1]).padStart(2, '0')}/${value[0]}`;
+    const match = String(value || '').match(/^(\d{4})-(\d{2})/);
+    return match ? `${match[2]}/${match[1]}` : '—';
+  };
+  const allocationBasis = basis !== 'CASH';
   const content = <section className="performance-dashboard accountant-finance expense-breakdown-report" aria-labelledby="expense-report-title" aria-busy={loading}>
     <header className="finance-heading expense-report-heading">
-      <div><h1 id="expense-report-title">Báo cáo chi phí</h1><p>Khoản chi đã thanh toán trong kỳ, phân nhóm theo loại, danh mục và cơ sở.</p></div>
+      <div><h1 id="expense-report-title">Báo cáo chi phí</h1><p>{allocationBasis?'Chi phí được ghi nhận theo lịch phân bổ; tổng lịch bằng đúng số tiền đã chi.':'Dòng tiền chi được nhóm theo ngày thanh toán thực tế.'}</p></div>
       <div className="finance-filters expense-report-filters">
         {hasDateRange ? <>
           <label className="finance-month">Từ ngày<input type="date" required value={from} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
           <label className="finance-month">Đến ngày<input type="date" required value={to} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
         </> : <label className="finance-month">Kỳ báo cáo<input type="month" value={month} onChange={(event) => event.target.value && updateFilter('month', event.target.value)} /></label>}
-        <label className="finance-month">Cơ sở<select multiple size="3" value={branchIds.length ? branchIds : branchId ? [branchId] : ['__ALL__']} onChange={updateBranches}><option value="__ALL__">Tất cả cơ sở</option>{(currentData?.branches || []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+        <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} multiple value={branchIds.length ? branchIds : branchId ? [branchId] : []} onChange={updateBranches} /></div>
         <label className="finance-month">Nhóm chi<select value={costType} onChange={(event) => updateFilter('costType', event.target.value)}><option value="">Tất cả nhóm</option><option value="OPEX">Chi phí vận hành</option><option value="CAPEX">Chi đầu tư (mua sắm, sửa chữa lớn)</option></select></label>
+        <label className="finance-month">Cách xem<select value={basis} onChange={(event) => updateFilter('basis', event.target.value)}><option value="ALLOCATION">Theo phân bổ</option><option value="CASH">Theo ngày chi</option></select></label>
         <label className="finance-month">Danh mục<select value={categoryId} onChange={(event) => updateFilter('categoryId', event.target.value)}><option value="">Tất cả danh mục</option>{(currentData?.categories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="finance-month expense-report-search">Tìm kiếm<input type="search" value={query} maxLength={100} placeholder="Mã chi, mô tả, danh mục, cơ sở…" onChange={(event) => updateFilter('q', event.target.value)} /></label>
       </div>
@@ -183,14 +195,14 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải báo cáo chi phí…</p>}
     <dl className="expense-report-totals" aria-label="Tổng chi phí theo nhóm">
-      <div className="is-opex"><dt>Chi phí vận hành đã thanh toán</dt><dd>{money(totals.opex)}</dd><small>{totals.opexCount} khoản · không gồm chi đầu tư</small></div>
-      <div className="is-capex"><dt>Chi đầu tư đã thanh toán</dt><dd>{money(totals.capex)}</dd><small>{totals.capexCount} khoản · trình bày riêng</small></div>
+      <div className="is-opex"><dt>{allocationBasis?'Chi phí vận hành theo phân bổ':'Chi tiền vận hành theo ngày chi'}</dt><dd>{money(totals.opex)}</dd><small>{totals.opexCount} {allocationBasis?'dòng ghi nhận':'khoản chi'} · không gồm chi đầu tư</small></div>
+      <div className="is-capex"><dt>{allocationBasis?'Chi đầu tư theo phân bổ':'Chi đầu tư theo ngày chi'}</dt><dd>{money(totals.capex)}</dd><small>{totals.capexCount} {allocationBasis?'dòng ghi nhận':'khoản chi'} · trình bày riêng</small></div>
     </dl>
 
     {!loading && !error && currentData && rows.length === 0 && <p className="expense-report-empty" role="status">{noResults}</p>}
     {rows.length > 0 && <div className="expense-report-table-scroll"><table className="expense-report-table">
-      <caption>Chi phí đã thanh toán {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
-      <thead><tr><th scope="col">Nhóm chi</th><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">Số khoản thanh toán</th><th scope="col">Tổng đã trả</th><th scope="col">Chi tiết</th></tr></thead>
+      <caption>{allocationBasis?'Chi phí theo tháng ghi nhận':'Dòng tiền chi'} {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
+      <thead><tr><th scope="col">Nhóm chi</th><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">{allocationBasis?'Số dòng ghi nhận':'Số khoản thanh toán'}</th><th scope="col">{allocationBasis?'Tổng ghi nhận':'Tổng đã chi'}</th><th scope="col">Chi tiết</th></tr></thead>
       <tbody>{rows.map((row) => {
         const key = `${row.costType}:${row.categoryId}:${row.branchId}`;
         const isExpanded = expanded && `${expanded.costType}:${expanded.categoryId}:${expanded.branchId}` === key;
@@ -206,9 +218,9 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
               {detailsLoading && <p role="status">Đang tải chi tiết…</p>}
               {detailsError && <p role="alert">{detailsError}</p>}
               {!detailsLoading && !detailsError && details.length === 0 && <p>{noResults}</p>}
-              {details.length > 0 && <div className="expense-report-detail-scroll"><table><thead><tr><th>Ngày thanh toán</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th>Chứng từ</th></tr></thead>
-                <tbody>{details.map((item) => <tr key={`${item.sourceType}:${item.expenseId}`}>
-                  <td>{dateTime(item.paidAt)}</td><td>{item.expenseCode}</td><td>{item.kind === 'REIMBURSEMENT' ? 'Hoàn ứng' : 'Thanh toán'}</td>
+              {details.length > 0 && <div className="expense-report-detail-scroll"><table><thead><tr><th>{allocationBasis?'Tháng ghi nhận':'Ngày thanh toán'}</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th>Chứng từ</th></tr></thead>
+                <tbody>{details.map((item) => <tr key={`${item.sourceType}:${item.expenseId}:${item.recognitionDate}`}>
+                  <td>{allocationBasis?recognitionMonth(item.recognitionDate):dateTime(item.paidAt)}</td><td>{item.expenseCode}</td><td>{item.kind === 'REIMBURSEMENT' ? 'Hoàn ứng' : item.origin==='ACCOUNTANT_DIRECT'?'Chi trực tiếp':'Thanh toán'}</td>
                   <td>{item.description || '—'}{item.paymentReference && <small className="expense-report-reference">Mã tham chiếu: {item.paymentReference}</small>}</td><td className="expense-report-number">{money(item.amount)}</td>
                   <td>{item.attachments?.length ? <div className="expense-report-evidence">{item.attachments.map((file) => <button key={file.id} type="button" disabled={evidenceBusy} onClick={() => viewEvidence(file)}>{evidenceBusy ? 'Đang mở…' : `Xem ${file.kind === 'INVOICE' ? 'hóa đơn' : 'chứng từ thanh toán'} · ${file.name}`}</button>)}</div> : '—'}</td>
                 </tr>)}</tbody></table></div>}

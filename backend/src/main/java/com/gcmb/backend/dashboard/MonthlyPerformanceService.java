@@ -211,7 +211,7 @@ public class MonthlyPerformanceService {
         WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
           AND (de.created_at AT TIME ZONE br.timezone)::date<? GROUP BY bk.branch_id,report_date
       ), paid_expenses AS (
-        -- BR-103/107: only PAID expenses; internal transfers never enter this set and CAPEX stays separate.
+        -- BR-103/107: use allocated recognition for business performance; CAPEX remains separate from OPEX.
         SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date report_date,e.class_snapshot cost_type,
           e.category_id::text category_id,c.name category_name,p.amount
         FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
@@ -219,12 +219,10 @@ public class MonthlyPerformanceService {
         WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE br.timezone)::date>=?
           AND (p.paid_at AT TIME ZONE br.timezone)::date<?
         UNION ALL
-        SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date,r.category_type,
-          r.category_id::text,c.name,r.amount
-        FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id
-        JOIN selected_branches br ON br.id=r.branch_id
-        WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE br.timezone)::date>=?
-          AND (r.paid_at AT TIME ZONE br.timezone)::date<?
+        SELECT v.branch_id,v.period_month,v.category_type,v.category_id::text,c.name,v.amount
+        FROM gcmb.v_expense_recognition v JOIN gcmb.finance_expense_category c ON c.id=v.category_id
+        JOIN selected_branches br ON br.id=v.branch_id
+        WHERE v.period_month>=? AND v.period_month<?
       ), salary_daily AS (
         SELECT fe.branch_id,(ft.occurred_at AT TIME ZONE br.timezone)::date report_date,sum(-fe.amount_signed) amount
         FROM gcmb.financial_transaction ft JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
@@ -480,10 +478,9 @@ public class MonthlyPerformanceService {
         JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
         WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?
         UNION ALL
-        SELECT r.branch_id,c.name,r.category_type,r.amount
-        FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id
-        JOIN gcmb.branch b ON b.id=r.branch_id
-        WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE b.timezone)::date>=? AND (r.paid_at AT TIME ZONE b.timezone)::date<?
+        SELECT v.branch_id,c.name,v.category_type,v.amount
+        FROM gcmb.v_expense_recognition v JOIN gcmb.finance_expense_category c ON c.id=v.category_id
+        WHERE v.period_month>=? AND v.period_month<?
       ), cost AS (
         SELECT branch_id,sum(amount) FILTER (WHERE class='OPEX') opex,sum(amount) FILTER (WHERE class='CAPEX') capex,count(*) payments
         FROM expense_rows GROUP BY branch_id
@@ -608,9 +605,9 @@ public class MonthlyPerformanceService {
         SELECT e.branch_id,c.name category,p.amount FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
         JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
         WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?
-        UNION ALL SELECT r.branch_id,c.name,r.amount FROM gcmb.finance_expense_request r
-        JOIN gcmb.finance_expense_category c ON c.id=r.category_id JOIN gcmb.branch b ON b.id=r.branch_id
-        WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE b.timezone)::date>=? AND (r.paid_at AT TIME ZONE b.timezone)::date<?
+        UNION ALL SELECT v.branch_id,c.name,v.amount FROM gcmb.v_expense_recognition v
+        JOIN gcmb.finance_expense_category c ON c.id=v.category_id
+        WHERE v.period_month>=? AND v.period_month<?
       ) x JOIN gcmb.branch b ON b.id=x.branch_id WHERE (?::uuid IS NULL OR b.id=?)
       GROUP BY category ORDER BY category
       """,start,start.plusMonths(1),start,start.plusMonths(1),branchId,branchId);

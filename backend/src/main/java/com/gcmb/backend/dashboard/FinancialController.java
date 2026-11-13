@@ -30,21 +30,35 @@ import org.springframework.http.HttpStatus;
 @RestController
 @RequestMapping("/api/v1/accounting")
 public class FinancialController {
-    private static final String PAID_EXPENSES_CTE = """
-        WITH paid_expenses AS (
-          SELECT 'EXPENSE'::text source_type,e.id record_id,e.class_snapshot cost_type,e.category_id,
-            c.name category_name,e.branch_id,b.name branch_name,e.code expense_code,e.kind expense_kind,
-            e.reason description,p.amount,p.paid_at,p.external_reference payment_reference,b.timezone
-          FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
-          JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
-          WHERE p.status='PAID'
-          UNION ALL
-          SELECT 'EXPENSE_REQUEST',r.id,r.category_type,r.category_id,c.name,r.branch_id,b.name,r.code,
-            r.kind,r.description,r.amount,r.paid_at,r.paid_reference,b.timezone
-          FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id
-          JOIN gcmb.branch b ON b.id=r.branch_id WHERE r.status='PAID'
-        )
+    private static final String LEGACY_PAID_EXPENSE_ROWS = """
+        SELECT 'EXPENSE'::text source_type,e.id record_id,e.class_snapshot cost_type,e.category_id,
+          c.name category_name,e.branch_id,b.name branch_name,e.code expense_code,e.kind expense_kind,
+          e.reason description,p.amount,p.paid_at,p.external_reference payment_reference,b.timezone,
+          (p.paid_at AT TIME ZONE b.timezone)::date recognition_date,'LEGACY'::text origin
+        FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
+        JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
+        WHERE p.status='PAID'
         """;
+    private static final String CASH_FINANCE_EXPENSE_ROWS = """
+        SELECT 'EXPENSE_REQUEST'::text source_type,r.id record_id,r.category_type cost_type,r.category_id,
+          c.name category_name,r.branch_id,b.name branch_name,r.code expense_code,r.kind expense_kind,
+          r.description,r.amount,r.paid_at,r.paid_reference payment_reference,b.timezone,
+          (r.paid_at AT TIME ZONE b.timezone)::date recognition_date,r.origin
+        FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id
+        JOIN gcmb.branch b ON b.id=r.branch_id WHERE r.status='PAID'
+        """;
+    private static final String ALLOCATED_FINANCE_EXPENSE_ROWS = """
+        SELECT 'EXPENSE_REQUEST'::text source_type,r.id record_id,v.category_type cost_type,r.category_id,
+          c.name category_name,v.branch_id,b.name branch_name,r.code expense_code,r.kind expense_kind,
+          r.description,v.amount,r.paid_at,r.paid_reference payment_reference,b.timezone,v.period_month recognition_date,r.origin
+        FROM gcmb.v_expense_recognition v JOIN gcmb.finance_expense_request r ON r.id=v.request_id
+        JOIN gcmb.finance_expense_category c ON c.id=v.category_id JOIN gcmb.branch b ON b.id=v.branch_id
+        """;
+
+    private static String paidExpensesCte(String basis) {
+        String financeRows="CASH".equals(basis)?CASH_FINANCE_EXPENSE_ROWS:ALLOCATED_FINANCE_EXPENSE_ROWS;
+        return "WITH paid_expenses AS (\n"+LEGACY_PAID_EXPENSE_ROWS+"\nUNION ALL\n"+financeRows+"\n)\n";
+    }
     private final JdbcTemplate db;
     private final MutationAudit mutationAudit;
     private final EquipmentAssetFileStorageService files;
@@ -134,13 +148,16 @@ public class FinancialController {
                                                 @RequestParam(required = false) UUID branchId,
                                                 @RequestParam(defaultValue = "") String costType,
                                                 @RequestParam(required = false) UUID categoryId,
+                                                @RequestParam(defaultValue = "ALLOCATION") String basis,
                                                 @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
         List<LocalDate> range = reportDateRange(month, from, to);
         LocalDate start = range.get(0), endExclusive = range.get(1);
         String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
+        String selectedBasis = basis == null ? "ALLOCATION" : basis.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
         if (!type.isEmpty() && !List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
+        if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         List<UUID> selectedBranches = performance.validateReportBranchIds(branchIds);
         if (selectedBranches.isEmpty() && branchId != null) performance.validateReportBranchIds(List.of(branchId));
@@ -157,13 +174,12 @@ public class FinancialController {
         branchFilter += " AND (?='' OR cost_type=?) AND (?::uuid IS NULL OR category_id=?)"
             + " AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')";
         args.add(type); args.add(type); args.add(categoryId); args.add(categoryId); args.add(search); args.add(search);
-        // BR-103: chỉ tính thanh toán PAID trong kỳ; loại chuyển quỹ nội bộ khỏi tập chi.
-        // BR-107: dùng loại chi phí đã chốt và giữ OPEX/CAPEX ở các nhóm riêng.
-        List<Map<String, Object>> rows = db.queryForList(PAID_EXPENSES_CTE + """
+        // BR-103/107: mặc định lấy lịch phân bổ, giữ OPEX và CAPEX riêng; CASH dùng ngày thanh toán.
+        List<Map<String, Object>> rows = db.queryForList(paidExpensesCte(selectedBasis) + """
             SELECT cost_type "class",cost_type "costType",category_id "categoryId",category_name "categoryName",
               branch_id "branchId",branch_name "branchName",sum(amount) amount,count(*) "paymentCount"
             FROM paid_expenses
-            WHERE (paid_at AT TIME ZONE timezone)::date>=? AND (paid_at AT TIME ZONE timezone)::date<?
+            WHERE recognition_date>=? AND recognition_date<?
             """ + branchFilter + """
             GROUP BY cost_type,category_id,category_name,branch_id,branch_name
             ORDER BY cost_type,category_name,branch_name
@@ -176,6 +192,7 @@ public class FinancialController {
             """);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("month", month); result.put("from", start.toString()); result.put("to", endExclusive.minusDays(1).toString());
+        result.put("basis", selectedBasis);
         result.put("branches", branches); result.put("categories", categories); result.put("rows", rows);
         return result;
     }
@@ -189,25 +206,29 @@ public class FinancialController {
                                                         @RequestParam UUID branchId,
                                                         @RequestParam UUID categoryId,
                                                         @RequestParam String costType,
+                                                        @RequestParam(defaultValue = "ALLOCATION") String basis,
                                                         @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
         List<LocalDate> range = reportDateRange(month, from, to);
         LocalDate start = range.get(0), endExclusive = range.get(1);
         String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
+        String selectedBasis = basis == null ? "ALLOCATION" : basis.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
         if (!List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
+        if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        List<Map<String, Object>> rows = db.queryForList(PAID_EXPENSES_CTE + """
+        List<Map<String, Object>> rows = db.queryForList(paidExpensesCte(selectedBasis) + """
             SELECT source_type "sourceType",record_id "expenseId",expense_code "expenseCode",expense_kind kind,
               cost_type "costType",category_name "categoryName",branch_name "branchName",
-              (paid_at AT TIME ZONE timezone) "paidAt",amount,description,payment_reference "paymentReference"
+              recognition_date "recognitionDate",(paid_at AT TIME ZONE timezone) "paidAt",amount,description,
+              payment_reference "paymentReference",origin
             FROM paid_expenses
-            WHERE (paid_at AT TIME ZONE timezone)::date>=? AND (paid_at AT TIME ZONE timezone)::date<?
+            WHERE recognition_date>=? AND recognition_date<?
               AND branch_id=? AND category_id=? AND cost_type=?
               AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')
-            ORDER BY paid_at DESC,expense_code
+            ORDER BY recognition_date DESC,paid_at DESC,expense_code
             """, start, endExclusive, branchId, categoryId, type, search, search);
-        List<UUID> requestIds = new java.util.ArrayList<>();
+        java.util.Set<UUID> requestIds = new java.util.LinkedHashSet<>();
         for (Map<String, Object> row : rows) {
             if ("EXPENSE_REQUEST".equals(row.get("sourceType"))) requestIds.add((UUID) row.get("expenseId"));
         }
@@ -226,7 +247,7 @@ public class FinancialController {
         for (Map<String, Object> row : rows) {
             row.put("attachments", attachmentsByRequest.getOrDefault((UUID) row.get("expenseId"), List.of()));
         }
-        return Map.of("month", month, "rows", rows);
+        return Map.of("month", month, "basis", selectedBasis, "rows", rows);
     }
 
     @GetMapping("/dashboard-details")

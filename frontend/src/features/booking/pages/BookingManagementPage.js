@@ -21,8 +21,8 @@ const navigation = [
   ['Ca làm việc', 'shifts'],
   ['Bàn giao tiền mặt', 'handover'],
   ['Hóa đơn thuế', 'tax'],
-  ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
-  ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Báo sự cố', 'issues'],
+  ['Phòng', 'rooms'], ['Booking', 'booking'],
+  ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
   ['Hóa đơn thuế', 'tax'],
@@ -34,8 +34,7 @@ const accountingNavigation = [
 
   ['Hoàn tiền cọc', 'deposit'],
   ['Lương nhân viên', 'booking'],
-  ['Báo cáo tài chính', 'orders'],
-  ['Danh mục chi phí', 'inventory'],
+  ['Báo cáo chi phí', 'orders'],
 ];
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
@@ -168,13 +167,14 @@ export function AppShell({
       const dateText = (date) => new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(date);
-      const [financeResult, refundResult, closingResult] = await Promise.allSettled([
+      const [financeResult, refundResult, closingResult, recurringResult] = await Promise.allSettled([
         financeApi.load('ACCOUNTANT'),
         depositApi.refundRequests(),
         financeApi.get('/accounting/cash-closing', {
           from: dateText(oldest),
           to: dateText(today),
         }),
+        financeApi.recurringReminderCount(),
       ]);
       if (!active) return;
       setAccountingPending((current) => {
@@ -190,6 +190,7 @@ export function AppShell({
         if (closingResult.status === 'fulfilled') {
           next.closings = closingResult.value.filter((item) => item.status !== 'RECONCILED').length;
         }
+        if (recurringResult.status === 'fulfilled') next.recurring = recurringResult.value;
         return next;
       });
     };
@@ -223,18 +224,19 @@ export function AppShell({
           navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
                 {navItems.map(([label, icon, unavailable]) => {
                   const pendingCount = icon === 'payments' ? accountingPending.payments
-                    : icon === 'plus' ? accountingPending.expenses
+                    : icon === 'plus' ? accountingPending.recurring
                       : icon === 'deposit' ? accountingPending.refunds
                         : icon === 'calendar' ? accountingPending.closings : 0;
+                  const pendingDescription = icon === 'plus' ? 'kỳ chi định kỳ cần xử lý' : 'yêu cầu cần xử lý';
                   return (
                   <button
                     type="button"
                     key={label}
-                    aria-label={pendingCount ? `${label}, ${pendingCount} yêu cầu cần xử lý` : label}
+                    aria-label={pendingCount ? `${label}, ${pendingCount} ${pendingDescription}` : label}
                     aria-current={icon === activeTab ? 'page' : undefined}
                     aria-disabled={Boolean(unavailable)}
                     disabled={Boolean(unavailable)}
-                    title={unavailable ? 'Đang phát triển' : pendingCount ? `${label} · ${pendingCount} yêu cầu cần xử lý` : label}
+                    title={unavailable ? 'Đang phát triển' : pendingCount ? `${label} · ${pendingCount} ${pendingDescription}` : label}
                     onClick={() => {
                       if (unavailable) return;
                       // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
@@ -245,7 +247,7 @@ export function AppShell({
                       if (icon === 'report') navigate('/ke-toan/bao-cao');
                       if (icon === 'orders') navigate('/ke-toan/bao-cao-chi-phi');
                       if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
-                      if (['payments', 'plus', 'inventory'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
+                      if (['payments', 'plus'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
                     }}
                   >
                     <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}

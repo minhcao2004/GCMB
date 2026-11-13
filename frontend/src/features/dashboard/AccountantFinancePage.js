@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
+import BranchFilterSelect from './BranchFilterSelect';
 import './dashboard.css';
 import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 import RevenueExpenseOverview from './RevenueExpenseOverview';
@@ -17,6 +18,7 @@ const label = { report: 'Tổng quan', periods: 'Chốt kỳ', transactions: 'Gi
 const transactionKindLabels = { PAYMENT: 'Thu thanh toán', REFUND: 'Hoàn cọc', EXPENSE: 'Chi phí', SALARY: 'Trả lương', ADVANCE: 'Ứng lương', TRANSFER: 'Chuyển quỹ', OPENING: 'Số dư đầu kỳ', ADJUSTMENT: 'Điều chỉnh' };
 const errorText = (error) => error.response?.data?.detail || error.response?.data?.message || 'Không thể tải dữ liệu. Vui lòng thử lại.';
 const parseAdjustments = (value) => { try { return JSON.parse(value || '[]'); } catch { return []; } };
+const EARLY_CLOSE_WARNING = 'Chế độ demo: đang cho phép chốt kỳ trước khi tháng kết thúc. Khóa kỳ không thể hoàn tác.';
 
 export default function AccountantFinancePage({ reportsOnly = false }) {
   const navigate = useNavigate();
@@ -213,7 +215,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       <div><h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
       {<div className="finance-filters">
         <label className="finance-month">Kỳ báo cáo<input type="month" value={month} max={currentVnMonth()} onChange={(e) => e.target.value && setMonth(e.target.value)} /></label>
-      {tab === 'report' && <label className="finance-month">Cơ sở<select value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">Tất cả cơ sở</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>}
+      {tab === 'report' && <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} value={branchId} onChange={setBranchId} /></div>}
       </div>}
     </header>
     <nav className="finance-tabs" aria-label="Nghiệp vụ tài chính">{Object.entries(label).filter(([key]) => availableTabs.includes(key)).map(([key, value]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => selectTab(key)}>{value}</button>)}</nav>
@@ -258,6 +260,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       <section className="finance-period-readiness" aria-labelledby="period-readiness-title">
         <div className="finance-section-heading"><div><h2 id="period-readiness-title">Điều kiện khóa kỳ {formatMonth(month)}</h2><p>Điều kiện được kiểm tra lại khi khóa kỳ.</p></div>
           <button type="button" disabled={busy || readinessLoading || !periodReadiness?.canClose} onClick={() => { setCloseNote(''); setClosingMonth(month); }}>Khóa kỳ</button></div>
+        {periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning" role="status">{EARLY_CLOSE_WARNING}</p>}
         {readinessLoading && <p role="status">Đang kiểm tra điều kiện…</p>}
         {periodReadiness && <>
           <ul className="finance-period-checks">{periodReadiness.checks.map((item) => <li key={item.key} className={item.passed ? 'is-passed' : 'is-pending'}><span>{item.passed ? 'Đạt' : 'Chưa đạt'}</span><strong>{item.label}</strong><span>Còn {item.pendingCount}</span><small>{item.detail}</small></li>)}</ul>
@@ -266,7 +269,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       </section>
     <DataTable caption="Lịch sử kỳ tài chính" columns={['Kỳ', 'Trạng thái', 'Phiếu chốt quỹ chưa đối soát', 'Người khóa', 'Thời điểm khóa', 'Ghi chú']} numericColumns={[2]} rows={rows} values={(r) => [formatMonth(String(r.month).slice(0, 7)), r.status === 'CLOSED' ? 'Đã khóa' : 'Đang mở', r.unreconciledClosings, r.closedBy || '—', r.closedAt ? new Date(r.closedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—', r.closeNote || '—']} />
     </>}
-    {!reportsOnly && closingMonth && <div className="finance-period-dialog-backdrop" role="presentation"><section className="finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="closing-period-title"><h2 id="closing-period-title">Xác nhận khóa kỳ {formatMonth(closingMonth)}</h2><p>Thao tác này khóa kỳ vĩnh viễn. Các giao dịch ngày thuộc kỳ sẽ không thể tạo, sửa hoặc xóa.</p><label>Ghi chú khóa kỳ<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} maxLength={1000} /></label><div className="finance-period-dialog-actions"><button type="button" disabled={busy} onClick={() => setClosingMonth(null)}>Hủy</button><button className="finance-period-dialog-primary" type="button" disabled={busy} onClick={() => closePeriod(closingMonth)}>{busy ? 'Đang khóa…' : 'Xác nhận khóa kỳ'}</button></div></section></div>}
+    {!reportsOnly && closingMonth && <div className="finance-period-dialog-backdrop" role="presentation"><section className="finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="closing-period-title"><h2 id="closing-period-title">Xác nhận khóa kỳ {formatMonth(closingMonth)}</h2><p>Thao tác này khóa kỳ vĩnh viễn. Các giao dịch ngày thuộc kỳ sẽ không thể tạo, sửa hoặc xóa.</p>{periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning">{EARLY_CLOSE_WARNING}</p>}<label>Ghi chú khóa kỳ<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} maxLength={1000} /></label><div className="finance-period-dialog-actions"><button type="button" disabled={busy} onClick={() => setClosingMonth(null)}>Hủy</button><button className="finance-period-dialog-primary" type="button" disabled={busy} onClick={() => closePeriod(closingMonth)}>{busy ? 'Đang khóa…' : 'Xác nhận khóa kỳ'}</button></div></section></div>}
     {!reportsOnly && tab === 'transactions' && !loading && !error && <>
       <div className="finance-filters">
         <label className="finance-month">Cơ sở<select value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">Tất cả cơ sở</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>

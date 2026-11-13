@@ -11,8 +11,9 @@
 }
 
 .expense-report-filters > .finance-month { min-width: 0; }
-.expense-report-filters input,
-.expense-report-filters select { box-sizing: border-box; width: 100%; min-width: 0; }
+.expense-report-filters > .finance-month > input,
+.expense-report-filters > .finance-month > select,
+.expense-report-filters > .finance-month > .finance-branch-filter { box-sizing: border-box; width: 100%; min-width: 0; }
 
 .expense-report-search {
   grid-column: span 2;

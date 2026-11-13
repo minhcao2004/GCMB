@@ -1,6 +1,11 @@
 server:
   port: 8080
 
+gcmb:
+  finance:
+    period-close:
+      allow-early-close: ${GCMB_ALLOW_EARLY_PERIOD_CLOSE:true}
+
 spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/gcmb}
