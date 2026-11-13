@@ -386,6 +386,8 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
+Local database reset (13/11/2026): database `gcmb` trên máy phát triển đã được nạp lại seed V1–V58 theo xác nhận của người dùng, còn 18 cơ sở, 108 phòng và 6 tài khoản; mật khẩu hiện tại của sáu tài khoản được giữ nguyên. Xem [biên bản và vị trí bản sao lưu](docs/Local%20Database%20Reset%202026-11-13.md). Đây là thao tác local, không phải yêu cầu reset các môi trường khác.
+
 The detailed project references are:
 
 - Report 1 — Project Introduction.
