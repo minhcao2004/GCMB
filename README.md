@@ -279,9 +279,15 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 
 ## Configuration
 
+### VPS deployment
+
+The repository includes `compose.yaml`, backend/frontend Dockerfiles, and the `prod` profile for a single VPS. Follow [VPS Deployment](docs/VPS%20Deployment.md) for private first-time setup, HTTPS, persistent uploads, updates, and backups. Copy `deploy/vps.env.example` to the root `.env` on the VPS; do not use local development secrets or expose seeded accounts before changing their passwords.
+
+The demo deployed on 13/11/2026 is available at [GCMB demo](https://gcmb.103.78.1.178.sslip.io). See [deployment record](docs/VPS%20Deployment%202026-11-13.md) for the copied local data, checks, backup locations, and remaining integration setup. Local and VPS data are independent after the snapshot.
+
 | File | Purpose |
 | --- | --- |
-| `application.yml` | Common backend settings. |
+| `application.yaml` | Common backend settings. |
 | `application-dev.yml` | Local development settings. |
 | `application-prod.yml` | Production settings using environment-supplied secrets. |
 | `frontend/.env.local` | Local frontend configuration; exclude from Git. |

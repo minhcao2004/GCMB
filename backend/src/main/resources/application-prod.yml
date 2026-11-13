@@ -1,0 +1,30 @@
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    default-schema: public
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    clean-disabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: gcmb
+
+gcmb:
+  finance:
+    period-close:
+      allow-early-close: ${GCMB_ALLOW_EARLY_PERIOD_CLOSE:false}
