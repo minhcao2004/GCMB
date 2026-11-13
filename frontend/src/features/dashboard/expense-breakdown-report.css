@@ -11,8 +11,9 @@
 }
 
 .expense-report-filters > .finance-month { min-width: 0; }
-.expense-report-filters input,
-.expense-report-filters select { box-sizing: border-box; width: 100%; min-width: 0; }
+.expense-report-filters > .finance-month > input,
+.expense-report-filters > .finance-month > select,
+.expense-report-filters > .finance-month > .finance-branch-filter { box-sizing: border-box; width: 100%; min-width: 0; }
 
 .expense-report-search {
   grid-column: span 2;
@@ -179,3 +180,38 @@
   .expense-report-footer { align-items: flex-start; gap: 12px; }
   .expense-report-preview-backdrop { padding: 10px; }
 }
+
+/* Expense reporting stays inside its report root, including the detail and evidence states. */
+.expense-breakdown-report {
+  --expense-ink: var(--gcmb-color-ink, #1a1a2e);
+  --expense-copy: var(--gcmb-color-text, #536071);
+  --expense-line: var(--gcmb-color-line, #e5e8ed);
+  font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif);
+  color: var(--expense-ink);
+}
+.expense-breakdown-report :is(.expense-report-totals > div, .expense-report-table-scroll, .expense-report-detail-scroll) {
+  border-color: var(--expense-line);
+  border-radius: var(--gcmb-radius-panel, 12px);
+  background: var(--gcmb-color-panel, #fff);
+  box-shadow: none;
+}
+.expense-breakdown-report .expense-report-totals :is(dt, small),
+.expense-breakdown-report :is(.expense-report-reference, .expense-report-empty, .expense-report-table caption, .expense-report-table th, .expense-report-detail-scroll th) { color: var(--expense-copy); }
+.expense-breakdown-report .expense-report-totals dd { color: var(--expense-ink); }
+.expense-breakdown-report .expense-report-totals .is-opex { border-top-color: var(--gcmb-color-info, #087f93); }
+.expense-breakdown-report .expense-report-totals .is-capex { border-top-color: var(--gcmb-color-primary, #ed188d); }
+.expense-breakdown-report :is(.expense-report-table th, .expense-report-table td, .expense-report-detail-scroll th, .expense-report-detail-scroll td) { border-color: var(--expense-line); }
+.expense-breakdown-report :is(.expense-report-table td, .expense-report-detail-scroll td) { color: var(--expense-ink); }
+.expense-breakdown-report .expense-report-detail-row > td { background: var(--gcmb-color-bg, #f5f7fa); }
+.expense-breakdown-report .expense-report-type { border-radius: var(--gcmb-radius-control, 8px); }
+.expense-breakdown-report .expense-report-type.is-opex { color: color-mix(in srgb, var(--gcmb-color-info, #087f93) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-info-soft, #e8f8fb); }
+.expense-breakdown-report .expense-report-type.is-capex { color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-primary-soft, #fdecf5); }
+.expense-breakdown-report :is(.expense-report-detail-button, .expense-report-footer button, .expense-report-evidence button, .expense-report-preview button) {
+  border-color: var(--expense-line);
+  border-radius: var(--gcmb-radius-control, 8px);
+  color: var(--expense-ink);
+  font-family: inherit;
+}
+.expense-breakdown-report :is(button, a, input, select):focus-visible { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 2px; }
+.expense-breakdown-report :is(.expense-report-footer a, .expense-report-preview a) { color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); text-underline-offset: 3px; }
+.expense-breakdown-report .expense-report-preview { border-radius: var(--gcmb-radius-panel, 12px); background: var(--gcmb-color-panel, #fff); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); }

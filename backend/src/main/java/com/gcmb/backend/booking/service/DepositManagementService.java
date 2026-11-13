@@ -128,6 +128,7 @@ public class DepositManagementService {
     @Transactional
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
                                                                String externalReference, MultipartFile image) {
+        // BR-17: Chỉ kế toán được ghi nhận hoàn cọc đã hoàn tất.
         requireAccountant(identity);
         periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận hoàn cọc");
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
@@ -140,7 +141,8 @@ public class DepositManagementService {
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
 
-        if (bookings.lockBookingId(initial.bookingId(), initial.branchId()) == null) throw notFound();
+        // Tất toán yêu cầu hiện có không phụ thuộc trạng thái hoạt động của cơ sở.
+        if (bookings.lockBookingIdForRefund(initial.bookingId(), initial.branchId()) == null) throw notFound();
         BookingRow booking = bookings.booking(initial.bookingId(), initial.branchId());
         if (booking == null) throw notFound();
         if (!"CANCELLED".equals(booking.status()))

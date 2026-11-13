@@ -5,10 +5,10 @@
  */
 
 .shift-page {
-  color: #202338;
+  color: var(--gcmb-color-ink);
   min-width: 0;
   padding: 12px 0 32px;
-  font: 13px/1.5 'Manrope', 'Segoe UI', sans-serif;
+  font: var(--gcmb-font-size-base)/var(--gcmb-line-height) var(--gcmb-font-family);
 }
 
 .booking-main > .shift-page {
@@ -39,10 +39,10 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid #dce3ed;
-  color: #536078;
+  border: 1px solid var(--gcmb-color-line);
+  color: var(--gcmb-color-text);
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--gcmb-radius-control);
   padding: 8px 13px;
   min-height: 36px;
 }
@@ -53,13 +53,13 @@
 }
 
 .shift-page button.shift-primary, .shift-dialog button.shift-primary {
-  color: #fff;
-  background: #ed138a;
-  border-color: #ed138a;
+  color: var(--gcmb-color-on-primary);
+  background: var(--gcmb-color-primary);
+  border-color: var(--gcmb-color-primary);
 }
 
 .shift-page :focus-visible, .shift-dialog :focus-visible {
-  outline: 2px solid #1596b9;
+  outline: 2px solid var(--gcmb-color-info);
   outline-offset: 2px;
 }
 
@@ -72,21 +72,21 @@
 }
 
 .shift-heading h1 {
-  font-size: 27px;
+  font-size: var(--gcmb-font-size-2xl);
   line-height: 1.3;
   margin: 2px 0 6px;
 }
 
 .shift-heading p {
   margin: 0;
-  color: #788399;
+  color: var(--gcmb-color-text);
 }
 
 .shift-heading .shift-eyebrow {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .07em;
-  color: #07849b;
+  color: var(--gcmb-color-info);
 }
 
 .shift-heading > button {
@@ -100,8 +100,8 @@
   gap: 16px;
   background: #fff;
   padding: 16px;
-  border: 1px solid #edf0f4;
-  border-radius: 12px;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
 }
 
 .shift-week-nav, .shift-filters {
@@ -124,9 +124,9 @@
 
 .shift-page input, .shift-page select, .shift-dialog input:not([type=checkbox]), .shift-dialog select, .shift-dialog textarea {
   font: inherit;
-  color: #28364c;
-  border: 1px solid #dce3ed;
-  border-radius: 8px;
+  color: var(--gcmb-color-ink);
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
   padding: 9px 11px;
   background: #fff;
   min-width: 0;
@@ -168,9 +168,9 @@
 
 .shift-grid-wrap {
   overflow: auto;
-  border: 1px solid #e3e8ef;
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
 }
 
 .shift-week-grid {
@@ -181,12 +181,12 @@
 }
 
 .shift-week-grid th {
-  background: #f8fafc;
-  color: #5a6880;
+  background: var(--gcmb-color-bg);
+  color: var(--gcmb-color-text);
   font-size: 12px;
   text-align: center;
   padding: 13px 8px;
-  border-bottom: 1px solid #e3e8ef;
+  border-bottom: 1px solid var(--gcmb-color-line);
 }
 
 .shift-week-grid thead th:first-child, .shift-week-grid tbody th {
@@ -203,12 +203,12 @@
 
 .shift-week-grid thead strong {
   display: block;
-  color: #24324a;
+  color: var(--gcmb-color-ink);
   font-size: 16px;
 }
 
 .shift-week-grid thead small {
-  color: #0086a1;
+  color: var(--gcmb-color-info);
   font-size: 10px;
 }
 
@@ -520,11 +520,13 @@
 .shift-dialog {
   padding: 0;
   border: 0;
-  border-radius: 12px;
-  color: #25334b;
+  border-radius: var(--gcmb-radius-panel);
+  color: var(--gcmb-color-ink);
+  background: var(--gcmb-color-panel);
+  box-shadow: var(--gcmb-shadow-lg);
   width: min(540px, calc(100vw - 28px));
   max-height: calc(100dvh - 36px);
-  font: 13px/1.5 'Manrope', 'Segoe UI', sans-serif;
+  font: var(--gcmb-font-size-base)/var(--gcmb-line-height) var(--gcmb-font-family);
 }
 
 .shift-dialog[open] {
@@ -545,7 +547,7 @@
   justify-content: space-between;
   gap: 15px;
   padding: 20px 24px;
-  border-bottom: 1px solid #e6eaf0;
+  border-bottom: 1px solid var(--gcmb-color-line);
   flex-shrink: 0;
 }
 

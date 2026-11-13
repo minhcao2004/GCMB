@@ -9,6 +9,45 @@
   min-width: 0;
 }
 
+.tax-invoice-page {
+  color: var(--gcmb-color-ink);
+  font-family: var(--gcmb-font-family);
+  font-size: var(--gcmb-font-size-base);
+  line-height: var(--gcmb-line-height);
+}
+
+.tax-invoice-page .staff-card {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
+  box-shadow: none;
+}
+
+.tax-invoice-page .staff-heading h1 {
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-2xl);
+}
+
+.tax-invoice-page .staff-heading p,
+.tax-invoice-page .staff-help,
+.tax-invoice-page .staff-muted {
+  color: var(--gcmb-color-text);
+}
+
+.tax-invoice-page .staff-table-wrap {
+  border-color: var(--gcmb-color-line);
+}
+
+.tax-invoice-page th {
+  color: var(--gcmb-color-text);
+  background: var(--gcmb-color-bg);
+}
+
+.tax-invoice-page td {
+  border-color: var(--gcmb-color-line);
+  color: var(--gcmb-color-text);
+}
+
 .tax-invoice-page .staff-form-grid > .full {
   grid-column: 1 / -1;
 }
@@ -21,8 +60,8 @@
 }
 
 .tax-invoice-page .staff-field > span {
-  color: #626c82;
-  font-size: 12px;
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-sm);
   font-weight: 600;
 }
 
@@ -31,21 +70,21 @@
   min-width: 0;
   min-height: 90px;
   padding: 11px 13px;
-  border: 1px solid #dce3ec;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-panel);
   font: inherit;
   line-height: 1.6;
-  color: #23263b;
+  color: var(--gcmb-color-ink);
   resize: vertical;
 }
 
 .tax-invoice-page .staff-field textarea::placeholder {
-  color: #818b9e;
+  color: var(--gcmb-color-text);
 }
 
 .tax-invoice-page .staff-field textarea:focus-visible {
-  outline: 2px solid #1596b9;
+  outline: 2px solid var(--gcmb-color-info);
   outline-offset: 2px;
 }
 
@@ -53,6 +92,41 @@
   align-items: center;
   gap: 10px;
   margin: 0;
+}
+
+.tax-invoice-page input,
+.tax-invoice-page select,
+.tax-invoice-page textarea {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-ink);
+  background-color: var(--gcmb-color-panel);
+  font-family: inherit;
+}
+
+.tax-invoice-page :focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: 2px;
+}
+
+.tax-invoice-page .staff-banner {
+  color: var(--gcmb-color-info);
+  background: var(--gcmb-color-info-soft);
+}
+
+.tax-invoice-page .staff-banner.success {
+  color: #087b50;
+  background: var(--gcmb-color-success-soft);
+}
+
+.tax-invoice-page .staff-banner.error {
+  color: var(--gcmb-color-danger);
+  background: var(--gcmb-color-danger-soft);
+}
+
+.tax-invoice-page .staff-banner.warning {
+  color: #946513;
+  background: var(--gcmb-color-warning-soft);
 }
 
 .tax-invoice-page button,
@@ -97,7 +171,22 @@
 
 .tax-invoice-page .tax-invoice-read-actions {
   justify-content: flex-end;
-  border-top: 1px solid #e6eaf0;
+  border-top: 1px solid var(--gcmb-color-line);
   margin: 24px 0 0;
   padding-top: 16px;
+}
+
+@media (max-width: 600px) {
+  .tax-invoice-page .staff-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .tax-invoice-page .staff-heading h1 {
+    font-size: var(--gcmb-font-size-xl);
+  }
+
+  .tax-invoice-page .staff-actions button {
+    min-height: 42px;
+  }
 }

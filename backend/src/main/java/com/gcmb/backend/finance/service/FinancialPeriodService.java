@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,12 +21,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class FinancialPeriodService {
-    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter LABEL = DateTimeFormatter.ofPattern("MM/yyyy");
     private static final List<String> ROLES = List.of("ACCOUNTANT");
 
     private final JdbcTemplate db;
     private final MutationAudit audit;
+    @Value("${gcmb.finance.period-close.allow-early-close:${GCMB_ALLOW_EARLY_PERIOD_CLOSE:false}}")
+    private boolean allowEarlyClose;
 
     public FinancialPeriodService(JdbcTemplate db, MutationAudit audit) {
         this.db = db;
@@ -56,7 +59,7 @@ public class FinancialPeriodService {
               UNION SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date FROM gcmb.refund_request
               UNION SELECT date_trunc('month',occurred_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
                 FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status='EXCEPTION'
-              UNION SELECT date_trunc('month',CURRENT_DATE)::date
+              UNION SELECT date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
             )
             SELECT p.id,m.month::text AS month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",
               u.username "closedBy",p.close_note "closeNote",
@@ -82,10 +85,12 @@ public class FinancialPeriodService {
         String closeNote = note == null ? "" : note.trim();
         if (closeNote.length() > 1000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ghi chú chỉ được chứa tối đa 1000 ký tự.");
         LocalDate start = firstOfMonth(month);
-        if (!periodEnded(start)) throw new AuthFailure(409, "form", "Chỉ có thể khóa kỳ sau khi tháng đã kết thúc theo giờ Việt Nam.");
+        boolean monthEnded = periodEnded(start);
+        if (!monthEnded && !allowEarlyClose) throw new AuthFailure(409, "form", "Chỉ có thể khóa kỳ sau khi tháng đã kết thúc.");
+        boolean earlyClose = allowEarlyClose && !monthEnded;
         db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", start);
         UUID id = db.queryForObject("SELECT id FROM gcmb.financial_period WHERE \"month\"=? FOR UPDATE", UUID.class, start);
-        UUID closedId = audit.record("CLOSE_FINANCIAL_PERIOD", "FINANCIAL_PERIOD", id, () -> {
+        UUID closedId = audit.recordWithMetadata("CLOSE_FINANCIAL_PERIOD", "FINANCIAL_PERIOD", id, () -> {
             Map<String, Object> period = db.queryForMap("SELECT status FROM gcmb.financial_period WHERE id=? FOR UPDATE", id);
             if ("CLOSED".equals(period.get("status"))) throw new AuthFailure(409, "form", "Kỳ tài chính này đã được khóa.");
             Map<String, Object> checks = readiness(start, "OPEN");
@@ -98,7 +103,7 @@ public class FinancialPeriodService {
                     actor.id(), closeNote, id) != 1)
                 throw new AuthFailure(409, "form", "Kỳ tài chính vừa được khóa ở phiên khác.");
             return id;
-        }, value -> value);
+        }, value -> value, earlyClose ? "{\"earlyClose\":true}" : null);
         return db.queryForMap("""
             SELECT p.id,p."month"::text AS "month",p.status,p.closed_at "closedAt",u.username "closedBy",p.close_note "closeNote"
             FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?
@@ -107,7 +112,8 @@ public class FinancialPeriodService {
 
     private Map<String, Object> readiness(LocalDate start, String periodStatus) {
         LocalDate end = start.plusMonths(1);
-        long periodEndPending = periodEnded(start) ? 0 : 1;
+        boolean monthEnded = periodEnded(start);
+        long periodEndPending = monthEnded || allowEarlyClose ? 0 : 1;
         long unreconciled = count("SELECT count(*) FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<? AND status<>'RECONCILED'", start, end);
         long missingActivityClosings = count("""
             SELECT count(*) FROM (
@@ -142,8 +148,11 @@ public class FinancialPeriodService {
             """, end.atStartOfDay(ZONE).toOffsetDateTime());
 
         List<Map<String, Object>> checks = new ArrayList<>();
-        checks.add(check("periodEnded", "Kỳ đã kết thúc", periodEndPending,
-            "Chỉ khóa sau khi đã sang tháng tiếp theo theo giờ Việt Nam."));
+        checks.add(check("periodEnded",
+            allowEarlyClose ? "Chế độ demo: cho phép chốt khi tháng chưa kết thúc" : "Kỳ đã kết thúc",
+            periodEndPending,
+            allowEarlyClose ? "Chế độ demo đang bật; các điều kiện khác vẫn bắt buộc." : "Chỉ khóa sau khi đã sang tháng tiếp theo."));
+        // BR-99: demo chỉ bỏ qua điều kiện kết thúc tháng; đối soát tiền mặt vẫn bắt buộc.
         checks.add(check("cashReconciliation", "Đối soát tiền mặt", cashPending,
             "Tính các phiếu chưa đối soát và ngày, quỹ có phát sinh dòng tiền nhưng chưa có phiếu đối soát."));
         checks.add(check("attendance", "Chốt công tháng", attendancePending,
@@ -159,6 +168,7 @@ public class FinancialPeriodService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("month", start.toString().substring(0, 7));
         result.put("status", periodStatus);
+        result.put("earlyCloseEnabled", allowEarlyClose);
         result.put("checks", checks);
         result.put("canClose", "OPEN".equals(periodStatus) && checks.stream().allMatch(item -> Boolean.TRUE.equals(item.get("passed"))));
         result.put("cashCalendarLimitation", "Không có lịch ngày bắt buộc chốt quỹ; hệ thống kiểm tra các ngày/quỹ có phát sinh dòng tiền và các phiếu đã tạo.");

@@ -388,9 +388,7 @@ export default function AccountantRefundPage() {
               <span className="accounting-refund-mobile-meta accounting-refund-mobile-requested"><small>Gửi lúc</small>{dateTimeText(item.requestedAt)}</span>
             </button>)}
           </div>
-          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span>
-            <button type="button" className="accounting-refund-refresh" onClick={() => setReload((value) => value + 1)} disabled={loading}>Tải lại</button>
-          </footer>
+          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>
         </section>
         <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)}
           onBackToQueue={() => setMobileView('queue')} />

@@ -650,3 +650,155 @@
   .booking-edit-dialog .booking-edit-combo { grid-column: 1; }
   .booking-edit-dialog .booking-edit-pricing-mode { margin-top: 0; }
 }
+
+/* Reception booking surfaces use backoffice tokens without changing shared consumers. */
+.booking-app--reception .booking-page-heading { margin-bottom: var(--gcmb-space-4); }
+.booking-app--reception .booking-page-heading h1 {
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-2xl);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: var(--gcmb-line-height);
+}
+.booking-app--reception .booking-button {
+  min-height: 40px;
+  border-radius: var(--gcmb-radius-control);
+  font-size: var(--gcmb-font-size-sm);
+}
+.booking-app--reception .booking-button-primary { color: var(--gcmb-color-on-primary); background: var(--gcmb-color-primary); }
+.booking-app--reception .booking-button-primary:hover:not(:disabled) { color: var(--gcmb-color-on-primary-hover); background: var(--gcmb-color-primary-hover); }
+.booking-app--reception .booking-button-secondary {
+  border-color: var(--gcmb-color-line);
+  color: var(--gcmb-color-ink);
+  background: var(--gcmb-color-panel);
+}
+.booking-app--reception .booking-button-secondary:hover:not(:disabled) { background: var(--gcmb-color-bg); }
+.booking-app--reception .booking-button-danger { background: var(--gcmb-color-danger); }
+.booking-app--reception .booking-create-button { min-width: 156px; min-height: 40px; border-radius: var(--gcmb-radius-control); }
+.booking-app--reception .booking-filters,
+.booking-app--reception .booking-status-tabs {
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
+}
+.booking-app--reception .booking-filters { min-height: 0; gap: var(--gcmb-space-3); padding: var(--gcmb-space-4); }
+.booking-app--reception .booking-status-tabs { gap: var(--gcmb-space-2); padding: var(--gcmb-space-2) var(--gcmb-space-3); }
+.booking-app--reception .booking-filter-label,
+.booking-app--reception .booking-result-count { color: var(--gcmb-color-text); font-size: var(--gcmb-font-size-xs); }
+.booking-app--reception .booking-date-buttons button,
+.booking-app--reception .booking-date-picker,
+.booking-app--reception .booking-room-filter select,
+.booking-app--reception .booking-search-field {
+  height: 40px;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-text);
+  background: var(--gcmb-color-panel);
+  font-size: var(--gcmb-font-size-sm);
+}
+.booking-app--reception .booking-date-buttons button.is-selected {
+  border-color: var(--gcmb-color-info);
+  color: var(--gcmb-color-ink);
+  background: var(--gcmb-color-info-soft);
+}
+.booking-app--reception .booking-search-field input { font-size: var(--gcmb-font-size-sm); }
+.booking-app--reception .booking-search-field input::placeholder,
+.booking-app--reception .booking-form-field input::placeholder,
+.booking-app--reception .booking-form-field textarea::placeholder,
+.booking-app--reception .booking-checkin-panel input::placeholder,
+.booking-app--reception .booking-checkin-panel textarea::placeholder { color: var(--gcmb-color-text); opacity: 1; }
+.booking-app--reception .booking-filter-chip {
+  min-height: 34px;
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-xs);
+}
+.booking-app--reception .booking-filter-chip.chip-pending { color: var(--gcmb-color-ink); background: var(--gcmb-color-primary-soft); }
+.booking-app--reception .booking-filter-chip.chip-checkedIn { color: var(--gcmb-color-ink); background: var(--gcmb-color-info-soft); }
+.booking-app--reception .booking-filter-chip.chip-noShow { color: var(--gcmb-color-ink); background: var(--gcmb-color-warning-soft); }
+.booking-app--reception .booking-filter-chip.chip-paid { color: var(--gcmb-color-ink); background: var(--gcmb-color-success-soft); }
+.booking-app--reception .booking-filter-chip.chip-unpaid { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
+.booking-app--reception .booking-table-card,
+.booking-app--reception .booking-create-card,
+.booking-app--reception .booking-summary-card {
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
+}
+.booking-app--reception .booking-table { color: var(--gcmb-color-text); font-size: var(--gcmb-font-size-sm); }
+.booking-app--reception .booking-table th {
+  height: 48px;
+  border-bottom: 1px solid var(--gcmb-color-line);
+  color: var(--gcmb-color-text);
+  background: var(--gcmb-color-bg);
+  font-size: var(--gcmb-font-size-xs);
+}
+.booking-app--reception .booking-table td { height: 64px; color: var(--gcmb-color-text); }
+.booking-app--reception .booking-table td strong,
+.booking-app--reception .booking-table td b { color: var(--gcmb-color-ink); font-size: var(--gcmb-font-size-sm); }
+.booking-app--reception .booking-table td small { color: var(--gcmb-color-text); font-size: var(--gcmb-font-size-xs); }
+.booking-app--reception .booking-table tbody tr:hover { background: var(--gcmb-color-bg); }
+.booking-app--reception .booking-table tbody tr.is-selected { outline-color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); }
+.booking-app--reception .booking-status {
+  min-height: 28px;
+  border-radius: var(--gcmb-radius-control);
+  font-size: var(--gcmb-font-size-xs);
+}
+.booking-app--reception .booking-status-pending { color: var(--gcmb-color-ink); background: var(--gcmb-color-primary-soft); }
+.booking-app--reception .booking-status-checkedIn { color: var(--gcmb-color-ink); background: var(--gcmb-color-info-soft); }
+.booking-app--reception .booking-status-cancelled,
+.booking-app--reception .booking-status-completed,
+.booking-app--reception .booking-status-draft { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
+.booking-app--reception .booking-status-noShow,
+.booking-app--reception .booking-status-late { color: var(--gcmb-color-ink); background: var(--gcmb-color-warning-soft); }
+.booking-app--reception .booking-row-action,
+.booking-app--reception .booking-pagination button {
+  min-height: 34px;
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-info);
+  background: var(--gcmb-color-panel);
+  font-size: var(--gcmb-font-size-xs);
+}
+.booking-app--reception .booking-row-action:hover,
+.booking-app--reception .booking-pagination button:hover:not(:disabled) { border-color: var(--gcmb-color-info); color: var(--gcmb-color-ink); background: var(--gcmb-color-info-soft); }
+.booking-app--reception .booking-pagination button:disabled { color: var(--gcmb-color-muted); }
+.booking-app--reception .booking-table-message.gcmb-ui-empty-state {
+  position: sticky;
+  left: 0;
+  margin: 0;
+  padding: var(--gcmb-space-8) var(--gcmb-space-4);
+  border: 0;
+  border-radius: 0;
+  color: var(--gcmb-color-text);
+  background: transparent;
+  font-size: var(--gcmb-font-size-sm);
+}
+.booking-app--reception .booking-table-message .gcmb-ui-empty-state__description { margin: 0; color: inherit; font-size: inherit; }
+.booking-app--reception .booking-form-field > span { color: var(--gcmb-color-ink); font-size: var(--gcmb-font-size-sm); font-weight: 600; }
+.booking-app--reception .booking-form-field input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.booking-app--reception .booking-form-field select,
+.booking-app--reception .booking-form-field textarea,
+.booking-app--reception .booking-checkin-panel input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.booking-app--reception .booking-checkin-panel select,
+.booking-app--reception .booking-checkin-panel textarea {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-ink);
+  background: var(--gcmb-color-panel);
+  font: 400 var(--gcmb-font-size-base) / var(--gcmb-line-height) var(--gcmb-font-family);
+}
+.booking-app--reception .booking-create-card,
+.booking-app--reception .booking-summary-card { box-shadow: none; }
+.booking-app--reception .booking-edit-dialog {
+  border-radius: var(--gcmb-radius-panel);
+  font-family: var(--gcmb-font-family);
+}
+.booking-app--reception .booking-checkin-panel {
+  border-radius: var(--gcmb-radius-panel);
+  font-family: var(--gcmb-font-family);
+}
+.booking-app--reception .booking-checkin-section h3,
+.booking-app--reception .booking-card-heading h2 { color: var(--gcmb-color-ink); }
+.booking-app--reception .booking-inline-error { border: 1px solid var(--gcmb-color-danger-soft); border-radius: var(--gcmb-radius-control); color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.booking-app--reception .booking-main :where(button, input, select, textarea):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }

@@ -64,14 +64,34 @@ export const financeApi = {
   load: (role) => apiClient.get(route[role]).then(({ data }) => data),
   sendFund: (values) => mutate('post','/head-office/finance/fund-transfers',values),
   uploadFundProof: (id, proof) => mutate('post',`/head-office/finance/fund-transfers/${id}/proof`,form({proof}),true),
+  financialOverview: (params) => apiClient.get('/accounting/reports/financial-overview', {
+    params, paramsSerializer: { indexes: null },
+  }).then(({ data }) => data),
+  exportFinancialOverview: (params) => apiClient.get('/accounting/reports/financial-overview/export', {
+    params, paramsSerializer: { indexes: null }, responseType: 'blob',
+  }).then(({ data }) => data),
   confirmFund: (id) => mutate('post',`/accounting/finance/fund-transfers/${id}/confirm`),
   createCategory: (value) => mutate('post','/accounting/finance/categories',value),
   updateCategory: (id, value) => mutate('put',`/accounting/finance/categories/${id}`,value),
   setCategoryActive: (id, active) => mutate('put',`/accounting/finance/categories/${id}/status`,{active}),
   deleteCategory: (id) => mutate('delete',`/accounting/finance/categories/${id}`),
+  createDirectExpense: (command, proof, invoice) => mutate('post','/accounting/finance/requests/direct',form({
+    command: new Blob([JSON.stringify(command)], { type: 'application/json' }), proof, invoice,
+  }),true),
+  listRecurringExpenses: (params) => apiClient.get('/accounting/finance/recurring-expenses', { params }).then(({ data }) => data),
+  createRecurringExpense: (command) => mutate('post','/accounting/finance/recurring-expenses',command),
+  updateRecurringExpense: (id, command) => mutate('put',`/accounting/finance/recurring-expenses/${id}`,command),
+  terminateRecurringExpense: (id) => mutate('post',`/accounting/finance/recurring-expenses/${id}/terminate`),
+  skipRecurringPeriod: (id, reason) => mutate('post',`/accounting/finance/recurring-expenses/periods/${id}/skip`,{reason}),
+  payRecurringPeriod: (id, command, proof, invoice) => mutate('post',`/accounting/finance/recurring-expenses/periods/${id}/pay`,form({
+    command: new Blob([JSON.stringify(command)], { type: 'application/json' }), proof, invoice,
+  }),true),
+  recurringReminderCount: () => apiClient.get('/accounting/finance/recurring-expenses/reminder-count').then(({ data }) => data.count),
   createRequest: (values) => mutate('post','/branch-management/finance/requests',values),
   uploadRequestAttachment: (id, kind, file) => mutate('post',`/branch-management/finance/requests/${id}/attachments?kind=${kind}`,form({file}),true),
   review: (role, id, approve, note='') => mutate('post',`${route[role]}/requests/${id}/review`,{ approve, note }),
-  pay: (id, reference, proof) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({ reference, proof }),true),
+  pay: (id, reference, proof, allocationMonths, allocationStart) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({
+    reference, proof, allocationMonths, allocationStart,
+  }),true),
 };
 

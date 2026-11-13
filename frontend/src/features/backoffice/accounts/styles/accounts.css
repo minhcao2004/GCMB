@@ -396,3 +396,54 @@
     padding: 20px;
   }
 }
+
+/* Account lists and their dialogs share the backoffice token system. */
+.accounts-page {
+  color: var(--gcmb-color-ink, #1a1a2e);
+  background: var(--gcmb-color-bg, #f5f7fa);
+  font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif);
+}
+.accounts-heading h1 { color: var(--gcmb-color-ink, #1a1a2e); font-size: var(--gcmb-font-size-24, 24px); }
+.accounts-heading p,
+.account-drawer-heading p,
+.accounts-page td small,
+.accounts-pagination,
+.account-success dt { color: var(--gcmb-color-text, #536071); }
+.accounts-filters,
+.accounts-card { border-radius: var(--gcmb-radius-panel, 12px); background: var(--gcmb-color-panel, #fff); }
+.accounts-filters { border: 1px solid var(--gcmb-color-line, #e5e8ed); }
+.accounts-page :is(input:not([type='checkbox']), select, textarea),
+.account-drawer :is(input:not([type='checkbox']), select, textarea) {
+  border-color: var(--gcmb-color-line, #e5e8ed);
+  border-radius: var(--gcmb-radius-control, 8px);
+  color: var(--gcmb-color-ink, #1a1a2e);
+  font-family: inherit;
+}
+.accounts-page input:focus-visible,
+.accounts-page select:focus-visible,
+.accounts-page button:focus-visible,
+.accounts-page a:focus-visible,
+.account-drawer :is(input, select, textarea, button):focus-visible { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 2px; }
+.accounts-page button,
+.account-drawer button { border-radius: var(--gcmb-radius-control, 8px); font-family: inherit; }
+.accounts-page .account-primary,
+.account-drawer .account-primary { border-color: var(--gcmb-color-primary, #ed188d); color: var(--gcmb-color-on-primary, #000); background: var(--gcmb-color-primary, #ed188d); }
+.accounts-page .account-status { border-radius: var(--gcmb-radius-control, 8px); color: var(--gcmb-color-text, #536071); background: var(--gcmb-color-bg, #f5f7fa); }
+.accounts-page .account-status.active { color: color-mix(in srgb, var(--gcmb-color-success, #168b5b) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.accounts-page .account-status.locked { color: color-mix(in srgb, var(--gcmb-color-warning, #d18a17) 65%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-warning-soft, #fff5e5); }
+.accounts-page :is(th, td) { border-color: var(--gcmb-color-line, #e5e8ed); }
+.accounts-page th { color: var(--gcmb-color-text, #536071); background: var(--gcmb-color-bg, #f5f7fa); }
+.accounts-page tr:nth-child(even) { background: color-mix(in srgb, var(--gcmb-color-bg, #f5f7fa) 65%, white); }
+.accounts-page tr.account-highlight { background: var(--gcmb-color-primary-soft, #fdecf5); }
+.accounts-page .account-error,
+.account-drawer .account-error { color: var(--gcmb-color-danger, #b12642); }
+.accounts-page .accounts-empty { color: var(--gcmb-color-text, #536071); }
+.account-drawer { border: 0; border-radius: var(--gcmb-radius-panel, 12px) 0 0 var(--gcmb-radius-panel, 12px); color: var(--gcmb-color-ink, #1a1a2e); background: var(--gcmb-color-panel, #fff); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif); }
+.account-drawer-heading,
+.account-drawer-footer { border-color: var(--gcmb-color-line, #e5e8ed); }
+.account-drawer h2 { color: var(--gcmb-color-ink, #1a1a2e); }
+.account-drawer-heading button { color: var(--gcmb-color-text, #536071); }
+.account-access-note { color: color-mix(in srgb, var(--gcmb-color-info, #087f93) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-info-soft, #e8f8fb); }
+.account-success { color: var(--gcmb-color-ink, #1a1a2e); }
+.account-check { color: color-mix(in srgb, var(--gcmb-color-success, #168b5b) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.account-success dd { border-color: var(--gcmb-color-line, #e5e8ed); }

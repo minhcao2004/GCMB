@@ -433,3 +433,136 @@
 @keyframes finance-confirm-in { from { opacity:0; transform:translateY(8px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media(max-width:760px) { .finance-page { padding:18px 14px 30px; }.finance-heading,.finance-balance { align-items:flex-start; flex-direction:column; }.finance-form,.finance-category-form,.finance-incoming-metrics { grid-template-columns:1fr; }.finance-form .wide { grid-column:auto; }.finance-category-form>button { justify-self:start; }.finance-tabs { width:100%; }.finance-section-heading { align-items:stretch; flex-wrap:wrap; }.finance-section-heading>div:first-child { flex-basis:100%; }.finance-mini-total { flex:1; }.finance-primary-action { justify-self:stretch!important; width:100%; }.finance-fund-summary { grid-template-columns:1fr; }.finance-fund-dialog-heading { padding:19px 18px 13px; }.finance-fund-dialog>p { padding:12px 18px 0; }.finance-fund-form { padding:16px 18px 20px; gap:13px; }.finance-fund-dialog-note,.finance-fund-form .finance-confirm-actions { grid-column:auto; }.finance-fund-form .finance-confirm-actions { justify-content:stretch; }.finance-fund-form .finance-confirm-actions button { flex:1; min-height:44px; } }
 
+/* Accountant and finance workspace surfaces use backoffice tokens; branch payroll stays isolated. */
+.finance-page:not(.branch-payroll-page) {
+  --finance-ink: var(--gcmb-color-ink, #1a1a2e);
+  --finance-copy: var(--gcmb-color-text, #536071);
+  --finance-muted: var(--gcmb-color-text, #536071);
+  --finance-line: var(--gcmb-color-line, #e5e8ed);
+  --finance-accent: var(--gcmb-color-primary, #ed188d);
+  --finance-accent-text: #b30f6e;
+  --finance-accent-text: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e));
+  --finance-info-text: #0c6b7f;
+  --finance-info-text: color-mix(in srgb, var(--gcmb-color-info, #087f93) 80%, var(--gcmb-color-ink, #1a1a2e));
+  --finance-success-text: #177452;
+  --finance-success-text: color-mix(in srgb, var(--gcmb-color-success, #168b5b) 80%, var(--gcmb-color-ink, #1a1a2e));
+  --finance-warning-text: #91631f;
+  --finance-warning-text: color-mix(in srgb, var(--gcmb-color-warning, #d18a17) 65%, var(--gcmb-color-ink, #1a1a2e));
+  font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif);
+  color: var(--finance-ink);
+}
+.finance-page:not(.branch-payroll-page) :is(h1, h2, h3) { color: var(--finance-ink); font-family: inherit; }
+.finance-page:not(.branch-payroll-page) :is(small, .finance-muted, .finance-footnote, .finance-section-heading p, .finance-panel > p) { color: var(--finance-copy); }
+.finance-page:not(.branch-payroll-page) :is(.finance-card, .finance-panel, .finance-workspace-panel, .finance-fund-panel, .finance-request-panel, .finance-toolbar, .finance-selection) {
+  border-color: var(--finance-line);
+  border-radius: var(--gcmb-radius-panel, 12px);
+  background-color: var(--gcmb-color-panel, #fff);
+  box-shadow: none;
+}
+.finance-page:not(.branch-payroll-page) :is(button, input:not([type='checkbox']), select, textarea) { font-family: inherit; }
+.finance-page:not(.branch-payroll-page) button {
+  border-color: var(--finance-line);
+  border-radius: var(--gcmb-radius-control, 8px);
+  color: var(--finance-copy);
+}
+.finance-page:not(.branch-payroll-page) button:hover:not(:disabled) { border-color: var(--finance-accent); }
+.finance-page:not(.branch-payroll-page) :is(input:not([type='checkbox']), select, textarea) {
+  border-color: var(--finance-line);
+  border-radius: var(--gcmb-radius-control, 8px);
+  color: var(--finance-ink);
+  background-color: var(--gcmb-color-panel, #fff);
+}
+.finance-page:not(.branch-payroll-page) :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 2px; }
+.finance-page:not(.branch-payroll-page) :is(.finance-primary, .finance-primary-action, .finance-form > button, .finance-confirm-actions .confirm-approve) {
+  border-color: var(--finance-accent);
+  color: var(--gcmb-color-on-primary, #000);
+  background: var(--finance-accent);
+}
+.finance-page:not(.branch-payroll-page) .finance-primary-action { border-color: var(--finance-accent) !important; color: var(--gcmb-color-on-primary, #000) !important; background: var(--finance-accent) !important; box-shadow: var(--gcmb-shadow-sm, 0 2px 8px rgb(26 26 46 / 12%)); }
+.finance-page:not(.branch-payroll-page) .finance-tabs button:is(.active, [aria-current='page']) {
+  border-color: var(--gcmb-color-primary-soft, #fdecf5);
+  color: var(--finance-accent-text);
+  background: var(--gcmb-color-primary-soft, #fdecf5);
+}
+.finance-page:not(.branch-payroll-page) :is(.finance-info, .finance-notice, .finance-success, .finance-warning, .finance-error) { border: 1px solid var(--finance-line); border-radius: var(--gcmb-radius-control, 8px); }
+.finance-page:not(.branch-payroll-page) .finance-info { color: var(--finance-info-text); background: var(--gcmb-color-info-soft, #e8f8fb); }
+.finance-page:not(.branch-payroll-page) .finance-notice { color: var(--finance-success-text); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.finance-page:not(.branch-payroll-page) .finance-success { color: var(--finance-success-text); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.finance-page:not(.branch-payroll-page) .finance-warning { color: var(--finance-warning-text); background: var(--gcmb-color-warning-soft, #fff5e5); }
+.finance-page:not(.branch-payroll-page) .finance-error { color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
+.finance-page:not(.branch-payroll-page) .finance-table-wrap { border-color: var(--finance-line); border-radius: var(--gcmb-radius-control, 8px); }
+.finance-page:not(.branch-payroll-page) th { color: var(--finance-copy); background: var(--gcmb-color-bg, #f5f7fa); }
+.finance-page:not(.branch-payroll-page) td { border-color: var(--finance-line); }
+.finance-page:not(.branch-payroll-page) tr:nth-child(even) { background: color-mix(in srgb, var(--gcmb-color-bg, #f5f7fa) 65%, white); }
+.finance-page:not(.branch-payroll-page) :is(.finance-status, .finance-mini-total, .finance-fund-summary article) { border-radius: var(--gcmb-radius-control, 8px); }
+.finance-page:not(.branch-payroll-page) .finance-status { color: var(--finance-warning-text); background: var(--gcmb-color-warning-soft, #fff5e5); }
+.finance-page:not(.branch-payroll-page) .finance-status:is(.paid, .received) { color: var(--finance-success-text); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.finance-page:not(.branch-payroll-page) .finance-status.rejected { color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
+.finance-page:not(.branch-payroll-page) :is(.finance-confirm-dialog, .finance-fund-dialog, .cash-closing-dialog) { border-color: var(--finance-line); border-radius: var(--gcmb-radius-panel, 12px); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); }
+
+.finance-category-panel { padding:clamp(18px,2.2vw,28px); }
+.finance-category-editor { grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:22px; padding-bottom:20px; border-bottom:1px solid var(--finance-line,#e8ecf2); }
+.finance-category-editor .finance-category-form-actions { grid-column:1/-1; display:flex; gap:8px; }
+.finance-category-editor .finance-category-checkbox { flex-direction:row; align-items:center; gap:9px; min-height:40px; }
+.finance-category-editor .finance-category-checkbox input { width:18px; min-height:18px; margin:0; accent-color:var(--finance-accent,#b32073); }
+.finance-category-hint { margin:0; padding:10px 12px; border:1px solid #f1e5c9; border-radius:9px; color:#755b20; background:#fffaf0; font-size:11px; line-height:1.5; }
+.finance-category-filters { display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:12px; margin-bottom:14px; }
+.finance-category-filters label { display:flex; flex-direction:column; gap:6px; color:var(--finance-copy,#58677e); font-size:11px; font-weight:700; }
+.finance-category-filters input,.finance-category-filters select { min-width:0; min-height:38px; border:1px solid var(--finance-line,#dce3ed); border-radius:8px; padding:8px 10px; color:var(--finance-copy,#34425a); background:#fff; font:inherit; }
+.finance-category-table-wrap { max-height:min(62vh,620px); }
+.finance-category-table { min-width:1360px!important; }
+.finance-category-table td:first-child { min-width:105px; font-variant-numeric:tabular-nums; }
+.finance-category-table td:nth-child(2) { min-width:210px; }
+.finance-category-actions { display:flex; flex-wrap:wrap; gap:5px; }
+.finance-category-actions button { min-height:30px; padding:0 9px; font-size:10px; white-space:nowrap; }
+.finance-allocation-fields { display:grid; grid-template-columns:repeat(2,minmax(120px,1fr)); gap:8px; margin-top:7px; }
+.finance-allocation-fields label { display:flex; flex-direction:column; gap:5px; color:#66758a; font-size:10px; font-weight:700; }
+.finance-allocation-fields input { width:100%; min-width:0; min-height:32px; border:1px solid #dce3ed; border-radius:7px; padding:6px 8px; color:#34425a; background:#fff; font:inherit; }
+.finance-allocation-preview { grid-column:1/-1; display:grid; gap:7px; padding:9px; border:1px solid #e7edf3; border-radius:8px; background:#fbfcfe; }
+.finance-allocation-preview-scroll { max-height:150px; overflow:auto; }
+.finance-allocation-preview table,.finance-allocation-detail table { width:100%; border-collapse:collapse; font-size:10px; }
+.finance-allocation-preview th,.finance-allocation-preview td,.finance-allocation-detail th,.finance-allocation-detail td { padding:5px 7px; border-bottom:1px solid #edf0f4; text-align:left; }
+.finance-allocation-preview td:last-child,.finance-allocation-detail td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+.finance-allocation-preview small { color:#7e8998; font-size:9px; }
+.finance-allocation-error { grid-column:1/-1; margin:0; color:#a72d25; font-size:10px; }
+.finance-allocation-toggle { padding:0; border:0; color:#8c2864; background:transparent; font:inherit; font-size:10px; text-decoration:underline; cursor:pointer; }
+.finance-allocation-detail { width:min(100%,250px); max-height:190px; margin-top:6px; overflow:auto; border:1px solid #edf0f4; border-radius:8px; background:#fff; }
+.finance-direct-expense-dialog { width:min(100%,880px); max-height:min(92vh,860px); overflow:auto; }
+.finance-dialog-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.finance-dialog-heading h2 { margin:5px 0 0; }
+.finance-dialog-eyebrow { color:#7b8798; font-size:10px; font-weight:800; letter-spacing:.08em; }
+.finance-direct-expense-dialog>p { color:#718095; font-size:12px; line-height:1.5; }
+.finance-direct-expense-form { grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+.finance-direct-expense-form .finance-allocation-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.finance-direct-expense-form .finance-confirm-actions { justify-content:flex-end; margin-top:4px; }
+.finance-pay-form .finance-allocation-fields { min-width:250px; }
+.finance-heading-actions { display:flex; align-items:center; gap:9px; }
+.finance-recurring-panel { padding:clamp(18px,2.2vw,28px); }
+.finance-recurring-editor { grid-template-columns:repeat(3,minmax(0,1fr)); margin:18px 0 24px; padding:18px 0 22px; border-top:1px solid var(--finance-line,#e8ecf2); border-bottom:1px solid var(--finance-line,#e8ecf2); }
+.finance-recurring-editor .wide { grid-column:1/-1; }
+.finance-recurring-filters { display:grid; grid-template-columns:repeat(3,minmax(160px,1fr)); gap:12px; margin:12px 0 14px; }
+.finance-recurring-filters label { display:flex; flex-direction:column; gap:6px; color:var(--finance-copy,#58677e); font-size:11px; font-weight:700; }
+.finance-recurring-filters input,.finance-recurring-filters select { min-width:0; min-height:38px; border:1px solid var(--finance-line,#dce3ed); border-radius:8px; padding:8px 10px; color:var(--finance-copy,#34425a); background:#fff; font:inherit; }
+.finance-recurring-table { min-width:980px!important; }
+.finance-recurring-table td small { display:block; margin-top:4px; color:var(--finance-muted,#7e8998); font-size:10px; line-height:1.4; }
+.finance-recurring-overdue td:first-child strong,.finance-recurring-overdue td:first-child small { color:var(--gcmb-color-danger,#b12642); }
+.finance-recurring-notices { margin:12px 0 20px; padding:14px 16px; border:1px solid var(--finance-line,#e8ecf2); border-radius:10px; background:var(--gcmb-color-bg,#f8fafc); }
+.finance-recurring-notices h3 { margin:0 0 9px; font-size:14px; }
+.finance-recurring-notices ul { display:grid; gap:7px; margin:0; padding:0; list-style:none; }
+.finance-recurring-notices li { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; color:var(--finance-copy,#46556c); font-size:11px; }
+.finance-recurring-notices li small { color:var(--finance-muted,#7e8998); white-space:nowrap; }
+.finance-recurring-notice-type { padding:3px 7px; border-radius:999px; color:#7b5c0b; background:#fff3d6; font-size:9px; font-weight:800; white-space:nowrap; }
+.finance-recurring-notice-type.overdue { color:#a1263c; background:#fbecef; }
+.finance-recurring-notice-type.due { color:#7b5c0b; background:#fff3d6; }
+@media(max-width:760px) {
+  .finance-category-editor,.finance-category-filters,.finance-direct-expense-form { grid-template-columns:1fr; }
+  .finance-recurring-editor,.finance-recurring-filters { grid-template-columns:1fr; }
+  .finance-recurring-editor .wide { grid-column:auto; }
+  .finance-heading-actions { flex-wrap:wrap; justify-content:flex-end; }
+  .finance-recurring-notices li { grid-template-columns:1fr auto; }
+  .finance-recurring-notices li>span:nth-child(2) { grid-column:1/-1; grid-row:2; }
+  .finance-category-editor .finance-category-form-actions,.finance-direct-expense-form .wide { grid-column:auto; }
+  .finance-direct-expense-form .finance-allocation-fields { grid-template-columns:1fr; }
+  .finance-category-table-wrap { max-height:65vh; }
+}
+

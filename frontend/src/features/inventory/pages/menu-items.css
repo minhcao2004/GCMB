@@ -283,3 +283,31 @@
   .menu-action-overlay { padding: 12px; }
   .menu-action-dialog { width: min(430px,calc(100vw - 24px)); max-height: 92svh; padding: 16px; }
 }
+
+/* Use the shared backoffice palette while keeping menu actions and states local. */
+.menu-items-page {
+  --menu-ink: var(--gcmb-color-ink);
+  --menu-body: var(--gcmb-color-text);
+  --menu-muted: var(--gcmb-color-text);
+  --menu-line: var(--gcmb-color-line);
+  --menu-canvas: var(--gcmb-color-bg);
+  --menu-accent: var(--gcmb-color-primary);
+  --menu-accent-dark: var(--gcmb-color-primary-hover);
+  --menu-teal: var(--gcmb-color-info);
+  --menu-good: var(--gcmb-color-success);
+  --menu-danger: var(--gcmb-color-danger);
+  font-family: var(--gcmb-font-family);
+}
+.menu-items-page .menu-create-button,
+.branch-manager-dashboard.has-menu-items .menu-items-page .menu-create-button,
+.menu-items-page .menu-editor-footer .menu-editor-confirm { color: var(--gcmb-color-on-primary); }
+.menu-items-page .menu-create-button:hover:not(:disabled),
+.branch-manager-dashboard.has-menu-items .menu-items-page .menu-create-button:hover:not(:disabled),
+.menu-items-page .menu-editor-footer .menu-editor-confirm:hover:not(:disabled) { color: var(--gcmb-color-on-primary-hover); }
+.menu-items-page .menu-filters,
+.menu-items-page .menu-table-card { border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); }
+.menu-items-page .menu-table-scroll { overscroll-behavior-inline: contain; scrollbar-color: var(--gcmb-color-muted) transparent; }
+.menu-items-page .menu-table thead { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
+.menu-items-page .menu-table tbody tr { border-top-color: var(--gcmb-color-line); }
+.menu-items-page :focus-visible { outline-color: var(--gcmb-color-info); }
+.menu-items-page ::selection { color: var(--gcmb-color-ink); background: var(--gcmb-color-primary-soft); }

@@ -178,3 +178,21 @@
   min-height: 18px;
   margin: 0;
 }
+
+.accounts-page .account-link { color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); }
+.accounts-page .account-link:focus-visible,
+.account-drawer :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 2px; }
+.accounts-page .access-permission-table th,
+.accounts-page .access-permission-table td,
+.account-drawer .access-permission-table th,
+.account-drawer .access-permission-table td { border-color: var(--gcmb-color-line, #e5e8ed); }
+.accounts-page .access-permission-table th,
+.account-drawer .access-permission-table th { color: var(--gcmb-color-text, #536071); background: var(--gcmb-color-bg, #f5f7fa); }
+.account-revoke-dialog { border: 0; border-radius: var(--gcmb-radius-panel, 12px); color: var(--gcmb-color-ink, #1a1a2e); background: var(--gcmb-color-panel, #fff); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); }
+.access-warning { border-radius: var(--gcmb-radius-control, 8px); color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
+.dashboard-page .account-danger { border-color: var(--gcmb-color-danger, #b12642); color: #fff; background: var(--gcmb-color-danger, #b12642); }
+.account-success-message { border-radius: var(--gcmb-radius-control, 8px); color: color-mix(in srgb, var(--gcmb-color-success, #168b5b) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-success-soft, #e8f6ef); }
+.audit-date label,
+.audit-detail-body dt { color: var(--gcmb-color-text, #536071); }
+.audit-detail-body { color: var(--gcmb-color-ink, #1a1a2e); }
+.dashboard-page .account-managed-branches { border-color: var(--gcmb-color-line, #e5e8ed); border-radius: var(--gcmb-radius-control, 8px); background: var(--gcmb-color-panel, #fff); }

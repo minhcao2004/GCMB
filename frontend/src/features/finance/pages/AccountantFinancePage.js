@@ -13,8 +13,8 @@ export default function AccountantFinancePage({ mode = 'requests' }) {
   async function logout(){setBusy(true);try{await authApi.logout();navigate('/dang-nhap',{replace:true});}catch(e){setError(apiErrors(e).form||'Không thể đăng xuất.');}finally{setBusy(false);}}
   if(error)return <main className="booking-auth-state"><p>{error}</p></main>;
   if(!user)return <main className="booking-auth-state"><p>Đang kiểm tra phiên đăng nhập…</p></main>;
-  const activeTab=mode==='payroll'?'booking':mode==='cash-closing'?'calendar':section==='payments'?'payments':section==='inventory'?'inventory':'plus';
-  const breadcrumb=mode==='payroll'?'Lương nhân viên':mode==='cash-closing'?'Đối soát chốt quỹ':section==='payments'?'Thu & cấp quỹ':section==='inventory'?'Danh mục chi phí':'Chi & hoàn ứng';
+  const activeTab=mode==='payroll'?'booking':mode==='cash-closing'?'calendar':section==='payments'?'payments':'plus';
+  const breadcrumb=mode==='payroll'?'Lương nhân viên':mode==='cash-closing'?'Đối soát chốt quỹ':section==='payments'?'Thu & cấp quỹ':'Chi & hoàn ứng';
   const page=mode==='payroll'?<PayrollPage/>:mode==='cash-closing'?<CashClosingPage user={user} accounting/>:<FinancePage user={user}/>;
   return <AppShell user={user} busy={busy} onLogout={logout} breadcrumb={breadcrumb} activeTab={activeTab} audience="accountant" hideSearch>{page}</AppShell>;
 }

@@ -38,7 +38,9 @@ public class MutationAudit {
         Map.entry("FINANCIAL_TRANSACTION", "financial_transaction"),
         Map.entry("BANK_TRANSACTION", "bank_transaction"),
         Map.entry("FINANCIAL_PERIOD", "financial_period"),
-        Map.entry("FINANCE_EXPENSE_CATEGORY", "finance_expense_category"));
+        Map.entry("FINANCE_EXPENSE_CATEGORY", "finance_expense_category"),
+        Map.entry("FINANCE_RECURRING_EXPENSE", "finance_recurring_expense"),
+        Map.entry("FINANCE_RECURRING_EXPENSE_PERIOD", "finance_recurring_expense_period"));
 
     private final JdbcTemplate db;
     private final TransactionTemplate transaction;
@@ -50,6 +52,12 @@ public class MutationAudit {
 
     // resultId xác định ID mới khi tạo đối tượng hoặc tạo phiên bản giá mới.
     public <T> T record(String action, String type, UUID id, Supplier<T> operation, Function<T, UUID> resultId) {
+        return recordWithMetadata(action, type, id, operation, resultId, null);
+    }
+
+    // Audit-only metadata avoids changing the entity row or caller-supplied note.
+    public <T> T recordWithMetadata(String action, String type, UUID id, Supplier<T> operation,
+                                    Function<T, UUID> resultId, String additionalAfterDataJson) {
         if (!TABLES.containsKey(type)) throw new IllegalArgumentException("Unsupported audit entity");
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof Identity actor)) {
@@ -65,8 +73,10 @@ public class MutationAudit {
                     INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
                     VALUES (?,COALESCE(CAST(CAST(? AS jsonb)->>'branch_id' AS uuid),
                         CAST(CAST(? AS jsonb)->>'branch_id' AS uuid)),?,?,?,CAST(? AS jsonb),
-                        COALESCE(CAST(? AS jsonb),'{}'::jsonb) || jsonb_build_object('actorRole',CAST(? AS text)))
-                    """, actor.id(), after, before, action, type, id == null ? afterId : id, before, after, actor.role());
+                        COALESCE(CAST(? AS jsonb),'{}'::jsonb) || COALESCE(CAST(? AS jsonb),'{}'::jsonb)
+                          || jsonb_build_object('actorRole',CAST(? AS text)))
+                    """, actor.id(), after, before, action, type, id == null ? afterId : id, before, after,
+                    additionalAfterDataJson, actor.role());
             }
             return result;
         });
@@ -119,7 +129,10 @@ public class MutationAudit {
                     'closed_by','closed_at','close_note','external_id','direction','amount','match_status',
                     'exception_reason','resolution_status','resolved_at','resolved_by','resolution_note',
                     'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
-                    'accepted_by','accepted_at','served_at')),'{}'::jsonb)
+                    'accepted_by','accepted_at','served_at',
+                    'beneficiary_name','bank_account','bank_name','due_day','monthly_amount','expected_amount',
+                    'expense_belongs_to','start_month','end_month','reminder_days','terminated_at','updated_by',
+                    'due_date','period_month','default_amount','request_id','skip_reason')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
         return snapshots.isEmpty() ? null : snapshots.get(0);
     }

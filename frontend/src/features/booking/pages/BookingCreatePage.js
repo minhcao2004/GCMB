@@ -97,7 +97,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
   if (contactPhoneError) bookingBlockers.push(contactPhoneError);
   if (!selectedType) bookingBlockers.push('Chọn hạng phòng.');
-  if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date() ? 'Chọn ngày giờ nhận phòng trong tương lai.' : 'Chọn ngày giờ nhận phòng hợp lệ.');
+  if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date()
+    ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+    : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.');
   if (guestCountError) bookingBlockers.push(guestCountError);
   if (!pricingSelectionValid) bookingBlockers.push(form.pricingMode === 'COMBO' ? 'Chọn một combo dịch vụ.' : 'Nhập thời lượng thuê từ 1 đến 24 giờ, theo bước 0,5 giờ.');
   if (!loadingAvailability && !chosenRoom) {
@@ -120,8 +122,8 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   const paymentReferenceFieldError = showPaymentReferenceError || Boolean(paymentReferenceServerError);
   const paymentReferenceFieldErrorText = paymentReferenceServerError || 'Nhập mã giao dịch / ghi chú khi thu tiền cọc.';
   const scheduleErrorMessage = plannedStart && plannedStart <= new Date()
-    ? 'Thời gian nhận phòng cần ở tương lai.'
-    : 'Vui lòng chọn ngày và giờ nhận phòng hợp lệ.';
+    ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+    : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.';
   const roomErrorMessage = availabilityError
     ? 'Không xác nhận được phòng trống. Hãy đổi lịch hoặc hạng phòng để thử lại.'
     : availableRooms.length
@@ -149,7 +151,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     if (!selectedType || !plannedStart || !plannedEnd || plannedStart <= new Date() || plannedEnd <= plannedStart) {
       setAvailability(null);
       setLoadingAvailability(false);
-      setAvailabilityError(plannedStart && plannedStart <= new Date() ? 'Thời gian nhận phòng cần ở tương lai.' : '');
+      setAvailabilityError(plannedStart && plannedStart <= new Date()
+        ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+        : '');
       return undefined;
     }
     let active = true;

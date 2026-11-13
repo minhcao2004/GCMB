@@ -487,6 +487,14 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    // Giữ khóa cơ sở và booking nhưng không chặn tất toán hoàn cọc theo trạng thái ACTIVE.
+    public UUID lockBookingIdForRefund(UUID bookingId, UUID branchId) {
+        if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? FOR SHARE", UUID.class, branchId).isEmpty()) return null;
+        List<UUID> rows = db.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
+            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     public boolean bookingExists(UUID bookingId) {
         return Boolean.TRUE.equals(db.queryForObject(
             "SELECT EXISTS(SELECT 1 FROM gcmb.booking WHERE id=?)", Boolean.class, bookingId));

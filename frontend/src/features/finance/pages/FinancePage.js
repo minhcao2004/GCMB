@@ -6,6 +6,11 @@ import { apiErrors, authApi } from '../../auth/services/authApi';
 import { financeApi } from '../services/financeApi';
 import '../styles/finance.css';
 import DrawerFundingPanel from '../components/DrawerFundingPanel';
+import ExpenseCategoriesTab from '../components/ExpenseCategoriesTab';
+import ExpenseAllocationFields from '../components/ExpenseAllocationFields';
+import DirectExpenseDialog from '../components/DirectExpenseDialog';
+import RecurringExpensesTab from '../components/RecurringExpensesTab';
+import { calculateExpenseAllocation } from '../utils/expenseAllocation';
 
 const statusName = { WAITING_CONFIRMATION:'Chờ kế toán xác nhận', RECEIVED:'Đã nhận', WAITING_ACCOUNTANT:'Chờ kế toán duyệt', WAITING_HEAD_OFFICE:'Chờ quản lý cấp cao duyệt', APPROVED_TO_PAY:'Đã duyệt · chờ thanh toán', REJECTED:'Từ chối', PAID:'Đã thanh toán' };
 const historyName = { SUBMITTED:'Đã gửi đề nghị', APPROVED:'Đã duyệt', REJECTED:'Đã từ chối', PAID:'Đã thanh toán' };
@@ -36,6 +41,14 @@ const localDateTime = (value) => {
 };
 const message = (error) => { const errors=apiErrors(error); return errors.form || Object.values(errors)[0] || 'Không thể hoàn tất thao tác. Vui lòng thử lại.'; };
 const fileAccept = 'image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf';
+const monthValue = (value) => {
+  if (Array.isArray(value) && value.length >= 2) return `${value[0]}-${String(value[1]).padStart(2,'0')}`;
+  return String(value || '').match(/^\d{4}-\d{2}/)?.[0] || '';
+};
+const monthLabel = (value) => {
+  const month = monthValue(value);
+  return month ? `${month.slice(5,7)}/${month.slice(0,4)}` : '—';
+};
 
 function Attachments({ rows=[], compact=false }) {
   const [preview,setPreview]=useState(null);
@@ -67,10 +80,19 @@ const kindLabel=(item)=>item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_
 }
 
 function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile }) {
+  const [expandedAllocation, setExpandedAllocation] = useState(null);
   return <div className="finance-table-wrap"><table><thead><tr><th>Mã · Cơ sở</th><th>Ngày · Hạng mục</th><th>Nội dung · Lịch sử</th><th>Số tiền</th><th>Người nhận · Ngân hàng</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead><tbody>
-    {rows.map((row)=><tr key={row.id}>
-      <td><strong>{row.code}</strong><small>{row.branch_name} · {row.kind==='REIMBURSEMENT'?'Hoàn ứng':'Thanh toán'}</small></td>
-      <td>{localDate(row.expense_on)}<small>{row.category_name}</small></td>
+    {rows.map((row)=>{
+      const form = paymentForms[row.id] || {};
+      const months = form.allocationMonths ?? row.allocation_months ?? '';
+      const startMonth = form.allocationStart ?? monthValue(row.expense_on);
+      const allocated = row.recognition_mode === 'ALLOCATED';
+      const allocationValid = !allocated || !calculateExpenseAllocation(row.amount, months, startMonth).error;
+      return <tr key={row.id}>
+      <td><strong>{row.code}</strong><small>{row.branch_name} · {row.kind==='REIMBURSEMENT'?'Hoàn ứng':'Thanh toán'}{row.origin==='ACCOUNTANT_DIRECT'?' · Chi trực tiếp':''}</small></td>
+      <td>{localDate(row.expense_on)}<small>{row.category_name}</small>{allocated&&<small><button type="button" className="finance-allocation-toggle" aria-expanded={expandedAllocation===row.id} onClick={()=>setExpandedAllocation(expandedAllocation===row.id?null:row.id)}>Phân bổ {row.allocation_months} tháng</button></small>}
+        {allocated&&expandedAllocation===row.id&&<div className="finance-allocation-detail"><table><thead><tr><th>Tháng</th><th>Số tiền</th></tr></thead><tbody>{(row.allocations||[]).map((line)=><tr key={line.id}><td>{monthLabel(line.period_month)}</td><td>{money(line.amount)}</td></tr>)}</tbody></table></div>}
+      </td>
       <td>{row.description}<small>Gửi bởi {row.requested_by_name}</small>{row.history?.map((event)=><small className="finance-history" key={event.id}>{historyName[event.action]||event.action} · {event.actor_name} · {localDateTime(event.created_at)}{event.note?` · ${event.note}`:''}</small>)}</td>
       <td><strong>{money(row.amount)}</strong></td>
       <td>{row.beneficiary_name}<small>{row.bank_name} · {row.bank_account}</small></td>
@@ -87,11 +109,14 @@ function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaym
         {role==='ACCOUNTANT'&&row.status==='WAITING_ACCOUNTANT'&&<div className="finance-actions"><button disabled={busy} onClick={()=>onReview(row.id,true)}>Duyệt</button><button disabled={busy} onClick={()=>onReview(row.id,false)}>Từ chối</button></div>}
         {role==='ACCOUNTANT'&&row.status==='APPROVED_TO_PAY'&&<form className="finance-pay-form" onSubmit={(event)=>onPay(event,row.id)}>
           <input placeholder="Mã giao dịch" value={paymentForms[row.id]?.reference||''} onChange={(event)=>setPaymentForms({...paymentForms,[row.id]:{...paymentForms[row.id],reference:event.target.value}})}/>
-            <input aria-label="Chứng từ chuyển khoản đã thanh toán" required type="file" accept={fileAccept} onChange={(event)=>setPaymentForms({...paymentForms,[row.id]:{...paymentForms[row.id],proof:event.target.files?.[0]||null}})}/>
-            <small>Chứng từ thanh toán thực tế, tối đa 20 MB.</small><button disabled={busy}>Ghi nhận đã thanh toán</button>
+          {allocated&&<ExpenseAllocationFields amount={row.amount} months={months} startMonth={startMonth}
+            onMonthsChange={(value)=>setPaymentForms({...paymentForms,[row.id]:{...paymentForms[row.id],allocationMonths:value}})}
+            onStartMonthChange={(value)=>setPaymentForms({...paymentForms,[row.id]:{...paymentForms[row.id],allocationStart:value}})} disabled={busy}/>}
+          <input aria-label="Chứng từ chuyển khoản đã thanh toán" required type="file" accept={fileAccept} onChange={(event)=>setPaymentForms({...paymentForms,[row.id]:{...paymentForms[row.id],proof:event.target.files?.[0]||null}})}/>
+          <small>Chứng từ thanh toán thực tế, tối đa 20 MB.</small><button disabled={busy||!allocationValid}>Ghi nhận đã thanh toán</button>
         </form>}
       </td>
-    </tr>)}
+    </tr>})}
     {!rows.length&&<tr><td colSpan="7" className="finance-empty">Chưa có đề nghị chi nào.</td></tr>}
   </tbody></table></div>;
 }
@@ -123,25 +148,41 @@ function FundTransferTable({ rows, busy, fundFiles, setFundFiles, onUpload, onCo
 function FinanceWorkspace({ user }) {
   const role=user?.role;
   const location=useLocation();
-  const initialTab=new URLSearchParams(location.search).get('section');
+  const navigate=useNavigate();
+  const initialParams=new URLSearchParams(location.search);
+  const initialTab=initialParams.get('section');
   const accountantSection=initialTab||'plus';
-  const [accountTab,setAccountTab]=useState(accountantSection==='payments'?'incoming':accountantSection==='inventory'?'categories':'requests');
+  const requestedTab=initialParams.get('tab');
+  const [accountTab,setAccountTab]=useState(accountantSection==='payments'?'incoming':accountantSection==='inventory'?'categories':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
   const [headOfficeTab,setHeadOfficeTab]=useState('fund');
   const [fundDialogOpen,setFundDialogOpen]=useState(false);
+  const [directDialogOpen,setDirectDialogOpen]=useState(false);
+  const [recurringPayPeriod,setRecurringPayPeriod]=useState(null);
+  const [recurringRevision,setRecurringRevision]=useState(0);
   const fundDialogRef=useRef(null); const fundDialogFirstFieldRef=useRef(null); const fundDialogTriggerRef=useRef(null);
   const [selectedBranch,setSelectedBranch]=useState('ALL');
   const [data,setData]=useState(null); const [loading,setLoading]=useState(true); const [busy,setBusy]=useState(false);
   const [error,setError]=useState(''); const [notice,setNotice]=useState('');
   const [reviewDialog,setReviewDialog]=useState(null);
   const busyRef=useRef(false); busyRef.current=busy;
-  const [categoryEdit,setCategoryEdit]=useState(null); const [categoryName,setCategoryName]=useState(''); const [categoryDescription,setCategoryDescription]=useState(''); const [categoryCostType,setCategoryCostType]=useState('OPEX');
   const [requestKind,setRequestKind]=useState('PAYMENT');
   const [request,setRequest]=useState({categoryId:'',amount:'',expenseOn:today(),description:'',beneficiaryName:'',bankAccount:'',bankName:'',invoice:null,transferProof:null});
   const [requestFiles,setRequestFiles]=useState({}); const [fund,setFund]=useState({amount:'50000000',sentOn:today(),reference:'',proof:null});
   const [fundFiles,setFundFiles]=useState({}); const [paymentForms,setPaymentForms]=useState({});
   const reload=useCallback(async()=>{setLoading(true);setError('');try{setData(await financeApi.load(role));}catch(e){setError(message(e));}finally{setLoading(false);}},[role]);
   useEffect(()=>{reload();},[reload]);
-  useEffect(()=>{const section=new URLSearchParams(location.search).get('section')||'plus';setAccountTab(section==='payments'?'incoming':section==='inventory'?'categories':'requests');},[location.search]);
+  useEffect(()=>{
+    const params=new URLSearchParams(location.search);
+    const section=params.get('section')||'plus';
+    if(section==='inventory') {
+      params.set('section','plus'); params.set('tab','categories');
+      navigate(`${location.pathname}?${params.toString()}`,{replace:true});
+      setAccountTab('categories');
+      return;
+    }
+    const requestedTab=params.get('tab');
+    setAccountTab(section==='payments'?'incoming':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
+  },[location.pathname,location.search,navigate]);
   useEffect(()=>{
     if(!fundDialogOpen)return;
     const trigger = fundDialogTriggerRef.current;
@@ -159,16 +200,31 @@ function FinanceWorkspace({ user }) {
     return()=>{document.removeEventListener('keydown',onKeyDown);trigger?.focus();};
   },[fundDialogOpen]);
 
-  async function act(fn,success){setBusy(true);setError('');setNotice('');try{await fn();setNotice(success);await reload();}catch(e){setError(message(e));}finally{setBusy(false);}}
-  async function saveCategory(event){event.preventDefault();const value={name:categoryName,description:categoryDescription,costType:categoryCostType};await act(()=>categoryEdit?financeApi.updateCategory(categoryEdit.id,value):financeApi.createCategory(value),categoryEdit?'Đã cập nhật hạng mục.':'Đã tạo hạng mục.');setCategoryEdit(null);setCategoryName('');setCategoryDescription('');setCategoryCostType('OPEX');}
-  function editCategory(category){setCategoryEdit(category);setCategoryName(category.name);setCategoryDescription(category.description||'');setCategoryCostType(category.cost_type||'OPEX');}
+  function changeExpenseTab(tab){
+    setAccountTab(tab);
+    const params=new URLSearchParams(location.search);params.set('section','plus');
+    params.set('tab',tab);
+    navigate(`${location.pathname}?${params.toString()}`,{replace:true});
+  }
+  async function act(fn,success){setBusy(true);setError('');setNotice('');try{await fn();setNotice(success);await reload();return true;}catch(e){setError(message(e));return false;}finally{setBusy(false);}}
+  async function saveCategory(value){const {id,...payload}=value;return act(()=>id?financeApi.updateCategory(id,payload):financeApi.createCategory(payload),id?'Đã cập nhật hạng mục.':'Đã tạo hạng mục.');}
+  async function setCategoryActive(id,active){return act(()=>financeApi.setCategoryActive(id,active),active?'Đã kích hoạt lại hạng mục.':'Đã ngừng sử dụng hạng mục.');}
+  async function deleteCategory(id){return act(()=>financeApi.deleteCategory(id),'Đã xóa hạng mục.');}
+  async function saveRecurringExpense(id,command){const saved=await act(()=>id?financeApi.updateRecurringExpense(id,command):financeApi.createRecurringExpense(command),id?'Đã cập nhật khoản chi định kỳ.':'Đã tạo khoản chi định kỳ.');if(saved)setRecurringRevision((value)=>value+1);return saved;}
+  async function terminateRecurringExpense(id){const saved=await act(()=>financeApi.terminateRecurringExpense(id),'Đã chấm dứt khoản chi định kỳ; lịch sử các kỳ được giữ lại.');if(saved)setRecurringRevision((value)=>value+1);return saved;}
+  async function skipRecurringPeriod(id,reason){const saved=await act(()=>financeApi.skipRecurringPeriod(id,reason),'Đã bỏ qua kỳ chi và lưu lý do.');if(saved)setRecurringRevision((value)=>value+1);return saved;}
 async function createFund(event){event.preventDefault();const formElement=event.currentTarget;setBusy(true);setError('');setNotice('');try{const created=await financeApi.sendFund({amount:fund.amount,sentOn:fund.sentOn,reference:fund.reference});let proofError='';if(fund.proof){try{await financeApi.uploadFundProof(created.id,fund.proof);}catch(e){proofError=message(e);}}formElement.reset();setFund({amount:'50000000',sentOn:today(),reference:'',proof:null});setFundDialogOpen(false);await reload();if(proofError){setError(`Yêu cầu đã gửi, nhưng chứng từ chưa tải lên được. Có thể thử tải lại trong danh sách cấp quỹ. ${proofError}`);}else{setNotice('Đã gửi yêu cầu cấp quỹ cho kế toán xác nhận. Số dư tăng sau khi kế toán xác nhận đã nhận tiền.');}}catch(e){setError(message(e));}finally{setBusy(false);}}
 async function uploadFundProof(event,id){event.preventDefault();const proof=fundFiles[id]?.proof;if(!proof){setError('Chọn chứng từ chuyển khoản trước khi tải lên.');return;}await act(()=>financeApi.uploadFundProof(id,proof),'Đã lưu chứng từ trên hệ thống.');setFundFiles({...fundFiles,[id]:{proof:null}});}
-async function createRequest(event){event.preventDefault();const formElement=event.currentTarget;const kind=requestKind;const metadata={kind,categoryId:request.categoryId,amount:request.amount,expenseOn:request.expenseOn,description:request.description,beneficiaryName:request.beneficiaryName,bankAccount:request.bankAccount,bankName:request.bankName};setBusy(true);setError('');setNotice('');try{const created=await financeApi.createRequest(metadata);const uploadErrors=[];if(request.invoice){try{await financeApi.uploadRequestAttachment(created.id,'INVOICE',request.invoice);}catch(e){uploadErrors.push(`Hóa đơn: ${message(e)}`);}}if(kind==='PAYMENT'&&request.transferProof){try{await financeApi.uploadRequestAttachment(created.id,'TRANSFER_PROOF',request.transferProof);}catch(e){uploadErrors.push(`Chứng từ chuyển khoản: ${message(e)}`);}}setRequest({...request,amount:'',description:'',invoice:null,transferProof:null});formElement.reset();await reload();setNotice(uploadErrors.length?'Đã gửi đề nghị sang kế toán. Chứng từ chưa lưu hết vào máy chủ; bạn có thể bổ sung ở danh sách bên dưới.':'Đã gửi đề nghị sang kế toán.');if(uploadErrors.length)setError(uploadErrors.join(' · '));}catch(e){setError(message(e));}finally{setBusy(false);}}
+async function createRequest(event){event.preventDefault();const formElement=event.currentTarget;const kind=requestKind;const metadata={kind,categoryId:request.categoryId,amount:request.amount,expenseOn:request.expenseOn,description:request.description,beneficiaryName:request.beneficiaryName,bankAccount:request.bankAccount,bankName:request.bankName};setBusy(true);setError('');setNotice('');try{const created=await financeApi.createRequest(metadata);const uploadErrors=[];if(request.invoice){try{await financeApi.uploadRequestAttachment(created.id,'INVOICE',request.invoice);}catch(e){uploadErrors.push(`Hóa đơn: ${message(e)}`);}}if(kind==='PAYMENT'&&request.transferProof){try{await financeApi.uploadRequestAttachment(created.id,'TRANSFER_PROOF',request.transferProof);}catch(e){uploadErrors.push(`Chứng từ chuyển khoản: ${message(e)}`);}}setRequest({...request,amount:'',description:'',invoice:null,transferProof:null});formElement.reset();await reload();setNotice(uploadErrors.length?'Đã gửi đề nghị sang kế toán. Chứng từ chưa lưu hết vào máy chủ; có thể bổ sung ở danh sách bên dưới.':'Đã gửi đề nghị sang kế toán.');if(uploadErrors.length)setError(uploadErrors.join(' · '));}catch(e){setError(message(e));}finally{setBusy(false);}}
   async function uploadRequestDoc(event,id,kind){event.preventDefault();const key=`${id}:${kind}`;const file=requestFiles[key];if(!file){setError('Chọn tệp chứng từ trước khi tải lên.');return;}await act(()=>financeApi.uploadRequestAttachment(id,kind,file),'Đã lưu chứng từ trên hệ thống.');setRequestFiles({...requestFiles,[key]:null});}
+  function chooseRequestKind(kind){setRequestKind(kind);if(kind==='REIMBURSEMENT'&&selectedRequestCategory&&!selectedRequestCategory.reimbursement_allowed)setRequest({...request,categoryId:''});}
   function review(id,approve){setReviewDialog({id,approve,note:''});}
   async function confirmReview(event){event.preventDefault();if(!reviewDialog)return;if(!reviewDialog.approve&&!reviewDialog.note.trim()){setError('Vui lòng nhập lý do từ chối.');return;}setBusy(true);setError('');setNotice('');try{await financeApi.review(role,reviewDialog.id,reviewDialog.approve,reviewDialog.note);setNotice(reviewDialog.approve?'Đã duyệt đề nghị.':'Đã từ chối đề nghị.');setReviewDialog(null);await reload();}catch(e){setError(message(e));}finally{setBusy(false);}}
-  async function pay(event,id){event.preventDefault();const proof=paymentForms[id]?.proof;if(!proof){setError('Vui lòng tải lên chứng từ chuyển khoản thực tế.');return;}await act(()=>financeApi.pay(id,paymentForms[id]?.reference||'',proof),'Đã ghi nhận thanh toán và trừ quỹ.');}
+  async function pay(event,id){event.preventDefault();const form=paymentForms[id]||{};const proof=form.proof;if(!proof){setError('Vui lòng tải lên chứng từ chuyển khoản thực tế.');return false;}const row=requests.find((item)=>item.id===id);const allocated=row?.recognition_mode==='ALLOCATED';const months=allocated?(form.allocationMonths??row.allocation_months):null;const startMonth=allocated?(form.allocationStart??monthValue(row.expense_on)):null;if(allocated){const preview=calculateExpenseAllocation(row.amount,months,startMonth);if(preview.error){setError(preview.error);return false;}}return act(()=>financeApi.pay(id,form.reference||'',proof,months,startMonth?`${startMonth}-01`:null),'Đã ghi nhận thanh toán và trừ quỹ.');}
+  async function createDirectExpense(command,proof,invoice){
+    if(recurringPayPeriod){const saved=await act(()=>financeApi.payRecurringPeriod(recurringPayPeriod.id,command,proof,invoice),'Đã thanh toán kỳ chi định kỳ, trừ quỹ và lưu lịch sử.');if(saved)setRecurringRevision((value)=>value+1);return saved;}
+    return act(()=>financeApi.createDirectExpense(command,proof,invoice),'Đã ghi nhận chi trực tiếp, trừ quỹ và lưu lịch sử.');
+  }
 
   const categories=data?.categories||[];const requests=data?.requests||[];const transfers=data?.fundTransfers||[];const branches=data?.branches||[];
   const branchRequests=selectedBranch==='ALL'?requests:requests.filter((item)=>String(item.branch_id)===String(selectedBranch));
@@ -176,11 +232,12 @@ async function createRequest(event){event.preventDefault();const formElement=eve
   const waitingTotal=transfers.filter((item)=>item.status==='WAITING_CONFIRMATION').reduce((sum,item)=>sum+Number(item.amount||0),0);
   const openRequests=requests.filter((item)=>!['PAID','REJECTED'].includes(item.status));
   const closedRequests=requests.filter((item)=>['PAID','REJECTED'].includes(item.status));
-  const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['drawer','Cấp tiền két'],['history','Lịch sử thanh toán và hoàn ứng']];
+  const selectedRequestCategory=categories.find((item)=>String(item.id)===String(request.categoryId));
+  const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['recurring','Chi định kỳ'],['drawer','Cấp tiền két'],['history','Lịch sử thanh toán và hoàn ứng'],['categories','Hạng mục chi phí']];
   const headOfficeTabs=[['fund','Cấp quỹ'],['expense_requests','Đề nghị thanh toán và hoàn ứng']];
 
   return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}`}>
-    <header className="finance-heading"><div><h1>{role==='HEAD_OFFICE_MANAGER'?'Quỹ & duyệt chi toàn chuỗi':role==='ACCOUNTANT'?accountantSection==='payments'?'Quản lý thu và cấp quỹ':accountantSection==='inventory'?'Hạng mục chi phí':'Chi và hoàn ứng':'Chi phí cơ sở'}</h1></div><button type="button" onClick={reload} disabled={loading}>Làm mới</button></header>
+    <header className="finance-heading"><div><h1>{role==='HEAD_OFFICE_MANAGER'?'Quỹ & duyệt chi toàn chuỗi':role==='ACCOUNTANT'?accountantSection==='payments'?'Quản lý thu và cấp quỹ':'Chi và hoàn ứng':'Chi phí cơ sở'}</h1></div><div className="finance-heading-actions">{role==='ACCOUNTANT'&&accountantSection==='plus'&&<button type="button" className="finance-primary-action" onClick={()=>{setRecurringPayPeriod(null);setDirectDialogOpen(true);}}>＋ Ghi nhận chi trực tiếp</button>}<button type="button" onClick={()=>{reload();setRecurringRevision((value)=>value+1);}} disabled={loading}>Làm mới</button></div></header>
     {notice&&<p className="finance-notice" role="status">{notice}</p>}{error&&<p className="finance-error" role="alert">{error}</p>}
 
     {role==='ACCOUNTANT'&&accountantSection==='payments'&&<>
@@ -189,21 +246,20 @@ async function createRequest(event){event.preventDefault();const formElement=eve
         <FundTransferTable rows={transfers} busy={busy} onConfirm={(id)=>act(()=>financeApi.confirmFund(id),'Đã xác nhận nhận tiền; số dư quỹ đã cập nhật.')}/>
       </section>}
     </>}
-      {role==='ACCOUNTANT'&&accountantSection==='inventory'&&<section className="finance-panel"><div className="finance-section-heading"><div><h2>Hạng mục chi phí</h2></div><div className="finance-mini-total"><span>Hạng mục đang dùng</span><strong>{categories.filter((item)=>item.active).length}</strong></div></div>
-      <form className="finance-form finance-category-form" onSubmit={saveCategory}><label>Tên hạng mục *<input required maxLength="120" value={categoryName} onChange={(event)=>setCategoryName(event.target.value)}/></label><label>Mô tả<input maxLength="500" value={categoryDescription} onChange={(event)=>setCategoryDescription(event.target.value)}/></label><label>Loại chi phí *<select required value={categoryCostType} onChange={(event)=>setCategoryCostType(event.target.value)}><option value="OPEX">OPEX · Vận hành</option><option value="CAPEX">CAPEX · Đầu tư</option></select></label><button disabled={busy}>{categoryEdit?'Cập nhật hạng mục':'Tạo hạng mục'}</button>{categoryEdit&&<button type="button" onClick={()=>{setCategoryEdit(null);setCategoryName('');setCategoryDescription('');setCategoryCostType('OPEX');}}>Hủy</button>}</form>
-      <div className="finance-category-list">{categories.map((item)=><div key={item.id}><span><strong>{item.name}</strong><small>{item.description||'Không có mô tả'}{!item.active?' · Đã ngừng dùng':''}</small></span>{item.active&&<><button type="button" onClick={()=>editCategory(item)}>Sửa</button><button type="button" onClick={()=>window.confirm(`Ngừng sử dụng “${item.name}”? Lịch sử chi cũ vẫn được giữ.`)&&act(()=>financeApi.deleteCategory(item.id),'Đã ngừng hạng mục; lịch sử chi cũ vẫn được giữ.')}>Xóa</button></>}</div>)}{!categories.length&&<p className="finance-empty">Chưa có hạng mục chi phí.</p>}</div>
-      </section>}
-
     {role==='ACCOUNTANT'&&accountantSection==='plus'&&<>
-      <nav className="finance-tabs" aria-label="Chi và hoàn ứng">{accountantExpenseTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>setAccountTab(key)}>{label}</button>)}</nav>
+      <nav className="finance-tabs" aria-label="Chi và hoàn ứng">{accountantExpenseTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>changeExpenseTab(key)}>{label}</button>)}</nav>
       {accountTab==='requests'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Đề nghị chờ xử lý</h2></div><div className="finance-mini-total pending"><span>Đang chờ xử lý</span><strong>{branchRequests.filter((item)=>!['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
         <RequestTable rows={branchRequests.filter((item)=>!['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
       </section>}
+      {accountTab==='recurring'&&<RecurringExpensesTab branches={branches} categories={categories} busy={busy} revision={recurringRevision} onSave={saveRecurringExpense} onTerminate={terminateRecurringExpense} onSkip={skipRecurringPeriod} onPay={(period)=>{setRecurringPayPeriod(period);setDirectDialogOpen(true);}}/>}
       {accountTab==='drawer'&&<DrawerFundingPanel user={user} onChange={reload}/>}
       {accountTab==='history'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Lịch sử thanh toán và hoàn ứng</h2></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
         <RequestTable rows={branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
       </section>}
+      {accountTab==='categories'&&<ExpenseCategoriesTab categories={categories} busy={busy} onSave={saveCategory} onSetActive={setCategoryActive} onDelete={deleteCategory}/>}
     </>}
+
+    {directDialogOpen&&role==='ACCOUNTANT'&&accountantSection==='plus'&&<DirectExpenseDialog key={recurringPayPeriod?.id||'direct'} branches={branches} categories={categories} busy={busy} recurringPeriod={recurringPayPeriod} onClose={()=>{setDirectDialogOpen(false);setRecurringPayPeriod(null);}} onSubmit={createDirectExpense}/>}
 
     {role==='HEAD_OFFICE_MANAGER'&&<>
       <nav className="finance-tabs" aria-label="Phê duyệt chi toàn chuỗi">{headOfficeTabs.map(([key,label])=><button type="button" key={key} className={headOfficeTab===key?'active':''} aria-pressed={headOfficeTab===key} onClick={()=>setHeadOfficeTab(key)}>{label}</button>)}</nav>
@@ -232,9 +288,11 @@ async function createRequest(event){event.preventDefault();const formElement=eve
     </div>}
 
     {role==='BRANCH_MANAGER'&&<>
-      {!user.readOnly&&<section className="finance-panel finance-workspace-panel finance-request-panel"><div className="finance-section-heading"><div><h2>Tạo đề nghị chi</h2></div><div className="finance-mini-total"><span>Đề nghị đang mở</span><strong>{openRequests.length}</strong></div></div><div className="finance-switch"><button type="button" className={requestKind==='PAYMENT'?'active':''} onClick={()=>setRequestKind('PAYMENT')}>Đề nghị thanh toán</button><button type="button" className={requestKind==='REIMBURSEMENT'?'active':''} onClick={()=>setRequestKind('REIMBURSEMENT')}>Hoàn ứng tiền đã chi</button></div>
-        <form className="finance-form" onSubmit={createRequest}><label>Loại chi phí *<select required value={request.categoryId} onChange={(event)=>setRequest({...request,categoryId:event.target.value})}><option value="">Chọn hạng mục</option>{categories.map((item)=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label>Số tiền *<input required type="number" min="1" step="1" value={request.amount} onChange={(event)=>setRequest({...request,amount:event.target.value})}/></label><label>Ngày chi/dự kiến chi *<input required type="date" value={request.expenseOn} onChange={(event)=>setRequest({...request,expenseOn:event.target.value})}/></label><label>Người nhận tiền *<input required maxLength="160" value={request.beneficiaryName} onChange={(event)=>setRequest({...request,beneficiaryName:event.target.value})}/></label><label>Số tài khoản *<input required maxLength="80" value={request.bankAccount} onChange={(event)=>setRequest({...request,bankAccount:event.target.value})}/></label><label>Ngân hàng *<input required maxLength="120" value={request.bankName} onChange={(event)=>setRequest({...request,bankName:event.target.value})}/></label><label className="wide">Nội dung/hạng mục mua *<textarea required maxLength="1000" rows="3" value={request.description} onChange={(event)=>setRequest({...request,description:event.target.value})}/></label>
-          <label>Hóa đơn/ảnh chứng minh<input type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,invoice:event.target.files?.[0]||null})}/><small>Có thể bổ sung sau · tối đa 20 MB.</small></label>{requestKind==='PAYMENT'&&<label>Chứng từ chuyển khoản/báo giá<input type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,transferProof:event.target.files?.[0]||null})}/><small>Có thể bổ sung sau · tối đa 20 MB.</small></label>}
+      {!user.readOnly&&<section className="finance-panel finance-workspace-panel finance-request-panel"><div className="finance-section-heading"><div><h2>Tạo đề nghị chi</h2></div><div className="finance-mini-total"><span>Đề nghị đang mở</span><strong>{openRequests.length}</strong></div></div><div className="finance-switch"><button type="button" className={requestKind==='PAYMENT'?'active':''} onClick={()=>chooseRequestKind('PAYMENT')}>Đề nghị thanh toán</button><button type="button" className={requestKind==='REIMBURSEMENT'?'active':''} onClick={()=>chooseRequestKind('REIMBURSEMENT')}>Hoàn ứng tiền đã chi</button></div>
+        <form className="finance-form" onSubmit={createRequest}><label>Loại chi phí *<select required value={request.categoryId} onChange={(event)=>setRequest({...request,categoryId:event.target.value})}><option value="">Chọn hạng mục</option>{categories.filter((item)=>requestKind!=='REIMBURSEMENT'||item.reimbursement_allowed).map((item)=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label>Số tiền *<input required type="number" min="1" step="1" value={request.amount} onChange={(event)=>setRequest({...request,amount:event.target.value})}/></label>
+          {selectedRequestCategory?.recognition_mode==='ALLOCATED'&&<p className="finance-category-hint wide">Sẽ phân bổ {selectedRequestCategory.default_allocation_months} tháng; kế toán xác nhận số tháng và tháng bắt đầu khi thanh toán.</p>}
+          <label>Ngày chi/dự kiến chi *<input required type="date" value={request.expenseOn} onChange={(event)=>setRequest({...request,expenseOn:event.target.value})}/></label><label>Người nhận tiền *<input required maxLength="160" value={request.beneficiaryName} onChange={(event)=>setRequest({...request,beneficiaryName:event.target.value})}/></label><label>Số tài khoản *<input required maxLength="80" value={request.bankAccount} onChange={(event)=>setRequest({...request,bankAccount:event.target.value})}/></label><label>Ngân hàng *<input required maxLength="120" value={request.bankName} onChange={(event)=>setRequest({...request,bankName:event.target.value})}/></label><label className="wide">Nội dung/hạng mục mua *<textarea required maxLength="1000" rows="3" value={request.description} onChange={(event)=>setRequest({...request,description:event.target.value})}/></label>
+          <label>Hóa đơn/ảnh chứng minh<input required={Boolean(selectedRequestCategory?.invoice_required)} type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,invoice:event.target.files?.[0]||null})}/><small>{selectedRequestCategory?.invoice_required?'Hạng mục này bắt buộc hóa đơn.':'Có thể bổ sung sau'} · tối đa 20 MB.</small></label>{requestKind==='PAYMENT'&&<label>Chứng từ chuyển khoản/báo giá<input type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,transferProof:event.target.files?.[0]||null})}/><small>Có thể bổ sung sau · tối đa 20 MB.</small></label>}
           <button disabled={busy}>Gửi {requestKind==='PAYMENT'?'đề nghị thanh toán':'đề nghị hoàn ứng'}</button>
         </form></section>}
       <section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Lịch sử đề nghị và khoản chi</h2></div><div className="finance-mini-total"><span>Tổng đề nghị</span><strong>{requests.length}</strong></div><div className="finance-mini-total pending"><span>Đang xử lý</span><strong>{openRequests.length}</strong></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{closedRequests.length}</strong></div></div><RequestTable rows={requests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/></section>

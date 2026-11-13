@@ -98,3 +98,14 @@
     gap: 20px;
   }
 }
+
+.account-drawer .profile-tabs { border-color: var(--gcmb-color-line, #e5e8ed); }
+.account-drawer .profile-tabs button { border-radius: var(--gcmb-radius-control, 8px); color: var(--gcmb-color-text, #536071); font-family: inherit; }
+.account-drawer .profile-tabs button[aria-pressed='true'] { border-color: var(--gcmb-color-primary-soft, #fdecf5); color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); background: var(--gcmb-color-primary-soft, #fdecf5); }
+.profile-password-title { color: var(--gcmb-color-ink, #1a1a2e); }
+.profile-password-intro,
+.profile-information dt { color: var(--gcmb-color-text, #536071); }
+.profile-information dd { color: var(--gcmb-color-ink, #1a1a2e); }
+.profile-fields input:disabled { border-color: var(--gcmb-color-line, #e5e8ed); color: var(--gcmb-color-text, #536071); background: var(--gcmb-color-bg, #f5f7fa); }
+.profile-payroll-section { border-color: var(--gcmb-color-line, #e5e8ed); }
+.profile-payroll-section h3 { color: var(--gcmb-color-ink, #1a1a2e); }

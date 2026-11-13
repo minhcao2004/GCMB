@@ -628,3 +628,111 @@
     gap: 9px;
   }
 }
+
+/* StaffPage shares staff.css with tax invoices; keep the token pass on workforce only. */
+.staff-page:not(.tax-invoice-page) {
+  color: var(--gcmb-color-ink);
+  background: var(--gcmb-color-bg);
+  font: var(--gcmb-font-size-base)/var(--gcmb-line-height) var(--gcmb-font-family);
+}
+
+.staff-page:not(.tax-invoice-page) :is(.staff-filters, .staff-card) {
+  background: var(--gcmb-color-panel);
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-heading h1 {
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-2xl);
+}
+
+.staff-page:not(.tax-invoice-page) :where(
+  small, .staff-heading p, .staff-dialog-header p, .staff-pagination,
+  .staff-empty, .staff-facts dt, .staff-summary dt, .staff-help,
+  .staff-muted, .staff-review dt
+) {
+  color: var(--gcmb-color-text);
+}
+
+.staff-page:not(.tax-invoice-page) button {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+}
+
+.staff-page:not(.tax-invoice-page) :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-ink);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-dialog {
+  color: var(--gcmb-color-ink);
+  font: var(--gcmb-font-size-base)/var(--gcmb-line-height) var(--gcmb-font-family);
+  box-shadow: var(--gcmb-shadow-lg);
+}
+
+.staff-page:not(.tax-invoice-page) :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: 2px;
+}
+
+.staff-page:not(.tax-invoice-page) button.staff-primary {
+  color: var(--gcmb-color-on-primary);
+  background: var(--gcmb-color-primary);
+  border-color: var(--gcmb-color-primary);
+}
+
+.staff-page:not(.tax-invoice-page) button.staff-danger {
+  color: #fff;
+  background: var(--gcmb-color-danger);
+  border-color: var(--gcmb-color-danger);
+}
+
+.staff-page:not(.tax-invoice-page) button.staff-link {
+  color: var(--gcmb-color-ink);
+  color: color-mix(in srgb, var(--gcmb-color-primary-hover) 80%, var(--gcmb-color-ink));
+}
+
+.staff-page:not(.tax-invoice-page) th {
+  color: var(--gcmb-color-text);
+  background: var(--gcmb-color-bg);
+}
+
+.staff-page:not(.tax-invoice-page) td {
+  border-bottom-color: var(--gcmb-color-line);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-badge.active,
+.staff-page:not(.tax-invoice-page) .staff-banner.success {
+  color: var(--gcmb-color-ink);
+  color: color-mix(in srgb, var(--gcmb-color-success) 80%, var(--gcmb-color-ink));
+  background: var(--gcmb-color-success-soft);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-banner.warning {
+  color: var(--gcmb-color-ink);
+  color: color-mix(in srgb, var(--gcmb-color-warning) 65%, var(--gcmb-color-ink));
+  background: var(--gcmb-color-warning-soft);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-banner.error {
+  color: var(--gcmb-color-danger);
+  background: var(--gcmb-color-danger-soft);
+}
+
+.staff-page:not(.tax-invoice-page) .staff-dialog-header,
+.staff-page:not(.tax-invoice-page) .staff-dialog-footer {
+  border-color: var(--gcmb-color-line);
+}
+
+@media (max-width: 600px) {
+  .staff-page:not(.tax-invoice-page) .staff-card {
+    padding: var(--gcmb-space-4);
+  }
+
+  .staff-page:not(.tax-invoice-page) .staff-filters {
+    gap: var(--gcmb-space-2);
+    padding: var(--gcmb-space-3);
+  }
+}

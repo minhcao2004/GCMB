@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -46,12 +47,14 @@ public class FinanceController {
     @PostMapping("/accounting/finance/categories")
     public Map<String,Object> createCategory(@AuthenticationPrincipal Identity who,@RequestBody Category body) {
         return audit.record("CREATE_FINANCE_EXPENSE_CATEGORY","FINANCE_EXPENSE_CATEGORY",null,
-            () -> finance.saveCategory(who,null,body.name(),body.description(),body.costType()), result -> (UUID) result.get("id"));
+            () -> finance.saveCategory(who,null,body.name(),body.description(),body.categoryGroup(),body.costType(),body.costNature(),
+                body.recognitionMode(),body.defaultAllocationMonths(),body.invoiceRequired(),body.reimbursementAllowed()), result -> (UUID) result.get("id"));
     }
     @PutMapping("/accounting/finance/categories/{id}")
     public Map<String,Object> updateCategory(@AuthenticationPrincipal Identity who,@PathVariable UUID id,@RequestBody Category body) {
         return audit.record("UPDATE_FINANCE_EXPENSE_CATEGORY","FINANCE_EXPENSE_CATEGORY",id,
-            () -> finance.saveCategory(who,id,body.name(),body.description(),body.costType()), result -> (UUID) result.get("id"));
+            () -> finance.saveCategory(who,id,body.name(),body.description(),body.categoryGroup(),body.costType(),body.costNature(),
+                body.recognitionMode(),body.defaultAllocationMonths(),body.invoiceRequired(),body.reimbursementAllowed()), result -> (UUID) result.get("id"));
     }
     @PutMapping("/accounting/finance/categories/{id}/status")
     public Map<String,Object> categoryStatus(@AuthenticationPrincipal Identity who,@PathVariable UUID id,@RequestBody CategoryStatus body) {
@@ -73,7 +76,21 @@ public class FinanceController {
     }
     @PostMapping(value="/accounting/finance/requests/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> pay(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
-            @RequestParam(required=false) String reference,@RequestPart("proof") MultipartFile proof) { return finance.pay(who,id,reference,proof); }
+            @RequestParam(required=false) String reference,@RequestPart("proof") MultipartFile proof,
+            @RequestParam(required=false) Integer allocationMonths,
+            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate allocationStart) {
+        return finance.pay(who,id,reference,proof,allocationMonths,allocationStart);
+    }
+
+    @PostMapping(value="/accounting/finance/requests/direct",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String,Object> createDirectExpense(@AuthenticationPrincipal Identity who,
+            @RequestPart("command") DirectExpenseRequest body,@RequestPart("proof") MultipartFile proof,
+            @RequestPart(value="invoice",required=false) MultipartFile invoice) {
+        return audit.record("CREATE_ACCOUNTANT_DIRECT_EXPENSE","FINANCE_EXPENSE_REQUEST",null,
+            () -> finance.createDirectExpense(who,body.idempotencyKey(),body.branchId(),body.categoryId(),body.amount(),body.expenseOn(),
+                body.description(),body.beneficiaryName(),body.bankAccount(),body.bankName(),body.reference(),body.allocationMonths(),
+                body.allocationStart(),proof,invoice),result -> (UUID)result.get("id"));
+    }
 
     @GetMapping("/branch-management/finance")
     public Map<String,Object> branch(@AuthenticationPrincipal Identity who) { return finance.branchSummary(who); }
@@ -98,10 +115,14 @@ public class FinanceController {
             .header(HttpHeaders.CACHE_CONTROL,"private, no-store").header("X-Content-Type-Options","nosniff").body((byte[])f.get("bytes"));
     }
 
-    public record Category(String name,String description,String costType) {}
+    public record Category(String name,String description,String categoryGroup,String costType,String costNature,
+            String recognitionMode,Integer defaultAllocationMonths,boolean invoiceRequired,boolean reimbursementAllowed) {}
     public record CategoryStatus(boolean active) {}
     public record Review(boolean approve,String note) {}
     public record FundTransfer(BigDecimal amount,LocalDate sentOn,String reference) {}
     public record ExpenseRequest(String kind,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
             String description,String beneficiaryName,String bankAccount,String bankName) {}
+    public record DirectExpenseRequest(UUID idempotencyKey,UUID branchId,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
+            String beneficiaryName,String bankAccount,String bankName,String description,String reference,
+            Integer allocationMonths,LocalDate allocationStart) {}
 }
