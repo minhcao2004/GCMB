@@ -97,8 +97,10 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
   }
   const accountLink =
     employee?.userId && onAccounts && (!branchScope || employee.accountRole === 'RECEPTIONIST');
+  const protectedAccountant = !!branchScope &&
+    (employee?.position === 'ACCOUNTANT' || employee?.accountRole === 'ACCOUNTANT');
   const canChangeStatus =
-    !readOnly &&
+    !readOnly && !protectedAccountant &&
     employee?.userId !== user.id &&
     (!branchScope ||
       !employee?.userId ||
@@ -153,7 +155,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
             <button
               type="button"
               className="staff-primary"
-              disabled={readOnly || detailLoading}
+              disabled={readOnly || detailLoading || protectedAccountant}
               onClick={() => setDialog('edit')}
             >
               Sửa hồ sơ

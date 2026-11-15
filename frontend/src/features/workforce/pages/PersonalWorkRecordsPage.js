@@ -3,7 +3,7 @@
  * Created: 03/11/2026
  * Description: UC-90 / BR-60/61, xem ca, công thực tế và chi tiết cá nhân theo tháng; MSG01/26.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { attendanceApi, dateTimeLabel, hoursLabel } from '../services/attendanceApi';
 import { dateLabel, today } from '../services/shiftApi';
@@ -17,6 +17,20 @@ export default function PersonalWorkRecordsPage({ user }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  const detailRef = useRef(null);
+  useEffect(() => {
+    if (!selected || !detailRef.current) return;
+    const dialog = detailRef.current;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [selected]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -153,10 +167,8 @@ export default function PersonalWorkRecordsPage({ user }) {
                         <button
                           type="button"
                           className="attendance-link"
-                          aria-expanded={selected === row.assignmentId}
-                          onClick={() =>
-                            setSelected(selected === row.assignmentId ? null : row.assignmentId)
-                          }
+                          aria-haspopup="dialog"
+                          onClick={() => setSelected(row.assignmentId)}
                         >
                           Chi tiết
                         </button>
@@ -172,22 +184,38 @@ export default function PersonalWorkRecordsPage({ user }) {
               </p>
             )}
             {details && (
-              <section className="attendance-summary" aria-label="Chi tiết công cá nhân">
-                <strong>
-                  {dateLabel(details.workDate)} · {details.branchName} · {label(details)}
-                </strong>
-                <span>Vào thực tế: {dateTimeLabel(details.actualIn, data.timezone)}</span>
-                <span>Ra thực tế: {dateTimeLabel(details.actualOut, data.timezone)}</span>
-                <span>
-                  Giờ công:{' '}
-                  {details.valid ? hoursLabel(details.workedMinutes) : 'Chưa có dữ liệu hợp lệ'}
-                </span>
-                <span>Ngoại lệ: {details.exceptions.join(', ') || 'Không'}</span>
-                <span>Ghi chú: {details.note || '—'}</span>
-                <button type="button" onClick={() => setSelected(null)}>
-                  Đóng chi tiết
-                </button>
-              </section>
+              <dialog
+                ref={detailRef}
+                className="shift-dialog personal-work-dialog"
+                aria-labelledby="personal-work-detail-title"
+                onCancel={(event) => {
+                  event.preventDefault();
+                  setSelected(null);
+                }}
+              >
+                <header>
+                  <div>
+                    <h2 id="personal-work-detail-title">Chi tiết chấm công</h2>
+                    <p>{dateLabel(details.workDate)} · {details.branchName}</p>
+                  </div>
+                  <button type="button" aria-label="Đóng chi tiết" onClick={() => setSelected(null)}>×</button>
+                </header>
+                <div className="shift-dialog-body">
+                  <dl className="personal-work-details">
+                    <div><dt>Ca dự kiến</dt><dd>{dateTimeLabel(details.startsAt, data.timezone)} → {dateTimeLabel(details.endsAt, data.timezone)}</dd></div>
+                    <div><dt>Tình trạng</dt><dd>{label(details)}</dd></div>
+                    <div><dt>Vào thực tế</dt><dd>{dateTimeLabel(details.actualIn, data.timezone)}</dd></div>
+                    <div><dt>Ra thực tế</dt><dd>{dateTimeLabel(details.actualOut, data.timezone)}</dd></div>
+                    <div><dt>Giờ công</dt><dd>{details.valid ? hoursLabel(details.workedMinutes) : 'Chưa có dữ liệu hợp lệ'}</dd></div>
+                    <div><dt>Kỳ công</dt><dd>{details.periodStatus === 'CLOSED' ? 'Đã chốt' : 'Chưa chốt'}</dd></div>
+                    <div><dt>Ngoại lệ</dt><dd>{details.exceptions.join(', ') || 'Không'}</dd></div>
+                    <div><dt>Ghi chú</dt><dd>{details.note || '—'}</dd></div>
+                  </dl>
+                </div>
+                <footer>
+                  <button type="button" onClick={() => setSelected(null)}>Đóng</button>
+                </footer>
+              </dialog>
             )}
           </>
         )

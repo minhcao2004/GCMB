@@ -135,7 +135,7 @@ export default function MonthlyPayrollDialog({
                 <label className="attendance-check">
                   <input type="checkbox" checked={confirmed} disabled={busy || readOnly}
                     onChange={(event) => setConfirmed(event.target.checked)} />
-                  Tôi đã kiểm tra và đồng ý khóa công cả tháng của nhân viên này.
+                  Tôi đồng ý khóa công cả tháng và hủy các ca đăng ký từ ngày mai trong tháng này.
                 </label>
                 <button type="button" disabled={busy || readOnly || !confirmed} onClick={closeAttendance}>
                   Chốt công cả tháng

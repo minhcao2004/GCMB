@@ -237,9 +237,22 @@ public class AttendanceService {
         }
         var period = repo.ensurePeriod(actor.branchId(), month.atDay(1));
         var rows = (List<Map<String, Object>>) current.get("rows");
+        LocalDate today = LocalDate.now(ZoneId.of((String) branch.get("timezone")));
         for (UUID employee : ids) {
+            // HuyDV / UC-89, thay đổi BR-62/63: hủy ca phía sau trong tháng trước khi khóa công.
+            for (var row : rows) {
+                if (employee.equals(row.get("employeeId")) &&
+                    LocalDate.parse(row.get("workDate").toString()).isAfter(today) &&
+                    row.get("attendanceId") == null) {
+                    shifts.cancel((UUID) row.get("assignmentId"), "Hủy do nhân viên đã chốt công sớm trong tháng.");
+                    shifts.audit(actor.id(), actor.branchId(), (UUID) row.get("shiftId"),
+                        "CANCEL_SHIFT_AFTER_ATTENDANCE_CLOSING", Map.of(
+                            "assignmentId", row.get("assignmentId"), "employeeId", employee));
+                }
+            }
             repo.closeEmployee((UUID) period.get("id"), employee, actor.id(),
-                rows.stream().filter(r -> employee.equals(r.get("employeeId"))).toList());
+                rows.stream().filter(r -> employee.equals(r.get("employeeId")) &&
+                    (!LocalDate.parse(r.get("workDate").toString()).isAfter(today) || r.get("attendanceId") != null)).toList());
         }
         repo.changed((UUID) period.get("id"));
         if (Boolean.TRUE.equals(current.get("monthEnded")) && employees.stream().allMatch(e ->
@@ -261,9 +274,11 @@ public class AttendanceService {
         var raw = repo.rows(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
         var rows = decorate(raw);
         var issues = repo.issues(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
+        LocalDate today = LocalDate.now(ZoneId.of((String) branch.get("timezone")));
         long missing = rows
             .stream()
-            .filter(r -> r.get("attendanceId") == null)
+            .filter(r -> r.get("attendanceId") == null &&
+                !LocalDate.parse(r.get("workDate").toString()).isAfter(today))
             .count();
         long invalid = rows
             .stream()
@@ -300,7 +315,9 @@ public class AttendanceService {
             });
             increment(employee, "shiftCount", 1);
             increment(employee, "openIssues", number(row, "openIssues"));
-            if (row.get("attendanceId") == null) increment(employee, "missing", 1);
+            if (row.get("attendanceId") == null) {
+                if (!LocalDate.parse(row.get("workDate").toString()).isAfter(today)) increment(employee, "missing", 1);
+            }
             else if (!Boolean.TRUE.equals(row.get("valid"))) increment(employee, "invalid", 1);
             else {
                 increment(employee, "workedMinutes", number(row, "workedMinutes"));
@@ -313,20 +330,23 @@ public class AttendanceService {
             }
         }
         var closures = repo.employeeClosures(branchId, month.atDay(1));
+        Instant now = Instant.now();
         for (var employee : employees.values()) {
             var closure = closures.stream()
                 .filter(c -> employee.get("employeeId").equals(c.get("employeeId")))
                 .findFirst().orElse(null);
             boolean closed = (period != null && "CLOSED".equals(period.get("status"))) || closure != null;
-            long unfinished = rows.stream()
-                .filter(r -> employee.get("employeeId").equals(r.get("employeeId"))
-                    && time(r, "endsAt").isAfter(Instant.now()))
+            var due = rows.stream().filter(r -> employee.get("employeeId").equals(r.get("employeeId")) &&
+                !LocalDate.parse(r.get("workDate").toString()).isAfter(today)).toList();
+            long unfinished = due.stream()
+                .filter(r -> time(r, "endsAt").isAfter(now))
                 .count();
             String reason = "";
             if (closed) reason = "Công tháng đã được chốt.";
             else if (unfinished > 0) {
-                reason = "Còn ca chưa kết thúc hoặc lịch phân công phía sau; cần bố trí người thay trước khi chốt cả tháng.";
-            } else if (number(employee, "missing") > 0) reason = "Còn ca chưa chấm công.";
+                reason = "Nhân viên cần làm hết các ca được phân công trong hôm nay trước khi chốt công.";
+            } else if (due.isEmpty()) reason = "Chưa có ca đã hoàn thành để chốt công.";
+            else if (due.stream().anyMatch(r -> r.get("attendanceId") == null)) reason = "Còn ca chưa chấm công.";
             else if (number(employee, "invalid") > 0) reason = "Còn bản ghi công chưa đúng.";
             else if (number(employee, "openIssues") > 0) reason = "Còn phản ánh chưa xử lý.";
             else if (!"ACTIVE".equals(branch.get("status"))) reason = "Cơ sở đang tạm ngừng.";

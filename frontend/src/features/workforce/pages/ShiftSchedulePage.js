@@ -16,7 +16,7 @@ import {
 } from '../services/shiftApi';
 import ShiftDialog from '../components/ShiftDialog';
 import AttendanceDialog from '../components/AttendanceDialog';
-import { attendanceApi } from '../services/attendanceApi';
+import { attendanceApi, futureAttendanceMessage } from '../services/attendanceApi';
 import '../styles/shifts.css';
 import '../styles/attendance.css';
 export default function ShiftSchedulePage({ user, branchScope, readOnly = false }) {
@@ -33,10 +33,17 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     [preparing, setPreparing] = useState(false);
   const modal = useRef(null);
   const attendanceRequest = useRef(0);
+  const [attendanceWarning, setAttendanceWarning] = useState(null);
+  useEffect(() => {
+    if (!attendanceWarning) return;
+    const timer = setTimeout(() => setAttendanceWarning(null), 5000);
+    return () => clearTimeout(timer);
+  }, [attendanceWarning]);
   useEffect(() => {
     attendanceRequest.current += 1;
     setDialog(null);
     setNotice('');
+    setAttendanceWarning(null);
     return () => { attendanceRequest.current += 1; };
   }, [branchScope, week]);
   modal.current = dialog;
@@ -101,6 +108,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
   };
   async function openAttendance(shift) {
     if (!manager || !shift || modal.current) return;
+    if (new Date(shift.startsAt).getTime() > Date.now()) {
+      setAttendanceWarning({ message: futureAttendanceMessage });
+      return;
+    }
+    setAttendanceWarning(null);
     setNotice('');
     const request = ++attendanceRequest.current;
     setDialog({ type: 'attendanceLoading', shift });
@@ -419,6 +431,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
             </div>
           </>
         )
+      )}
+      {attendanceWarning && (
+        <div className="attendance-warning-toast" role="status">
+          <span>{attendanceWarning.message}</span>
+          <button type="button" aria-label="Đóng thông báo" onClick={() => setAttendanceWarning(null)}>×</button>
+        </div>
       )}
       {dialog?.type === 'attendanceLoading' && (
         <p className="shift-message" role="status">Đang tải chấm công của ca…</p>

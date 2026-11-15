@@ -417,7 +417,7 @@ export default function AttendancePage({
               <>
                 {!closed && !data.monthEnded && (
                   <p className="attendance-help">
-                    Có thể chốt sớm theo nhân viên. Cần hoàn tất các ca và xử lý phản ánh; nhân viên đã chốt sẽ bị khóa công cả tháng.
+                    Chốt công sẽ khóa cả tháng và hủy các ca đăng ký từ ngày mai trong tháng của nhân viên đã chọn.
                   </p>
                 )}
                 {closed ? (

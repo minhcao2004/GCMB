@@ -123,6 +123,59 @@
   color: var(--gcmb-color-ink);
   color: color-mix(in srgb, var(--gcmb-color-success) 80%, var(--gcmb-color-ink));
 }
+.attendance-warning-toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 16px;
+  border: 1px solid #e8cd94;
+  border-radius: var(--gcmb-radius-control);
+  background: #fff7e8;
+  color: #79500b;
+  box-shadow: 0 6px 20px #2022321a;
+}
+.attendance-warning-toast button {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+}
+.personal-work-dialog {
+  width: min(680px, calc(100vw - 28px));
+}
+.personal-work-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0;
+}
+.personal-work-details > div:first-child,
+.personal-work-details > div:last-child {
+  grid-column: 1 / -1;
+}
+.personal-work-details dt {
+  color: var(--gcmb-color-text);
+  margin-bottom: 6px;
+}
+.personal-work-details dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 540px) {
+  .personal-work-details {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
 .attendance-summary {
   display: flex;
   flex-direction: column;

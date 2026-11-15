@@ -66,6 +66,9 @@ public class AccountAccessService {
         if (roleId == null) {
             throw new AuthFailure(400, "role", "Vui lòng chọn vai trò hợp lệ");
         }
+        if ("HEAD_OFFICE_MANAGER".equals(input.role()) && !accounts.headOfficeAvailable(input.role(), id)) throw new AuthFailure(
+            409, "role", "Hệ thống đã có tài khoản Quản lý cấp cao. Không thể phân thêm vai trò này."
+        );
         boolean chain = List.of("HEAD_OFFICE_MANAGER", "ACCOUNTANT").contains(input.role());
         if (input.branchIds() != null && !"BRANCH_MANAGER".equals(input.role())) {
             throw new AuthFailure(400, "branchIds", "Chỉ quản lý cơ sở được phân công nhiều cơ sở");
@@ -180,6 +183,9 @@ public class AccountAccessService {
                   true
               );
         if (activate) {
+            if ("HEAD_OFFICE_MANAGER".equals(before.role()) && !accounts.headOfficeAvailable(before.role(), id)) throw new AuthFailure(
+                409, "form", "Hệ thống đã có tài khoản Quản lý cấp cao. Không thể kích hoạt thêm."
+            );
             if (!accounts.canReactivate(id)) throw new AuthFailure(
                 409,
                 "form",

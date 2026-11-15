@@ -148,6 +148,9 @@ public class AccountService {
         if (input.employeeId() == null) {
             throw new AuthFailure(400, "employeeId", "Vui lòng bổ sung hồ sơ nhân viên.");
         }
+        if ("HEAD_OFFICE_MANAGER".equals(input.role()) && !repository.headOfficeAvailable(input.role(), null)) throw new AuthFailure(
+            409, "role", "Hệ thống đã có tài khoản Quản lý cấp cao. Không thể tạo thêm."
+        );
         if (!repository.lockAvailableEmployee(input.employeeId())) {
             throw new AuthFailure(
                 409,
