@@ -39,6 +39,7 @@ public class MutationAudit {
         Map.entry("BANK_TRANSACTION", "bank_transaction"),
         Map.entry("FINANCIAL_PERIOD", "financial_period"),
         Map.entry("FINANCE_EXPENSE_CATEGORY", "finance_expense_category"),
+        Map.entry("FINANCE_EXPENSE_REQUEST", "finance_expense_request"),
         Map.entry("FINANCE_RECURRING_EXPENSE", "finance_recurring_expense"),
         Map.entry("FINANCE_RECURRING_EXPENSE_PERIOD", "finance_recurring_expense_period"));
 
@@ -114,6 +115,14 @@ public class MutationAudit {
         if ("FINANCIAL_PERIOD".equals(type)) extra = " || jsonb_build_object('month',t.\"month\",'close_note',t.close_note)";
         if ("BANK_TRANSACTION".equals(type)) extra = " || jsonb_build_object('branch_id',(SELECT branch_id FROM gcmb.financial_account a WHERE a.id=t.account_id))";
         if ("FINANCE_EXPENSE_CATEGORY".equals(type)) extra = " || jsonb_build_object('request_count',(SELECT count(*) FROM gcmb.finance_expense_request r WHERE r.category_id=t.id))";
+        // HuyDV: chi trực tiếp cần giữ chứng từ, tiến trình xử lý và lịch phân bổ cùng snapshot audit.
+        if ("FINANCE_EXPENSE_REQUEST".equals(type)) extra = " || jsonb_build_object('history',"
+            + "(SELECT jsonb_agg(jsonb_build_object('action',h.action,'actor_id',h.actor_id,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at,h.id)"
+            + " FROM gcmb.finance_request_history h WHERE h.request_id=t.id),"
+            + "'attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'kind',a.kind,'original_name',a.original_name,'mime_type',a.mime_type,'byte_size',a.byte_size) ORDER BY a.created_at,a.id)"
+            + " FROM gcmb.finance_attachment a WHERE a.owner_type='EXPENSE_REQUEST' AND a.owner_id=t.id),"
+            + "'allocations',(SELECT jsonb_agg(jsonb_build_object('period_month',a.period_month,'seq',a.seq,'amount',a.amount) ORDER BY a.seq,a.id)"
+            + " FROM gcmb.finance_expense_allocation a WHERE a.request_id=t.id))";
         List<String> snapshots = db.queryForList("""
             SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
                 WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description','category_id','room_id','location_note','serial_number','purchase_date','purchase_value','warranty_expiry','image_attachment_id',
@@ -131,6 +140,9 @@ public class MutationAudit {
                     'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
                     'accepted_by','accepted_at','served_at',
                     'beneficiary_name','bank_account','bank_name','due_day','monthly_amount','expected_amount',
+                    'expense_on','origin','recognition_mode','allocation_months','allocation_start','requested_by','requested_at',
+                    'accountant_reviewed_by','accountant_reviewed_at','head_office_reviewed_by','head_office_reviewed_at',
+                    'paid_by','paid_at','paid_reference',
                     'expense_belongs_to','start_month','end_month','reminder_days','terminated_at','updated_by',
                     'due_date','period_month','default_amount','request_id','skip_reason')),'{}'::jsonb)
             """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
