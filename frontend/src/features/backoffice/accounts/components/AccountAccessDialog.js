@@ -37,7 +37,7 @@ export default function AccountAccessDialog({
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const chain = ['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'].includes(role);
-  const immutable = account.id === actorId || readOnly;
+  const immutable = account.id === actorId || account.role === 'ACCOUNTANT' || readOnly;
   const branchName = chain
     ? 'Toàn chuỗi'
     : role === 'BRANCH_MANAGER'
@@ -133,7 +133,9 @@ export default function AccountAccessDialog({
             <p className="account-access-note">
               {account.id === actorId
                 ? 'Không thể thay đổi quyền hoặc thu hồi chính tài khoản đang đăng nhập.'
-                : 'Tài khoản đã bị thu hồi truy cập.'}
+                : account.role === 'ACCOUNTANT'
+                  ? 'Tài khoản kế toán chỉ được xem trong màn quản lý tài khoản.'
+                  : 'Tài khoản đã bị thu hồi truy cập.'}
             </p>
           )}
           {mode === 'role' ? (

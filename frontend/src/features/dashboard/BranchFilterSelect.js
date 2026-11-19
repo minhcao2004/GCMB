@@ -11,7 +11,7 @@ export default function BranchFilterSelect({ branches = [], value, multiple = fa
   const summary = !selectedIds.length
     ? 'Tất cả cơ sở'
     : multiple
-      ? selectedIds.length === 1 ? selectedNames[0] || '1 cơ sở' : `${selectedIds.length} cơ sở`
+      ? selectedIds.length <= 2 && selectedNames.length === selectedIds.length ? selectedNames.join(', ') : `${selectedIds.length} cơ sở`
       : selectedNames[0] || 'Cơ sở đã chọn';
 
   function changeMultiple(id, checked) {
@@ -29,13 +29,13 @@ export default function BranchFilterSelect({ branches = [], value, multiple = fa
 
   return (
     <details className="finance-branch-filter">
-      <summary aria-label={`Cơ sở: ${summary}`} title={summary}><span>{summary}</span></summary>
+      <summary aria-label={`Cơ sở: ${summary}`} title={selectedNames.join(', ') || summary}><span>{summary}</span></summary>
       <div className="finance-branch-filter__menu" role={multiple ? 'group' : 'radiogroup'} aria-label="Chọn cơ sở">
         {multiple ? <>
-          <label className="finance-branch-filter__option">
-            <input type="checkbox" checked={!selectedIds.length} onChange={() => onChange([])} />
-            <span>Tất cả cơ sở</span>
-          </label>
+          <div className="finance-branch-filter__actions">
+            <button type="button" disabled={!branches.length || selectedIds.length === branches.length} onClick={() => onChange(branches.map((branch) => String(branch.id)))}>Chọn tất cả</button>
+            <button type="button" disabled={!selectedIds.length} onClick={() => onChange([])}>Bỏ chọn · xem toàn chuỗi</button>
+          </div>
           {branches.map((branch) => {
             const id = String(branch.id);
             return <label className="finance-branch-filter__option" key={id}>

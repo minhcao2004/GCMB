@@ -1,16 +1,36 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import './executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(Number(value) * 100)}%`;
-const changeText = (value) => value == null ? 'Chưa có doanh thu kỳ trước để so sánh' : `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}% so kỳ trước`;
 const tooltipMoney = (value) => money(value);
 const axisMoney = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value / 1_000_000)} tr`;
+const todayVn = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const addDays = (day, amount) => new Date(Date.parse(`${day}T00:00:00Z`) + amount * 86400000).toISOString().slice(0, 10);
+const dateLabel = (day) => day.split('-').reverse().join('/');
+const periods = [['day', 'Hôm nay'], ['week', 'Tuần này'], ['month', 'Tháng này'], ['quarter', 'Quý này'], ['year', 'Năm nay'], ['custom', 'Tùy chỉnh']];
+const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+
+function presetRange(period, anchor, today) {
+  const date = new Date(`${anchor}T00:00:00Z`);
+  const month = date.getUTCMonth();
+  const from = period === 'day' ? anchor : period === 'week' ? addDays(anchor, -((date.getUTCDay() + 6) % 7))
+    : period === 'quarter' ? `${anchor.slice(0, 4)}-${String(Math.floor(month / 3) * 3 + 1).padStart(2, '0')}-01`
+      : period === 'year' ? `${anchor.slice(0, 4)}-01-01` : `${anchor.slice(0, 7)}-01`;
+  const end = new Date(`${from}T00:00:00Z`);
+  if (period === 'week') end.setUTCDate(end.getUTCDate() + 6);
+  if (period === 'month') { end.setUTCMonth(end.getUTCMonth() + 1); end.setUTCDate(0); }
+  if (period === 'quarter') { end.setUTCMonth(end.getUTCMonth() + 3); end.setUTCDate(0); }
+  if (period === 'year') { end.setUTCFullYear(end.getUTCFullYear() + 1); end.setUTCDate(0); }
+  const last = period === 'day' ? anchor : end.toISOString().slice(0, 10);
+  return { from, to: last > today ? today : last };
+}
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -23,38 +43,86 @@ function PanelHeading({ title, description, trailing }) {
   return <div className="executive-panel-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{trailing}</div>;
 }
 
-function Metric({ label, value, footnote, tone = '' }) {
+function Metric({ label, value, footnote, tone = '', href, linkLabel }) {
   return <article className={`executive-metric${tone ? ` is-${tone}` : ''}`}>
-    <h2>{label}</h2><strong>{value}</strong><p>{footnote}</p>
+    <h2>{label}</h2><strong>{value}</strong><p>{footnote}</p>{href && <Link to={href}>{linkLabel}</Link>}
   </article>;
 }
 
 function RankingTable({ rows, emptyMessage }) {
-  return <div className="executive-table-scroll"><table className="executive-ranking-table">
-    <thead><tr><th>Cơ sở</th><th>Thu nhập vận hành</th><th>Lượt đặt không hủy</th><th>Lấp đầy</th><th>Chi phí</th><th>Trạng thái</th></tr></thead>
-    <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id}>
-      <td><span className="executive-branch-name"><span className="executive-rank">{String(index + 1).padStart(2, '0')}</span><span>{row.name}<small>{row.code}</small></span></span></td>
-      <td className="executive-number">{money(row.revenue)}</td><td className="executive-number">{new Intl.NumberFormat('vi-VN').format(row.bookings)}</td>
-      <td><span className="executive-occupancy-value">{percent(row.occupancy)}</span>{row.occupancy != null && <span className="executive-mini-track"><i style={{ width: `${row.occupancy * 100}%` }} /></span>}</td>
-      <td className="executive-number">{money(row.cost)}</td>
+  return <div className="executive-table-scroll" tabIndex="0" role="region" aria-label="Bảng kết quả theo cơ sở, cuộn ngang khi cần"><table className="executive-ranking-table">
+    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Thu nhập vận hành</th><th scope="col">Chi phí (theo ngày thanh toán)</th><th scope="col">Lợi nhuận vận hành</th><th scope="col">Lấp đầy (ước tính)</th><th scope="col">Trạng thái hiện tại</th></tr></thead>
+    <tbody>{rows.length ? rows.map((row) => <tr key={row.id} className={Number(row.profit) < 0 || row.status !== 'ACTIVE' ? 'is-attention' : ''}>
+      <th scope="row"><span className="executive-branch-name"><span>{row.name}<small>{row.code}</small></span></span></th>
+      <td className="executive-number">{money(row.revenue)}</td>
+      <td className="executive-number" title="Khoản chi vận hành theo ngày thanh toán; gồm lương và ứng lương.">{money(row.cost)}</td>
+      <td className={`executive-number${Number(row.profit) < 0 ? ' is-loss' : ''}`}>{money(row.profit)}{Number(row.profit) < 0 && <small>Lỗ vận hành</small>}</td>
+      <td>{percent(row.occupancy)}</td>
       <td><span className={`executive-status${row.status === 'ACTIVE' ? '' : ' is-paused'}`}><i />{row.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm ngừng'}</span></td>
     </tr>) : <tr><td className="executive-empty-cell" colSpan="6">{emptyMessage}</td></tr>}</tbody>
   </table></div>;
 }
 
 export default function ExecutiveDashboard() {
-  const [period, setPeriod] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date()));
-  const [selectedBranchId, setSelectedBranchId] = useState('');
-  const [reportBranchId, setReportBranchId] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const today = todayVn();
+  const initial = presetRange('month', today, today);
+  const from = searchParams.has('from') ? searchParams.get('from') : initial.from;
+  const to = searchParams.has('to') ? searchParams.get('to') : initial.to;
+  const requestedPeriod = periods.some(([key]) => key === searchParams.get('period')) ? searchParams.get('period') : searchParams.has('from') ? 'custom' : 'month';
+  const matchingPreset = requestedPeriod !== 'custom' && validDate(from) && validDate(to)
+    && presetRange(requestedPeriod, from, today).from === from && presetRange(requestedPeriod, from, today).to === to;
+  const period = matchingPreset ? requestedPeriod : 'custom';
+  const reportBranchId = searchParams.get('branchId') || '';
   const [branchOptions, setBranchOptions] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const rangeError = !validDate(from) || !validDate(to) ? 'Cần chọn đủ ngày bắt đầu và ngày kết thúc.'
+    : from > today || to > today ? 'Không thể chọn ngày trong tương lai.'
+      : from > to ? 'Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.' // BR-163 / MSG106.
+        : (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000 + 1 > 366 ? 'Khoảng ngày tối đa là 366 ngày.' : '';
   useEffect(() => {
+    if (searchParams.has('from') && searchParams.has('to') && searchParams.get('period') === period) return;
+    const next = new URLSearchParams(searchParams);
+    if (!next.has('from')) next.set('from', from);
+    if (!next.has('to')) next.set('to', to);
+    next.set('period', period);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, from, to, period]);
+
+  function updateScope(values) {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(values).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key));
+    setSearchParams(next, { replace: true });
+  }
+
+  function choosePeriod(value) {
+    updateScope(value === 'custom' ? { period: value } : { period: value, ...presetRange(value, today, today) });
+  }
+
+  function chooseAnchor(value) {
+    if (validDate(value) && value <= today) updateScope({ period, ...presetRange(period, value, today) });
+  }
+
+  function movePeriod(direction) {
+    const anchor = new Date(`${from}T00:00:00Z`);
+    if (period === 'day') anchor.setUTCDate(anchor.getUTCDate() + direction);
+    if (period === 'week') anchor.setUTCDate(anchor.getUTCDate() + 7 * direction);
+    if (period === 'month') anchor.setUTCMonth(anchor.getUTCMonth() + direction);
+    if (period === 'quarter') anchor.setUTCMonth(anchor.getUTCMonth() + 3 * direction);
+    if (period === 'year') anchor.setUTCFullYear(anchor.getUTCFullYear() + direction);
+    const next = anchor.toISOString().slice(0, 10);
+    if (next <= today) chooseAnchor(next);
+  }
+
+  useEffect(() => {
+    if (rangeError) { setData(null); setLoading(false); return undefined; }
     let active = true;
     setLoading(true); setError(''); setData(null);
     Promise.allSettled([
-      api.get('/head-office/dashboard', { params: { month: period, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
+      api.get('/head-office/dashboard', { params: { from, to, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
       api.get('/head-office/finance'),
     ]).then(([reportResult, financeResult]) => {
       if (!active) return;
@@ -62,154 +130,114 @@ export default function ExecutiveDashboard() {
       const report = reportResult.value.data;
       const branches = report.results || [];
       const totals = report.totals || {};
-      if (!reportBranchId) setBranchOptions(branches.filter((row) => row.status === 'ACTIVE'));
+      setBranchOptions(report.branches || []);
       const requests = financeResult.status === 'fulfilled' ? financeResult.value.data.requests || [] : [];
       setData({
-        kpis: { revenue: totals.revenue, billRevenue: totals.billRevenue, forfeitedDeposits: totals.forfeitedDeposits, revenueChange: report.changes?.revenue, bookings: totals.bookingCount, occupancy: totals.occupancyRate == null ? null : Number(totals.occupancyRate) / 100, cost: totals.expenses, grossProfit: totals.profit, activeBranches: branches.filter((row) => row.status === 'ACTIVE').length, suspendedBranches: branches.filter((row) => row.status !== 'ACTIVE').length, branchTotal: branches.length },
-        revenueByBranch: branches.map((row) => {
-          return { ...row, shortName: row.code, revenue: Number(row.revenue) || 0, occupancy: row.occupancyRate == null ? null : Number(row.occupancyRate) / 100, bookings: row.bookingCount, cost: row.expenses };
-        }),
-        occupancyByBranch: branches.map((row) => ({ ...row, occupancy: row.occupancyRate == null ? 0 : Number(row.occupancyRate) / 100 })),
+        // BR-102/103/104/105/107: giữ số KPI đã tính ở backend, không nhập cọc vào thu nhập hay CAPEX vào chi phí vận hành.
+        kpis: { revenue: totals.revenue, heldDeposits: totals.heldDeposits, forfeitedDeposits: totals.forfeitedDeposits, bookings: totals.bookingCount, occupancy: totals.occupancyRate == null ? null : Number(totals.occupancyRate) / 100, cost: totals.expenses, grossProfit: totals.profit, margin: totals.margin, activeBranches: branches.filter((row) => row.status === 'ACTIVE').length, suspendedBranches: branches.filter((row) => row.status !== 'ACTIVE').length, branchTotal: branches.length },
         revenueByDay: (report.dailyRevenue || []).map((row) => {
           const date = String(row.date).slice(0, 10);
-          return { ...row, label: `${date.slice(8, 10)}/${date.slice(5, 7)}`, roomRevenue: Number(row.roomRevenue) || 0, fnbRevenue: Number(row.fnbRevenue) || 0, overtimeRevenue: Number(row.overtimeRevenue) || 0, otherRevenue: Number(row.otherRevenue) || 0 };
+          return { label: `${date.slice(8, 10)}/${date.slice(5, 7)}`, revenue: Number(row.billRevenue) || 0 };
         }),
-        revenueMix: (report.revenueMix || []).map((row) => ({ name: row.label, value: Number(row.value) || 0, color: row.label === 'Tiền mặt' ? '#168b87' : row.label === 'SePay' ? '#6a3ee8' : '#df9b28' })),
-        ranking: [...branches].map((row) => ({ ...row, occupancy: row.occupancyRate == null ? null : Number(row.occupancyRate) / 100, bookings: row.bookingCount, cost: row.expenses })).sort((a, b) => Number(b.revenue) - Number(a.revenue)),
-        approvals: requests.filter((row) => ['WAITING_HEAD_OFFICE', 'WAITING_APPROVAL', 'WAITING_MANAGER'].includes(row.status)).map((row) => ({ id: row.id, category: row.description || row.categoryName || 'Đề nghị chi', branch: row.branchName || '—', amount: row.amount || 0 })),
-        warnings: branches.filter((row) => row.status !== 'ACTIVE').map((row) => ({ id: row.id, branch: row.name, kind: 'Cơ sở tạm ngừng', detail: 'Trạng thái hoạt động theo hồ sơ cơ sở.', level: 'critical' })),
+        ranking: [...branches].map((row) => ({ ...row, occupancy: row.occupancyRate == null ? null : Number(row.occupancyRate) / 100, cost: row.expenses })).sort((a, b) =>
+          Number(Number(b.profit) < 0 || b.status !== 'ACTIVE') - Number(Number(a.profit) < 0 || a.status !== 'ACTIVE') || Number(a.profit) - Number(b.profit)),
+        // BR-91: quản lý cấp cao chỉ duyệt đề nghị đang chờ cấp này.
+        approvals: requests.filter((row) => row.status === 'WAITING_HEAD_OFFICE').map((row) => ({ id: row.id, code: row.code || row.id, category: row.category_name || 'Đề nghị chi', description: row.description || '', branch: row.branch_name || '—', amount: row.amount || 0 })),
+        warnings: branches.filter((row) => Number(row.profit) < 0 || row.status !== 'ACTIVE').map((row) => ({ id: row.id, branch: row.name, profit: row.profit, loss: Number(row.profit) < 0, paused: row.status !== 'ACTIVE' })),
         approvalsAvailable: financeResult.status === 'fulfilled',
       });
       if (financeResult.status === 'rejected') setError('Không tải được danh sách đề nghị chi; các biểu đồ báo cáo vẫn đã được tải.');
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [period, reportBranchId]);
-  const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], revenueMix: [], ranking: [], approvals: [], warnings: [] };
-  const selectedBranch = safeData.revenueByBranch.find((branch) => branch.id === selectedBranchId);
+  }, [from, to, reportBranchId, rangeError, revision]);
+  const safeData = data || { kpis: {}, revenueByDay: [], ranking: [], approvals: [], warnings: [] };
   const { kpis } = safeData;
-  const selectedRevenueMix = safeData.revenueMix.reduce((sum, item) => sum + item.value, 0);
-  const noReportMessage = loading ? 'Đang tải báo cáo…' : 'Chưa có dữ liệu báo cáo.';
-
-  const selectChartBranch = (event) => {
-    const row = event?.activePayload?.[0]?.payload;
-    if (row?.id) setSelectedBranchId(row.id);
-  };
+  const branchName = reportBranchId ? branchOptions.find((branch) => branch.id === reportBranchId)?.name || 'cơ sở đang chọn' : 'toàn chuỗi';
+  const scopeLabel = `${dateLabel(from)} – ${dateLabel(to)} · ${branchName}`;
+  const currentPreset = period !== 'custom' && presetRange(period, today, today).from === from && to === today;
+  const periodLabel = period === 'custom' ? 'Khoảng tùy chỉnh' : currentPreset
+    ? periods.find(([key]) => key === period)?.[1]
+    : period === 'day' ? `Ngày ${dateLabel(from)}` : period === 'week' ? `Tuần ${dateLabel(from)} – ${dateLabel(to)}`
+      : period === 'month' ? `Tháng ${from.slice(5, 7)}/${from.slice(0, 4)}`
+        : period === 'quarter' ? `Quý ${Math.floor((Number(from.slice(5, 7)) - 1) / 3) + 1}/${from.slice(0, 4)}`
+          : `Năm ${from.slice(0, 4)}`;
+  // BR-103/107: số chi theo ngày thanh toán mở chi tiết cùng kỳ/cơ sở và cùng cách ghi nhận.
+  const expenseQuery = new URLSearchParams({ screen: 'Báo cáo chi phí', from, to, period, basis: 'CASH', costType: 'OPEX', returnTo: 'executive' });
+  if (reportBranchId) expenseQuery.set('branchId', reportBranchId);
+  const expenseHref = `/quan-ly-he-thong?${expenseQuery}`;
+  const marginText = Number(kpis.revenue) > 0 && kpis.margin != null
+    ? `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(Number(kpis.margin))}%` : '—';
+  const noActivity = data && Number(kpis.revenue) === 0 && Number(kpis.cost) === 0 && Number(kpis.bookings) === 0;
+  const noReportMessage = loading ? 'Đang tải báo cáo…' : error ? 'Không tải được báo cáo.' : 'Chưa có dữ liệu báo cáo.';
 
   return <section className="manager-content executive-dashboard" aria-labelledby="executive-title" aria-busy={loading}>
     <header className="executive-heading">
-      <div><h1 id="executive-title">Tổng quan toàn chuỗi</h1><p>Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu. Chi phí vận hành chỉ tính khoản đã thanh toán, không gồm chuyển quỹ nội bộ. Chi đầu tư được trình bày riêng.</p></div>
+      <div><h1 id="executive-title">Tổng quan toàn chuỗi</h1><p>Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất. Cọc đang giữ và cọc bị tịch thu được trình bày riêng. Chi phí vận hành chỉ tính khoản đã thanh toán, không gồm chuyển quỹ nội bộ. Chi đầu tư được trình bày riêng.</p></div>
       <div className="executive-filters">
-        <label className="executive-period">Kỳ báo cáo<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
-        <label className="executive-period">Phạm vi báo cáo<select value={reportBranchId} onChange={(event) => setReportBranchId(event.target.value)}><option value="">Toàn chuỗi</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+        <label className="executive-period">Kỳ báo cáo<select value={period} onChange={(event) => choosePeriod(event.target.value)}>{periods.map(([key, label]) => <option key={key} value={key}>{key === period && !currentPreset && key !== 'custom' ? label.replace(' này', '').replace('Hôm nay', 'Ngày') : label}</option>)}</select></label>
+        {period !== 'custom' && <><label className="executive-period">Chọn ngày thuộc kỳ<input type="date" value={to} max={today} onChange={(event) => chooseAnchor(event.target.value)} /></label>
+          <div className="executive-period-nav" aria-label="Chuyển kỳ báo cáo"><button type="button" onClick={() => movePeriod(-1)}>Kỳ trước</button><button type="button" disabled={currentPreset} onClick={() => movePeriod(1)}>Kỳ sau</button><button type="button" disabled={currentPreset} onClick={() => choosePeriod(period)}>Kỳ này</button></div></>}
+        <label className="executive-period">Từ ngày<input type="date" value={from} max={today} onChange={(event) => updateScope({ from: event.target.value, period: 'custom' })} /></label>
+        <label className="executive-period">Đến ngày<input type="date" value={to} max={today} onChange={(event) => updateScope({ to: event.target.value, period: 'custom' })} /></label>
+        <label className="executive-period">Phạm vi báo cáo<select value={reportBranchId} onChange={(event) => updateScope({ branchId: event.target.value })}><option value="">Toàn chuỗi</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name} · {branch.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm ngừng'}</option>)}</select></label>
       </div>
     </header>
-    {loading && <p role="status">Đang tải báo cáo…</p>}{error && <p role="alert">{error}</p>}
+    <p className="executive-scope">Kỳ đang xem: {periodLabel} · {scopeLabel}. Số liệu tài chính theo khoảng lọc; việc chờ duyệt và trạng thái cơ sở là hiện tại.</p>
+    {loading && <p role="status">Đang tải báo cáo theo kỳ và cơ sở đã chọn…</p>}
+    {rangeError && <p role="alert">{rangeError}</p>}
+    {error && <div className="executive-feedback" role="alert"><span>{error}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>Thử lại</button></div>}
 
-    <div className="executive-kpis" aria-label="Chỉ số chính">
-      <Metric label="Thu nhập vận hành" value={data ? money(kpis.revenue) : '—'} footnote={data ? `Hóa đơn hoàn tất ${money(kpis.billRevenue)} · Cọc bị tịch thu ${money(kpis.forfeitedDeposits)} · ${changeText(kpis.revenueChange)}` : 'Chưa có dữ liệu'} tone={kpis.revenueChange == null ? '' : kpis.revenueChange >= 0 ? 'positive' : 'negative'} />
-      <Metric label="Số lượt đặt không hủy" value={data ? new Intl.NumberFormat('vi-VN').format(kpis.bookings || 0) : '—'} footnote="Theo ngày bắt đầu dự kiến; gồm khách không đến" />
-      <Metric label="Tỷ lệ lấp đầy tháng (ước tính)" value={data ? percent(kpis.occupancy) : '—'} footnote="Số giờ phòng có khách trong khung giờ bán" />
-      <Metric label="Chi phí vận hành" value={data ? money(kpis.cost) : '—'} footnote="Chỉ gồm khoản đã thanh toán; chi đầu tư trình bày riêng" />
-      <Metric label="Lợi nhuận vận hành" value={data ? money(kpis.grossProfit) : '—'} footnote="Thu nhập vận hành trừ chi phí vận hành đã thanh toán" tone={!data ? '' : kpis.grossProfit >= 0 ? 'positive' : 'negative'} />
-      <Metric label="Cơ sở hoạt động" value={data ? `${kpis.activeBranches} / ${kpis.branchTotal}` : '—'} footnote={data ? `${kpis.suspendedBranches} cơ sở tạm ngừng` : 'Chưa có dữ liệu'} />
+    <div className="executive-kpis" aria-label="Kết quả chính trong kỳ">
+      <Metric label="Thu nhập vận hành" value={data ? money(kpis.revenue) : '—'} footnote="Từ hóa đơn hoàn tất; không cộng tiền cọc." />
+      <Metric label="Chi phí vận hành (theo ngày thanh toán)" value={data ? money(kpis.cost) : '—'} footnote="Gồm lương và ứng lương đã chi; không gồm chi đầu tư." href={expenseHref} linkLabel="Xem khoản chi theo ngày thanh toán" />
+      <Metric label="Lợi nhuận vận hành" value={data ? money(kpis.grossProfit) : '—'} footnote={`Thu nhập trừ chi phí vận hành · Biên lợi nhuận: ${data ? marginText : '—'}`} tone={!data ? '' : Number(kpis.grossProfit) < 0 ? 'negative' : 'positive'} />
+      <Metric label="Tỷ lệ lấp đầy (ước tính)" value={data ? percent(kpis.occupancy) : '—'} footnote="Giờ có khách ÷ (phòng khả dụng hiện tại × ngày lọc × 12 giờ, 08–20h)." />
     </div>
 
-    <div className="executive-chart-grid">
-      <article className="executive-panel executive-panel-branch-revenue">
-        <PanelHeading title="Thu nhập vận hành theo cơ sở" description="Gồm hóa đơn hoàn tất và cọc bị tịch thu; chọn cột để xem số liệu cơ sở." />
-        <label className="executive-chart-select">Chọn cơ sở xem số liệu
-          <select value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)}>
-            <option value="">Chọn cơ sở…</option>{safeData.revenueByBranch.map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
-          </select>
-        </label>
-        <div className="executive-chart-area executive-chart-area-branches" style={{ height: Math.max(266, safeData.revenueByBranch.length * 32) }}>
-          {safeData.revenueByBranch.length ? <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={safeData.revenueByBranch} layout="vertical" margin={{ top: 8, right: 34, left: 8, bottom: 8 }} onClick={selectChartBranch}>
-              <CartesianGrid horizontal={false} stroke="#e8eaf1" strokeDasharray="3 5" />
-              <XAxis type="number" tickFormatter={axisMoney} tickLine={false} axisLine={false} tick={{ fill: '#59657a', fontSize: 12 }} />
-              <YAxis type="category" dataKey="name" width={180} tickLine={false} axisLine={false} tick={{ fill: '#39445a', fontSize: 12 }} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f5f4fa' }} />
-              <Bar dataKey="revenue" name="Thu nhập vận hành" fill="#6a3ee8" radius={[0, 4, 4, 0]} barSize={18} cursor="pointer" onClick={(item) => item?.payload?.id && setSelectedBranchId(item.payload.id)} />
-            </BarChart>
-          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Không có dữ liệu cơ sở trong kỳ báo cáo.' : noReportMessage}</p>}
-        </div>
-        {selectedBranch && <div className="executive-branch-insight" aria-live="polite">
-          <div><strong>{selectedBranch.name}</strong><small>{selectedBranch.code} · {selectedBranch.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm ngừng'}</small></div>
-          <span>Thu nhập vận hành <b>{money(selectedBranch.revenue)}</b></span><span>Lượt đặt không hủy <b>{new Intl.NumberFormat('vi-VN').format(selectedBranch.bookings)}</b></span><span>Lấp đầy <b>{percent(selectedBranch.occupancy)}</b></span><span>Chi phí vận hành <b>{money(selectedBranch.cost)}</b></span>
-          <button type="button" aria-label="Đóng chi tiết cơ sở" onClick={() => setSelectedBranchId('')}>Đóng</button>
-        </div>}
-      </article>
+    <div className="executive-support" aria-label="Chỉ số hỗ trợ">
+      <Metric label="Lượt đặt không hủy · trong kỳ" value={data ? new Intl.NumberFormat('vi-VN').format(kpis.bookings || 0) : '—'} footnote="Theo ngày bắt đầu dự kiến; gồm khách không đến." />
+      <Metric label="Cọc đang giữ · cuối kỳ" value={data ? money(kpis.heldDeposits) : '—'} footnote="Số dư cọc tại cuối khoảng; không thuộc doanh thu." />
+      <Metric label="Cọc bị tịch thu · trong kỳ" value={data ? money(kpis.forfeitedDeposits) : '—'} footnote="Trình bày riêng khỏi doanh thu hóa đơn." />
+      <Metric label="Cơ sở · trạng thái hiện tại" value={data ? `${kpis.activeBranches} hoạt động / ${kpis.suspendedBranches} tạm ngừng` : '—'} footnote="Trong phạm vi cơ sở đã chọn; không theo bộ lọc ngày." />
+    </div>
+    {noActivity && <p className="executive-no-activity" role="status">Không có hóa đơn hoàn tất, chi phí đã thanh toán hoặc lượt đặt trong khoảng này. Trạng thái cơ sở và việc chờ duyệt vẫn là dữ liệu hiện tại.</p>}
 
+    <div className="executive-work-grid">
       <article className="executive-panel executive-panel-trend">
-        <PanelHeading title="Xu hướng doanh thu" description="Doanh thu thuần từ hóa đơn hoàn tất, phân theo từng dòng hóa đơn." />
-        <div className="executive-chart-area executive-chart-area-tall">
+        <PanelHeading title="Xu hướng thu nhập vận hành từ hóa đơn hoàn tất" description={`Trong kỳ ${scopeLabel} · Theo ngày hoàn tất hóa đơn; không gồm cọc.`} />
+        <div className="executive-chart-area executive-chart-area-tall" role={safeData.revenueByDay.length ? 'img' : undefined} aria-label={safeData.revenueByDay.length ? `Xu hướng thu nhập vận hành từ hóa đơn hoàn tất trong kỳ ${scopeLabel}` : undefined}>
           {safeData.revenueByDay.length ? <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={safeData.revenueByDay} margin={{ top: 10, right: 14, left: 3, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="#e8eaf1" strokeDasharray="3 5" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} tick={{ fill: '#758096', fontSize: 10 }} />
-              <YAxis tickFormatter={axisMoney} tickLine={false} axisLine={false} width={48} tick={{ fill: '#758096', fontSize: 10 }} />
+            <LineChart data={safeData.revenueByDay} margin={{ top: 12, right: 18, left: 4, bottom: 4 }}>
+              <CartesianGrid vertical={false} stroke="var(--ed-line)" strokeDasharray="3 5" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} tick={{ fill: 'var(--ed-copy)', fontSize: 11 }} />
+              <YAxis tickFormatter={axisMoney} tickLine={false} axisLine={false} width={54} tick={{ fill: 'var(--ed-copy)', fontSize: 11 }} />
               <Tooltip content={<ChartTooltip />} />
-              <Legend verticalAlign="top" align="right" height={32} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="roomRevenue" name="Tiền phòng" stroke="#6a3ee8" strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="fnbRevenue" name="Đồ ăn, thức uống" stroke="#168b87" strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="overtimeRevenue" name="Phụ phí quá giờ" stroke="#df9b28" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="otherRevenue" name="Khác (phụ phí/giảm giá)" stroke="#cc5b62" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="revenue" name="Thu nhập vận hành từ hóa đơn hoàn tất" stroke="var(--ed-primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
             </LineChart>
-          </ResponsiveContainer> : <p className="executive-empty">Chưa có dữ liệu doanh thu theo ngày.</p>}
+          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Chưa có hóa đơn hoàn tất trong khoảng đã chọn.' : noReportMessage}</p>}
         </div>
       </article>
 
-      <article className="executive-panel executive-panel-mix">
-        <PanelHeading title="Cơ cấu thu nhập vận hành" description="Hóa đơn hoàn tất và cọc bị tịch thu được tách riêng." />
-        <div className="executive-chart-area executive-chart-area-donut">
-          {safeData.revenueMix.length ? <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={safeData.revenueMix} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={3} stroke="none">
-                {safeData.revenueMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-              </Pie>
-              <Tooltip formatter={tooltipMoney} />
-            </PieChart>
-          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Chưa có cơ cấu doanh thu trong kỳ.' : noReportMessage}</p>}
-          <div className="executive-donut-center"><strong>{data ? money(selectedRevenueMix) : '—'}</strong><span>Thu nhập vận hành</span></div>
-        </div>
-        <div className="executive-mix-legend">{safeData.revenueMix.length ? safeData.revenueMix.map((item) => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><strong>{money(item.value)}</strong></div>) : <p className="executive-empty">{data ? 'Không có khoản thu từ hóa đơn hoặc cọc bị tịch thu trong kỳ.' : noReportMessage}</p>}</div>
-      </article>
-
-      <article className="executive-panel executive-panel-occupancy">
-        <PanelHeading title="Tỷ lệ lấp đầy theo cơ sở" description="Ước tính theo số giờ phòng có khách trong khung 08:00–20:00." />
-        <div className="executive-chart-area executive-chart-area-occupancy" style={{ height: Math.max(278, safeData.occupancyByBranch.length * 44) }}>
-          {safeData.occupancyByBranch.length ? <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={safeData.occupancyByBranch} layout="vertical" margin={{ top: 8, right: 46, left: 8, bottom: 8 }}>
-              <CartesianGrid horizontal={false} stroke="#e8eaf1" strokeDasharray="3 5" />
-              <XAxis type="number" domain={[0, 1]} tickFormatter={(value) => `${Math.round(value * 100)}%`} tickLine={false} axisLine={false} tick={{ fill: '#758096', fontSize: 10 }} />
-              <YAxis type="category" dataKey="name" width={250} tickLine={false} axisLine={false} tick={{ fill: '#39445a', fontSize: 11 }} />
-              <Tooltip formatter={(value) => percent(value)} cursor={{ fill: '#f5f4fa' }} />
-              <Bar dataKey="occupancy" name="Tỷ lệ lấp đầy" fill="#168b87" radius={[0, 5, 5, 0]} barSize={16} label={{ position: 'right', formatter: (value) => percent(value), fill: '#39445a', fontSize: 10 }} />
-            </BarChart>
-          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Chưa có dữ liệu lấp đầy trong kỳ.' : noReportMessage}</p>}
-        </div>
-      </article>
+      <div className="executive-action-column" aria-label="Việc cần xử lý">
+        <article className="executive-panel executive-approvals">
+          <PanelHeading title="Việc cần duyệt" description="Trạng thái hiện tại của toàn chuỗi · không theo kỳ hoặc cơ sở đang lọc." trailing={<span className="executive-pending-count">{loading || !data?.approvalsAvailable ? '—' : safeData.approvals.length} chờ duyệt</span>} />
+          {safeData.approvals.length ? <div className="executive-approval-list">{safeData.approvals.map((item) => <div className="executive-approval-row" key={item.id}>
+            <div><strong>{item.branch} · {item.code}</strong><span>{item.category}{item.description ? ` · ${item.description}` : ''}</span></div><b>{money(item.amount)}</b>
+          </div>)}</div> : <p className="executive-empty">{loading ? 'Đang tải đề nghị chi…' : !data ? noReportMessage : data.approvalsAvailable ? 'Không có đề nghị đang chờ duyệt.' : 'Không tải được danh sách đề nghị chi.'}</p>}
+          <Link className="executive-task-link" to={`/quan-ly-he-thong?${new URLSearchParams({ screen: 'Phê duyệt chi', tab: 'expense_requests' })}`}>Mở phê duyệt chi</Link>
+        </article>
+        <article className="executive-panel executive-warnings">
+          <PanelHeading title="Cơ sở cần chú ý" description={`Lỗ vận hành trong kỳ ${scopeLabel}; tạm ngừng theo trạng thái hiện tại.`} trailing={<span className="executive-warning-count">{loading || !data ? '—' : safeData.warnings.length} cơ sở</span>} />
+          {safeData.warnings.length ? <ul className="executive-warning-list">{safeData.warnings.map((item) => <li key={item.id} className={item.loss ? 'is-critical' : ''}>
+            <span className="executive-warning-mark" aria-hidden="true" /><div><strong>{item.branch}</strong><p>{item.loss && <>Lỗ vận hành {money(item.profit)} trong kỳ. </>}{item.paused && <>Cơ sở tạm ngừng hiện tại.</>}</p></div>
+          </li>)}</ul> : <p className="executive-empty">{loading ? 'Đang tải trạng thái cơ sở…' : data ? 'Không có cơ sở lỗ vận hành hoặc tạm ngừng trong phạm vi này.' : noReportMessage}</p>}
+        </article>
+      </div>
     </div>
 
     <article className="executive-panel executive-ranking">
-      <PanelHeading title="Xếp hạng cơ sở" description="So sánh kết quả kinh doanh và trạng thái vận hành." trailing={<span className="executive-count">{safeData.ranking.length} cơ sở</span>} />
-      <RankingTable rows={safeData.ranking} emptyMessage={data ? 'Không có cơ sở trong kỳ báo cáo.' : noReportMessage} />
+      <PanelHeading title="Kết quả theo cơ sở" description={`Trong kỳ ${scopeLabel} · Cơ sở lỗ hoặc tạm ngừng được đưa lên trước; trạng thái hoạt động là hiện tại.`} trailing={<span className="executive-count">{safeData.ranking.length} cơ sở</span>} />
+      <RankingTable rows={safeData.ranking} emptyMessage={data ? 'Không có cơ sở trong phạm vi đã chọn.' : noReportMessage} />
     </article>
-
-    <div className="executive-bottom-grid">
-      <article className="executive-panel executive-approvals">
-        <PanelHeading title="Việc cần duyệt" description="Các đề nghị chi đang chờ xử lý." trailing={<span className="executive-pending-count">{safeData.approvals.length} chờ duyệt</span>} />
-        {safeData.approvals.length ? <div className="executive-approval-list">{safeData.approvals.map((item) => <div className="executive-approval-row" key={item.id}>
-          <div><strong>{item.category}</strong><span>{item.branch} · {item.id}</span></div><b>{money(item.amount)}</b>
-        </div>)}</div> : <p className="executive-empty">{loading ? 'Đang tải danh sách đề nghị…' : !data ? 'Chưa có dữ liệu báo cáo.' : data.approvalsAvailable ? 'Không có đề nghị vượt ngưỡng cần duyệt trong kỳ.' : 'Không tải được danh sách đề nghị chi.'}</p>}
-      </article>
-
-      <article className="executive-panel executive-warnings">
-        <PanelHeading title="Cảnh báo vận hành" description="Trạng thái cơ sở trong hồ sơ hệ thống." trailing={<span className="executive-warning-count">{safeData.warnings.length} cảnh báo</span>} />
-        {safeData.warnings.length ? <ul className="executive-warning-list">{safeData.warnings.map((item) => <li key={item.id} className={`is-${item.level}`}>
-          <span className="executive-warning-mark" aria-hidden="true" /><div><strong>{item.kind}</strong><p>{item.branch} · {item.detail}</p></div>
-        </li>)}</ul> : <p className="executive-empty">{loading ? 'Đang tải cảnh báo…' : data ? 'Không có cảnh báo cần theo dõi.' : 'Chưa có dữ liệu báo cáo.'}</p>}
-      </article>
-    </div>
   </section>;
 }

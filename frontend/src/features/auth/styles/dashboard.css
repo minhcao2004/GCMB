@@ -222,6 +222,115 @@
   flex-shrink: 0;
 }
 
+.head-office-shell .head-office-nav__group { min-width: 0; border-top: 1px solid var(--gcmb-color-line); padding-top: 6px; }
+.head-office-shell .head-office-nav__toggle { min-height: 36px; justify-content: space-between; gap: 8px; padding: 8px 12px; color: #526178; font-weight: 650; }
+.head-office-shell .head-office-nav__group[data-active] .head-office-nav__toggle { color: var(--manager-accent); font-weight: 800; }
+.head-office-shell .head-office-nav__chevron { width: 14px; height: 14px; transition: transform .18s ease; }
+.head-office-shell .head-office-nav__toggle[aria-expanded='false'] .head-office-nav__chevron { transform: rotate(-90deg); }
+.head-office-shell .head-office-nav__short { display: none; }
+.head-office-shell .head-office-nav__items { display: grid; gap: 2px; padding-left: 8px; }
+.head-office-shell .head-office-nav__items[hidden] { display: none; }
+.head-office-shell .head-office-nav__item { min-width: 0; line-height: 1.4; }
+.head-office-shell .head-office-nav__item span { min-width: 0; overflow-wrap: anywhere; }
+.head-office-shell .head-office-nav button:focus-visible { outline: 2px solid var(--manager-focus); outline-offset: -2px; }
+
+@media (min-width: 721px) {
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__toggle,
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__item { justify-content: center; padding-inline: 8px; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__title,
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__chevron,
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__item span { display: none; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__short { display: inline; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .head-office-nav__items { padding-left: 0; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) { flex-basis: 220px; width: 220px; align-items: stretch; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__toggle { justify-content: space-between; padding-inline: 12px; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__item { justify-content: flex-start; padding-inline: 12px; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__title,
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__chevron,
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__item span { display: inline; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__short { display: none; }
+  .head-office-shell.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .head-office-nav__items { padding-left: 8px; }
+}
+
+@media (max-width: 720px) {
+  .head-office-shell.gcmb-ui-app-shell .gcmb-ui-app-shell__sidebar .head-office-nav { flex-direction: column; overflow-x: hidden; overflow-y: visible; }
+  .head-office-shell .head-office-nav__group,
+  .head-office-shell .head-office-nav__item,
+  .head-office-shell .head-office-nav__toggle { width: 100%; min-width: 0; white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head-office-shell .head-office-nav__chevron { transition: none; }
+}
+
+.booking-app--accountant .accounting-nav-group__toggle {
+  min-height: 34px;
+  justify-content: space-between;
+  padding: 8px 12px;
+  color: #526178;
+  font-weight: 700;
+}
+
+.booking-app--accountant .accounting-nav-group__short { display: none; }
+.booking-app--accountant .accounting-nav-link__copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.booking-app--accountant .accounting-nav-link__copy small { color: #687587; font-size: 10px; line-height: 1.35; }
+
+.booking-app--accountant .accounting-nav-group__toggle:focus-visible,
+.booking-app--accountant .accounting-nav-group__items button:focus-visible {
+  outline: 2px solid var(--manager-focus);
+  outline-offset: 2px;
+}
+
+.accounting-nav-group__chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.accounting-nav-group__toggle[aria-expanded='false'] .accounting-nav-group__chevron { transform: rotate(-45deg); }
+.accounting-nav-group__items[hidden] { display: none; }
+.accounting-nav-group__items { display: grid; gap: 3px; }
+.booking-app--accountant .accounting-nav-group__items button { padding-left: 18px; }
+
+@media (min-width: 721px) {
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed { position: relative; padding-left: 68px; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 10;
+    width: 68px;
+    transition: width 160ms ease;
+    box-shadow: 4px 0 16px rgba(28, 39, 54, .08);
+  }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:hover,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:focus-within { width: 220px; align-items: stretch; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-group__toggle { justify-content: center; padding-inline: 4px; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-group__title,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-group__chevron,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-link__copy { display: none; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-group__short { display: inline; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .accounting-nav-link { justify-content: center; padding-inline: 4px; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-group__toggle,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-link { justify-content: flex-start; padding-inline: 12px; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-group__title,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-group__chevron,
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-link__copy { display: flex; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-group__short { display: none; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .gcmb-ui-app-shell__sidebar:is(:hover, :focus-within) .accounting-nav-group__toggle { justify-content: space-between; }
+}
+
+@media (max-width: 720px) {
+  .booking-app--accountant .gcmb-ui-app-shell__sidebar .manager-navigation { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  .booking-app--accountant .accounting-nav-group { flex: 0 0 auto; min-width: 0; }
+  .booking-app--accountant .accounting-nav-group__items { display: flex; overflow-x: auto; }
+  .booking-app--accountant .accounting-nav-group__items[hidden] { display: none; }
+  .booking-app--accountant .accounting-nav-group__items button,
+  .booking-app--accountant .manager-navigation > .accounting-nav-link { width: auto; min-width: max-content; white-space: nowrap; }
+  .booking-app--accountant.gcmb-ui-app-shell--collapsed .manager-navigation > .accounting-nav-link .accounting-nav-link__copy { display: flex; }
+}
+
 .manager-sidebar-footer {
   margin: auto 6px 0;
   padding-top: 24px;

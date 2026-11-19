@@ -21,28 +21,58 @@ public class DashboardController {
     @GetMapping("/api/v1/head-office/dashboard")
     @Transactional(readOnly = true)
     @SuppressWarnings("unchecked")
-    public Map<String, Object> chain(@AuthenticationPrincipal Identity actor, @RequestParam String month, @RequestParam(required = false) UUID branchId) {
+    public Map<String, Object> chain(@AuthenticationPrincipal Identity actor,
+                                     @RequestParam(required = false) String month,
+                                     @RequestParam(required = false) String from,
+                                     @RequestParam(required = false) String to,
+                                     @RequestParam(required = false) UUID branchId) {
         requireRole(actor, "HEAD_OFFICE_MANAGER");
-        LocalDate start = month(month);
-        List<Map<String, Object>> options = db.queryForList("SELECT id, name, code FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name, id");
-        Map<String, Object> report = performance.report(actor,start,branchId);
+        if ((from == null) != (to == null) || (from != null && month != null) || (from == null && month == null))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần chọn đủ ngày bắt đầu và ngày kết thúc.");
+        LocalDate start, end;
+        if (from != null) {
+            try { start = LocalDate.parse(from); end = LocalDate.parse(to); }
+            catch (DateTimeParseException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo không hợp lệ."); }
+        } else {
+            start = month(month);
+            end = start.plusMonths(1).minusDays(1);
+        }
+        List<Map<String, Object>> options = db.queryForList("SELECT id, name, code, status FROM gcmb.branch ORDER BY name, id");
+        Map<String, Object> report = from == null ? performance.report(actor,start,branchId) : performance.chainRange(actor,start,end,branchId);
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
-        return Map.ofEntries(Map.entry("month",month),Map.entry("branches",options),Map.entry("results",rows),
+        return Map.ofEntries(Map.entry("from",start.toString()),Map.entry("to",end.toString()),Map.entry("branches",options),Map.entry("results",rows),
             Map.entry("totals",report.get("totals")),Map.entry("previousTotals",report.get("previousTotals")),
-            Map.entry("changes",report.get("changes")),Map.entry("revenueGroups",report.get("revenueGroups")),
-            Map.entry("expenseGroups",report.get("expenseGroups")),Map.entry("dailyRevenue",dailyRevenue(start,branchId)),
-            Map.entry("revenueMix",revenueMix(start,branchId)),Map.entry("occupancyByBranch",rows));
+            Map.entry("changes",report.get("changes")),Map.entry("revenueGroups",report.getOrDefault("revenueGroups",List.of())),
+            Map.entry("expenseGroups",report.getOrDefault("expenseGroups",List.of())),Map.entry("dailyRevenue",performance.dailyRevenue(start,end.plusDays(1),branchId)),
+            Map.entry("revenueMix",revenueMix(start,end.plusDays(1),branchId)),Map.entry("occupancyByBranch",rows));
     }
 
     @GetMapping("/api/v1/branch-management/dashboard")
     @Transactional(readOnly = true)
-    public Map<String, Object> branch(@AuthenticationPrincipal Identity actor, @RequestParam String month) {
+    public Map<String, Object> branch(@AuthenticationPrincipal Identity actor,
+                                      @RequestParam(required = false) String month,
+                                      @RequestParam(required = false) String from,
+                                      @RequestParam(required = false) String to) {
         requireRole(actor, "BRANCH_MANAGER");
         // Phạm vi được kiểm tra lại tại máy chủ, kể cả khi không có header chọn cơ sở.
         if (actor.branchId() == null || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
-        LocalDate start = month(month);
-        Map<String,Object> report = performance.report(actor,start,actor.branchId());
+        if ((from == null) != (to == null) || (from != null && month != null) || (from == null && month == null))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần chọn đủ ngày bắt đầu và ngày kết thúc.");
+        LocalDate start, end;
+        if (from != null) {
+            try { start = LocalDate.parse(from); end = LocalDate.parse(to); }
+            catch (DateTimeParseException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo không hợp lệ."); }
+            if (start.isAfter(end)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc."); // BR-163 / MSG106.
+            if (end.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem báo cáo đến ngày trong tương lai.");
+            if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > 366)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo tối đa là 366 ngày.");
+        } else {
+            start = month(month);
+            end = start.plusMonths(1).minusDays(1);
+        }
+        Map<String,Object> report = from == null ? performance.report(actor,start,actor.branchId()) : performance.chainRange(actor,start,end,actor.branchId());
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
         Map<String, Object> operational = db.queryForMap("""
@@ -73,24 +103,20 @@ public class DashboardController {
         String timezone = db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
         LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
         return Map.ofEntries(
-            Map.entry("month", month),
+            Map.entry("month", YearMonth.from(start).toString()), Map.entry("from", start.toString()), Map.entry("to", end.toString()),
             Map.entry("result", rows.get(0)),
             Map.entry("operations", operational),
-            Map.entry("dailyRevenue", dailyRevenue(start, actor.branchId())),
-            Map.entry("revenueMix", revenueMix(start, actor.branchId())),
-            Map.entry("hourlyOccupancy", hourlyOccupancy(start, actor.branchId())),
-            Map.entry("roomTypePerformance", roomTypePerformance(start, actor.branchId())),
-            Map.entry("topItems", topItems(start, actor.branchId())),
+            Map.entry("dailyRevenue", performance.dailyRevenue(start, end.plusDays(1), actor.branchId())),
+            Map.entry("revenueMix", revenueMix(start, end.plusDays(1), actor.branchId())),
+            Map.entry("hourlyOccupancy", hourlyOccupancy(start, end.plusDays(1), actor.branchId())),
+            Map.entry("roomTypePerformance", roomTypePerformance(start, end.plusDays(1), actor.branchId())),
+            Map.entry("topItems", topItems(start, end.plusDays(1), actor.branchId())),
             Map.entry("lowStockItems", lowStock(actor.branchId())),
             Map.entry("openIncidents", openIncidents(actor.branchId())),
             Map.entry("todayShifts", todayShifts(actor.branchId(), today)));
     }
 
-    private List<Map<String, Object>> dailyRevenue(LocalDate start, UUID branchId) {
-        return performance.dailyRevenue(start,branchId);
-    }
-
-    private List<Map<String, Object>> revenueMix(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> revenueMix(LocalDate start, LocalDate end, UUID branchId) {
         return db.queryForList("""
             WITH bill_methods AS (
               SELECT b.id AS bill_id,
@@ -112,8 +138,8 @@ public class DashboardController {
               WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
                 AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (CAST(? AS uuid) IS NULL OR bk.branch_id=?)
             ) SELECT label,value FROM revenue_mix ORDER BY label
-            """, start, start.plusMonths(1), branchId, branchId,
-                start, start.plusMonths(1), branchId, branchId);
+            """, start, end, branchId, branchId,
+                start, end, branchId, branchId);
     }
 
     private List<Map<String, Object>> occupancy(UUID branchId) {
@@ -128,7 +154,7 @@ public class DashboardController {
             """, branchId, branchId);
     }
 
-    private List<Map<String, Object>> roomTypePerformance(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> roomTypePerformance(LocalDate start, LocalDate end, UUID branchId) {
         return db.queryForList("""
             SELECT rt.name,COUNT(DISTINCT a.id) AS count,COALESCE(SUM(bl.amount),0) AS revenue,
               COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(a.actual_end,a.ends_at)-COALESCE(a.actual_start,a.starts_at)))/60),0) AS minutes
@@ -144,10 +170,10 @@ public class DashboardController {
               AND (COALESCE(a.actual_end,a.ends_at) AT TIME ZONE br.timezone)::date >= ?
               AND (COALESCE(a.actual_end,a.ends_at) AT TIME ZONE br.timezone)::date < ?
             GROUP BY rt.id,rt.name ORDER BY revenue DESC,rt.name
-            """, start, start.plusMonths(1), branchId, start, start.plusMonths(1));
+            """, start, end, branchId, start, end);
     }
 
-    private List<Map<String, Object>> hourlyOccupancy(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> hourlyOccupancy(LocalDate start, LocalDate end, UUID branchId) {
         return db.queryForList("""
             SELECT EXTRACT(ISODOW FROM local_day)::int AS weekday, hour_slot AS hour,
               COUNT(*) AS occupied_room_hours
@@ -162,7 +188,7 @@ public class DashboardController {
               AND a.starts_at < ((slots.local_day + slots.hour_slot * interval '1 hour' + interval '1 hour') AT TIME ZONE br.timezone)
               AND COALESCE(a.actual_end,a.ends_at) > ((slots.local_day + slots.hour_slot * interval '1 hour') AT TIME ZONE br.timezone)
             GROUP BY weekday,hour_slot ORDER BY weekday,hour_slot
-            """, start, start.plusMonths(1), branchId);
+            """, start, end, branchId);
     }
 
     private List<Map<String, Object>> openIncidents(UUID branchId) {
@@ -194,7 +220,7 @@ public class DashboardController {
             """, branchId, today, today.plusDays(2));
     }
 
-    private List<Map<String, Object>> topItems(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> topItems(LocalDate start, LocalDate end, UUID branchId) {
         return db.queryForList("""
             SELECT ol.name_snapshot AS name,COALESCE(SUM(ol.quantity),0) AS quantity,
               COALESCE(SUM(bl.amount),0) AS revenue
@@ -204,7 +230,7 @@ public class DashboardController {
             WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date >= ?
               AND (b.completed_at AT TIME ZONE br.timezone)::date < ? AND b.branch_id=?
             GROUP BY ol.name_snapshot ORDER BY quantity DESC,revenue DESC LIMIT 10
-            """, start, start.plusMonths(1), branchId);
+            """, start, end, branchId);
     }
 
     private List<Map<String, Object>> lowStock(UUID branchId) {

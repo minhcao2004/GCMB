@@ -259,6 +259,13 @@ public class CashClosingService {
     if(version==0) db.update("INSERT INTO gcmb.cash_closing_report VALUES (?,?,'SUBMITTED')",id,next);
     else db.update("UPDATE gcmb.cash_closing_report SET revision=?,state='SUBMITTED' WHERE closing_id=?",next,id);
     if(evidence!=null && !evidence.isEmpty()) storeEvidence(id,next,evidence);
+    // Thông báo chỉ được ghi cùng giao dịch gửi báo cáo chốt quỹ ngày thành công.
+    db.update("""
+      INSERT INTO gcmb.cash_closing_notification(id,closing_id,report_version,recipient_id)
+      SELECT gen_random_uuid(),?,?,u.id FROM gcmb.user_account u
+      JOIN gcmb.role r ON r.id=u.role_id WHERE r.code='ACCOUNTANT' AND u.status='ACTIVE'
+      ON CONFLICT (closing_id,report_version,recipient_id) DO NOTHING
+      """,id,next);
     access.audit(actor,branch,id,version==0?"SUBMIT_DAILY_TILL_REPORT":"RESUBMIT_DAILY_TILL_REPORT",null,payload);
     return detail(actor,id);
   }
@@ -323,6 +330,42 @@ public class CashClosingService {
     rows.forEach(row->{ row.remove("source_snapshot"); row.remove("source"); });
     if(alerts) rows.removeIf(row->decimal(row.get("variance")).signum()==0);
     return rows;
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String,Object>> statuses(Identity actor,LocalDate date,UUID branchId) {
+    access.accountant(actor);
+    LocalDate selected=date==null?LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")):date;
+    if(selected.isAfter(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")))) throw bad("Không thể xem trạng thái báo cáo trong tương lai.");
+    return db.queryForList("""
+      SELECT b.id AS "branchId",b.name AS "branchName",?::date AS "businessDate",c.id AS "closingId",
+        CASE WHEN c.state='NEEDS_EXPLANATION' THEN 'NEEDS_EXPLANATION'
+             WHEN c.state IS NULL THEN 'NOT_SUBMITTED' ELSE 'SUBMITTED' END AS status,
+        c.submitted_at AS "submittedAt"
+      FROM gcmb.branch b LEFT JOIN LATERAL (
+        SELECT d.id,coalesce(r.state,d.status) state,coalesce(v.submitted_at,d.submitted_at) submitted_at
+        FROM gcmb.daily_cash_closing d
+        LEFT JOIN gcmb.cash_closing_report r ON r.closing_id=d.id
+        LEFT JOIN gcmb.cash_closing_report_revision v ON v.closing_id=r.closing_id AND v.revision=r.revision
+        WHERE d.branch_id=b.id AND d.business_date=?
+        ORDER BY d.submitted_at DESC,d.id DESC LIMIT 1
+      ) c ON true
+      WHERE (CAST(? AS uuid) IS NULL OR b.id=?) ORDER BY b.name,b.id
+      """,selected,selected,branchId,branchId);
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String,Object>> notifications(Identity actor) {
+    access.accountant(actor);
+    return db.queryForList("""
+      SELECT n.id,n.closing_id AS "closingId",n.report_version AS "reportVersion",
+        n.created_at AS "sentAt",b.name AS "branchName",c.business_date AS "businessDate",
+        'Báo cáo chốt quỹ ngày' AS "reportType"
+      FROM gcmb.cash_closing_notification n
+      JOIN gcmb.daily_cash_closing c ON c.id=n.closing_id
+      JOIN gcmb.branch b ON b.id=c.branch_id
+      WHERE n.recipient_id=? ORDER BY n.created_at DESC LIMIT 100
+      """,actor.id());
   }
 
   public Map<String,Object> detail(Identity actor,UUID id) {

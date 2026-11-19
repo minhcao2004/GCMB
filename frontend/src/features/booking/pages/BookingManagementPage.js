@@ -25,17 +25,45 @@ const navigation = [
   ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
-  ['Hóa đơn thuế', 'tax'],
-  ['Tổng quan', 'overview'],
-  ['Báo cáo chi tiết', 'report'],
-  ['Thu & cấp quỹ', 'payments'],
-  ['Chi & hoàn ứng', 'plus'],
-  ['Đối soát chốt quỹ', 'calendar'],
-
-  ['Hoàn tiền cọc', 'deposit'],
-  ['Lương nhân viên', 'booking'],
-  ['Báo cáo chi phí', 'orders'],
+  { label: 'Tổng quan tài chính', icon: 'overview', target: '/ke-toan' },
+  { title: 'Thu nhập & doanh thu', short: 'Thu', items: [
+    { label: 'Doanh thu & khoản thu', icon: 'report', target: '/ke-toan/bao-cao' },
+    { label: 'Hóa đơn thuế', icon: 'tax', target: '/ke-toan/hoa-don-thue' },
+  ] },
+  // BR-108: Cọc đang giữ không được trình bày như doanh thu hóa đơn.
+  { label: 'Hoàn tiền cọc', hint: 'Tiền cọc không phải doanh thu hóa đơn', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
+  { title: 'Chi phí & quỹ', short: 'Chi', items: [
+    { label: 'Đề nghị chi', icon: 'plus', target: '/ke-toan/chi-phi?section=plus&tab=requests', countKey: 'expenses', countLabel: 'đề nghị chi chờ xử lý' },
+    { label: 'Chi định kỳ', icon: 'calendar', target: '/ke-toan/chi-phi?section=plus&tab=recurring', countKey: 'recurring', countLabel: 'kỳ chi định kỳ cần xử lý' },
+    { label: 'Cấp tiền két', icon: 'payments', target: '/ke-toan/chi-phi?section=plus&tab=drawer' },
+    { label: 'Lịch sử chi & hoàn ứng', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=history' },
+    { label: 'Hạng mục chi phí', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=categories' },
+    // BR-82: Tiền cấp quỹ từ quản lý cấp cao là luân chuyển nội bộ.
+    { label: 'Quỹ kế toán', hint: 'Tiền cấp quỹ là luân chuyển nội bộ', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
+    { label: 'Lương nhân viên', icon: 'booking', target: '/ke-toan/luong' },
+  ] },
+  { title: 'Báo cáo & đối soát', short: 'BC', items: [
+    { label: 'Báo cáo chi phí', icon: 'orders', target: '/ke-toan/bao-cao-chi-phi' },
+    { label: 'Giao dịch & đối soát', icon: 'report', target: '/ke-toan/bao-cao?tab=transactions' },
+    { label: 'Chốt quỹ', icon: 'calendar', target: '/ke-toan/chot-quy', countKey: 'closings', countLabel: 'phiếu chốt quỹ chờ đối soát' },
+    { label: 'Chốt kỳ tài chính', icon: 'calendar', target: '/ke-toan/bao-cao?tab=periods' },
+    { label: 'Xuất dữ liệu', icon: 'report', target: '/ke-toan/bao-cao?tab=export' },
+  ] },
 ];
+function accountingLinkIsCurrent(target, location) {
+  const [path, search = ''] = target.split('?');
+  if (location.pathname !== path) return false;
+  const selected = new URLSearchParams(location.search);
+  const expected = new URLSearchParams(search);
+  if (path === '/ke-toan/chi-phi') return (selected.get('section') || 'plus') === (expected.get('section') || 'plus')
+    && ((expected.get('section') === 'payments') || (selected.get('tab') || 'requests') === (expected.get('tab') || 'requests'));
+  if (path === '/ke-toan/bao-cao') return (selected.get('tab') || 'report') === (expected.get('tab') || 'report');
+  return true;
+}
+function readAccountingGroups() {
+  try { return JSON.parse(window.localStorage.getItem('gcmb:accountant:nav-groups') || '{}') || {}; }
+  catch { return {}; }
+}
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
@@ -156,6 +184,20 @@ export function AppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountingPending, setAccountingPending] = useState({});
   const isAccountant = audience === 'accountant';
+  const location = useLocation();
+  const accountingNavRef = useRef(null);
+  const [openAccountingGroups, setOpenAccountingGroups] = useState(readAccountingGroups);
+
+  useEffect(() => {
+    if (!isAccountant) return;
+    try { window.localStorage.setItem('gcmb:accountant:nav-groups', JSON.stringify(openAccountingGroups)); }
+    catch { /* Keep group choices in memory when browser storage is unavailable. */ }
+  }, [isAccountant, openAccountingGroups]);
+
+  useEffect(() => {
+    if (!isAccountant) return;
+    accountingNavRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [isAccountant, location.pathname, location.search]);
 
   useEffect(() => {
     if (!isAccountant) return undefined;
@@ -188,7 +230,7 @@ export function AppShell({
           next.refunds = (refundResult.value.items || []).filter((item) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(item.status)).length;
         }
         if (closingResult.status === 'fulfilled') {
-          next.closings = closingResult.value.filter((item) => item.status !== 'RECONCILED').length;
+          next.closings = closingResult.value.filter((item) => item.status === 'SUBMITTED').length;
         }
         if (recurringResult.status === 'fulfilled') next.recurring = recurringResult.value;
         return next;
@@ -205,7 +247,17 @@ export function AppShell({
   }, [isAccountant]);
 
   if (isAccountant) {
-    const navItems = accountingNavigation;
+    const accountingLink = ({ label, hint, icon, target, countKey, countLabel }) => {
+      const active = accountingLinkIsCurrent(target, location);
+      const pendingCount = accountingPending[countKey] || 0;
+      const accessibleLabel = `${label}${hint ? `. ${hint}` : ''}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
+      return <button type="button" className="accounting-nav-link" key={target} aria-current={active ? 'page' : undefined}
+        aria-label={accessibleLabel} title={accessibleLabel} onClick={() => navigate(target)}>
+        <Icon name={icon} />
+        <span className="accounting-nav-link__copy"><span>{label}</span>{hint && <small>{hint}</small>}</span>
+        {pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
+      </button>;
+    };
     const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
@@ -221,38 +273,25 @@ export function AppShell({
           sidebarLabel="Kế toán thu chi"
           brand={<div className="manager-brand"><BrandWordmark /></div>}
           roleLabel="KẾ TOÁN THU CHI"
-          navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
-                {navItems.map(([label, icon, unavailable]) => {
-                  const pendingCount = icon === 'payments' ? accountingPending.payments
-                    : icon === 'plus' ? accountingPending.recurring
-                      : icon === 'deposit' ? accountingPending.refunds
-                        : icon === 'calendar' ? accountingPending.closings : 0;
-                  const pendingDescription = icon === 'plus' ? 'kỳ chi định kỳ cần xử lý' : 'yêu cầu cần xử lý';
-                  return (
-                  <button
-                    type="button"
-                    key={label}
-                    aria-label={pendingCount ? `${label}, ${pendingCount} ${pendingDescription}` : label}
-                    aria-current={icon === activeTab ? 'page' : undefined}
-                    aria-disabled={Boolean(unavailable)}
-                    disabled={Boolean(unavailable)}
-                    title={unavailable ? 'Đang phát triển' : pendingCount ? `${label} · ${pendingCount} ${pendingDescription}` : label}
-                    onClick={() => {
-                      if (unavailable) return;
-                      // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
-                      if (icon === 'calendar') navigate('/ke-toan/chot-quy');
-                      if (icon === 'booking') navigate('/ke-toan/luong');
-                      if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
-                      if (icon === 'overview') navigate('/ke-toan');
-                      if (icon === 'report') navigate('/ke-toan/bao-cao');
-                      if (icon === 'orders') navigate('/ke-toan/bao-cao-chi-phi');
-                      if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
-                      if (['payments', 'plus'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
-                    }}
-                  >
-                    <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
-                  </button>
-                );})}
+          navigation={<nav ref={accountingNavRef} id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+                {accountingNavigation.map((entry, index) => {
+                  if (!entry.items) return accountingLink(entry);
+                  const { title, short, items } = entry;
+                  const hasCurrentPage = items.some(({ target }) => accountingLinkIsCurrent(target, location));
+                  const open = hasCurrentPage || Boolean(openAccountingGroups[title]);
+                  return <div className="accounting-nav-group" key={title}>
+                    <button type="button" className="accounting-nav-group__toggle" aria-label={title} title={title}
+                      aria-expanded={open} aria-controls={`accounting-nav-group-${index}`}
+                      onClick={() => setOpenAccountingGroups((current) => ({ ...current, [title]: hasCurrentPage || !open }))}>
+                      <span className="accounting-nav-group__title">{title}</span>
+                      <span className="accounting-nav-group__short" aria-hidden="true">{short}</span>
+                      <span aria-hidden="true" className="accounting-nav-group__chevron" />
+                    </button>
+                    <div id={`accounting-nav-group-${index}`} hidden={!open} className="accounting-nav-group__items">
+                      {items.map(accountingLink)}
+                    </div>
+                  </div>;
+                })}
               </nav>}
           footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>

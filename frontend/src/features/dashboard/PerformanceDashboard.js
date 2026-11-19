@@ -19,7 +19,7 @@ function Results({ rows, onSelect }) {
         ? <button className="performance-link" onClick={() => onSelect(row.id)}>{row.name}<span aria-hidden="true"> ↗</span></button>
         : <strong>{row.name}</strong>}<small>{row.code}{row.status !== 'ACTIVE' ? ' · Không hoạt động' : ''}</small></td>
       <td data-label="Doanh thu hóa đơn">{money(row.billRevenue)}</td><td data-label="Cọc bị tịch thu">{money(row.forfeitedDeposits)}</td>
-      <td data-label="Tổng doanh thu"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
+      <td data-label="Thu nhập vận hành"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
       <td data-label="Chi đã trả">{money(row.expenses)}</td><td data-label="Lương">{money(row.salary)}</td>
       <td data-label="Lợi nhuận" className={amount(row.profit) < 0 ? 'negative' : 'positive'}>{money(row.profit)}</td>
       <td data-label="Biên lợi nhuận">{percent(row.margin)}</td>
@@ -44,18 +44,20 @@ function BranchContext({ branch }) {
 function FinanceStrip({ totals, isChain, branchSelected }) {
   const metrics = isChain ? [
     ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Cọc đang giữ cuối kỳ', money(totals.heldDeposits), 'Số dư cọc, không thuộc doanh thu'],
     ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
-    ['Thu nhập vận hành', money(totals.revenue), 'Hóa đơn hoàn tất + cọc bị tịch thu'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Chỉ gồm hóa đơn hoàn tất'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Đã gồm lương và ứng lương'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Chưa gồm chi đầu tư'],
     ['Dòng tiền thuần', money(totals.netCashFlow), 'Theo sổ giao dịch'],
   ] : [
     ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Cọc đang giữ cuối kỳ', money(totals.heldDeposits), 'Số dư cọc, không thuộc doanh thu'],
     ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
-    ['Thu nhập vận hành', money(totals.revenue), 'Hóa đơn hoàn tất + cọc bị tịch thu'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Chỉ gồm hóa đơn hoàn tất'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Chưa gồm chi đầu tư'],
-    ['Lợi nhuận vận hành', money(totals.profit), 'Tổng doanh thu − chi vận hành đã trả'],
-    ['Biên lợi nhuận vận hành', percent(totals.margin), 'Lợi nhuận vận hành ÷ Tổng doanh thu'],
+    ['Lợi nhuận vận hành', money(totals.profit), 'Thu nhập vận hành − chi vận hành đã trả'],
+    ['Biên lợi nhuận vận hành', percent(totals.margin), 'Lợi nhuận vận hành ÷ Thu nhập vận hành'],
   ];
   return <section className="performance-summary" aria-label="Kết quả tài chính trong kỳ">
     <div className="performance-summary-heading"><h2>Kết quả tài chính</h2><span>{isChain ? branchSelected ? 'Cơ sở đang chọn' : 'Toàn hệ thống' : 'Cơ sở được phân quyền'}</span></div>
@@ -178,7 +180,7 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
         <BranchFinance totals={totals} />
         <BranchOperations operations={data.operations} onNavigate={onNavigate} />
       </div>}
-      <p className="performance-explanation">Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu; cọc đang giữ hoặc chờ hoàn không được tính. Chi phí vận hành chỉ gồm khoản đã thanh toán. Chi đầu tư được trình bày riêng.</p>
+      <p className="performance-explanation">Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất; cọc đang giữ và cọc bị tịch thu được trình bày riêng. Báo cáo tổng hợp tính từ giao dịch hệ thống của mọi cơ sở trong phạm vi, kể cả cơ sở chưa gửi chốt quỹ ngày; trạng thái chốt quỹ được đối soát riêng. Chi phí vận hành chỉ gồm khoản đã thanh toán. Chi đầu tư được trình bày riêng.</p>
     </>}
   </section>;
 }

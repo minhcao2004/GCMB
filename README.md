@@ -85,8 +85,7 @@ The backend is deployed as one application. Its ten peer feature packages are `a
 ## Project Structure
 
 
-The tree below reflects the current repositcd D:\DO_AN_2026\GCMB\frontend
-npm.cmd startory structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
+The tree below reflects the current repository structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
 
 ```text
 GCMB/
@@ -109,6 +108,7 @@ GCMB/
 │   │   ├── application-prod.yml
 │   │   └── db/migration/
 │   ├── src/test/
+│   ├── scripts/
 │   ├── .mvn/wrapper/
 │   ├── pom.xml
 │   ├── mvnw
@@ -158,9 +158,9 @@ GCMB/
 | `booking` | Reservations, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Head-office chain overview with period filters, KPIs, interactive Recharts, branch ranking, pending approvals and operational alerts; shared accountant/head-office financial reports with selectable two-month performance comparison and a date-range income/expense overview, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; branch performance summaries with bill and forfeited-deposit revenue; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
-| `finance` (frontend) | Accountant fund and expense workflows, configurable expense categories, one-time direct expenses, recurring expense templates and monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
-| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, reimbursements, cash reconciliation, financial transactions, and period closing. |
+| `dashboard` | Head-office chain overview with URL-backed day/week/month/quarter/year or custom date ranges, historical period navigation capped at today, branch scope including suspended branches' history, scoped KPIs and charts, branch ranking, current chain-wide pending approvals, and operational alerts; its expense-detail link preserves the selected period and branch on return, mapping a multi-branch detail selection to the chain-wide overview; head-office operating expenses use payment dates, while the shared accountant/head-office financial overview recognizes finance requests by allocation month and older expenses/payroll by payment date, with matching basis on expense-detail links; shared financial reports support separate chart grouping, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; completed-bill revenue, held-deposit balance at period end, and forfeited deposits are shown separately; branch performance summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `finance` (frontend) | Accountant fund and expense workflows, configurable expense categories, one-time direct expenses, recurring expense templates and monthly payment cycles with in-app reminders, allocation schedules, daily cash-closing status by branch and submission notifications, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
+| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, reimbursements, daily cash-closing status and accountant notifications on successful submission, cash reconciliation, financial transactions, and period closing. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 

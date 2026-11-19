@@ -15,6 +15,7 @@ import com.gcmb.backend.accounts.dto.AccountDtos.AccountView;
 import com.gcmb.backend.accounts.repository.AccountAccessRepository;
 import com.gcmb.backend.accounts.repository.AccountRepository;
 import com.gcmb.backend.branch.service.BranchAdministrationService;
+import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import java.util.List;
 import java.util.UUID;
@@ -84,7 +85,7 @@ class AccountAccessServiceTest {
     @Test
     @DisplayName("UTC-ACL-002 setRole assigns branch role only for active branch")
     void setRoleAssignsBranchRoleForActiveBranch() {
-        AccountView before = account("ACCOUNTANT", null, "ACTIVE");
+        AccountView before = account("BRANCH_MANAGER", branchId, "ACTIVE");
         AccountView after = account("RECEPTIONIST", branchId, "ACTIVE");
         arrangeEditable(before, after);
         when(accounts.roleId("RECEPTIONIST")).thenReturn(roleId);
@@ -97,6 +98,26 @@ class AccountAccessServiceTest {
         verify(access).setRole(targetId, roleId, branchId);
         verify(access).revokeTokens(targetId);
         verify(access).audit(actorId, "SET_ACCOUNT_ROLE", before, after, null);
+    }
+
+    @Test
+    @DisplayName("Accountant account rejects role and status changes by head office")
+    void accountantAccountRejectsManagementMutations() {
+        arrangeEditable(account("ACCOUNTANT", null, "ACTIVE"));
+        Identity actor = new Identity(actorId, "hom", "HEAD_OFFICE_MANAGER", "/quan-ly-he-thong", null, null);
+
+        AuthFailure roleFailure = assertThrows(AuthFailure.class,
+                () -> service.setRole(targetId, new SetRole("RECEPTIONIST", branchId), actorId));
+        AuthFailure statusFailure = assertThrows(AuthFailure.class,
+                () -> service.changeStatus(targetId, new Deactivate("Lý do"), actor, false));
+
+        assertEquals(403, roleFailure.status());
+        assertEquals("Bạn không có quyền phân quyền đối với tài khoản kế toán.", roleFailure.getMessage());
+        assertEquals(403, statusFailure.status());
+        assertEquals("Bạn không có quyền đổi trạng thái đối với tài khoản kế toán.", statusFailure.getMessage());
+        verify(access, never()).setRole(any(), any(), any());
+        verify(access, never()).deactivate(any());
+        verify(access, never()).revokeTokens(any());
     }
 
     @Test

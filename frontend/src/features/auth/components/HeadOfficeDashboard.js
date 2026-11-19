@@ -13,8 +13,8 @@ import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AppShell from '../../../shared/components/AppShell';
-import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLayoutEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
@@ -28,6 +28,11 @@ import FinancePage from '../../finance/pages/FinancePage';
 
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const groups = [
+  { id: 'finance', title: 'Tài chính & báo cáo', short: 'TC', items: ['Phê duyệt chi', 'Báo cáo kinh doanh', 'Báo cáo chi phí'] },
+  { id: 'operations', title: 'Vận hành', short: 'VH', items: ['Cơ sở', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị'] },
+  { id: 'administration', title: 'Quản trị', short: 'QT', items: ['Tài khoản & phân quyền', 'Nhật ký hệ thống'] },
+];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
@@ -52,27 +57,46 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const activeTab = location.pathname === catalogPath
     ? 'Phòng & bảng giá'
     : tabs.includes(requestedTab) && requestedTab !== 'Phòng & bảng giá' ? requestedTab : 'Tổng quan';
+  const activeGroup = groups.find((group) => group.items.includes(activeTab))?.id;
+  const [openGroups, setOpenGroups] = useState(() => activeGroup ? { [activeGroup]: true } : {});
+  useLayoutEffect(() => {
+    setOpenGroups(activeGroup ? { [activeGroup]: true } : {});
+  }, [activeTab, activeGroup]);
   const selectTab = (tab) => {
+    if (tab === 'Tổng quan') setOpenGroups({});
     const params = new URLSearchParams(location.search);
     if (tab === 'Tổng quan' || tab === 'Phòng & bảng giá') params.delete('screen');
     else params.set('screen', tab);
+    if (tab === 'Phê duyệt chi') params.set('tab', 'expense_requests');
+    else if (params.get('tab') === 'expense_requests') params.delete('tab');
     const targetPath = tab === 'Phòng & bảng giá' ? catalogPath : dashboardPath;
     const search = params.toString();
     navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
+  const renderItem = (tab) => <button key={tab} type="button" className="head-office-nav__item" aria-label={tab} title={tab}
+    aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[tabs.indexOf(tab)]} /></svg>
+    <span>{tab}</span>
+  </button>;
   return <AppShell
     audience="head-office-manager"
+    className="head-office-shell"
     sidebarLabel="Quản lý cấp cao"
     brand={<div className="manager-brand"><BrandWordmark /></div>}
     roleLabel="QUẢN LÝ CẤP CAO"
-    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          <span>{tab}</span>
-        </NavLink> : <button key={tab} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          <span>{tab}</span>
-        </button>)}
+    navigation={<nav className="manager-navigation head-office-nav" aria-label="Chức năng quản lý cấp cao">
+        {renderItem('Tổng quan')}
+        {groups.map((group) => <div className="head-office-nav__group" key={group.id} data-active={activeGroup === group.id || undefined}>
+          <button type="button" className="head-office-nav__toggle" aria-label={group.title} title={group.title}
+            aria-expanded={Boolean(openGroups[group.id])} aria-controls={`head-office-nav-${group.id}`}
+            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}>
+            <span className="head-office-nav__title">{group.title}</span><span className="head-office-nav__short" aria-hidden="true">{group.short}</span>
+            <svg className="head-office-nav__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <div id={`head-office-nav-${group.id}`} className="head-office-nav__items" hidden={!openGroups[group.id]}>
+            {group.items.map(renderItem)}
+          </div>
+        </div>)}
       </nav>}
     footer={<div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>}
     renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (

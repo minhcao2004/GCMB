@@ -198,12 +198,12 @@ export default function AccountsPage({
                         </span>
                       </td>
                       <td>
-                        <button
+                        {account.role === 'ACCOUNTANT' ? <span>Chỉ xem</span> : (!branchScope || account.role === 'RECEPTIONIST') && <button
                           className="account-link"
                           onClick={() => setSelectedAccount(account)}
                         >
                           {branchScope ? 'Trạng thái' : 'Quyền & trạng thái'}
-                        </button>
+                        </button>}
                       </td>
                     </tr>
                   ))}

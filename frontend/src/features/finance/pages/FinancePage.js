@@ -154,7 +154,7 @@ function FinanceWorkspace({ user }) {
   const accountantSection=initialTab||'plus';
   const requestedTab=initialParams.get('tab');
   const [accountTab,setAccountTab]=useState(accountantSection==='payments'?'incoming':accountantSection==='inventory'?'categories':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
-  const [headOfficeTab,setHeadOfficeTab]=useState('fund');
+  const [headOfficeTab,setHeadOfficeTab]=useState(role==='HEAD_OFFICE_MANAGER'&&requestedTab==='expense_requests'?'expense_requests':'fund');
   const [fundDialogOpen,setFundDialogOpen]=useState(false);
   const [directDialogOpen,setDirectDialogOpen]=useState(false);
   const [recurringPayPeriod,setRecurringPayPeriod]=useState(null);
@@ -173,6 +173,10 @@ function FinanceWorkspace({ user }) {
   useEffect(()=>{reload();},[reload]);
   useEffect(()=>{
     const params=new URLSearchParams(location.search);
+    if(role==='HEAD_OFFICE_MANAGER'){
+      setHeadOfficeTab(params.get('tab')==='expense_requests'?'expense_requests':'fund');
+      return;
+    }
     const section=params.get('section')||'plus';
     if(section==='inventory') {
       params.set('section','plus'); params.set('tab','categories');
@@ -182,7 +186,7 @@ function FinanceWorkspace({ user }) {
     }
     const requestedTab=params.get('tab');
     setAccountTab(section==='payments'?'incoming':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
-  },[location.pathname,location.search,navigate]);
+  },[location.pathname,location.search,navigate,role]);
   useEffect(()=>{
     if(!fundDialogOpen)return;
     const trigger = fundDialogTriggerRef.current;
@@ -262,7 +266,7 @@ async function createRequest(event){event.preventDefault();const formElement=eve
     {directDialogOpen&&role==='ACCOUNTANT'&&accountantSection==='plus'&&<DirectExpenseDialog key={recurringPayPeriod?.id||'direct'} branches={branches} categories={categories} busy={busy} recurringPeriod={recurringPayPeriod} onClose={()=>{setDirectDialogOpen(false);setRecurringPayPeriod(null);}} onSubmit={createDirectExpense}/>}
 
     {role==='HEAD_OFFICE_MANAGER'&&<>
-      <nav className="finance-tabs" aria-label="Phê duyệt chi toàn chuỗi">{headOfficeTabs.map(([key,label])=><button type="button" key={key} className={headOfficeTab===key?'active':''} aria-pressed={headOfficeTab===key} onClick={()=>setHeadOfficeTab(key)}>{label}</button>)}</nav>
+      <nav className="finance-tabs" aria-label="Phê duyệt chi toàn chuỗi">{headOfficeTabs.map(([key,label])=><button type="button" key={key} className={headOfficeTab===key?'active':''} aria-pressed={headOfficeTab===key} onClick={()=>{setHeadOfficeTab(key);const params=new URLSearchParams(location.search);if(key==='expense_requests')params.set('tab',key);else params.delete('tab');navigate({pathname:location.pathname,search:params.toString()?`?${params}`:''});}}>{label}</button>)}</nav>
       {headOfficeTab==='fund'&&<section className="finance-panel finance-fund-panel">
         <div className="finance-section-heading"><div><h2>Cấp quỹ</h2></div><button ref={fundDialogTriggerRef} type="button" className="finance-primary-action" onClick={()=>{setError('');setNotice('');setFund({amount:'50000000',sentOn:today(),reference:'',proof:null});setFundDialogOpen(true);}}>＋ Tạo yêu cầu chuyển tiền</button></div>
         <div className="finance-fund-summary"><article><span>Tổng số yêu cầu</span><strong>{transfers.length}</strong></article><article className="pending"><span>Chờ kế toán xác nhận</span><strong>{money(waitingTotal)}</strong></article><article className="received"><span>Đã xác nhận vào quỹ</span><strong>{money(receivedTotal)}</strong></article></div>

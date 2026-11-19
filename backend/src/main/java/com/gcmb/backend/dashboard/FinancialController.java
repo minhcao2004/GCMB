@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -312,16 +313,23 @@ public class FinancialController {
 
     @GetMapping("/transactions")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> transactions(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+    public List<Map<String, Object>> transactions(@AuthenticationPrincipal Identity actor, @RequestParam(required=false) String month,
+                                                  @RequestParam(required=false) String from,
+                                                  @RequestParam(required=false) String to,
+                                                  @RequestParam(required=false) List<UUID> branchIds,
                                                   @RequestParam(required=false) UUID branchId,
                                                   @RequestParam(defaultValue="") String kind,
                                                   @RequestParam(defaultValue="") String q) {
         requireAccountant(actor);
-        LocalDate start = month(month);
+        List<LocalDate> dates = reportDateRange(month, from, to);
+        LocalDate start = dates.get(0), endExclusive = dates.get(1);
+        List<UUID> selectedBranches = performance.validateReportBranchIds(branchIds);
+        String branchFilter = selectedBranches.isEmpty() ? "(?::uuid IS NULL OR \"branchId\"=?::uuid)"
+            : "\"branchId\" IN (" + String.join(",", java.util.Collections.nCopies(selectedBranches.size(), "?")) + ")";
         if (!kind.isBlank() && !List.of("PAYMENT", "REFUND", "EXPENSE", "SALARY", "ADVANCE", "TRANSFER", "OPENING", "ADJUSTMENT").contains(kind))
             throw bad("Loại giao dịch không hợp lệ.");
         if (q.trim().length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        return db.queryForList("""
+        String sql = """
             WITH transaction_rows AS (
               SELECT t.id,t.kind,t.booking_date "bookingDate",t.occurred_at "occurredAt",t.reason,
                 p."month"::text "periodMonth",p.status "periodStatus",scope.branch_id "branchId",scope.branch_name "branchName",
@@ -357,11 +365,16 @@ public class FinancialController {
                 AND (r.paid_at AT TIME ZONE b.timezone)::date<?
             )
             SELECT * FROM transaction_rows
-            WHERE (?::uuid IS NULL OR "branchId"=?::uuid)
+            WHERE %s
               AND (?='' OR kind=?)
               AND (?='' OR lower(concat_ws(' ',reason,kind,id::text,"branchName")) LIKE '%'||lower(?)||'%')
             ORDER BY "occurredAt" DESC,id
-            """, start, start.plusMonths(1), start, start.plusMonths(1), branchId, branchId, kind.trim(), kind.trim(), q.trim(), q.trim());
+            """.replace("WHERE %s", "WHERE " + branchFilter);
+        List<Object> args = new ArrayList<>(List.of(start, endExclusive, start, endExclusive));
+        if (selectedBranches.isEmpty()) { args.add(branchId); args.add(branchId); }
+        else args.addAll(selectedBranches);
+        args.add(kind.trim()); args.add(kind.trim()); args.add(q.trim()); args.add(q.trim());
+        return db.queryForList(sql, args.toArray());
     }
 
     @PostMapping(value="/transactions/{id}/adjustments", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -509,7 +522,7 @@ public class FinancialController {
         }
         if (from == null || from.isBlank() || to == null || to.isBlank()) throw bad("Cần chọn đủ ngày bắt đầu và ngày kết thúc.");
         LocalDate start = date(from), end = date(to);
-        if (start.isAfter(end)) throw bad("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+        if (start.isAfter(end)) throw bad("Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc."); // BR-163 / MSG106.
         if (end.isAfter(LocalDate.now(FinancialPeriodService.ZONE))) throw bad("Không thể xem báo cáo đến ngày trong tương lai.");
         if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > 366) throw bad("Khoảng ngày báo cáo tối đa là 366 ngày.");
         return List.of(start, end.plusDays(1));

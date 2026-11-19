@@ -565,4 +565,5 @@
   .finance-direct-expense-form .finance-allocation-fields { grid-template-columns:1fr; }
   .finance-category-table-wrap { max-height:65vh; }
 }
+.cash-closing-notifications h2:focus { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 4px; }
 

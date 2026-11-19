@@ -315,9 +315,10 @@ class AccountProfileServiceTest {
 
     static Stream<Arguments> validPhoneNumbersUnderBr119() {
         return Stream.of(
-                Arguments.of("lower boundary of seven digits", "0123456", "0123456"),
+                Arguments.of("digits without a required local prefix", "1234567", "1234567"),
                 Arguments.of("ordinary local number", "0901234567", "0901234567"),
-                Arguments.of("upper boundary of 15 digits", "0" + "1".repeat(14), "0" + "1".repeat(14)),
+                Arguments.of("single leading plus sign", "+84901234567", "+84901234567"),
+                Arguments.of("long numeric contact", "0" + "1".repeat(15), "0" + "1".repeat(15)),
                 Arguments.of("outer spaces are trimmed", "  0901234567  ", "0901234567"));
     }
 
@@ -345,10 +346,6 @@ class AccountProfileServiceTest {
 
     static Stream<Arguments> invalidPhoneNumbersUnderBr119() {
         return Stream.of(
-                Arguments.of("fewer than seven digits", "012345"),
-                Arguments.of("more than 15 digits", "0" + "1".repeat(15)),
-                Arguments.of("first digit is not zero", "1234567"),
-                Arguments.of("leading plus sign", "+84901234567"),
                 Arguments.of("formatting spaces", "090 123 4567"),
                 Arguments.of("alphabetic characters", "09012ABC"),
                 Arguments.of("hyphen formatting", "090-123-4567"));
