@@ -66,10 +66,14 @@ public class StaffService {
         var row = staff.find(id);
         if (row == null) throw missing();
         if (scope != null && !scope.equals(row.get("branchId"))) throw denied();
-        // HuyDV / UC-79, BR-52 / MSG24: BM không sửa hồ sơ liên kết kế toán qua màn nhân sự.
-        if (lock && scope != null && ("ACCOUNTANT".equals(row.get("position")) ||
-            "ACCOUNTANT".equals(row.get("accountRole")))) throw denied();
+        // HuyDV / UC-79, BR-52 / MSG24: BM không sửa hồ sơ kế toán/QLCC qua màn nhân sự.
+        if (lock && scope != null && (protectedPosition(row.get("position")) ||
+            protectedPosition(row.get("accountRole")))) throw denied();
         return row;
+    }
+
+    private static boolean protectedPosition(Object position) {
+        return "ACCOUNTANT".equals(position) || "HEAD_OFFICE_MANAGER".equals(position);
     }
 
     private void version(Map<String, Object> row, Long version) {
@@ -136,7 +140,8 @@ public class StaffService {
     public Map<String, Object> create(Identity actor, StaffCommand input) {
         UUID scope = scope(actor, true);
         StaffCommand c = validate(input, null);
-        if (scope != null && "ACCOUNTANT".equals(c.position())) throw denied();
+        // HuyDV / UC-77: chỉ QLCC tạo hồ sơ có vị trí kế toán hoặc QLCC.
+        if (scope != null && protectedPosition(c.position())) throw denied();
         UUID id = UUID.randomUUID();
         staff.create(id, c);
         // UC-77/BR-52: BM creates inside the current assigned branch. UC-81/82 remain HOM-only.
@@ -155,7 +160,7 @@ public class StaffService {
         var before = record(id, scope(actor, true), true);
         version(before, input == null ? null : input.version());
         StaffCommand c = validate(input, id);
-        if ("BRANCH_MANAGER".equals(actor.role()) && "ACCOUNTANT".equals(c.position())) throw denied();
+        if ("BRANCH_MANAGER".equals(actor.role()) && protectedPosition(c.position())) throw denied();
         staff.update(id, c);
         var after = staff.find(id);
         staff.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);
