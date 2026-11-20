@@ -25,9 +25,25 @@
 .cash-handover-form textarea { min-height: 96px; }
 .cash-handover-check { display: flex; align-items: start; gap: 10px; line-height: 1.6; }
 .cash-handover-check input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 3px; accent-color: #c31476; }
+.cash-handover-dialog { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 16px; background: #fff; color: #25364f; font: inherit; box-shadow: 0 16px 48px #20223233; }
+.cash-handover-dialog[open] { display: flex; flex-direction: column; }
+.cash-handover-dialog::backdrop { background: #20223266; }
+.cash-handover .cash-handover-dialog > .cash-handover-dialog-heading { position: static; inset: auto; display: flex; justify-content: space-between; align-items: start; gap: 16px; padding: 24px 28px; border-bottom: 1px solid #dce5ef; flex-shrink: 0; }
+.cash-handover-dialog-heading h3 { margin: 0; font-size: 20px; }
+.cash-handover-dialog-heading p { margin: 6px 0 0; font-size: 13px; color: #526781; }
+.cash-handover-dialog-heading button { border: 0; background: transparent; color: #526781; padding: 0 6px; font-size: 24px; line-height: 1.2; }
+.cash-handover .cash-handover-dialog .cash-handover-form { display: flex; flex-direction: column; min-height: 0; gap: 0; margin: 0; max-width: none; }
+.cash-handover-dialog-body { display: grid; gap: 20px; padding: 24px 28px; overflow-y: auto; }
+.cash-handover .cash-handover-dialog label.cash-handover-check { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; }
+.cash-handover .cash-handover-dialog footer { padding: 18px 28px; margin: 0; border-top: 1px solid #dce5ef; flex-shrink: 0; }
 .cash-handover .cash-handover-pending { margin-bottom: 24px; border: 1px solid #e8cfa9; }
 .cash-handover-pending-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 0; border-top: 1px solid #e5eaf1; }
 .cash-handover-pending-row p { margin: 6px 0 0; overflow-wrap: anywhere; }
 .cash-handover button:focus-visible, .cash-handover input:focus-visible, .cash-handover textarea:focus-visible { outline: 2px solid #087d98; outline-offset: 3px; }
 @media (max-width: 1100px) { .cash-handover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .cash-handover-grid { grid-template-columns: 1fr; } .cash-handover-pending-row { flex-direction: column; align-items: start; } }
+@media (max-width: 480px) {
+  .cash-handover .cash-handover-dialog > .cash-handover-dialog-heading { padding: 20px; }
+  .cash-handover-dialog-body { padding: 20px; }
+  .cash-handover .cash-handover-dialog footer { padding: 16px 20px; }
+}
