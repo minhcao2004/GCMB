@@ -350,7 +350,6 @@ export default function AttendancePage({
                       <th>Ca dự kiến</th>
                       <th>Thực tế</th>
                       <th>Giờ công</th>
-                      <th>Ngoại lệ / phản ánh</th>
                       <th>Thao tác</th>
                     </tr>
                   </thead>
@@ -379,24 +378,6 @@ export default function AttendancePage({
                           )}
                         </td>
                         <td>{row.attendanceId ? hoursLabel(row.workedMinutes) : '—'}</td>
-                        <td>
-                          {row.exceptions.join(' · ') ||
-                            (row.status === 'ABSENT'
-                              ? row.note
-                                ? 'Có lý do / ghi chú'
-                                : 'Vắng mặt'
-                              : row.attendanceId
-                                ? 'Không'
-                                : 'Cần ghi nhận')}
-                          {row.attendanceId && !row.valid && (
-                            <small className="attendance-warning">Bản ghi chưa đúng</small>
-                          )}
-                          {row.openIssues > 0 && (
-                            <small className="attendance-warning">
-                              {row.openIssues} phản ánh chưa xử lý
-                            </small>
-                          )}
-                        </td>
                         <td>
                           <button className="attendance-link" onClick={() => openRecord(row)}>
                             {readonly || row.periodStatus === 'CLOSED' ? 'Chi tiết' : row.attendanceId ? 'Xem / sửa' : 'Ghi nhận'}

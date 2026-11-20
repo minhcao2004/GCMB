@@ -665,7 +665,7 @@ export default function InventoryPage({ user }) {
         <dl className="inv-adjust-summary" aria-live="polite"><div><dt>Hệ thống</dt><dd>{adjustLoading ? 'Đang tải…' : adjustItem ? formatQuantity(adjustItem.quantity) : '—'}</dd></div><div><dt>Thực tế</dt><dd>{validActualQuantity ? formatQuantity(adjustActual) : actualQuantityInput ? 'Không hợp lệ' : 'Chưa nhập'}</dd></div>
           <div><dt>Điều chỉnh</dt><dd className={adjustDelta === null ? undefined : adjustDelta >= 0 ? 'inv-positive' : 'inv-negative'}>{adjustDelta === null ? '—' : `${adjustDelta > 0 ? '+' : ''}${formatQuantity(adjustDelta)} ${adjustItem.unitName}`}</dd></div>
           <div><dt>Tồn mới</dt><dd>{adjustDelta === null ? '—' : `${formatQuantity(adjustActual)} ${adjustItem.unitName}`}</dd></div><div><dt>Lý do</dt><dd>{adjustDraft?.reason || 'Chưa nhập'}</dd></div></dl>
-        {actualQuantityError && <div id="inventory-actual-quantity-error" className="inv-alert inv-alert-warning" role="alert">{actualQuantityError}</div>}
+        {actualQuantityError && <div id="inventory-actual-quantity-error" className="inv-alert inv-alert-error" role="alert">{actualQuantityError}</div>}
         <div className="inv-summary-actions"><button type="submit" form="inventory-adjustment-form" className="inv-button inv-button-primary" disabled={!canSubmitAdjustment}>{busy ? 'Đang xác nhận…' : 'Xác nhận điều chỉnh'}</button>
           <button type="button" className="inv-button inv-button-quiet" disabled={busy} onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại danh sách</button></div>
       </aside>

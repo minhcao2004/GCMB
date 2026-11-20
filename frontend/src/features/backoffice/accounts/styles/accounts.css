@@ -437,7 +437,7 @@
 .accounts-page tr.account-highlight { background: var(--gcmb-color-primary-soft, #fdecf5); }
 .accounts-page .account-error,
 .account-drawer .account-error { color: var(--gcmb-color-danger, #b12642); }
-.accounts-page .accounts-empty { color: var(--gcmb-color-text, #536071); }
+.accounts-page .accounts-empty:not(.account-error) { color: var(--gcmb-color-text, #536071); }
 .account-drawer { border: 0; border-radius: var(--gcmb-radius-panel, 12px) 0 0 var(--gcmb-radius-panel, 12px); color: var(--gcmb-color-ink, #1a1a2e); background: var(--gcmb-color-panel, #fff); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); font-family: var(--gcmb-font-family, "Be Vietnam Pro", sans-serif); }
 .account-drawer-heading,
 .account-drawer-footer { border-color: var(--gcmb-color-line, #e5e8ed); }

@@ -153,7 +153,7 @@ export default function AccountsPage({
       </div>
       <div className="accounts-card" aria-busy={loading}>
         {error ? (
-          <div className="accounts-empty" role="alert">
+          <div className="accounts-empty account-error" role="alert">
             {error}
             <button onClick={() => setRevision((n) => n + 1)}>Thử lại</button>
           </div>

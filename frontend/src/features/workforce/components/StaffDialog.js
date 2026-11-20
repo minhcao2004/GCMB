@@ -394,9 +394,9 @@ export default function StaffDialog({
                     )}
                     {field(
                       'position',
-                      <select {...attrs('position')}>
-                        {Object.entries(positions).filter(([key]) => !branchScope ||
-                          !['ACCOUNTANT', 'HEAD_OFFICE_MANAGER'].includes(key)).map(([key, value]) => (
+                      branchScope ? <input id="staff-position" readOnly
+                        value={positions[form.position] || form.position} /> : <select {...attrs('position')}>
+                        {Object.entries(positions).map(([key, value]) => (
                           <option key={key} value={key}>
                             {value}
                           </option>

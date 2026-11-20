@@ -8,6 +8,13 @@
   color: var(--gcmb-color-ink);
   font: var(--gcmb-font-size-base)/var(--gcmb-line-height) var(--gcmb-font-family);
 }
+/* HuyDV: khung QLCS không có đệm; giữ lịch ca/chấm công cách viền như màn nhân sự. */
+.branch-manager-content > .workforce-page {
+  padding: 24px 28px;
+}
+@media (max-width: 600px) {
+  .branch-manager-content > .workforce-page { padding: 18px 14px; }
+}
 .workforce-tabs {
   display: flex;
   gap: 8px;

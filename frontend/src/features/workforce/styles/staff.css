@@ -19,7 +19,7 @@
 }
 
 .branch-manager-content > .staff-page {
-  padding: 0;
+  padding: 24px 28px;
 }
 
 .staff-page *, .staff-dialog * {
@@ -415,7 +415,7 @@
 }
 
 .staff-dialog-header {
-  padding: 23px 25px;
+  padding: 24px 28px;
   border-bottom: 1px solid #e8ecf2;
   display: flex;
   justify-content: space-between;
@@ -445,7 +445,7 @@
 }
 
 .staff-dialog-body {
-  padding: 25px;
+  padding: 24px 28px;
   overflow-y: auto;
   flex: 1;
 }
@@ -462,7 +462,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 17px 25px;
+  padding: 16px 28px;
   flex-shrink: 0;
   background: white;
 }
@@ -505,7 +505,7 @@
 
 .staff-error {
   display: block;
-  color: #c8354b;
+  color: var(--gcmb-color-danger, #b12642);
   font-size: 11px;
   margin-top: 6px;
 }
@@ -605,7 +605,7 @@
 }
 
 @media (max-width: 600px) {
-  .staff-page {
+  .staff-page, .branch-manager-content > .staff-page {
     padding: 18px 14px;
   }
   .staff-heading {
@@ -648,7 +648,7 @@
 }
 
 .staff-page:not(.tax-invoice-page) :where(
-  small, .staff-heading p, .staff-dialog-header p, .staff-pagination,
+  small:not(.staff-error), .staff-heading p, .staff-dialog-header p, .staff-pagination,
   .staff-empty, .staff-facts dt, .staff-summary dt, .staff-help,
   .staff-muted, .staff-review dt
 ) {

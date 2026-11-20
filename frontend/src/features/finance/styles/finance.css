@@ -11,7 +11,7 @@
   width: 100%;
   min-width: 0;
   max-width: none;
-  padding: 24px 32px;
+  padding: 24px 28px;
   gap: 16px;
 }
 .finance-page.cash-closing-page > h1 { margin: 0; }

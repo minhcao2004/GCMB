@@ -140,8 +140,8 @@ public class StaffService {
     public Map<String, Object> create(Identity actor, StaffCommand input) {
         UUID scope = scope(actor, true);
         StaffCommand c = validate(input, null);
-        // HuyDV / UC-77: chỉ QLCC tạo hồ sơ có vị trí kế toán hoặc QLCC.
-        if (scope != null && protectedPosition(c.position())) throw denied();
+        // HuyDV / UC-77: QLCS chỉ tạo lễ tân; kiểm tra cả khi gọi API trực tiếp.
+        if (scope != null && !"RECEPTIONIST".equals(c.position())) throw denied();
         UUID id = UUID.randomUUID();
         staff.create(id, c);
         // UC-77/BR-52: BM creates inside the current assigned branch. UC-81/82 remain HOM-only.
@@ -160,7 +160,9 @@ public class StaffService {
         var before = record(id, scope(actor, true), true);
         version(before, input == null ? null : input.version());
         StaffCommand c = validate(input, id);
-        if ("BRANCH_MANAGER".equals(actor.role()) && protectedPosition(c.position())) throw denied();
+        // HuyDV: không cho đổi vị trí sau khi tạo để vượt quyền của QLCS.
+        if ("BRANCH_MANAGER".equals(actor.role()) &&
+            (protectedPosition(c.position()) || !Objects.equals(before.get("position"), c.position()))) throw denied();
         staff.update(id, c);
         var after = staff.find(id);
         staff.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);

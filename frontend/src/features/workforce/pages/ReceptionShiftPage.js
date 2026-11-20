@@ -54,7 +54,7 @@ export default function ReceptionShiftPage() {
         }
       }}
     >
-      {error && <p role="alert">{error}</p>}
+      {error && <p className="shift-message error" role="alert">{error}</p>}
       <div className="shift-page workforce-page">
         <nav className="workforce-tabs" aria-label="Ca làm và công cá nhân">
           <button

@@ -48,6 +48,26 @@ const statusNames = {
   HOLIDAY: 'Ngày lễ',
 };
 const entityNames = {
+  EMPLOYEE: 'Hồ sơ nhân viên',
+  SCHEDULED_SHIFT: 'Ca làm việc',
+  ATTENDANCE: 'Chấm công',
+  FINANCE: 'Tài chính',
+  REPORT: 'Báo cáo',
+  TAX_INVOICE_REQUEST: 'Yêu cầu hóa đơn thuế',
+  MENU_ITEM: 'Món trong thực đơn',
+  FB_ORDER: 'Đơn phục vụ phòng',
+  INVENTORY_ITEM: 'Mặt hàng trong kho',
+  ASSET_CATEGORY: 'Nhóm thiết bị',
+  ASSET: 'Thiết bị',
+  INCIDENT: 'Sự cố thiết bị',
+  TRANSFER: 'Điều chuyển thiết bị',
+  FINANCIAL_TRANSACTION: 'Giao dịch tài chính',
+  BANK_TRANSACTION: 'Giao dịch ngân hàng',
+  FINANCIAL_PERIOD: 'Kỳ tài chính',
+  FINANCE_EXPENSE_CATEGORY: 'Hạng mục chi phí',
+  FINANCE_EXPENSE_REQUEST: 'Đề nghị chi phí',
+  FINANCE_RECURRING_EXPENSE: 'Khoản chi định kỳ',
+  FINANCE_RECURRING_EXPENSE_PERIOD: 'Kỳ chi định kỳ',
   USER_ACCOUNT: 'Tài khoản',
   ROOM: 'Phòng',
   ROOM_TYPE: 'Hạng phòng',
@@ -370,7 +390,7 @@ export default function AuditLogPage({ onAccounts }) {
             Đang tải nhật ký…
           </p>
         ) : error ? (
-          <div className="accounts-empty" role="alert">
+          <div className="accounts-empty account-error" role="alert">
             {error}
             <button onClick={() => setRetry((old) => old + 1)}>Thử lại</button>
           </div>
