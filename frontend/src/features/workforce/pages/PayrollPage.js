@@ -1,11 +1,12 @@
 /** Author: HuyDV. UC-91..97 / BR-64..81/213/225/227: bảng lương kế toán. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
 import MoneyInput from '../../finance/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/accounting/payroll';
+const pageSize = 6;
 const componentNames = {
   BASE: 'Tiền công theo ca',
   OVERTIME: 'Ngoài giờ ngày thường',
@@ -43,6 +44,25 @@ export default function PayrollPage() {
   });
   const [available, setAvailable] = useState(null);
   const [results, setResults] = useState({});
+  const [page, setPage] = useState(1);
+  const detailRef = useRef(null);
+  useEffect(() => {
+    setPage(1);
+  }, [month, search, filter, branchFilter]);
+  // HuyDV / UC-92: chi tiết riêng, giữ vị trí danh sách khi đóng cửa sổ.
+  useEffect(() => {
+    if (!detail || !detailRef.current) return;
+    const element = detailRef.current;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    element.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      element.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [detail]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -140,6 +160,10 @@ export default function PayrollPage() {
       (!filter || Boolean(r.paid) === (filter === 'paid')),
   );
   const totalDue = rows.filter((row) => !row.paid).reduce((sum, row) => sum + Number(row.net_amount), 0);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const firstRow = (currentPage - 1) * pageSize;
+  const pageRows = rows.slice(firstRow, firstRow + pageSize);
   const pendingBranches = (data?.pendingBranches || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
   const advances = (data?.advances || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
   return (
@@ -413,7 +437,7 @@ export default function PayrollPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {pageRows.map((r) => (
                     <tr key={r.id}>
                       <td>
                         <input
@@ -436,24 +460,37 @@ export default function PayrollPage() {
                       <td>{vnd(r.net_amount)}</td>
                       <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
                       <td>
-                        <button onClick={() => setDetail(r)}>Chi tiết</button>
+                        <button type="button" aria-haspopup="dialog" onClick={() => setDetail(r)}>Chi tiết</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {!!rows.length && <nav className="payroll-pagination" aria-label="Phân trang lương nhân viên">
+                <span>Hiển thị {firstRow + 1}–{Math.min(firstRow + pageSize, rows.length)} / {rows.length} nhân viên</span>
+                <div>
+                  <button type="button" disabled={busy || currentPage === 1}
+                    onClick={() => setPage(currentPage - 1)}>Trang trước</button>
+                  <span aria-live="polite">Trang {currentPage} / {pageCount}</span>
+                  <button type="button" disabled={busy || currentPage === pageCount}
+                    onClick={() => setPage(currentPage + 1)}>Trang sau</button>
+                </div>
+              </nav>}
               {!rows.length && (
                 <p>{readyRows.length ? emptyMessage : 'Chưa có bảng lương đã chốt trong tháng này.'}</p>
               )}
             </article>
             {detail && (
-              <article className="finance-card">
-                <div className="finance-actions">
-                  <h2>
-                    {detail.code} · {detail.name}
-                  </h2>
-                  <button onClick={() => setDetail(null)}>Đóng chi tiết</button>
-                </div>
+              <dialog ref={detailRef} className="payroll-detail-dialog"
+                aria-labelledby="payroll-detail-title" onCancel={(event) => {
+                  event.preventDefault(); setDetail(null);
+                }}>
+                <header>
+                  <div><h2 id="payroll-detail-title">Chi tiết lương</h2>
+                    <p>{detail.code} · {detail.name} · Tháng {month.split('-').reverse().join('/')}</p></div>
+                  <button type="button" aria-label="Đóng chi tiết" onClick={() => setDetail(null)}>×</button>
+                </header>
+                <div className="payroll-detail-body">
                 {detail.components.map((c, i) => (
                   <div className="finance-line" key={i}>
                     <span>
@@ -476,7 +513,9 @@ export default function PayrollPage() {
                     {p.external_reference}
                   </p>
                 ))}
-              </article>
+                </div>
+                <footer><button type="button" onClick={() => setDetail(null)}>Đóng</button></footer>
+              </dialog>
             )}
             {!!pendingBranches.length && <details className="finance-card" open>
               <summary>Chờ các cơ sở chốt đủ ({pendingBranches.length} phần lương đã gửi)</summary>

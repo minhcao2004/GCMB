@@ -12,7 +12,11 @@
   min-width: 0;
   max-width: none;
   padding: 24px 32px;
+  gap: 16px;
 }
+.finance-page.cash-closing-page > h1 { margin: 0; }
+.finance-page.cash-closing-page > .finance-tabs { margin: 0; }
+.finance-page.cash-closing-page > .cash-handover { margin: 0; }
 /* HuyDV: tách nhóm nộp tiền và cấp lại két, giãn các trường để thao tác rõ ràng. */
 .cash-drawer-workspace {
   display: grid;
@@ -77,6 +81,50 @@
 }
 .finance-page small {
   display: block;
+}
+.payroll-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 0 0;
+  color: #52617b;
+  font-size: 13px;
+}
+.payroll-pagination > div { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.payroll-detail-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #25364f;
+  font: inherit;
+  box-shadow: 0 16px 48px #20223233;
+}
+.payroll-detail-dialog[open] { display: flex; flex-direction: column; }
+.payroll-detail-dialog::backdrop { background: #20223266; }
+.finance-page .payroll-detail-dialog > header {
+  position: static;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #dce5ef;
+  flex-shrink: 0;
+}
+.finance-page .payroll-detail-dialog > header h2 { margin: 0; font-size: 20px; }
+.payroll-detail-dialog > header p { margin: 6px 0 0; color: #52617b; font-size: 13px; overflow-wrap: anywhere; }
+.finance-page .payroll-detail-dialog > header button { border: 0; padding: 0 6px; font-size: 24px; background: transparent; }
+.payroll-detail-body { padding: 8px 28px 24px; overflow-y: auto; }
+.payroll-detail-dialog > footer { display: flex; justify-content: flex-end; padding: 16px 28px; border-top: 1px solid #dce5ef; flex-shrink: 0; }
+@media (max-width: 480px) {
+  .finance-page .payroll-detail-dialog > header { padding: 20px; }
+  .payroll-detail-body { padding: 8px 20px 20px; }
+  .payroll-detail-dialog > footer { padding: 16px 20px; }
 }
 .payroll-bank-details {
   display: grid;
