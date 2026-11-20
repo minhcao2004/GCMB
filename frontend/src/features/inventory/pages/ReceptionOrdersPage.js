@@ -1,3 +1,4 @@
+import MoneyInput from '../../finance/components/MoneyInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -248,7 +249,7 @@ export default function ReceptionOrdersPage() {
             <label>Chọn món<select value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)}>{menu.filter((item) => item.available).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatVnd(item.salePrice)}</option>)}</select></label>
             <button type="button" className="food-secondary" disabled={!menuItemId} onClick={draftAddItem}>Thêm món</button>
           </div>
-          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<input aria-label={`Giá ${item.name}`} type="number" min="0" step="1" value={draftPrices[item.id] ?? item.salePrice ?? 0} onChange={(event) => setDraftPrices((current) => ({ ...current, [item.id]: event.target.value }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
+          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<MoneyInput aria-label={`Giá ${item.name}`}  min="0"  value={draftPrices[item.id] ?? item.salePrice ?? 0} onValueChange={value => setDraftPrices((current) => ({ ...current, [item.id]: value }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
           <footer className="food-add-footer"><span>Tạm tính <strong>{formatVnd(draftTotal)}</strong></span><button className="food-primary" disabled={busy || draftLines.length === 0}>{busy ? 'Đang lưu…' : 'Ghi nhận order'}</button></footer>
         </form>}
       </section>

@@ -1,3 +1,4 @@
+import MoneyInput from '../../finance/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -177,7 +178,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
             {form.roomId && <label>Ghi chú vị trí<input maxLength="200" value={form.locationNote} onChange={(e) => setForm({ ...form, locationNote: e.target.value })} /></label>}
             <label>Số serial<input maxLength="200" value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} /></label>
             <label>Ngày mua<input type="date" value={form.purchaseDate} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} /></label>
-            <label>Giá trị mua<input type="number" min="0" step="1" value={form.purchaseValue} onChange={(e) => setForm({ ...form, purchaseValue: e.target.value })} /></label>
+            <label>Giá trị mua<MoneyInput  min="0"  value={form.purchaseValue} onValueChange={value => setForm({ ...form, purchaseValue: value })} /></label>
             <label>Hạn bảo hành<input type="date" min={form.purchaseDate || undefined} value={form.warrantyExpiry} onChange={(e) => setForm({ ...form, warrantyExpiry: e.target.value })} /></label>
             <label>Trạng thái<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} disabled={lockedInTransit}>
               {statuses.filter(([key]) => key !== 'IN_TRANSIT' || key === form.status).map(([key, label]) => <option key={key} value={key}>{label}</option>)}

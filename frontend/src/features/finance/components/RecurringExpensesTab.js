@@ -1,3 +1,4 @@
+import MoneyInput from './MoneyInput';
 import { useEffect, useState } from 'react';
 import { financeApi, today } from '../services/financeApi';
 
@@ -95,8 +96,8 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
       <label>Số tài khoản *<input required maxLength="80" value={draft.bankAccount} onChange={(event) => setDraft({ ...draft, bankAccount: event.target.value })} /></label>
       <label>Ngân hàng *<input required maxLength="120" value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>
       <label>Ngày đến hạn trong tháng *<input required type="number" min="1" max="31" step="1" value={draft.dueDay} onChange={(event) => setDraft({ ...draft, dueDay: event.target.value })} /><small>Ngày 29–31 tự chuyển về ngày cuối tháng nếu tháng ngắn hơn.</small></label>
-      <label>Số tiền cố định (VND)<input type="number" min="1" step="1" value={draft.monthlyAmount} onChange={(event) => setDraft({ ...draft, monthlyAmount: event.target.value })} placeholder="Để trống nếu thay đổi" /></label>
-      <label>Số tiền dự kiến (tùy chọn)<input type="number" min="1" step="1" value={draft.expectedAmount} onChange={(event) => setDraft({ ...draft, expectedAmount: event.target.value })} placeholder="Gợi ý khi thanh toán" /></label>
+      <label>Số tiền cố định (VND)<MoneyInput  min="1"  value={draft.monthlyAmount} onValueChange={value => setDraft({ ...draft, monthlyAmount: value })} placeholder="Để trống nếu thay đổi" /></label>
+      <label>Số tiền dự kiến (tùy chọn)<MoneyInput  min="1"  value={draft.expectedAmount} onValueChange={value => setDraft({ ...draft, expectedAmount: value })} placeholder="Gợi ý khi thanh toán" /></label>
       <label>Ghi nhận chi phí vào *<select required value={draft.expenseBelongsTo} onChange={(event) => setDraft({ ...draft, expenseBelongsTo: event.target.value })}><option value="SAME_MONTH">Tháng đến hạn</option><option value="PREVIOUS_MONTH">Tháng trước tháng đến hạn</option></select></label>
       <label>Tháng bắt đầu *<input required type="month" value={draft.startMonth} onChange={(event) => setDraft({ ...draft, startMonth: event.target.value })} /></label>
       <label>Tháng kết thúc<input type="month" value={draft.endMonth} onChange={(event) => setDraft({ ...draft, endMonth: event.target.value })} /></label>

@@ -1,3 +1,4 @@
+import MoneyInput from '../../finance/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -557,9 +558,9 @@ Hạng phòng
               </label>
               <label>
 Giá áp dụng / giờ
-<input required min="0" type="number" value={form.hourlyPrice} onChange={e => setForm({
+<MoneyInput required min="0"  value={form.hourlyPrice} onValueChange={value => setForm({
                   ...form,
-                  hourlyPrice: e.target.value
+                  hourlyPrice: value
                 })} />
               </label>
               <label>
@@ -669,9 +670,9 @@ Thời lượng (phút)
               </label>
               <label>
 Giá combo
-<input required min="0" type="number" value={form.price} onChange={e => setForm({
+<MoneyInput required min="0"  value={form.price} onValueChange={value => setForm({
                   ...form,
-                  price: e.target.value
+                  price: value
                 })} />
               </label>
               <label>

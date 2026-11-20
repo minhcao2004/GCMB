@@ -1,3 +1,4 @@
+import MoneyInput from './MoneyInput';
 import { useMemo, useState } from 'react';
 import { today } from '../services/financeApi';
 import ExpenseAllocationFields from './ExpenseAllocationFields';
@@ -83,7 +84,7 @@ export default function DirectExpenseDialog({ branches, categories, busy, onClos
       <form className="finance-form finance-direct-expense-form" onSubmit={submit}>
         <label>Cơ sở *<select required disabled={Boolean(recurringPeriod)} value={draft.branchId} onChange={(event) => setDraft({ ...draft, branchId: event.target.value })}><option value="">Chọn cơ sở</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
         <label>Hạng mục *<select required disabled={Boolean(recurringPeriod)} value={draft.categoryId} onChange={chooseCategory}><option value="">Chọn hạng mục đang dùng</option>{categories.filter((item) => item.active || String(item.id) === String(recurringPeriod?.category_id)).map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
-        <label>Số tiền (VND) *<input required min="1" step="1" type="number" inputMode="numeric" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} />
+        <label>Số tiền (VND) *<MoneyInput required min="1"    value={draft.amount} onValueChange={value => setDraft({ ...draft, amount: value })} />
           {recurringPeriod && recurringPeriod.default_amount != null && <small>Số tiền cố định: {Number(recurringPeriod.default_amount).toLocaleString('vi-VN')} ₫</small>}
           {recurringPeriod && recurringPeriod.default_amount == null && <small>{recurringPeriod.expected_amount ? `Số tiền dự kiến: ${Number(recurringPeriod.expected_amount).toLocaleString('vi-VN')} ₫ · có thể nhập số thực tế.` : 'Nhập số tiền thực tế của kỳ này.'}</small>}
         </label>
