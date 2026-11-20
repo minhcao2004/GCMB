@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,6 +40,7 @@ public class RefundEvidenceStorageService {
     private final String endpoint;
     private final boolean pathStyle;
     private volatile S3Client client;
+    private final CloudinaryStorageService cloudinary;
 
     public RefundEvidenceStorageService(
             @Value("${gcmb.attachments.storage-dir:./data/attachments}") String storageDirectory,
@@ -46,14 +48,30 @@ public class RefundEvidenceStorageService {
             @Value("${gcmb.attachments.s3.region:us-east-1}") String region,
             @Value("${gcmb.attachments.s3.endpoint:}") String endpoint,
             @Value("${gcmb.attachments.s3.path-style:false}") boolean pathStyle) {
+        this(storageDirectory, bucket, region, endpoint, pathStyle, null);
+    }
+
+    @Autowired
+    public RefundEvidenceStorageService(
+            @Value("${gcmb.attachments.storage-dir:./data/attachments}") String storageDirectory,
+            @Value("${gcmb.attachments.s3.bucket:}") String bucket,
+            @Value("${gcmb.attachments.s3.region:us-east-1}") String region,
+            @Value("${gcmb.attachments.s3.endpoint:}") String endpoint,
+            @Value("${gcmb.attachments.s3.path-style:false}") boolean pathStyle,
+            CloudinaryStorageService cloudinary) {
         storageRoot = Path.of(storageDirectory).toAbsolutePath().normalize();
         this.bucket = bucket.trim();
         this.region = region.trim();
         this.endpoint = endpoint.trim();
         this.pathStyle = pathStyle;
+        this.cloudinary = cloudinary;
     }
 
     public StoredEvidence store(MultipartFile file) {
+        return store(file, "khac");
+    }
+
+    public StoredEvidence store(MultipartFile file, String area) {
         if (file == null || file.isEmpty()) {
             throw new BookingFailure(400, "image", "Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB.");
         }
@@ -84,6 +102,11 @@ public class RefundEvidenceStorageService {
         UUID id = UUID.randomUUID();
         String objectKey = CLOUD_PREFIX + id + "." + type.extension();
         String originalName = originalName(file.getOriginalFilename());
+        // HuyDV / BR-115/116: kiểm tra nội dung trước khi gửi lên Cloudinary; giữ cách đọc tệp S3/local cũ.
+        if (cloudinary != null && cloudinary.enabled()) {
+            String cloudKey = cloudinary.store(type.mimeType(), bytes, area);
+            return new StoredEvidence(id, cloudKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
+        }
         try {
             s3().putObject(request -> request.bucket(bucket).key(objectKey).contentType(type.mimeType()),
                 RequestBody.fromBytes(bytes));
@@ -94,6 +117,7 @@ public class RefundEvidenceStorageService {
     }
 
     public byte[] read(String objectKey) throws IOException {
+        if (cloudinary != null && cloudinary.owns(objectKey)) return cloudinary.read(objectKey);
         if (!objectKey.startsWith(CLOUD_PREFIX)) return Files.readAllBytes(resolve(objectKey));
         try {
             return s3().getObjectAsBytes(request -> request.bucket(bucket).key(objectKey)).asByteArray();
@@ -109,7 +133,9 @@ public class RefundEvidenceStorageService {
 
     public void deleteQuietly(String objectKey) {
         try {
-            if (objectKey.startsWith(CLOUD_PREFIX)) {
+            if (cloudinary != null && cloudinary.owns(objectKey)) {
+                cloudinary.delete(objectKey);
+            } else if (objectKey.startsWith(CLOUD_PREFIX)) {
                 s3().deleteObject(request -> request.bucket(bucket).key(objectKey));
             } else {
                 Files.deleteIfExists(resolve(objectKey));

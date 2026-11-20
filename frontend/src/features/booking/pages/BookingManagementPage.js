@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import { EmptyState } from '../../../shared/components/Feedback';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 import '../../auth/styles/dashboard.css';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { depositApi } from '../services/depositApi';
+import { financeApi } from '../../finance/services/financeApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
@@ -15,21 +19,51 @@ import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage
 
 const navigation = [
   ['Ca làm việc', 'shifts'],
+  ['Bàn giao tiền mặt', 'handover'],
   ['Hóa đơn thuế', 'tax'],
-  ['Tổng quan', 'overview'], ['Phòng', 'rooms'], ['Booking', 'booking'], ['Order', 'orders'],
-  ['Thanh toán', 'payments'], ['Tiền cọc', 'deposit'], ['Kho hàng', 'inventory'], ['Báo sự cố', 'issues'],
+  ['Phòng', 'rooms'], ['Booking', 'booking'],
+  ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
-  ['Hóa đơn thuế', 'tax'],
-  ['Tổng quan', 'overview'],
-  ['Thu & cấp quỹ', 'payments', true],
-  ['Chi & hoàn ứng', 'plus', true],
-  ['Đối soát chốt quỹ', 'calendar'],
-  ['Hoàn tiền cọc', 'deposit'],
-  ['Lương nhân viên', 'booking'],
-  ['Báo cáo tài chính', 'orders', true],
-  ['Danh mục chi phí', 'inventory', true],
+  { label: 'Tổng quan tài chính', icon: 'overview', target: '/ke-toan' },
+  { title: 'Thu nhập & doanh thu', short: 'Thu', items: [
+    { label: 'Doanh thu & khoản thu', icon: 'report', target: '/ke-toan/bao-cao' },
+    { label: 'Hóa đơn thuế', icon: 'tax', target: '/ke-toan/hoa-don-thue' },
+  ] },
+  // BR-108: Cọc đang giữ không được trình bày như doanh thu hóa đơn.
+  { label: 'Hoàn tiền cọc', hint: 'Tiền cọc không phải doanh thu hóa đơn', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
+  { title: 'Chi phí & quỹ', short: 'Chi', items: [
+    { label: 'Đề nghị chi', icon: 'plus', target: '/ke-toan/chi-phi?section=plus&tab=requests', countKey: 'expenses', countLabel: 'đề nghị chi chờ xử lý' },
+    { label: 'Chi định kỳ', icon: 'calendar', target: '/ke-toan/chi-phi?section=plus&tab=recurring', countKey: 'recurring', countLabel: 'kỳ chi định kỳ cần xử lý' },
+    { label: 'Cấp tiền két', icon: 'payments', target: '/ke-toan/chi-phi?section=plus&tab=drawer' },
+    { label: 'Lịch sử chi & hoàn ứng', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=history' },
+    { label: 'Hạng mục chi phí', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=categories' },
+    // BR-82: Tiền cấp quỹ từ quản lý cấp cao là luân chuyển nội bộ.
+    { label: 'Quỹ kế toán', hint: 'Tiền cấp quỹ là luân chuyển nội bộ', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
+    { label: 'Lương nhân viên', icon: 'booking', target: '/ke-toan/luong' },
+  ] },
+  { title: 'Báo cáo & đối soát', short: 'BC', items: [
+    { label: 'Báo cáo chi phí', icon: 'orders', target: '/ke-toan/bao-cao-chi-phi' },
+    { label: 'Giao dịch & đối soát', icon: 'report', target: '/ke-toan/bao-cao?tab=transactions' },
+    { label: 'Chốt quỹ', icon: 'calendar', target: '/ke-toan/chot-quy', countKey: 'closings', countLabel: 'phiếu chốt quỹ chờ đối soát' },
+    { label: 'Chốt kỳ tài chính', icon: 'calendar', target: '/ke-toan/bao-cao?tab=periods' },
+    { label: 'Xuất dữ liệu', icon: 'report', target: '/ke-toan/bao-cao?tab=export' },
+  ] },
 ];
+function accountingLinkIsCurrent(target, location) {
+  const [path, search = ''] = target.split('?');
+  if (location.pathname !== path) return false;
+  const selected = new URLSearchParams(location.search);
+  const expected = new URLSearchParams(search);
+  if (path === '/ke-toan/chi-phi') return (selected.get('section') || 'plus') === (expected.get('section') || 'plus')
+    && ((expected.get('section') === 'payments') || (selected.get('tab') || 'requests') === (expected.get('tab') || 'requests'));
+  if (path === '/ke-toan/bao-cao') return (selected.get('tab') || 'report') === (expected.get('tab') || 'report');
+  return true;
+}
+function readAccountingGroups() {
+  try { return JSON.parse(window.localStorage.getItem('gcmb:accountant:nav-groups') || '{}') || {}; }
+  catch { return {}; }
+}
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
@@ -38,11 +72,22 @@ const cancellationReasons = [
   'Khách không đồng ý giá hoặc phụ phí',
   'Khác',
 ];
+// BR-186, BR-187: gợi ý ngân hàng nhận hoàn và vẫn hỗ trợ ngân hàng ngoài danh sách.
+const vietnameseBanks = [
+  'Agribank', 'ABBank', 'ACB', 'Bac A Bank', 'BaoVietBank', 'BIDV', 'BVBank', 'Cake by VPBank',
+  'CBBank', 'Citibank', 'Co-opBank', 'Eximbank', 'GPBank', 'HDBank', 'Hong Leong Bank', 'HSBC',
+  'Indovina Bank', 'KBank', 'KienlongBank', 'LPBank', 'MB Bank', 'MSB', 'Nam A Bank', 'NCB',
+  'OCB', 'PGBank', 'Public Bank Vietnam', 'PVcomBank', 'Sacombank', 'Saigonbank', 'SeABank',
+  'SHB', 'Shinhan Bank', 'Standard Chartered', 'Techcombank', 'TPBank', 'VIB', 'Viet A Bank',
+  'VietBank', 'Vietcombank', 'VietinBank', 'VPBank', 'VRB', 'Woori Bank',
+];
 
 const iconPaths = {
+  handover: <><path d="M3 7h14m-4-4 4 4-4 4M21 17H7m4-4-4 4 4 4"/></>,
   shifts: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 4h3m3 0h3m-9 4h3"/></>,
   tax: <><path d="M6 3h9l4 4v14l-3-2-3 2-3-2-4 2V3Z"/><path d="M14 3v5h5M9 11h7M9 15h5"/></>,
   overview: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+  report: <><path d="M4 19V5m0 14h17M8 15l3-4 3 2 5-7"/><circle cx="19" cy="6" r="1"/></>,
   rooms: <><path d="M3 20V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14M3 13h18M6 13V9a2 2 0 0 1 2-2h3v6m2 0V7h3a2 2 0 0 1 2 2v4M2 20h20"/></>,
   booking: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3m-3 3h7"/></>,
   orders: <><path d="M4 5h16M4 12h16M4 19h16M7 3v4m10-4v4M7 10v4m10-4v4M7 17v4m10-4v4"/></>,
@@ -137,70 +182,122 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return window.localStorage.getItem(`gcmb:${audience}:sidebar-collapsed`) === 'true';
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(`gcmb:${audience}:sidebar-collapsed`, String(sidebarCollapsed));
-    } catch {
-      // Tùy chọn vẫn dùng được trong phiên hiện tại nếu trình duyệt chặn lưu trữ.
-    }
-  }, [audience, sidebarCollapsed]);
+  const [accountingPending, setAccountingPending] = useState({});
   const isAccountant = audience === 'accountant';
-  const toggleSidebar = () => setSidebarCollapsed((collapsed) => !collapsed);
+  const location = useLocation();
+  const accountingNavRef = useRef(null);
+  const [openAccountingGroups, setOpenAccountingGroups] = useState(readAccountingGroups);
+
+  useEffect(() => {
+    if (!isAccountant) return;
+    try { window.localStorage.setItem('gcmb:accountant:nav-groups', JSON.stringify(openAccountingGroups)); }
+    catch { /* Keep group choices in memory when browser storage is unavailable. */ }
+  }, [isAccountant, openAccountingGroups]);
+
+  useEffect(() => {
+    if (!isAccountant) return;
+    accountingNavRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [isAccountant, location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!isAccountant) return undefined;
+    let active = true;
+    const refreshPending = async () => {
+      const today = new Date();
+      const oldest = new Date(today);
+      oldest.setFullYear(oldest.getFullYear() - 2);
+      const dateText = (date) => new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(date);
+      const [financeResult, refundResult, closingResult, recurringResult] = await Promise.allSettled([
+        financeApi.load('ACCOUNTANT'),
+        depositApi.refundRequests(),
+        financeApi.get('/accounting/cash-closing', {
+          from: dateText(oldest),
+          to: dateText(today),
+        }),
+        financeApi.recurringReminderCount(),
+      ]);
+      if (!active) return;
+      setAccountingPending((current) => {
+        const next = { ...current };
+        if (financeResult.status === 'fulfilled') {
+          const finance = financeResult.value;
+          next.payments = (finance.fundTransfers || []).filter((item) => item.status === 'WAITING_CONFIRMATION').length;
+          next.expenses = (finance.requests || []).filter((item) => item.status === 'WAITING_ACCOUNTANT').length;
+        }
+        if (refundResult.status === 'fulfilled') {
+          next.refunds = (refundResult.value.items || []).filter((item) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(item.status)).length;
+        }
+        if (closingResult.status === 'fulfilled') {
+          next.closings = closingResult.value.filter((item) => item.status === 'SUBMITTED').length;
+        }
+        if (recurringResult.status === 'fulfilled') next.recurring = recurringResult.value;
+        return next;
+      });
+    };
+    refreshPending();
+    const timer = window.setInterval(refreshPending, 60000);
+    window.addEventListener('focus', refreshPending);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshPending);
+    };
+  }, [isAccountant]);
 
   if (isAccountant) {
-    const navItems = accountingNavigation;
+    const accountingLink = ({ label, hint, icon, target, countKey, countLabel }) => {
+      const active = accountingLinkIsCurrent(target, location);
+      const pendingCount = accountingPending[countKey] || 0;
+      const accessibleLabel = `${label}${hint ? `. ${hint}` : ''}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
+      return <button type="button" className="accounting-nav-link" key={target} aria-current={active ? 'page' : undefined}
+        aria-label={accessibleLabel} title={accessibleLabel} onClick={() => navigate(target)}>
+        <Icon name={icon} />
+        <span className="accounting-nav-link__copy"><span>{label}</span>{hint && <small>{hint}</small>}</span>
+        {pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
+      </button>;
+    };
     const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
-      month: '2-digit',
+      month: 'long',
       year: 'numeric',
-    }).format(now);
+    }).format(now).replace(/^tháng/u, 'Tháng');
 
     return (
       <>
-        <div className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}>
-          <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
-            <aside className="manager-sidebar" id="app-sidebar" aria-label="Kế toán thu chi">
-              <div className="manager-brand"><BrandWordmark /></div>
-              <p className="manager-role">KẾ TOÁN THU CHI</p>
-              <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
-                {navItems.map(([label, icon, unavailable]) => (
-                  <button
-                    type="button"
-                    key={label}
-                    aria-label={label}
-                    aria-current={icon === activeTab ? 'page' : undefined}
-                    aria-disabled={Boolean(unavailable)}
-                    disabled={Boolean(unavailable)}
-                    title={unavailable ? 'Đang phát triển' : label}
-                    onClick={() => {
-                      if (unavailable) return;
-                      // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
-                      if (icon === 'calendar') navigate('/ke-toan/chot-quy');
-                      if (icon === 'booking') navigate('/ke-toan/luong');
-                      if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
-                      if (icon === 'overview') navigate('/ke-toan');
-                      if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
-                    }}
-                  >
-                    <Icon name={icon} /><span>{label}</span>
-                  </button>
-                ))}
-              </nav>
-              <div className="manager-sidebar-footer">
+        <SharedAppShell
+          audience={audience}
+          className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}
+          sidebarLabel="Kế toán thu chi"
+          brand={<div className="manager-brand"><BrandWordmark /></div>}
+          roleLabel="KẾ TOÁN THU CHI"
+          navigation={<nav ref={accountingNavRef} id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
+                {accountingNavigation.map((entry, index) => {
+                  if (!entry.items) return accountingLink(entry);
+                  const { title, short, items } = entry;
+                  const hasCurrentPage = items.some(({ target }) => accountingLinkIsCurrent(target, location));
+                  const open = hasCurrentPage || Boolean(openAccountingGroups[title]);
+                  return <div className="accounting-nav-group" key={title}>
+                    <button type="button" className="accounting-nav-group__toggle" aria-label={title} title={title}
+                      aria-expanded={open} aria-controls={`accounting-nav-group-${index}`}
+                      onClick={() => setOpenAccountingGroups((current) => ({ ...current, [title]: hasCurrentPage || !open }))}>
+                      <span className="accounting-nav-group__title">{title}</span>
+                      <span className="accounting-nav-group__short" aria-hidden="true">{short}</span>
+                      <span aria-hidden="true" className="accounting-nav-group__chevron" />
+                    </button>
+                    <div id={`accounting-nav-group-${index}`} hidden={!open} className="accounting-nav-group__items">
+                      {items.map(accountingLink)}
+                    </div>
+                  </div>;
+                })}
+              </nav>}
+          footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>
                 <p>Phạm vi: {branchName || 'cơ sở được phân công'}</p>
-              </div>
-            </aside>
-
-            <div className="manager-workspace">
+              </div>}
+          renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
               <DashboardTopbar
                 role={roleLabel}
                 page={breadcrumb}
@@ -208,15 +305,16 @@ export function AppShell({
                 busy={busy}
                 onLogout={onLogout}
                 onProfile={() => setProfileOpen(true)}
-                onToggleSidebar={toggleSidebar}
-                sidebarExpanded={!sidebarCollapsed}
+                onToggleSidebar={onToggleSidebar}
+                sidebarExpanded={sidebarExpanded}
               >
-                {showCurrentMonth && <span className="booking-topbar-datetime">Tháng {currentMonth}</span>}
+                {showCurrentMonth && <span className="booking-topbar-datetime">{currentMonth}</span>}
               </DashboardTopbar>
-              <main className="booking-main" id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
-            </div>
-          </div>
-        </div>
+          )}
+          mainClassName="booking-main"
+        >
+          {user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}
+        </SharedAppShell>
 
         {profileOpen && (
           <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
@@ -228,6 +326,7 @@ export function AppShell({
   }
 
   function selectTab(icon) {
+    if (icon === 'handover') navigate('/le-tan/ban-giao-tien');
     if (icon === 'shifts') navigate('/le-tan/ca-lam');
     if (icon === 'tax') navigate('/le-tan/hoa-don-thue');
     if (icon === 'booking') {
@@ -247,12 +346,13 @@ export function AppShell({
 
   return (
     <>
-      <div className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}>
-        <div className={`head-office-dashboard${sidebarCollapsed ? ' head-office-dashboard--sidebar-collapsed' : ''}`}>
-          <aside className="manager-sidebar" id="app-sidebar" aria-label="Lễ tân">
-            <div className="manager-brand"><BrandWordmark /></div>
-            <p className="manager-role">LỄ TÂN</p>
-            <nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
+      <SharedAppShell
+        audience={audience}
+        className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}
+        sidebarLabel="Lễ tân"
+        brand={<div className="manager-brand"><BrandWordmark /></div>}
+        roleLabel="LỄ TÂN"
+        navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
               {navigation.map(([label, icon]) => (
                 <button
                   type="button"
@@ -260,20 +360,18 @@ export function AppShell({
                   aria-label={label}
                   title={label}
                   aria-current={icon === activeTab ? 'page' : undefined}
-                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts', 'issues'].includes(icon)}
+                  aria-disabled={!['booking', 'rooms', 'orders', 'payments', 'deposit', 'tax', 'shifts', 'issues', 'handover'].includes(icon)}
                   onClick={() => selectTab(icon)}
                 >
                   <Icon name={icon} /><span>{label}</span>
                 </button>
               ))}
-            </nav>
-            <div className="manager-sidebar-footer">
+            </nav>}
+        footer={<div className="manager-sidebar-footer">
               <strong>{branchName || 'Cơ sở theo tài khoản'}</strong>
               <p>Đang làm việc · Lễ tân</p>
-            </div>
-          </aside>
-
-          <div className="manager-workspace">
+            </div>}
+        renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
             <DashboardTopbar
               role="LỄ TÂN"
               page={breadcrumb}
@@ -281,8 +379,8 @@ export function AppShell({
               busy={busy}
               onLogout={onLogout}
               onProfile={() => setProfileOpen(true)}
-              onToggleSidebar={toggleSidebar}
-              sidebarExpanded={!sidebarCollapsed}
+              onToggleSidebar={onToggleSidebar}
+              sidebarExpanded={sidebarExpanded}
             >
               {!hideSearch && (
                 <label className="booking-global-search">
@@ -302,10 +400,11 @@ export function AppShell({
                 </label>
               )}
             </DashboardTopbar>
-            <main className={`booking-main${activeTab === 'rooms' ? ' booking-main--rooms' : ''}${activeTab === 'shifts' ? ' booking-main--shifts' : ''}`} id="main">{user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}</main>
-          </div>
-        </div>
-      </div>
+        )}
+        mainClassName={`booking-main${activeTab === 'rooms' ? ' booking-main--rooms' : ''}${activeTab === 'shifts' ? ' booking-main--shifts' : ''}`}
+      >
+        {user?.readOnly && <p className="booking-inline-error" role="status">Cơ sở {branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}{children}
+      </SharedAppShell>
 
       {profileOpen && (
         <div className="dashboard-page dashboard-page-manager profile-dashboard-context">
@@ -412,6 +511,17 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const [giftRequirementsError, setGiftRequirementsError] = useState('');
   const [drinkSelections, setDrinkSelections] = useState([]);
   const [foodSelections, setFoodSelections] = useState([]);
+  const [giftPicker, setGiftPicker] = useState(null);
+  const [giftSearch, setGiftSearch] = useState('');
+  const [giftCategoryFilter, setGiftCategoryFilter] = useState('all');
+  const [giftStockFilter, setGiftStockFilter] = useState('all');
+  const giftPickerTriggerRef = useRef(null);
+  useEffect(() => {
+    if (!giftPicker) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [giftPicker]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
@@ -441,18 +551,19 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     return () => { active = false; };
   }, [booking?.id, booking?.status]);
   const actualTime = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
-  const recordedCheckIn = detail?.booking?.id === booking?.id
+  const detailMatchesBooking = Boolean(booking?.id && detail?.booking?.id === booking.id);
+  const recordedCheckIn = detailMatchesBooking
     ? detail.booking.actualCheckin || booking?.actualCheckin
     : booking?.actualCheckin;
   const savedCheckInTime = recordedCheckIn
     ? displayPart(recordedCheckIn, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone)
     : 'Chưa có dữ liệu';
   const charge = Number(booking?.expectedAmount || 0);
-  const depositReceived = Number(detail?.booking?.id === booking?.id
+  const depositReceived = Number(detailMatchesBooking
     ? detail.deposit?.receivedAmount ?? booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0
     : booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0);
-  const depositBalance = Number(detail?.booking?.id === booking?.id ? detail.deposit?.balance ?? booking?.depositBalance ?? 0 : booking?.depositBalance ?? 0);
-  const depositDetail = detail?.booking?.id === booking?.id ? detail.deposit : null;
+  const depositBalance = Number(detailMatchesBooking ? detail.deposit?.balance ?? booking?.depositBalance ?? 0 : booking?.depositBalance ?? 0);
+  const depositDetail = detailMatchesBooking ? detail.deposit : null;
   const depositOutcome = depositDetail?.cancellationOutcome;
   const depositStatus = depositOutcomeLabel(depositOutcome, depositReceived, booking?.status);
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, Number(depositDetail?.forfeitedAmount ?? 0), booking?.status);
@@ -468,13 +579,58 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const giftSelectionBlocked = booking?.status === 'CONFIRMED'
     && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
       || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
+  const openGiftPicker = (event, label, prefix, index) => {
+    giftPickerTriggerRef.current = event.currentTarget;
+    setGiftSearch('');
+    setGiftCategoryFilter('all');
+    setGiftStockFilter('all');
+    setGiftPicker({ label, prefix, index });
+  };
+  const closeGiftPicker = () => {
+    setGiftPicker(null);
+    window.requestAnimationFrame(() => {
+      if (giftPickerTriggerRef.current?.isConnected) giftPickerTriggerRef.current.focus();
+    });
+  };
   const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
-    const slots = [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
-      ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))];
-    const usedElsewhere = slots.filter((slot) => slot.key !== `${prefix}-${index}` && slot.id)
-      .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
-    return <label key={`${prefix}-${index}`}><span>{label} {index + 1}</span><select required value={selectedId} onChange={(event) => setSelections((current) => current.map((id, i) => i === index ? event.target.value : id))}><option value="">Chọn {label.toLowerCase()}</option>{giftMenu.map((item) => <option key={item.id} value={item.id} disabled={Number(item.stockQuantity || 0) <= (usedElsewhere[item.id] || 0)}>{item.name} · tồn {item.stockQuantity} {item.unitName}</option>)}</select></label>;
+    const selectedItem = giftMenu.find((item) => item.id === selectedId);
+    return <div className="booking-gift-slot" key={`${prefix}-${index}`}>
+      <span>{label} {index + 1}</span>
+      <button className="booking-gift-picker-trigger" type="button" onClick={(event) => openGiftPicker(event, label, prefix, index)}>
+        <span>{selectedItem?.name || `Chọn ${label.toLowerCase()}`}</span>
+        <small>{selectedItem ? selectedItem.stockTracked ? `Tồn ${selectedItem.stockQuantity} ${selectedItem.unitName}` : 'Không theo dõi tồn kho' : 'Mở danh sách món'}</small>
+      </button>
+    </div>;
   });
+  const pickerTypeKeyword = giftPicker?.prefix === 'drink' ? 'uống' : 'ăn';
+  const pickerItems = giftPicker
+    ? giftMenu.filter((item) => (item.category || '').toLocaleLowerCase('vi-VN').includes(pickerTypeKeyword))
+    : [];
+  const pickerSlots = giftPicker ? [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
+    ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))] : [];
+  const pickerUsedElsewhere = pickerSlots
+    .filter((slot) => slot.key !== `${giftPicker?.prefix}-${giftPicker?.index}` && slot.id)
+    .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
+  const pickerCategories = [...new Map(pickerItems.map((item) => [
+    (item.category || '').trim().toLocaleLowerCase('vi-VN'), item.category,
+  ]).filter(([key]) => key)).values()];
+  const normalizedGiftSearch = giftSearch.trim().toLocaleLowerCase('vi-VN');
+  const filteredPickerItems = pickerItems.filter((item) => {
+    const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
+    const matchesSearch = !normalizedGiftSearch || `${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(normalizedGiftSearch);
+    const matchesCategory = giftCategoryFilter === 'all' || (item.category || '').toLocaleLowerCase('vi-VN') === giftCategoryFilter;
+    const matchesStock = giftStockFilter === 'all'
+      || (giftStockFilter === 'available' && selectable)
+      || (giftStockFilter === 'untracked' && !item.stockTracked)
+      || (giftStockFilter === 'out' && !selectable);
+    return matchesSearch && matchesCategory && matchesStock;
+  });
+  const chooseGift = (item) => {
+    const setter = giftPicker?.prefix === 'drink' ? setDrinkSelections : setFoodSelections;
+    const index = giftPicker?.index;
+    setter((current) => current.map((id, position) => position === index ? item.id : id));
+    closeGiftPicker();
+  };
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
   if (!booking) return <div className="booking-checkin-overlay"><button className="booking-overlay-dismiss" type="button" onClick={onClose} aria-label="Đóng" /><aside className="booking-checkin-panel"><button className="booking-panel-close" type="button" onClick={onClose}>×</button><p role="status">Đang tải thông tin booking…</p></aside></div>;
@@ -488,11 +644,11 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
           <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{booking.roomCode ? `${booking.roomCode} · ${booking.roomName || ''}` : 'Chưa gán'}</strong></div>
         </div></section>
-        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Chọn mặt hàng của cơ sở; kho sẽ trừ khi xác nhận check-in.</p>
+        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
-          {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng đóng gói liên kết kho tự trừ.</small>}
+          {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
           {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
           {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
         </section>}
@@ -513,6 +669,43 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
+    {giftPicker && <div className="booking-gift-picker-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGiftPicker(); }}>
+      <section className="booking-gift-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-gift-picker-title" onKeyDown={(event) => {
+        if (event.key === 'Escape') closeGiftPicker();
+        if (event.key === 'Tab') {
+          const focusable = event.currentTarget.querySelectorAll('button:not(:disabled),input,select');
+          const first = focusable[0], last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      }}>
+        <header className="booking-gift-picker-heading">
+          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2></div>
+          <button type="button" aria-label="Đóng danh sách món" onClick={closeGiftPicker}>×</button>
+        </header>
+        <label className="booking-gift-picker-search"><span>Tìm món</span><input autoFocus value={giftSearch} onChange={(event) => setGiftSearch(event.target.value)} placeholder="Nhập tên món…" /></label>
+        <div className="booking-gift-picker-filters">
+          <label><span>Danh mục</span><select value={giftCategoryFilter} onChange={(event) => setGiftCategoryFilter(event.target.value)}>
+            <option value="all">Tất cả danh mục</option>
+            {pickerCategories.map((category) => <option key={category} value={(category || '').toLocaleLowerCase('vi-VN')}>{category}</option>)}
+          </select></label>
+          <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
+            {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
+          </div>
+        </div>
+        <div className="booking-gift-picker-list" aria-live="polite">
+          {filteredPickerItems.length ? filteredPickerItems.map((item) => {
+            const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
+            const selected = (giftPicker.prefix === 'drink' ? drinkSelections : foodSelections)[giftPicker.index] === item.id;
+            return <button key={item.id} type="button" className={`booking-gift-picker-item${selected ? ' is-selected' : ''}`} disabled={!selectable} onClick={() => chooseGift(item)}>
+              <span><strong>{item.name}</strong><small>{item.category}</small></span>
+              <span className={`booking-gift-picker-stock${item.stockTracked ? '' : ' is-untracked'}`}>{item.stockTracked ? selectable ? `Tồn ${item.stockQuantity} ${item.unitName}` : 'Hết tồn' : 'Không theo dõi tồn'}</span>
+            </button>;
+          }) : <p className="booking-gift-picker-empty">Không tìm thấy món phù hợp với bộ lọc.</p>}
+        </div>
+        <footer className="booking-gift-picker-footer"><span>{filteredPickerItems.length} món</span><button type="button" onClick={closeGiftPicker}>Đóng</button></footer>
+      </section>
+    </div>}
   </div>;
 }
 
@@ -618,7 +811,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
         <div className="booking-cancel-account-grid">
           <label className="booking-form-field"><span>Chủ tài khoản *</span><input maxLength="200" value={beneficiaryName} onChange={(event) => setBeneficiaryName(event.target.value)} placeholder="Tên chủ tài khoản" /></label>
           <label className="booking-form-field"><span>Số tài khoản *</span><input maxLength="60" value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} inputMode="numeric" placeholder="Nhập số tài khoản" /></label>
-          <label className="booking-form-field"><span>Ngân hàng *</span><input maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Nhập tên ngân hàng" /></label>
+          <label className="booking-form-field"><span>Ngân hàng *</span><input list="vietnamese-bank-suggestions" maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Nhập tên ngân hàng" /><datalist id="vietnamese-bank-suggestions">{vietnameseBanks.map((name) => <option key={name} value={name} />)}</datalist></label>
         </div>
         <div className="booking-cancel-next-step"><strong>Tạo yêu cầu hoàn {formatVnd(depositAmount)} và chuyển Kế toán xử lý.</strong><p>Lễ tân không đánh dấu giao dịch là đã hoàn.</p></div>
       </>}
@@ -1024,7 +1217,7 @@ export default function BookingManagementPage() {
   const closeCheckIn = () => navigate('/le-tan/bookings');
   const mainContent = incidentsMode ? <EquipmentIncidentsPage user={user} /> : createMode ? <BookingCreatePage user={user} options={options} optionsLoading={optionsLoading} optionsError={optionsError} onBack={() => navigate('/le-tan/bookings')} onCreate={createBooking} /> : <>
     <div className="booking-page-heading">
-      <div><h1>Booking</h1><p>Theo dõi lịch đặt và check-in khách trong ca</p></div>
+      <div><h1>Booking</h1></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
     </div>
     {notice && <div className={`booking-live-notice${noticeKind === 'warning' ? ' is-warning' : ''}`} role={noticeKind === 'warning' ? 'alert' : 'status'}><span>{noticeKind === 'warning' ? '!' : '✓'}</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
@@ -1060,7 +1253,7 @@ export default function BookingManagementPage() {
           })}</tbody>
         </table>
         {listLoading && <div className="booking-table-message" role="status">Đang tải booking…</div>}
-        {!listLoading && !visibleRows.length && <div className="booking-table-message">Không có booking trong ngày này.</div>}
+        {!listLoading && !visibleRows.length && <EmptyState className="booking-table-message" description="Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc." />}
         </div>
         {bookingPageCount > 1 && <nav className="booking-pagination" aria-label="Trang danh sách booking">
           <button type="button" disabled={currentBookingPage === 0} onClick={() => setBookingPage(currentBookingPage - 1)}>Trang trước</button>

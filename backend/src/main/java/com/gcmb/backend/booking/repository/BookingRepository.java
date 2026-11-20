@@ -487,6 +487,14 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    // Giữ khóa cơ sở và booking nhưng không chặn tất toán hoàn cọc theo trạng thái ACTIVE.
+    public UUID lockBookingIdForRefund(UUID bookingId, UUID branchId) {
+        if (db.queryForList("SELECT id FROM gcmb.branch WHERE id=? FOR SHARE", UUID.class, branchId).isEmpty()) return null;
+        List<UUID> rows = db.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
+            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     public boolean bookingExists(UUID bookingId) {
         return Boolean.TRUE.equals(db.queryForObject(
             "SELECT EXISTS(SELECT 1 FROM gcmb.booking WHERE id=?)", Boolean.class, bookingId));
@@ -710,11 +718,14 @@ public class BookingRepository {
     }
 
     // Ghi bút toán giữ cọc với khóa chống ghi lặp.
-    public void forfeitDeposit(UUID bookingId, UUID actorId, BigDecimal amount, String reason, String idempotencyKey) {
+    public void forfeitDeposit(UUID bookingId, UUID actorId, String reason, String idempotencyKey) {
         db.update("""
             INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,actor_id,reason,idempotency_key)
-            SELECT id,'FORFEIT',?,?,?,? FROM gcmb.deposit WHERE booking_id=?
-            """, amount, actorId, reason, idempotencyKey, bookingId);
+            SELECT d.id,'FORFEIT',v.balance,?,?,?
+            FROM gcmb.deposit d JOIN gcmb.v_deposit_balance v ON v.id=d.id
+            WHERE d.booking_id=? AND v.balance>0
+            ON CONFLICT (idempotency_key) DO NOTHING
+            """, actorId, reason, idempotencyKey, bookingId);
     }
 
     // Lưu sự kiện và chi tiết JSON để đối soát lịch sử booking.

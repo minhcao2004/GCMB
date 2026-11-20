@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './dashboard.css';
+import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 
 const currentMonth = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
 };
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}%`;
@@ -13,12 +13,13 @@ const amount = (value) => Number(value) || 0;
 function Results({ rows, onSelect }) {
   const maxRevenue = Math.max(1, ...rows.map((row) => amount(row.revenue)));
   return <div className="performance-table-wrap"><table className="performance-table">
-    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu</th><th scope="col">Chi đã trả</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên LN</th></tr></thead>
+    <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu hóa đơn</th><th scope="col">Cọc bị tịch thu</th><th scope="col">Thu nhập vận hành</th><th scope="col">Chi phí đã thanh toán</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên lợi nhuận</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id}>
       <td data-label="Cơ sở" className="performance-branch-cell">{onSelect && row.status === 'ACTIVE'
         ? <button className="performance-link" onClick={() => onSelect(row.id)}>{row.name}<span aria-hidden="true"> ↗</span></button>
         : <strong>{row.name}</strong>}<small>{row.code}{row.status !== 'ACTIVE' ? ' · Không hoạt động' : ''}</small></td>
-      <td data-label="Doanh thu"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
+      <td data-label="Doanh thu hóa đơn">{money(row.billRevenue)}</td><td data-label="Cọc bị tịch thu">{money(row.forfeitedDeposits)}</td>
+      <td data-label="Thu nhập vận hành"><span>{money(row.revenue)}</span><div className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / maxRevenue * 100)}%` }} /></div></td>
       <td data-label="Chi đã trả">{money(row.expenses)}</td><td data-label="Lương">{money(row.salary)}</td>
       <td data-label="Lợi nhuận" className={amount(row.profit) < 0 ? 'negative' : 'positive'}>{money(row.profit)}</td>
       <td data-label="Biên lợi nhuận">{percent(row.margin)}</td>
@@ -42,15 +43,21 @@ function BranchContext({ branch }) {
 
 function FinanceStrip({ totals, isChain, branchSelected }) {
   const metrics = isChain ? [
-    ['Doanh thu dịch vụ', money(totals.revenue), `${amount(totals.billCount)} bill hoàn tất`],
+    ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Cọc đang giữ cuối kỳ', money(totals.heldDeposits), 'Số dư cọc, không thuộc doanh thu'],
+    ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Chỉ gồm hóa đơn hoàn tất'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Đã gồm lương và ứng lương'],
     ['Lợi nhuận vận hành', money(totals.profit), 'Chưa gồm chi đầu tư'],
     ['Dòng tiền thuần', money(totals.netCashFlow), 'Theo sổ giao dịch'],
   ] : [
-    ['Doanh thu dịch vụ', money(totals.revenue), `${amount(totals.billCount)} bill hoàn tất`],
+    ['Doanh thu hóa đơn', money(totals.billRevenue), `${amount(totals.billCount)} hóa đơn hoàn tất`],
+    ['Cọc đang giữ cuối kỳ', money(totals.heldDeposits), 'Số dư cọc, không thuộc doanh thu'],
+    ['Thu từ cọc bị tịch thu', money(totals.forfeitedDeposits), 'Ghi nhận theo ngày phát sinh'],
+    ['Thu nhập vận hành', money(totals.revenue), 'Chỉ gồm hóa đơn hoàn tất'],
     ['Chi vận hành đã trả', money(totals.expenses), 'Chưa gồm chi đầu tư'],
-    ['Lợi nhuận vận hành', money(totals.profit), 'Doanh thu trừ chi vận hành'],
-    ['Biên lợi nhuận', percent(totals.margin), 'Tính khi doanh thu lớn hơn 0'],
+    ['Lợi nhuận vận hành', money(totals.profit), 'Thu nhập vận hành − chi vận hành đã trả'],
+    ['Biên lợi nhuận vận hành', percent(totals.margin), 'Lợi nhuận vận hành ÷ Thu nhập vận hành'],
   ];
   return <section className="performance-summary" aria-label="Kết quả tài chính trong kỳ">
     <div className="performance-summary-heading"><h2>Kết quả tài chính</h2><span>{isChain ? branchSelected ? 'Cơ sở đang chọn' : 'Toàn hệ thống' : 'Cơ sở được phân quyền'}</span></div>
@@ -74,6 +81,7 @@ function ChainDetails({ totals }) {
 }
 
 function BranchFinance({ totals }) {
+  const [selectedCost, setSelectedCost] = useState(null);
   const otherOperatingCost = Math.max(0, amount(totals.expenses) - amount(totals.salary));
   const items = [
     ['Chi phí khác', otherOperatingCost],
@@ -84,9 +92,10 @@ function BranchFinance({ totals }) {
   return <article className="performance-panel performance-breakdown">
     <div className="performance-panel-heading"><div><h2>Cơ cấu khoản chi</h2><p>Đã thanh toán trong kỳ báo cáo</p></div></div>
     <dl>{items.map(([label, value]) => <div className="performance-breakdown-row" key={label}>
-      <dt>{label}<span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, value / max * 100)}%` }} /></span></dt>
+      <dt><button type="button" className="performance-chart-choice" onClick={() => setSelectedCost([label, value])}>{label}</button><span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, value / max * 100)}%` }} /></span></dt>
       <dd>{money(value)}</dd>
     </div>)}</dl>
+    <p className="performance-chart-detail" aria-live="polite">{selectedCost ? `${selectedCost[0]}: ${money(selectedCost[1])} trong tháng hiện tại.` : 'Bấm vào một khoản chi để xem số liệu hiện tại.'}</p>
   </article>;
 }
 
@@ -108,11 +117,13 @@ function BranchOperations({ operations, onNavigate }) {
 }
 
 export default function PerformanceDashboard({ user, isChain, onNavigate }) {
-  const [month, setMonth] = useState(currentMonth);
+  const month = currentMonth();
   const [branchId, setBranchId] = useState('');
+  const [selectedChartBranch, setSelectedChartBranch] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -123,7 +134,14 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
       .catch((e) => { if (live) setError(e.response?.data?.detail || e.response?.data?.message || 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.'); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [month, branchId, isChain, user.branchId]);
+  }, [month, branchId, isChain, user.branchId, revision]);
+
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1);
+    const timer = window.setInterval(refresh, 90_000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
 
   const rows = isChain ? data?.results || [] : data?.result ? [data.result] : [];
   const branch = !isChain ? data?.result : branchId ? rows[0] : null;
@@ -131,10 +149,10 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
 
   return <section className={`manager-content performance-dashboard${isChain ? ' is-chain' : ' is-branch'}`} aria-labelledby="performance-title">
     <header className="performance-heading"><div><h1 id="performance-title">{isChain ? 'Hiệu quả kinh doanh chuỗi' : 'Tổng quan cơ sở'}</h1>
-      <p>{isChain ? 'Kết quả tài chính và mức đóng góp theo từng cơ sở.' : `${user.branchName || 'Cơ sở được phân quyền'} · Kết quả kinh doanh và tình hình vận hành.`}</p></div>
+      </div>
       <div className="performance-filters">
-        <label><span>Tháng báo cáo</span><input type="month" value={month} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} /></label>
-        {isChain && <label><span>Phạm vi cơ sở</span><select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+        <span className="performance-current-period">Số liệu tháng hiện tại · tự cập nhật mỗi 90 giây</span>
+        {isChain && <label><span>Phạm vi cơ sở</span><select value={branchId} onChange={(event) => { setBranchId(event.target.value); setSelectedChartBranch(null); }}>
           <option value="">Tất cả cơ sở</option>{(data?.branches || []).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
         </select></label>}
       </div>
@@ -144,18 +162,25 @@ export default function PerformanceDashboard({ user, isChain, onNavigate }) {
     {error && <div className="performance-state performance-error" role="alert"><strong>Không tải được báo cáo</strong><span>{error}</span></div>}
     {data && totals && <>
       {branch && <BranchContext branch={branch} />}
-      {Number(totals.billCount) === 0 && Number(totals.expenseCount) === 0 && <div className="performance-note" role="status">Chưa có bill hoàn tất hoặc khoản chi đã thanh toán trong kỳ này.</div>}
+      {Number(totals.billCount) === 0 && Number(totals.expenseCount) === 0 && <div className="performance-note" role="status">Chưa có hóa đơn hoàn tất hoặc khoản chi đã thanh toán trong kỳ này.</div>}
       <FinanceStrip totals={totals} isChain={isChain} branchSelected={Boolean(branchId)} />
+      {isChain && <MonthlyPerformanceSummary report={data} month={month} branchId={branchId} />}
       {isChain ? <div className="performance-grid performance-grid-chain">
         <article className="performance-panel performance-branches"><div className="performance-panel-heading"><div><h2>Kết quả theo cơ sở</h2><p>{branchId ? 'Kết quả của cơ sở đang chọn' : 'Chọn cơ sở đang hoạt động để xem riêng'}</p></div><span>{rows.length} cơ sở</span></div>
-          {rows.length ? <Results rows={rows} onSelect={branchId ? null : setBranchId} /> : <p className="performance-empty">Chưa có cơ sở trong phạm vi báo cáo đã chọn.</p>}
+          <div className="performance-chart" aria-label="Biểu đồ doanh thu theo cơ sở">
+            {rows.map((row) => <button type="button" key={`chart-${row.id}`} className={`performance-chart-row${branchId === row.id ? ' is-selected' : ''}`} onClick={() => { setSelectedChartBranch(row); if (!branchId) setBranchId(row.id); }} aria-pressed={Boolean(branchId && (selectedChartBranch?.id === row.id || branchId === row.id))}>
+              <span>{row.name}</span><span className="performance-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, amount(row.revenue) / Math.max(1, ...rows.map((item) => amount(item.revenue))) * 100)}%` }} /></span><strong>{money(row.revenue)}</strong>
+            </button>)}
+          </div>
+          {selectedChartBranch && <p className="performance-chart-detail" aria-live="polite">{selectedChartBranch.name}: lợi nhuận {money(selectedChartBranch.profit)}, chi đã trả {money(selectedChartBranch.expenses)}.</p>}
+          {rows.length ? <Results rows={rows} onSelect={branchId ? null : (id) => { setSelectedChartBranch(null); setBranchId(id); }} /> : <p className="performance-empty">Chưa có cơ sở trong phạm vi báo cáo đã chọn.</p>}
         </article>
         <ChainDetails totals={totals} />
       </div> : <div className="performance-grid performance-grid-branch">
         <BranchFinance totals={totals} />
         <BranchOperations operations={data.operations} onNavigate={onNavigate} />
       </div>}
-      <p className="performance-explanation">Doanh thu tính theo bill hoàn tất; chi phí và tiền lương tính theo khoản đã trả trong kỳ, theo múi giờ từng cơ sở. Chi đầu tư được trình bày riêng.</p>
+      <p className="performance-explanation">Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất; cọc đang giữ và cọc bị tịch thu được trình bày riêng. Báo cáo tổng hợp tính từ giao dịch hệ thống của mọi cơ sở trong phạm vi, kể cả cơ sở chưa gửi chốt quỹ ngày; trạng thái chốt quỹ được đối soát riêng. Chi phí vận hành chỉ gồm khoản đã thanh toán. Chi đầu tư được trình bày riêng.</p>
     </>}
   </section>;
 }

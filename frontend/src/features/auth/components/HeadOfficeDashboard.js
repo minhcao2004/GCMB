@@ -8,11 +8,13 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
-import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import ExecutiveDashboard from '../../dashboard/ExecutiveDashboard';
 import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
+import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
-import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import AppShell from '../../../shared/components/AppShell';
+import { useLayoutEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
@@ -22,9 +24,15 @@ import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
 import StaffPage from '../../workforce/pages/StaffPage';
 
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
+import FinancePage from '../../finance/pages/FinancePage';
 
 
-const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const groups = [
+  { id: 'finance', title: 'Tài chính & báo cáo', short: 'TC', items: ['Phê duyệt chi', 'Báo cáo kinh doanh', 'Báo cáo chi phí'] },
+  { id: 'operations', title: 'Vận hành', short: 'VH', items: ['Cơ sở', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị'] },
+  { id: 'administration', title: 'Quản trị', short: 'QT', items: ['Tài khoản & phân quyền', 'Nhật ký hệ thống'] },
+];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
@@ -32,6 +40,7 @@ const icons = [
   'M4 21V5l8-3 8 3v16 M9 21v-5h6v5 M8 7h1 M15 7h1 M8 11h1 M15 11h1',
   'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M18 8v6 M15 11h6',
   'M4 3v18h17 M8 16v-4 M13 16V8 M18 16V5',
+  'M4 4h16v16H4z M8 8h8M8 12h8M8 16h5',
   'M8 3H5v18h14V3h-3 M8 2h8v4H8z M8 13l3 3 5-6',
   'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M17 4a4 4 0 0 1 0 7 M22 21v-2a4 4 0 0 0-3-4',
   'M3 21V3h12v18 M7 7h4 M7 11h4 M18 8h3v13 M2 21h20',
@@ -48,35 +57,58 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const activeTab = location.pathname === catalogPath
     ? 'Phòng & bảng giá'
     : tabs.includes(requestedTab) && requestedTab !== 'Phòng & bảng giá' ? requestedTab : 'Tổng quan';
+  const activeGroup = groups.find((group) => group.items.includes(activeTab))?.id;
+  const [openGroups, setOpenGroups] = useState(() => activeGroup ? { [activeGroup]: true } : {});
+  useLayoutEffect(() => {
+    setOpenGroups(activeGroup ? { [activeGroup]: true } : {});
+  }, [activeTab, activeGroup]);
   const selectTab = (tab) => {
+    if (tab === 'Tổng quan') setOpenGroups({});
     const params = new URLSearchParams(location.search);
     if (tab === 'Tổng quan' || tab === 'Phòng & bảng giá') params.delete('screen');
     else params.set('screen', tab);
+    if (tab === 'Phê duyệt chi') params.set('tab', 'expense_requests');
+    else if (params.get('tab') === 'expense_requests') params.delete('tab');
     const targetPath = tab === 'Phòng & bảng giá' ? catalogPath : dashboardPath;
     const search = params.toString();
     navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
-  return <div className="head-office-dashboard">
-    <aside className="manager-sidebar" aria-label="Quản lý cấp cao">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">QUẢN LÝ CẤP CAO</p>
-      <nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-current={activeTab === tab ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
-        </NavLink> : <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          {tab}
-        </button>)}
-      </nav>
-      <div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>
-    </aside>
-    <div className="manager-workspace">
-      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} />
-      {activeTab === 'Tổng quan' ? (
-        <PerformanceDashboard user={user} isChain />
+  const renderItem = (tab) => <button key={tab} type="button" className="head-office-nav__item" aria-label={tab} title={tab}
+    aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[tabs.indexOf(tab)]} /></svg>
+    <span>{tab}</span>
+  </button>;
+  return <AppShell
+    audience="head-office-manager"
+    className="head-office-shell"
+    sidebarLabel="Quản lý cấp cao"
+    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    roleLabel="QUẢN LÝ CẤP CAO"
+    navigation={<nav className="manager-navigation head-office-nav" aria-label="Chức năng quản lý cấp cao">
+        {renderItem('Tổng quan')}
+        {groups.map((group) => <div className="head-office-nav__group" key={group.id} data-active={activeGroup === group.id || undefined}>
+          <button type="button" className="head-office-nav__toggle" aria-label={group.title} title={group.title}
+            aria-expanded={Boolean(openGroups[group.id])} aria-controls={`head-office-nav-${group.id}`}
+            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}>
+            <span className="head-office-nav__title">{group.title}</span><span className="head-office-nav__short" aria-hidden="true">{group.short}</span>
+            <svg className="head-office-nav__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <div id={`head-office-nav-${group.id}`} className="head-office-nav__items" hidden={!openGroups[group.id]}>
+            {group.items.map(renderItem)}
+          </div>
+        </div>)}
+      </nav>}
+    footer={<div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>}
+    renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
+      <DashboardTopbar role="QUẢN LÝ CẤP CAO" page={activeTab} user={user} busy={busy} onProfile={onProfile} onLogout={onLogout} onToggleSidebar={onToggleSidebar} sidebarExpanded={sidebarExpanded} />
+    )}
+  >
+    {activeTab === 'Tổng quan' ? (
+        <ExecutiveDashboard user={user} />
       ) : activeTab === 'Báo cáo kinh doanh' ? (
         <AccountantFinancePage reportsOnly />
+      ) : activeTab === 'Báo cáo chi phí' ? (
+        <ExpenseBreakdownReportPage initialUser={user} />
       ) : activeTab === 'Cơ sở' ? (
         <BranchManagementPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Phòng & bảng giá' ? (
@@ -98,7 +130,8 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
         <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
+      ) : activeTab === 'Phê duyệt chi' ? (
+        <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
-    </div>
-  </div>;
+  </AppShell>;
 }

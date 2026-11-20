@@ -47,8 +47,9 @@ public class FinanceAccess {
     if (
       actor.branchId() == null || !accounts.manages(actor.id(), actor.branchId(), false)
     ) throw new AuthFailure(403, "form", "Bạn không có quyền xem đối với cơ sở này.");
+    // HuyDV / BR-177: chỉ thao tác ghi cần giữ khóa cơ sở; FOR SHARE bị cấm trong transaction chỉ đọc.
     var branch = db.queryForMap(
-      "SELECT name,status FROM gcmb.branch WHERE id=? FOR SHARE",
+      "SELECT name,status FROM gcmb.branch WHERE id=?" + (write ? " FOR SHARE" : ""),
       actor.branchId()
     );
     if (write && !"ACTIVE".equals(branch.get("status"))) throw new AuthFailure(
@@ -62,7 +63,7 @@ public class FinanceAccess {
   }
 
   public void lock() {
-    db.execute("SELECT pg_advisory_xact_lock(1300261103)");
+    AccountantFund.lock(db);
   }
 
   public void audit(

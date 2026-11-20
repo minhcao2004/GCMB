@@ -66,9 +66,6 @@ export default function PersonalWorkRecordsPage({ user }) {
       <header className="shift-heading">
         <div>
           <h1 id="personal-work-title">Công cá nhân</h1>
-          <p>
-            Xem ca được phân công và giờ công thực tế. Liên hệ quản lý cơ sở nếu cần điều chỉnh.
-          </p>
         </div>
         <button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>
           Tải lại

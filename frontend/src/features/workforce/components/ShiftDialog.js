@@ -20,7 +20,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
         return {
           date,
           templateId: t.id,
-          capacity: String(old?.capacity || 2),
+          capacity: String(old?.capacity || 3),
           open:
             (dialog.focusSlot === slotKey(date, t.id) &&
               data.editableSlots?.includes(slotKey(date, t.id))) ||
@@ -32,7 +32,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
   );
   const [employeeId, setEmployeeId] = useState(''),
     [reason, setReason] = useState('');
-  const [defaultCapacity, setDefaultCapacity] = useState('2');
+  const [defaultCapacity, setDefaultCapacity] = useState('3');
   const [review, setReview] = useState(false),
     [busy, setBusy] = useState(false),
     [errors, setErrors] = useState({});
@@ -65,6 +65,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
   const participants = shift ? data.assignments.filter((a) => a.shiftId === shift.id) : [];
   const candidates = data.employees.filter(
     (e) => e.id !== assignment?.employeeId && !participants.some((a) => a.employeeId === e.id)
+      && !(data.employeeClosings || []).some((c) => c.employeeId === e.id && c.month.slice(0, 7) === shift?.date.slice(0, 7))
   );
   const replacement = candidates.find((e) => e.id === employeeId);
   const canReplace =
@@ -101,7 +102,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
       setErrors(found);
       return;
     }
-    if (type === 'detail' && (!canReplace || participants.length || !employeeId)) return;
+    if (type === 'detail' && (!canReplace || participants.length >= shift.capacity || !employeeId)) return;
     if (!review && type !== 'register' && type !== 'detail') {
       setReview(true);
       return;
@@ -125,6 +126,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
             : type === 'detail'
               ? await shiftApi.assign(shift.id, employeeId, scope)
               : await shiftApi.register(shift.id);
+      setEmployeeId('');
       onSaved(
         result,
         type === 'register'
@@ -193,43 +195,22 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                   {shift.status === 'OPEN' ? 'Đang mở đăng ký' : 'Đóng đăng ký mới'}
                 </div>
                 <h3>Nhân viên được phân công</h3>
-                {participants.length ? (
-                  <ul className="shift-people">
-                    {participants.map((a) => (
-                      <li key={a.id}>
-                        <div>
-                          <strong>{a.fullName}</strong>
-                          <small>
-                            {a.code} · {a.source === 'MANAGER' ? 'Quản lý phân công' : 'Tự đăng ký'}
-                            {a.employeeStatus !== 'ACTIVE' ? ' · Hồ sơ đã ngừng' : ''}
-                          </small>
-                        </div>
-                        {canReplace && (
-                          <button type="button" onClick={() => dialog.onReplace(a)}>
-                            Làm thay
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <>
-                    <p>Chưa có nhân viên đăng ký ca này.</p>
-                    {canReplace && shift.status !== 'CANCELLED' && (
-                      <div className="shift-empty-assignment">
-                        <label>
-                          Nhân viên phân công
-                          <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-                            <option value="">Chọn nhân viên</option>
-                            {candidates.map((employee) => (
-                              <option key={employee.id} value={employee.id}>{employee.fullName} · {employee.code}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <button type="submit" disabled={!employeeId}>Phân công</button>
-                      </div>
-                    )}
-                  </>
+                {participants.length ? <ul className="shift-people">
+                  {participants.map((a) => <li key={a.id}>
+                    <div><strong>{a.fullName}</strong><small>{a.code} · {a.source === 'MANAGER' ? 'Quản lý phân công' : 'Tự đăng ký'}{a.employeeStatus !== 'ACTIVE' ? ' · Hồ sơ đã ngừng' : ''}</small></div>
+                    {canReplace && <button type="button" onClick={() => dialog.onReplace(a)}>Làm thay</button>}
+                  </li>)}
+                </ul> : <p>Chưa có nhân viên đăng ký ca này.</p>}
+                {canReplace && shift.status !== 'CANCELLED' && participants.length < Math.min(3, shift.capacity) && (
+                  <div className="shift-empty-assignment">
+                    <label>Phân công thêm nhân viên (còn {Math.min(3, shift.capacity) - participants.length} chỗ)
+                      <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+                        <option value="">Chọn nhân viên</option>
+                        {candidates.map((e) => <option key={e.id} value={e.id}>{e.fullName} · {e.code}</option>)}
+                      </select>
+                    </label>
+                    <button type="submit" disabled={!employeeId || busy}>Phân công</button>
+                  </div>
                 )}
                 {data.history.some((h) => h.shiftId === shift.id) && (
                   <>
@@ -290,8 +271,9 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                     Số người mặc định
                     <input
                       type="number"
-                      min="1"
+                      min="3"
                       step="1"
+                      readOnly
                       value={defaultCapacity}
                       onChange={(e) => setDefaultCapacity(e.target.value)}
                     />
@@ -350,8 +332,9 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                                 aria-label={`Số chỗ ${s.date} ca ${i + 1}`}
                                 type="number"
                                 min="1"
-                                max="2147483647"
+                                max="3"
                                 step="1"
+                                readOnly
                                 value={s.capacity}
                                 disabled={!editable(s) || (!s.open && !before)}
                                 onChange={(e) => updateSlot(index, 'capacity', e.target.value)}

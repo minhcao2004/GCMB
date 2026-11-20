@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
+import MoneyInput from '../../finance/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/accounting/payroll';
 const componentNames = {
-  BASE: 'Lương giờ thường',
+  BASE: 'Tiền công theo ca',
   OVERTIME: 'Ngoài giờ ngày thường',
   REST: 'Làm ngày nghỉ',
   HOLIDAY: 'Làm ngày lễ',
@@ -14,6 +15,7 @@ const componentNames = {
   ADDITION: 'Thưởng đã duyệt',
   DEDUCTION: 'Khấu trừ đã duyệt',
 };
+const paymentStatusNames = { PAID: 'Đã thanh toán', FAILED: 'Không thành công', PENDING: 'Chờ xác nhận' };
 const requestId = () => window.crypto.randomUUID();
 export default function PayrollPage() {
   const [month, setMonth] = useState(today().slice(0, 7));
@@ -23,6 +25,7 @@ export default function PayrollPage() {
   const [selected, setSelected] = useState([]),
     [search, setSearch] = useState(''),
     [filter, setFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false),
@@ -103,13 +106,10 @@ export default function PayrollPage() {
   const moneyInput = (key, label, state, setter) => (
     <label>
       {label}
-      <input
-        type="number"
-        min="0"
-        step="1"
+      <MoneyInput
         required
         value={state[key]}
-        onChange={(e) => setter({ ...state, [key]: e.target.value })}
+        onValueChange={(value) => setter({ ...state, [key]: value })}
       />
     </label>
   );
@@ -131,16 +131,20 @@ export default function PayrollPage() {
     </label>
   );
   const readyRows = (data?.rows || []).filter((row) => data.status === 'CONFIRMED' || row.submitted_branch_id);
-  const totalDue = readyRows.filter((row) => !row.paid).reduce((sum, row) => sum + Number(row.net_amount), 0);
-  const rows = readyRows.filter(
+  const branchRows = readyRows.filter((row) => !branchFilter ||
+    row.submitted_branch_id === branchFilter ||
+    row.components?.some((component) => component.branch_id === branchFilter));
+  const rows = branchRows.filter(
     (r) =>
       `${r.code} ${r.name}`.toLowerCase().includes(search.toLowerCase()) &&
       (!filter || Boolean(r.paid) === (filter === 'paid')),
   );
+  const totalDue = rows.filter((row) => !row.paid).reduce((sum, row) => sum + Number(row.net_amount), 0);
+  const pendingBranches = (data?.pendingBranches || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
+  const advances = (data?.advances || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
   return (
     <section className="finance-page">
       <h1>Lương nhân viên</h1>
-      <p className="finance-muted">Tiếp nhận bảng lương đã chốt và ghi nhận thanh toán · Phạm vi toàn chuỗi</p>
       {error && (
         <p role="alert" className="finance-error">
           {error}
@@ -160,6 +164,21 @@ export default function PayrollPage() {
             value={month}
             onChange={(e) => e.target.value && setMonth(e.target.value)}
           />
+        </label>
+        <label>
+          Cơ sở
+          <select value={branchFilter} disabled={busy} onChange={(event) => {
+            setBranchFilter(event.target.value);
+            setSelected([]);
+            setDialog('');
+            setDetail(null);
+            setReviewed(false);
+          }}>
+            <option value="">Tất cả cơ sở</option>
+            {(options?.branches || []).map((branch) => (
+              <option key={branch.id} value={branch.id}>{branch.name}</option>
+            ))}
+          </select>
         </label>
         <label>
           Tìm nhân viên
@@ -190,7 +209,7 @@ export default function PayrollPage() {
           <>
             <div className="finance-info">
               <span>
-                {readyRows.length}{' '}
+                {rows.length}{' '}
                 nhân viên
               </span>
               <strong className="finance-total">Còn phải trả: {vnd(totalDue)}</strong>
@@ -213,7 +232,7 @@ export default function PayrollPage() {
                 Ghi nhận ứng lương
               </button>
               <button
-                disabled={busy || !readyRows.length}
+                disabled={busy || !branchRows.length}
                 onClick={() => setDialog('export')}
               >
                 Xuất Excel
@@ -259,7 +278,9 @@ export default function PayrollPage() {
                 {dialog === 'export' && (
                   <>
                     <p>
-                      Xuất dữ liệu bảng lương tháng {month}. Việc xuất không đánh dấu đã trả lương.
+                      Xuất dữ liệu bảng lương tháng {month}
+                      {branchFilter ? ` · ${options.branches.find((branch) => branch.id === branchFilter)?.name || ''}` : ' · Tất cả cơ sở'}.
+                      Việc xuất không đánh dấu đã trả lương.
                     </p>
                     <button
                       className="finance-primary"
@@ -267,7 +288,8 @@ export default function PayrollPage() {
                       onClick={async () => {
                         setBusy(true);
                         try {
-                          await api.download(`${base}/${month}/export`, `Bang-luong-${month}.xlsx`);
+                          const query = branchFilter ? `?branchId=${encodeURIComponent(branchFilter)}` : '';
+                          await api.download(`${base}/${month}/export${query}`, `Bang-luong-${month}.xlsx`);
                           setDialog('');
                         } catch {
                           setError(
@@ -350,6 +372,7 @@ export default function PayrollPage() {
                             <h3>
                               {r.code} · {r.name} · {vnd(r.net_amount)}
                             </h3>
+                            <SalaryBankDetails entry={r} />
                             <ResultInputs
                               value={results[id]}
                               onChange={(v) => setResults({ ...results, [id]: v })}
@@ -380,6 +403,7 @@ export default function PayrollPage() {
                   <tr>
                     <th>Chọn</th>
                     <th>Nhân viên</th>
+                    <th>Tài khoản nhận lương</th>
                     <th>Tổng lương</th>
                     <th>Khấu trừ (gồm ứng)</th>
                     <th>Ứng đã trả</th>
@@ -405,11 +429,12 @@ export default function PayrollPage() {
                         <small>{r.name}</small>
                         {r.submitted_branch_name && <small>{r.submitted_branch_name}</small>}
                       </td>
+                      <td><SalaryBankDetails entry={r} /></td>
                       <td>{vnd(r.gross_amount)}</td>
                       <td>{vnd(r.deduction_amount)}</td>
                       <td>{vnd(r.advances)}</td>
                       <td>{vnd(r.net_amount)}</td>
-                      <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'QLCS đã gửi' : 'Chưa trả'}</td>
+                      <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
                       <td>
                         <button onClick={() => setDetail(r)}>Chi tiết</button>
                       </td>
@@ -433,6 +458,7 @@ export default function PayrollPage() {
                   <div className="finance-line" key={i}>
                     <span>
                       {componentNames[c.reason] || componentNames[c.kind]}
+                      {c.branch_name && <small>{c.branch_name}</small>}
                       {['ADDITION', 'DEDUCTION'].includes(c.kind) && <small>{c.reason}</small>}
                     </span>
                     <strong>{vnd(c.amount)}</strong>
@@ -443,10 +469,7 @@ export default function PayrollPage() {
                   <strong>−{vnd(detail.advances)}</strong>
                 </div>
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
-                <p>
-                  Ngân hàng: {detail.bank_name_snapshot || '—'} · Tài khoản:{' '}
-                  {detail.bank_account_snapshot || '—'} · {detail.bank_holder_snapshot || '—'}
-                </p>
+                <SalaryBankDetails entry={detail} />
                 {detail.payments.map((p, i) => (
                   <p key={i}>
                     {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
@@ -455,8 +478,12 @@ export default function PayrollPage() {
                 ))}
               </article>
             )}
+            {!!pendingBranches.length && <details className="finance-card" open>
+              <summary>Chờ các cơ sở chốt đủ ({pendingBranches.length} phần lương đã gửi)</summary>
+              {pendingBranches.map((row, index) => <p key={index}>{row.code} · {row.name} — {row.branch_name} đã gửi</p>)}
+            </details>}
             <details className="finance-card">
-              <summary>Lịch sử ứng lương ({data.advances.length})</summary>
+              <summary>Lịch sử ứng lương ({advances.length})</summary>
               <div className="finance-table-wrap">
                 <table>
                   <thead>
@@ -468,13 +495,13 @@ export default function PayrollPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.advances.map((a) => (
+                    {advances.map((a) => (
                       <tr key={a.id}>
                         <td>
                           {a.code} · {a.name}
                         </td>
                         <td>{vnd(a.amount)}</td>
-                        <td>{a.status === 'PAID' ? 'Đã trả' : a.status}</td>
+                        <td>{paymentStatusNames[a.status] || 'Chưa xác định'}</td>
                         <td>{a.external_reference}</td>
                       </tr>
                     ))}
@@ -486,6 +513,21 @@ export default function PayrollPage() {
         )
       )}
     </section>
+  );
+}
+
+// HuyDV | UC-97: kế toán đối chiếu tài khoản do QLCS lưu trước khi chuyển tiền bên ngoài.
+function SalaryBankDetails({ entry }) {
+  const complete = entry.bank_name_snapshot && entry.bank_account_snapshot && entry.bank_holder_snapshot;
+  return (
+    <div className="payroll-bank-details">
+      <span>Ngân hàng: <strong>{entry.bank_name_snapshot || 'Chưa có'}</strong></span>
+      <span>Số tài khoản: <strong>{entry.bank_account_snapshot || 'Chưa có'}</strong></span>
+      <span>Chủ tài khoản: <strong>{entry.bank_holder_snapshot || 'Chưa có'}</strong></span>
+      {!complete && !entry.paid && <small>
+        Chưa đủ thông tin nhận lương. Liên hệ quản lý cơ sở để bổ sung, rồi bấm Tải lại trước khi chuyển khoản.
+      </small>}
+    </div>
   );
 }
 

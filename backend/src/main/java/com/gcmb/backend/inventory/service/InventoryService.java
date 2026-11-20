@@ -74,7 +74,10 @@ public class InventoryService {
     @Transactional
     public InventoryItemView create(Identity actor, InventoryItemCommand input) {
         UUID branchId = writableBranch(actor);
-        InventoryItemCommand command = validate(input);
+        if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
+        // Mã mặt hàng được cấp tự động trong phạm vi từng cơ sở.
+        InventoryItemCommand command = validate(new InventoryItemCommand(repository.nextInventorySku(branchId),
+            input.name(), input.category(), input.unitId(), input.trackingMode(), input.minimumQuantity(), input.active()));
         try {
             UUID id = repository.create(branchId, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity());
@@ -140,7 +143,7 @@ public class InventoryService {
     public StockReceiptResult receive(Identity actor, StockReceiptCommand input, MultipartFile evidence) {
         UUID branchId = writableBranch(actor);
         StockReceiptCommand command = validateReceipt(input, branchId);
-        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence);
+        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence, "kho-hang");
         if (stored != null) cleanupIfRolledBack(stored.objectKey());
 
         String code = repository.nextReceiptCode();
@@ -204,7 +207,7 @@ public class InventoryService {
         }
         BigDecimal delta = actual.subtract(item.quantity());
         if (delta.signum() == 0) throw bad("Tồn thực tế không thay đổi. Không cần ghi nhận điều chỉnh.");
-        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence);
+        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence, "kho-hang");
         if (stored != null) cleanupIfRolledBack(stored.objectKey());
         UUID movementId = repository.insertAdjustment(item.id(), delta, item.quantity(), input.occurredAt(), actor.id(), reason,
             stored == null ? null : stored.objectKey(), stored == null ? null : stored.originalName(),

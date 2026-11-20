@@ -1,39 +1,45 @@
-/** HuyDV: QLCS đặt đơn giá và bàn giao bảng lương cho kế toán. */
-import { useEffect, useRef, useState } from 'react';
+/** HuyDV: QLCS đặt đơn giá; chốt lương tại bảng công và lương tháng. */
+import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
-import { financeApi, today, vnd } from '../../finance/services/financeApi';
+import { financeApi, today } from '../../finance/services/financeApi';
+import MoneyInput from '../../finance/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/branch-management/payroll';
+const monthEnd = (value) => {
+  const [year, month] = value.split('-').map(Number);
+  return `${value}-${new Date(year, month, 0).getDate()}`;
+};
 
 export default function BranchPayrollPage({ branchScope, readOnly }) {
   const [employees, setEmployees] = useState([]);
+  const [monthlyEmployees, setMonthlyEmployees] = useState([]);
+  const [revision, setRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [employeeId, setEmployeeId] = useState('');
-  const [tab, setTab] = useState('rates');
+  const [historicalRates, setHistoricalRates] = useState(false);
   const [month, setMonth] = useState(today().slice(0, 7));
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [amount, setAmount] = useState('');
-  const [bonus, setBonus] = useState('0');
-  const [penalty, setPenalty] = useState('0');
-  const [reason, setReason] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [attendanceNotes, setAttendanceNotes] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const settlementFeedback = useRef(null);
-  useEffect(() => {
-    if (tab === 'settlement' && (notice || error)) {
-      settlementFeedback.current?.scrollIntoView({ block: 'nearest' });
-    }
-  }, [tab, notice, error]);
   useEffect(() => {
     let active = true;
-    financeApi.get(base + '/employees', {}, branchScope)
-      .then((rows) => { if (active) setEmployees(rows); })
-      .catch((e) => { if (active) setError(Object.values(apiErrors(e)).join(' ')); });
+    setLoading(true);
+    setEmployees([]);
+    setMonthlyEmployees([]);
+    setEmployeeId('');
+    Promise.all([financeApi.get(base + '/employees', {}, branchScope),
+      financeApi.get(`${base}/${month}/employees`, {}, branchScope)])
+      .then(([rows, monthly]) => {
+        if (active) { setEmployees(rows); setMonthlyEmployees(monthly); }
+      })
+      .catch((e) => { if (active) setError(Object.values(apiErrors(e)).join(' ')); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [branchScope]);
+  }, [branchScope, month, revision]);
+  const choices = historicalRates ? monthlyEmployees : employees;
 
   async function save(path, body, message) {
     setBusy(true);
@@ -42,114 +48,79 @@ export default function BranchPayrollPage({ branchScope, readOnly }) {
     try {
       const result = await financeApi.post(base + path, body, branchScope);
       if (message) {
-        setNotice(message);
-        setPreview(null);
-      } else {
-        setPreview(result);
-        setAttendanceNotes(result.attendanceNotes ?? []);
+        setNotice(result?.message || message);
+        setRevision((value) => value + 1);
       }
     } catch (e) {
-      setPreview(null);
       setError(Object.values(apiErrors(e)).join(' '));
     } finally {
       setBusy(false);
     }
   }
 
-  const settlement = { employeeId, bonus: Number(bonus), penalty: Number(penalty), reason };
-  const change = (setter, clearNotes = false) => (event) => {
-    setter(event.target.value);
-    setPreview(null);
-    if (clearNotes) setAttendanceNotes(null);
-  };
+  const change = (setter) => (event) => setter(event.target.value);
   return (
     <section className="finance-page branch-payroll-page">
-      <h2>Đơn giá và chốt lương cơ sở</h2>
-      <nav className="workforce-tabs" aria-label="Quản lý lương cơ sở">
-        {[['rates', 'Đơn giá giờ'], ['settlement', 'Chốt lương tháng']].map(([key, label]) => (
-          <button key={key} type="button" disabled={busy}
-            aria-current={tab === key ? 'page' : undefined}
-            onClick={() => {
-              setTab(key);
-              setPreview(null);
+      <h2>Đơn giá giờ cơ sở</h2>
+      {error && <p className="finance-error" role="alert">{error}</p>}
+      {notice && <p className="finance-info" role="status">{notice}</p>}
+      <label className="finance-check">
+        <input type="checkbox" checked={historicalRates} disabled={busy || loading}
+          onChange={(event) => {
+            setHistoricalRates(event.target.checked);
+            if (event.target.checked) setEffectiveFrom(month + '-01');
+            setEmployeeId('');
+            setAmount('');
+            setError('');
+            setNotice('');
+          }} />
+        Bổ sung đơn giá công cũ (nhân viên đã nghỉ, khóa tài khoản hoặc chuyển cơ sở)
+      </label>
+      {historicalRates && <p className="finance-muted">
+        Chọn tháng đã kết thúc. Chỉ bổ sung đơn giá còn thiếu cho công đi làm tại cơ sở, không thay đổi tháng lương đã gửi.
+      </p>}
+      {historicalRates && <label>Tháng
+        <input type="month" value={month} required disabled={busy}
+          onChange={(event) => {
+            if (event.target.value) {
+              setMonth(event.target.value);
+              if (historicalRates) setEffectiveFrom(event.target.value + '-01');
               setError('');
               setNotice('');
-            }}>
-            {label}
-          </button>
-        ))}
-      </nav>
-      {tab === 'rates' && error && <p className="finance-error" role="alert">{error}</p>}
-      {tab === 'rates' && notice && <p className="finance-info" role="status">{notice}</p>}
+            }
+          }} />
+      </label>}
+      {loading && <p role="status">Đang tải thông tin lương…</p>}
       <label>Nhân viên
-        <select value={employeeId} onChange={change(setEmployeeId, true)} disabled={busy}>
+        <select value={employeeId} onChange={(event) => {
+          const id = event.target.value;
+          setEmployeeId(id);
+          setError('');
+          setNotice('');
+        }} disabled={busy || loading}>
           <option value="">Chọn nhân viên</option>
-          {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.code} · {employee.name}</option>)}
+          {choices.map((employee) => <option key={employee.id} value={employee.id}>{employee.code} · {employee.name}</option>)}
         </select>
       </label>
-      {tab === 'rates' ? <form onSubmit={(event) => {
+      <form onSubmit={(event) => {
         event.preventDefault();
+        if (historicalRates && (!effectiveFrom.startsWith(month) || month >= today().slice(0, 7))) {
+          setError('Vui lòng chọn tháng đã kết thúc và ngày hiệu lực trong tháng công cũ đã chọn.');
+          return;
+        }
         save('/hourly-rates', { employeeId, effectiveFrom, amount: Number(amount) }, 'Đã lưu đơn giá giờ.');
       }}>
         <fieldset disabled={busy || readOnly || !employeeId}>
           <legend className="branch-payroll-legend">Đơn giá giờ</legend>
-          <label>Ngày hiệu lực <input type="date" required value={effectiveFrom} onChange={change(setEffectiveFrom)} /></label>
+          <label>Ngày hiệu lực <input type="date" required value={effectiveFrom} onChange={change(setEffectiveFrom)}
+            min={historicalRates ? month + '-01' : undefined}
+            max={historicalRates ? monthEnd(month) : undefined} /></label>
           <label>Đơn giá (đ/giờ)
-            <input type="text" inputMode="numeric" required
-              value={amount.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-              onChange={(event) => {
-                const digits = event.target.value.replace(/\./g, '');
-                if (/^\d{0,15}$/.test(digits)) setAmount(digits.replace(/^0+/, ''));
-              }}
-            />
+            <MoneyInput required value={amount} onValueChange={setAmount} />
           </label>
           <button type="submit">Lưu đơn giá</button>
         </fieldset>
-      </form> : <form onSubmit={(event) => {
-        event.preventDefault();
-        save('/' + month + '/preview', settlement);
-      }}>
-        <fieldset disabled={busy || readOnly || !employeeId}>
-          <legend className="branch-payroll-legend">Chốt lương tháng</legend>
-          <label>Tháng <input type="month" required value={month} onChange={change(setMonth, true)} /></label>
-          {attendanceNotes && (
-            <section aria-label="Ghi chú chấm công">
-              <h3>Ghi chú chấm công trong tháng</h3>
-              {attendanceNotes.length ? (
-                <details key={employeeId + '/' + month}>
-                  <summary>Chi tiết ({attendanceNotes.length} ghi chú)</summary>
-                  <ul>
-                  {attendanceNotes.map((item, index) => (
-                    <li key={index}>
-                      <strong>{item.date.split('-').reverse().join('/')} · {item.status === 'ABSENT' ? 'Vắng mặt' : 'Đi làm'}</strong>
-                      <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.note}</div>
-                    </li>
-                  ))}
-                  </ul>
-                </details>
-              ) : <p>Tháng này không có ghi chú chấm công.</p>}
-            </section>
-          )}
-          <label>Thưởng thêm <input type="number" min="0" step="1" required value={bonus} onChange={change(setBonus)} /></label>
-          <label>Tiền phạt <input type="number" min="0" step="1" required value={penalty} onChange={change(setPenalty)} /></label>
-          <label>Lý do <textarea value={reason} maxLength={2000} onChange={change(setReason)} /></label>
-          <button type="submit">Xem trước lương</button>
-          {preview && (
-            <div role="status">
-              <p>Tiền công {vnd(preview.wage)} · Thưởng trên 100 giờ {vnd(preview.reward)} · Tạm ứng {vnd(preview.advance)}</p>
-              <p><strong>Thực nhận {vnd(preview.net)}</strong></p>
-              <button type="button" onClick={() => save('/' + month + '/submit',
-                { ...settlement, reviewedTotal: preview.net }, 'Đã chốt lương và gửi kế toán.')}>
-                {busy ? 'Đang xử lý…' : 'Chốt và gửi kế toán'}
-              </button>
-            </div>
-          )}
-        </fieldset>
-        <div ref={settlementFeedback}>
-          {error && <p className="finance-error" role="alert">{error}</p>}
-          {notice && <p className="finance-info" role="status">{notice}</p>}
-        </div>
-      </form>}
+      </form>
     </section>
   );
 }

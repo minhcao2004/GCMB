@@ -6,7 +6,8 @@
  * Description: Dashboard, điều hướng, đồng hồ và hồ sơ quản lý cơ sở.
  */
 
-import PerformanceDashboard from '../../dashboard/PerformanceDashboard';
+import BranchOverviewDashboard from './BranchOverviewDashboard';
+import AppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -20,12 +21,22 @@ import InventoryPage from '../../inventory/pages/InventoryPage';
 import WorkforcePage from '../../workforce/pages/WorkforcePage';
 import StaffPage from '../../workforce/pages/StaffPage';
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
+
 // HuyDV / UC-98/100: chốt quỹ theo cơ sở đang chọn.
 import CashClosingPage from '../../finance/pages/CashClosingPage';
+
+import FinancePage from '../../finance/pages/FinancePage';
+
+
 import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
 const branchNav = [...nav, 'Tài khoản'];
+const groups = [
+  { id: 'finance', title: 'Tài chính', short: 'TC', items: ['Chốt quỹ', 'Chi phí & đề nghị'] },
+  { id: 'operations', title: 'Vận hành', short: 'VH', items: ['Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố'] },
+  { id: 'people', title: 'Nhân sự & tài khoản', short: 'NS', items: ['Nhân sự', 'Ca làm & chấm công', 'Tài khoản'] },
+];
 const screenIds = ['overview', 'rooms', 'menu', 'inventory', 'equipment', 'staff', 'attendance', 'cash-closing', 'expenses', 'accounts'];
 const icons = [
   'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -45,6 +56,11 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
   const contentRef = useRef(null);
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
   const active = branchNav[activeIndex] || 'Tổng quan';
+  const activeGroup = groups.find((group) => group.items.includes(active))?.id;
+  const [openGroups, setOpenGroups] = useState(() => activeGroup ? { [activeGroup]: true } : {});
+  useLayoutEffect(() => {
+    setOpenGroups(activeGroup ? { [activeGroup]: true } : {});
+  }, [active, activeGroup]);
   useLayoutEffect(() => {
     if (active === 'Thực đơn F&B' || active === 'Kho hàng') window.scrollTo(0, 0);
   }, [active]);
@@ -84,30 +100,46 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     } catch (error) { setBranchError(Object.values(apiErrors(error))[0]); }
     finally { setSwitching(false); }
   };
-  const selectScreen = (label) => {
+  const selectScreen = (label, equipmentTab) => {
+    if (label === 'Tổng quan') setOpenGroups({});
     const screen = screenIds[branchNav.indexOf(label)];
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set('screen', screen);
+      if (screen === 'equipment' && equipmentTab === 'incidents') next.set('equipmentTab', 'incidents');
+      else next.delete('equipmentTab');
       return next;
     });
   };
+  const renderItem = (label) => <button key={label} type="button" className="branch-nav__item" aria-label={label} title={label}
+    aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[branchNav.indexOf(label)]} /></svg><span>{label}</span>
+  </button>;
   useLayoutEffect(() => {
     contentRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [active]);
 
-  return <div className={`head-office-dashboard branch-manager-dashboard${active === 'Thực đơn F&B' ? ' has-menu-items' : ''}${active === 'Kho hàng' ? ' has-inventory' : ''}`}>
-    <aside className="manager-sidebar">
-      <div className="manager-brand"><BrandWordmark /></div>
-      <p className="manager-role">QUẢN LÝ CƠ SỞ</p>
-      <nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
-        {branchNav.map((label, i) => <button key={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg>{label}
-        </button>)}
-      </nav>
-    </aside>
-    <div className="manager-workspace">
+  return <AppShell
+    audience="branch-manager"
+    className={`branch-manager-dashboard${active === 'Thực đơn F&B' ? ' has-menu-items' : ''}${active === 'Kho hàng' ? ' has-inventory' : ''}`}
+    sidebarLabel="Quản lý cơ sở"
+    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    roleLabel="QUẢN LÝ CƠ SỞ"
+    navigation={<nav className="manager-navigation branch-nav" aria-label="Chức năng quản lý cơ sở">
+        {renderItem('Tổng quan')}
+        {groups.map((group) => <div className="branch-nav__group" key={group.id} data-active={activeGroup === group.id || undefined}>
+          <button type="button" className="branch-nav__toggle" aria-label={group.title} title={group.title}
+            aria-expanded={Boolean(openGroups[group.id])} aria-controls={`branch-nav-${group.id}`}
+            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}>
+            <span className="branch-nav__title">{group.title}</span><span className="branch-nav__short" aria-hidden="true">{group.short}</span>
+            <svg className="branch-nav__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <div id={`branch-nav-${group.id}`} className="branch-nav__items" hidden={!openGroups[group.id]}>{group.items.map(renderItem)}</div>
+        </div>)}
+      </nav>}
+    renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
       <DashboardTopbar role="QUẢN LÝ CƠ SỞ" page={active} user={user} busy={busy || switching} onProfile={onProfile} onLogout={onLogout}
+        onToggleSidebar={onToggleSidebar} sidebarExpanded={sidebarExpanded}
         accountHeader={<label className="manager-branch-selector">Cơ sở đang quản lý
           <select aria-label="Cơ sở đang quản lý" title={user.branchName || 'Cơ sở được phân quyền'}
             value={user.branchId || ''} onChange={selectBranch} disabled={busy || switching || loadingBranches}>
@@ -115,11 +147,15 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
             {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
         </label>} />
-      <section ref={contentRef} className="manager-content branch-manager-content" key={`${active}-${user.branchId}`}>
+    )}
+    mainClassName="manager-content branch-manager-content"
+    mainRef={contentRef}
+    mainKey={`${active}-${user.branchId}`}
+  >
         {readOnly && <p className="br-warning" role="status">Cơ sở {user.branchName} đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.</p>}
         {branchError && <p className="br-error" role="alert">{branchError}</p>}
         {switching ? <p role="status">Đang chuyển cơ sở…</p>
-          : active === 'Tổng quan' ? <PerformanceDashboard user={user} onNavigate={selectScreen} />
+          : active === 'Tổng quan' ? <BranchOverviewDashboard user={user} onNavigate={selectScreen} />
           : active === 'Chốt quỹ' ? <CashClosingPage user={user} readOnly={readOnly} />
           : active === 'Tài khoản' ? <AccountsPage actorId={user.id} initialSearch={accountSearch} branchScope={user.branchId} readOnly={readOnly} />
             : active === 'Nhân sự' ? <StaffPage user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} />
@@ -128,8 +164,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
                   : active === 'Thực đơn F&B' ? <MenuItemsPage user={{ ...user, readOnly }} />
                     : active === 'Kho hàng' ? <InventoryPage user={{ ...user, readOnly }} />
                       : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage user={{ ...user, readOnly }} />
+                        : active === 'Chi phí & đề nghị' ? <FinancePage user={{ ...user, readOnly }} />
                         : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}
-      </section>
-    </div>
-  </div>;
+  </AppShell>;
 }

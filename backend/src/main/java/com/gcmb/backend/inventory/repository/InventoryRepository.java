@@ -63,6 +63,15 @@ public class InventoryRepository {
             "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')", Boolean.class, branchId));
     }
 
+    public String nextInventorySku(UUID branchId) {
+        db.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> {}, "GCMB_INVENTORY_ITEM_SKU:" + branchId);
+        Long next = db.queryForObject("""
+            SELECT COALESCE(MAX(substring(sku FROM 4)::bigint),0)+1
+            FROM gcmb.inventory_item WHERE branch_id=? AND sku ~ '^MH-[0-9]+$'
+            """, Long.class, branchId);
+        return String.format(Locale.ROOT, "MH-%04d", next == null ? 1L : next);
+    }
+
     public UUID create(UUID branchId, String sku, String name, String category, UUID unitId,
                        String trackingMode, BigDecimal minimumQuantity) {
         UUID id = db.queryForObject("""

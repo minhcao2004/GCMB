@@ -53,6 +53,10 @@ public class AccountAccessService {
             throw new AuthFailure(404, "form", "Tài khoản không tồn tại");
         }
         AccountView account = accounts.find(id);
+        // MSG24: quản lý cấp cao chỉ được xem tài khoản kế toán, không sửa quyền hoặc trạng thái.
+        if ("ACCOUNTANT".equals(account.role())) {
+            throw new AuthFailure(403, "form", "Bạn không có quyền " + action + " đối với tài khoản kế toán.");
+        }
         if ("REVOKED".equals(account.status())) {
             throw new AuthFailure(409, "form", "Tài khoản đã bị thu hồi truy cập");
         }
@@ -158,6 +162,10 @@ public class AccountAccessService {
         }
         if (!access.lockAccount(id)) throw new AuthFailure(404, "form", "Tài khoản không tồn tại.");
         AccountView before = accounts.find(id);
+        // MSG24: kiểm tra lại vai trò đích trên máy chủ trước mọi thay đổi trạng thái.
+        if ("ACCOUNTANT".equals(before.role())) throw new AuthFailure(
+            403, "form", "Bạn không có quyền đổi trạng thái đối với tài khoản kế toán."
+        );
         if (
             "BRANCH_MANAGER".equals(actor.role()) &&
             (!"RECEPTIONIST".equals(before.role()) || !actor.branchId().equals(before.branchId()))

@@ -107,6 +107,9 @@ public class AttendanceService {
             "Không tìm thấy phân ca tại cơ sở đang quản lý."
         );
         LocalDate date = LocalDate.parse((String) row.get("workDate"));
+        if ("CLOSED".equals(row.get("periodStatus"))) throw new AuthFailure(
+            409, "form", "Công tháng của nhân viên này đã chốt, không được ghi hoặc sửa thêm."
+        );
         // HuyDV / UC-87: cho tích đủ công ca từ giờ bắt đầu, kể cả ca đang diễn ra.
         Instant now = Instant.now();
         Instant scheduledStart = time(row, "startsAt");
@@ -196,49 +199,56 @@ public class AttendanceService {
         return daily(actor, date);
     }
 
+    // HuyDV / UC-89, BR-62/63/64: full-month closing for an explicit employee selection.
+    @SuppressWarnings("unchecked")
     public Map<String, Object> close(Identity actor, String value, CloseCommand input) {
         var branch = shiftService.scope(actor, true, true);
         YearMonth month = month(value, branch);
         var existing = repo.period(actor.branchId(), month.atDay(1), true);
         requireOpen(existing, month.atDay(1));
         var current = summary(actor.branchId(), branch, month);
-        // BR-62 / MSG20: đối chiếu toàn bộ phân ca, bản ghi còn thiếu và phản ánh chưa xử lý.
-        if (!Boolean.TRUE.equals(current.get("canClose"))) {
-            throw new AuthFailure(
-                409,
-                "form",
-                "Chưa thể chốt công tháng " +
-                    label(month) +
-                    ". Vui lòng bổ sung các bản ghi còn thiếu và kiểm tra những bản ghi chấm công chưa đúng."
-            );
-        }
-        if (input == null || !input.confirmedCorrect()) {
-            throw bad(
-                "confirmedCorrect",
-                "Vui lòng xác nhận không còn bản ghi chấm công chưa đúng."
-            );
-        }
-        if (!Objects.equals(current.get("revision"), input.revision())) throw stale();
-        var period = repo.ensurePeriod(actor.branchId(), month.atDay(1));
-        // BR-63/64: khóa tháng trong cùng giao dịch với lần kiểm tra cuối, chỉ dữ liệu đã chốt dùng tính lương.
-        repo.close((UUID) period.get("id"), actor.id());
-        repo.audit(
-            actor.id(),
-            actor.branchId(),
-            (UUID) period.get("id"),
-            "CLOSE_MONTHLY_ATTENDANCE",
-            period,
-            Map.of(
-                "month",
-                month.toString(),
-                "workedMinutes",
-                current.get("workedMinutes"),
-                "assignmentCount",
-                current.get("assignmentCount"),
-                "confirmedCorrect",
-                true
-            )
+        if (input == null || !input.confirmedCorrect()) throw bad(
+            "confirmedCorrect", "Vui lòng xác nhận đã kiểm tra công của các nhân viên được chọn."
         );
+        if (!Objects.equals(current.get("revision"), input.revision())) throw stale();
+        var employees = (Collection<Map<String, Object>>) current.get("employees");
+        List<UUID> selected = input.employeeIds();
+        if (selected == null && Boolean.TRUE.equals(current.get("monthEnded"))) {
+            selected = employees.stream()
+                .filter(e -> !Boolean.TRUE.equals(e.get("closed")))
+                .map(e -> (UUID) e.get("employeeId"))
+                .toList();
+        }
+        if (selected == null || selected.isEmpty()) throw bad(
+            "employeeIds", "Vui lòng chọn ít nhất một nhân viên để chốt công."
+        );
+        var ids = new LinkedHashSet<>(selected);
+        if (ids.size() != selected.size() || ids.contains(null)) throw bad(
+            "employeeIds", "Danh sách nhân viên không hợp lệ."
+        );
+        for (UUID id : ids) {
+            var employee = employees.stream()
+                .filter(e -> id.equals(e.get("employeeId")))
+                .findFirst()
+                .orElseThrow(() -> bad("employeeIds", "Nhân viên không có công trong tháng tại cơ sở này."));
+            if (!Boolean.TRUE.equals(employee.get("canClose"))) throw new AuthFailure(
+                409, "form", employee.get("fullName") + ": " + employee.get("closeBlockReason")
+            );
+        }
+        var period = repo.ensurePeriod(actor.branchId(), month.atDay(1));
+        var rows = (List<Map<String, Object>>) current.get("rows");
+        for (UUID employee : ids) {
+            repo.closeEmployee((UUID) period.get("id"), employee, actor.id(),
+                rows.stream().filter(r -> employee.equals(r.get("employeeId"))).toList());
+        }
+        repo.changed((UUID) period.get("id"));
+        if (Boolean.TRUE.equals(current.get("monthEnded")) && employees.stream().allMatch(e ->
+            Boolean.TRUE.equals(e.get("closed")) || ids.contains(e.get("employeeId")))) {
+            repo.close((UUID) period.get("id"), actor.id());
+        }
+        repo.audit(actor.id(), actor.branchId(), (UUID) period.get("id"),
+            "CLOSE_EMPLOYEE_MONTHLY_ATTENDANCE", existing,
+            Map.of("month", month.toString(), "employeeIds", ids, "confirmedCorrect", true));
         return summary(actor.branchId(), branch, month);
     }
 
@@ -302,6 +312,33 @@ public class AttendanceService {
                 );
             }
         }
+        var closures = repo.employeeClosures(branchId, month.atDay(1));
+        for (var employee : employees.values()) {
+            var closure = closures.stream()
+                .filter(c -> employee.get("employeeId").equals(c.get("employeeId")))
+                .findFirst().orElse(null);
+            boolean closed = (period != null && "CLOSED".equals(period.get("status"))) || closure != null;
+            long unfinished = rows.stream()
+                .filter(r -> employee.get("employeeId").equals(r.get("employeeId"))
+                    && time(r, "endsAt").isAfter(Instant.now()))
+                .count();
+            String reason = "";
+            if (closed) reason = "Công tháng đã được chốt.";
+            else if (unfinished > 0) {
+                reason = "Còn ca chưa kết thúc hoặc lịch phân công phía sau; cần bố trí người thay trước khi chốt cả tháng.";
+            } else if (number(employee, "missing") > 0) reason = "Còn ca chưa chấm công.";
+            else if (number(employee, "invalid") > 0) reason = "Còn bản ghi công chưa đúng.";
+            else if (number(employee, "openIssues") > 0) reason = "Còn phản ánh chưa xử lý.";
+            else if (!"ACTIVE".equals(branch.get("status"))) reason = "Cơ sở đang tạm ngừng.";
+            employee.put("closed", closed);
+            employee.put("canClose", reason.isEmpty());
+            employee.put("closeBlockReason", reason);
+            employee.put("unfinished", unfinished);
+            if (closure != null) {
+                employee.put("closedBy", closure.get("closedBy"));
+                employee.put("closedAt", closure.get("closedAt"));
+            }
+        }
         var result = base(branch);
         result.put("month", month.toString());
         result.put("period", periodView(period));
@@ -322,17 +359,9 @@ public class AttendanceService {
                 .isBefore(Instant.now()) &&
             rows.stream().noneMatch(r -> time(r, "endsAt").isAfter(Instant.now()));
         result.put("monthEnded", ended);
-        result.put(
-            "canClose",
-            ended &&
-                !rows.isEmpty() &&
-                missing == 0 &&
-                invalid == 0 &&
-                unresolved == 0 &&
-                (period == null || "OPEN".equals(period.get("status"))) &&
-                "ACTIVE".equals(branch.get("status"))
-        );
-        result.put("revision", digest(raw.toString() + issues + Objects.toString(period, "")));
+        result.put("canClose",employees.values().stream().anyMatch(e->Boolean.TRUE.equals(e.get("canClose"))));
+        result.put("closedCount",employees.values().stream().filter(e->Boolean.TRUE.equals(e.get("closed"))).count());
+        result.put("revision",digest(raw.toString()+issues+Objects.toString(period,"")+closures));
         return result;
     }
 

@@ -310,7 +310,6 @@ export default function AuditLogPage({ onAccounts }) {
       <div className="accounts-heading">
         <div>
           <h1 id="audit-title">Nhật ký hệ thống</h1>
-          <p>Tra cứu người thực hiện và các thay đổi quan trọng</p>
         </div>
         <button onClick={onAccounts}>Về tài khoản</button>
       </div>

@@ -6,7 +6,7 @@ export const newReceiptLine = (id) => ({
 });
 
 export const receivingUnitName = (line, item) => line.receivingUnit === 'CUSTOM'
-  ? line.customUnit.trim() : line.receivingUnit || item?.unitName || 'đơn vị';
+  ? line.customUnit.trim() : line.receivingUnit && line.receivingUnit !== 'BASE' ? line.receivingUnit : item?.unitName || 'đơn vị';
 
 const scaledQuantity = (value) => {
   const text = String(value).trim();
@@ -17,19 +17,20 @@ const scaledQuantity = (value) => {
 
 // BR-31: số lượng nhận phải dương. Quy đổi chính xác về đơn vị tồn kho, tối đa 3 số thập phân.
 export const receiptQuantity = (line) => {
+  const isPack = Boolean(line.receivingUnit && line.receivingUnit !== 'BASE');
   const received = scaledQuantity(line.quantity);
   if (received === null || received <= 0n) {
     return { error: 'Số lượng nhận phải lớn hơn 0 và tối đa 3 chữ số thập phân.' };
   }
-  if (line.receivingUnit && received % 1000n !== 0n) {
+  if (isPack && received % 1000n !== 0n) {
     // MSG44: áp dụng số nguyên cho số lượng kiện hàng; đơn vị gốc vẫn hỗ trợ hàng cân/đong.
-    return { error: 'Số lượng kiện hàng phải là số nguyên lớn hơn 0.' };
+    return { error: 'Số lượng nhận phải là số nguyên lớn hơn 0.' };
   }
   if (line.receivingUnit === 'CUSTOM' && !line.customUnit.trim()) {
     // BR-111, MSG02: tên đơn vị khác không được để trống hoặc chỉ có khoảng trắng.
     return { error: 'Vui lòng bổ sung tên đơn vị nhận.' };
   }
-  const factor = line.receivingUnit ? scaledQuantity(line.unitsPerPack) : 1000n;
+  const factor = isPack ? scaledQuantity(line.unitsPerPack) : 1000n;
   if (factor === null || factor <= 0n) {
     return { error: 'Quy cách phải lớn hơn 0 và tối đa 3 chữ số thập phân.' };
   }

@@ -337,6 +337,13 @@ public class DepositRepository {
     }
 
     private UUID openFinancialPeriod() {
+        // A missing current-month row is treated as OPEN by the accounting period screen.
+        // Materialize that implicit period before linking the refund transaction to it.
+        db.update("""
+            INSERT INTO gcmb.financial_period(month,status)
+            VALUES(date_trunc('month',CURRENT_DATE)::date,'OPEN')
+            ON CONFLICT(month) DO NOTHING
+            """);
         List<UUID> rows = db.query("""
             SELECT id FROM gcmb.financial_period
             WHERE month=date_trunc('month',CURRENT_DATE)::date AND status='OPEN'

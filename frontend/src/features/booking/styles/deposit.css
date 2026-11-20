@@ -1,4 +1,27 @@
-.deposit-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.deposit-page {
+  --booking-ink: var(--gcmb-color-ink);
+  --booking-text: var(--gcmb-color-text);
+  --booking-muted: var(--gcmb-color-muted);
+  --booking-bg: var(--gcmb-color-bg);
+  --booking-panel: var(--gcmb-color-panel);
+  --booking-line: var(--gcmb-color-line);
+  --booking-pink: var(--gcmb-color-primary);
+  --booking-pink-soft: var(--gcmb-color-primary-soft);
+  --booking-cyan: var(--gcmb-color-info);
+  --booking-cyan-soft: var(--gcmb-color-info-soft);
+  --booking-blue: var(--gcmb-color-info);
+  --booking-blue-soft: var(--gcmb-color-info-soft);
+  --booking-yellow: var(--gcmb-color-warning);
+  --booking-yellow-soft: var(--gcmb-color-warning-soft);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--gcmb-color-ink);
+  font-family: var(--gcmb-font-family);
+  font-size: var(--gcmb-font-size-base);
+  line-height: var(--gcmb-line-height);
+}
 .deposit-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 0; }
 .deposit-page-heading h1 { margin: 0; color: var(--booking-ink); font-size: 28px; font-weight: 750; letter-spacing: -.7px; line-height: 1.2; }
 .deposit-page-heading p { margin: 7px 0 0; color: #7f8997; font-size: 13px; }
@@ -186,3 +209,52 @@
   .deposit-details-card { width: 100vw; border-radius: 0; }
   .deposit-details-scroll { padding: max(18px, env(safe-area-inset-top)) 17px max(14px, env(safe-area-inset-bottom)); }
 }
+
+.deposit-page-heading h1 { font-size: var(--gcmb-font-size-2xl); letter-spacing: -.03em; }
+.deposit-page-heading p,
+.deposit-summary-title,
+.deposit-table td,
+.deposit-table td small,
+.deposit-detail-list dt,
+.deposit-history li strong,
+.deposit-history li time,
+.deposit-history li small,
+.deposit-evidence-meta,
+.deposit-evidence-reference,
+.deposit-evidence-message { color: var(--gcmb-color-text); }
+.deposit-summary-copy strong { font-size: var(--gcmb-font-size-xl); font-variant-numeric: tabular-nums; }
+.deposit-summary-count { font-size: var(--gcmb-font-size-xs); }
+.deposit-summary-card--pending .deposit-summary-count { color: #946513; background: var(--gcmb-color-warning-soft); }
+.deposit-summary-card--refunded .deposit-summary-count { color: #075d6a; background: var(--gcmb-color-info-soft); }
+.deposit-summary-card--forfeited .deposit-summary-count { color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.deposit-table { font-size: var(--gcmb-font-size-xs); }
+.deposit-table th,
+.deposit-table td { font-size: var(--gcmb-font-size-xs); }
+.deposit-table td strong { font-size: var(--gcmb-font-size-xs); }
+.deposit-table td small,
+.deposit-history li time,
+.deposit-history li small { font-size: var(--gcmb-font-size-xs); }
+.deposit-status { border-radius: var(--gcmb-radius-control); font-size: var(--gcmb-font-size-xs); }
+.deposit-status--held { color: #087b50; background: var(--gcmb-color-success-soft); }
+.deposit-status--pending-refund { color: #946513; background: var(--gcmb-color-warning-soft); }
+.deposit-status--refunded,
+.deposit-status--applied { color: #075d6a; background: var(--gcmb-color-info-soft); }
+.deposit-status--forfeited { color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+.deposit-detail-list dt { font-size: var(--gcmb-font-size-sm); }
+.deposit-detail-list dd { font-size: var(--gcmb-font-size-base); }
+.deposit-details-amount span { font-size: var(--gcmb-font-size-sm); }
+.deposit-details-amount strong { font-size: var(--gcmb-font-size-xl); font-variant-numeric: tabular-nums; }
+.deposit-history li strong { font-size: var(--gcmb-font-size-sm); }
+.deposit-evidence-meta,
+.deposit-evidence-reference,
+.deposit-evidence-message { font-size: var(--gcmb-font-size-xs); }
+.deposit-evidence-copy-message { color: #087b50; }
+.deposit-page .deposit-table-card,
+.deposit-page .deposit-filter-card,
+.deposit-page .deposit-summary-card { border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); background: var(--gcmb-color-panel); }
+.deposit-page button:focus-visible,
+.deposit-page a:focus-visible,
+.deposit-page input:focus-visible,
+.deposit-page select:focus-visible,
+.deposit-page textarea:focus-visible,
+.deposit-page tr:focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }

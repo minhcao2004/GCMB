@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -149,9 +150,21 @@ public class FoodOrderService {
         if (active == null || !active.allocationId().equals(allocationId))
             throw conflict("Booking không còn lịch phòng hợp lệ để thêm đồ uống combo.");
         Map<UUID,SellableItem> sellable = requireSellableItems(branchId,quantities.keySet());
+        Set<UUID> drinkIds = drinks == null ? Set.of() : drinks.stream()
+            .map(com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem::menuItemId).collect(Collectors.toSet());
+        Set<UUID> foodIds = food == null ? Set.of() : food.stream()
+            .map(com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem::menuItemId).collect(Collectors.toSet());
         for (SellableItem item : sellable.values()) {
-            if (!"PACKAGED".equals(item.kind()) || !"AUTO_ON_SALE".equals(item.trackingMode()))
-                throw bad("Đồ uống combo phải là hàng đóng gói có liên kết kho tự trừ tồn.");
+            boolean trackedPackaged = "PACKAGED".equals(item.kind()) && item.inventoryItemId() != null
+                && "AUTO_ON_SALE".equals(item.trackingMode());
+            boolean untrackedPrepared = "PREPARED".equals(item.kind()) && item.inventoryItemId() == null;
+            if (!trackedPackaged && !untrackedPrepared)
+                throw bad("Quà combo phải là hàng đóng gói có liên kết kho tự trừ hoặc món chế biến không theo dõi tồn.");
+            String category = item.category() == null ? "" : item.category().toLowerCase(java.util.Locale.ROOT);
+            if (drinkIds.contains(item.id()) && !category.contains("uống"))
+                throw bad("Chỉ chọn món thuộc danh mục đồ uống cho suất đồ uống combo.");
+            if (foodIds.contains(item.id()) && !category.contains("ăn"))
+                throw bad("Chỉ chọn món thuộc danh mục đồ ăn cho suất đồ ăn combo.");
         }
         UUID orderId = orders.createOrder(branchId,bookingId,allocationId,"STAFF",actor.id(),null,
             "ACCEPTED",actor.id(),null,"COMBO-GIFT-"+bookingId);

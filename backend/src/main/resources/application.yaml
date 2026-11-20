@@ -29,6 +29,7 @@ gcmb:
   attachments:
     # The directory remains available for files uploaded before cloud storage was enabled.
     storage-dir: ${GCMB_ATTACHMENT_STORAGE_DIR:./data/attachments}
+
     s3:
       # Configure a private bucket and AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in the backend environment.
       # For Cloudflare R2: region=auto, endpoint=https://<account-id>.r2.cloudflarestorage.com, path-style=true.
@@ -37,6 +38,9 @@ gcmb:
       region: ${GCMB_S3_REGION:us-east-1}
       endpoint: ${GCMB_S3_ENDPOINT:}
       path-style: ${GCMB_S3_PATH_STYLE:false}
-  google-drive:
-    credentials-file: ${GOOGLE_DRIVE_CREDENTIALS_FILE:}
-    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
+  cloudinary:
+    enabled: ${CLOUDINARY_ENABLED:false}
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+

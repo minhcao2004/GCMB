@@ -25,7 +25,8 @@ public final class CheckoutDtos {
         BigDecimal overtimeAmount,
         boolean unservedConfirmed,
         Instant quotedAt,
-        String quoteToken
+        String quoteToken,
+        BigDecimal payableAmount
     ) {}
 
     public record Overtime(

@@ -137,7 +137,11 @@ public class MenuItemService {
     private MenuItemCommand validate(UUID branchId, MenuItemCommand input, UUID existingInventoryId) {
         if (input == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung thông tin món.");
         String name = required(input.name(), "Tên món", 200);
-        String category = required(input.category(), "Danh mục", 200);
+        String requestedCategory = required(input.category(), "Danh mục", 200);
+        // Dùng lại cách viết đang có tại cơ sở để tránh tạo nhóm chỉ khác chữ hoa/thường.
+        String category = repository.categories(branchId).stream()
+            .filter(existing -> existing.equalsIgnoreCase(requestedCategory))
+            .findFirst().orElse(requestedCategory);
         String kind = input.kind() == null ? "" : input.kind().trim().toUpperCase(Locale.ROOT);
         if (!Set.of("PACKAGED", "PREPARED", "SERVICE").contains(kind)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn loại món hợp lệ.");
@@ -181,7 +185,7 @@ public class MenuItemService {
 
     private StoredImage store(MultipartFile image) {
         if (image == null) return null;
-        StoredEvidence stored = imageStorage.store(image);
+        StoredEvidence stored = imageStorage.store(image, "thuc-don");
         return new StoredImage(stored.objectKey(), stored.originalName(), stored.mimeType());
     }
 

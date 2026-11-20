@@ -68,7 +68,8 @@ public class AttendanceRepository {
             SELECT sa.id AS "assignmentId",sa.employee_id AS "employeeId",e.code,
               e.full_name AS "fullName",s.id AS "shiftId",s.work_date::text AS "workDate",
               s.template_id AS "templateId",s.starts_at AS "startsAt",s.ends_at AS "endsAt",
-              br.name AS "branchName",p.status AS "periodStatus",
+              br.name AS "branchName",CASE WHEN gcmb.employee_month_closed(s.branch_id,e.id,s.work_date)
+                THEN 'CLOSED' ELSE p.status END AS "periodStatus",
               COALESCE((SELECT r.hourly_rate FROM gcmb.branch_employee_pay_rate r
                 WHERE r.employee_id=e.id AND r.branch_id=s.branch_id AND r.effective_from<=s.work_date
                 ORDER BY r.effective_from DESC LIMIT 1),
@@ -188,6 +189,19 @@ public class AttendanceRepository {
 
     public void changed(UUID period) {
         db.update("UPDATE gcmb.attendance_period SET version=version+1 WHERE id=?", period);
+    }
+
+    public List<Map<String,Object>> employeeClosures(UUID branch,LocalDate month) {
+        return db.queryForList("""
+            SELECT c.employee_id AS "employeeId",c.closed_at AS "closedAt",u.username AS "closedBy"
+            FROM gcmb.employee_attendance_closing c JOIN gcmb.attendance_period p ON p.id=c.period_id
+            JOIN gcmb.user_account u ON u.id=c.closed_by WHERE p.branch_id=? AND p.month=?
+            """,branch,month);
+    }
+
+    public void closeEmployee(UUID period,UUID employee,UUID actor,Object snapshot) {
+        db.update("INSERT INTO gcmb.employee_attendance_closing(period_id,employee_id,closed_by,source_snapshot) VALUES (?,?,?,?::jsonb)",
+            period,employee,actor,json.writeValueAsString(snapshot));
     }
 
     public void close(UUID period, UUID actor) {

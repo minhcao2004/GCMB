@@ -146,7 +146,8 @@ export default function MenuItemsPage({ user }) {
     return items.filter((item) => {
       const matchesSearch = !term || [item.code, item.name, item.category, item.description, item.inventoryName, item.inventorySku]
         .filter(Boolean).join(' ').toLocaleLowerCase('vi-VN').includes(term);
-      const matchesCategory = category === 'all' || item.category === category;
+      const matchesCategory = category === 'all'
+        || item.category?.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN');
       const matchesStatus = status === 'all' || (status === 'active' ? item.active : !item.active);
       return matchesSearch && matchesCategory && matchesStatus;
     });
@@ -432,7 +433,6 @@ export default function MenuItemsPage({ user }) {
     <header className="menu-heading">
       <div>
         <h1>Thực đơn F&amp;B</h1>
-        <p>Cơ sở {user.branchName || 'được phân quyền'} · Thực đơn F&amp;B</p>
       </div>
       <button ref={createButtonRef} type="button" className="menu-create-button" data-menu-focus-key="create-menu"
         onClick={openCreate} disabled={loading || Boolean(error)}>+ Thêm món / dịch vụ</button>

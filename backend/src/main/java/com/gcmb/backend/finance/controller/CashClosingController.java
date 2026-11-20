@@ -52,6 +52,17 @@ public class CashClosingController {
     return service.list(actor, from, to, branchId, status, alerts);
   }
 
+  @GetMapping("/api/v1/accounting/cash-closing/statuses")
+  public List<Map<String, Object>> statuses(@AuthenticationPrincipal Identity actor,
+      @RequestParam(required = false) LocalDate date, @RequestParam(required = false) UUID branchId) {
+    return service.statuses(actor, date, branchId);
+  }
+
+  @GetMapping("/api/v1/accounting/cash-closing/notifications")
+  public List<Map<String, Object>> notifications(@AuthenticationPrincipal Identity actor) {
+    return service.notifications(actor);
+  }
+
   @GetMapping({
     "/api/v1/branch-management/cash-closing/{id}",
     "/api/v1/accounting/cash-closing/{id}",
@@ -61,6 +72,17 @@ public class CashClosingController {
     @PathVariable UUID id
   ) {
     return service.detail(actor, id);
+  }
+
+  @PostMapping("/api/v1/branch-management/cash-closing/remittances")
+  public Map<String,Object> remit(@AuthenticationPrincipal Identity actor, @RequestBody Remittance body) {
+    return service.remit(actor, body);
+  }
+
+  @PostMapping("/api/v1/accounting/cash-closing/{id}/return")
+  public Map<String,Object> returnReport(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
+    @RequestBody Review body) {
+    return service.returnReport(actor, id, body);
   }
 
   @PostMapping("/api/v1/accounting/cash-closing/{id}/reconcile")
@@ -78,9 +100,10 @@ public class CashClosingController {
   })
   public ResponseEntity<byte[]> evidence(
     @AuthenticationPrincipal Identity actor,
-    @PathVariable UUID id
+    @PathVariable UUID id,
+    @RequestParam(defaultValue = "0") int revision
   ) {
-    var value = service.evidence(actor, id);
+    var value = service.evidence(actor, id, revision);
     return ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
       .contentType(MediaType.parseMediaType((String) value.get("mime_type")))

@@ -36,6 +36,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
   useEffect(() => {
     attendanceRequest.current += 1;
     setDialog(null);
+    setNotice('');
     return () => { attendanceRequest.current += 1; };
   }, [branchScope, week]);
   modal.current = dialog;
@@ -75,6 +76,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     };
   }, [week, branchScope, revision]);
   async function publish(targetWeek, focusSlot = null) {
+    setNotice('');
     setPreparing(true);
     setError('');
     try {
@@ -93,10 +95,13 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
       .filter((s) => s.status !== 'CANCELLED')
       .map((s) => [slotKey(s.date, s.templateId), s])
   );
-  const open = (type, shift, assignment) =>
+  const open = (type, shift, assignment) => {
+    setNotice('');
     setDialog({ type, data: { ...data, readOnly: readonly }, shift, assignment });
+  };
   async function openAttendance(shift) {
     if (!manager || !shift || modal.current) return;
+    setNotice('');
     const request = ++attendanceRequest.current;
     setDialog({ type: 'attendanceLoading', shift });
     setError('');
@@ -144,13 +149,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     <section className="shift-page" aria-labelledby="shift-title">
       <header className="shift-heading">
         <div>
-          <p className="shift-eyebrow">CA LÀM VIỆC · {data?.branchName || user.branchName}</p>
           <h1 id="shift-title">{manager ? 'Lịch ca tuần' : 'Đăng ký ca làm'}</h1>
-          {!manager && (
-            <p>
-              Đăng ký ca tuần tới tại cơ sở của bạn từ thứ Hai đến trước 22:00 Chủ nhật.
-            </p>
-          )}
         </div>
       </header>
       {notice && (
@@ -304,12 +303,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                 if (event.target === event.currentTarget &&
                                     (event.key === 'Enter' || event.key === ' ')) {
                                   event.preventDefault();
-                                  openAttendance(s);
+                                  open('detail', s);
                                 }
                               } : undefined}
                               style={manager && s ? { cursor: 'pointer' } : undefined}
                               onClick={manager && s ? (event) => {
-                                if (!event.target.closest('button')) openAttendance(s);
+                                if (!event.target.closest('button')) open('detail', s);
                               } : undefined}
                             >
                               {s ? (
@@ -351,9 +350,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     <button
                                       type="button"
                                       className="shift-slot-action"
-                                      onClick={() => open('detail', s)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openAttendance(s);
+                                      }}
                                     >
-                                      Chi tiết / làm thay
+                                      Chấm công
                                     </button>
                                     </>
                                   ) : (
@@ -458,7 +460,15 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           onSaved={(next, message) => {
             setData(next);
             setWeek(next.week);
-            setDialog(null);
+            if (dialog.type === 'detail') {
+              setDialog({
+                ...dialog,
+                data: { ...next, readOnly: readonly },
+                shift: next.shifts.find((s) => s.id === dialog.shift.id),
+              });
+            } else {
+              setDialog(null);
+            }
             setNotice(message);
           }}
         />

@@ -97,7 +97,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
   if (contactPhoneError) bookingBlockers.push(contactPhoneError);
   if (!selectedType) bookingBlockers.push('Chọn hạng phòng.');
-  if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date() ? 'Chọn ngày giờ nhận phòng trong tương lai.' : 'Chọn ngày giờ nhận phòng hợp lệ.');
+  if (!validSchedule) bookingBlockers.push(plannedStart && plannedStart <= new Date()
+    ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+    : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.');
   if (guestCountError) bookingBlockers.push(guestCountError);
   if (!pricingSelectionValid) bookingBlockers.push(form.pricingMode === 'COMBO' ? 'Chọn một combo dịch vụ.' : 'Nhập thời lượng thuê từ 1 đến 24 giờ, theo bước 0,5 giờ.');
   if (!loadingAvailability && !chosenRoom) {
@@ -120,8 +122,8 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   const paymentReferenceFieldError = showPaymentReferenceError || Boolean(paymentReferenceServerError);
   const paymentReferenceFieldErrorText = paymentReferenceServerError || 'Nhập mã giao dịch / ghi chú khi thu tiền cọc.';
   const scheduleErrorMessage = plannedStart && plannedStart <= new Date()
-    ? 'Thời gian nhận phòng cần ở tương lai.'
-    : 'Vui lòng chọn ngày và giờ nhận phòng hợp lệ.';
+    ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+    : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.';
   const roomErrorMessage = availabilityError
     ? 'Không xác nhận được phòng trống. Hãy đổi lịch hoặc hạng phòng để thử lại.'
     : availableRooms.length
@@ -149,7 +151,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     if (!selectedType || !plannedStart || !plannedEnd || plannedStart <= new Date() || plannedEnd <= plannedStart) {
       setAvailability(null);
       setLoadingAvailability(false);
-      setAvailabilityError(plannedStart && plannedStart <= new Date() ? 'Thời gian nhận phòng cần ở tương lai.' : '');
+      setAvailabilityError(plannedStart && plannedStart <= new Date()
+        ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
+        : '');
       return undefined;
     }
     let active = true;
@@ -236,13 +240,13 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
 
   return <div className="booking-create-page">
     <div className="booking-page-heading">
-      <div><h1>Tạo booking</h1><p>Đặt phòng qua điện thoại, Facebook hoặc Zalo</p></div>
+      <div><h1>Tạo booking</h1></div>
       <button type="button" className="booking-button booking-button-secondary" onClick={onBack}>← Quay lại</button>
     </div>
     {(optionsError || formError) && <div className="booking-inline-error" role="alert">{formError || optionsError}</div>}
     {optionsLoading ? <div className="booking-empty-state">Đang tải hạng phòng và gói dịch vụ…</div> : <form className="booking-create-layout" onSubmit={submit}>
       <section className="booking-create-card">
-        <header className="booking-card-heading"><h2>Thông tin khách &amp; lịch đặt</h2><p>Các trường có dấu * là bắt buộc</p></header>
+        <header className="booking-card-heading"><h2>Thông tin khách &amp; lịch đặt</h2></header>
 
         <div className="booking-form-grid booking-customer-grid">
           <Field label="Họ tên khách *" className={showContactNameError ? 'is-invalid' : ''}>

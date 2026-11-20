@@ -16,7 +16,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class MenuItemRepository {
     private static final String SELECT = """
-        SELECT m.id,m.code,m.name,m.category,m.kind,m.inventory_item_id,
+        SELECT m.id,m.code,m.name,
+               (SELECT c.category FROM gcmb.menu_item c
+                WHERE c.branch_id=m.branch_id AND c.deleted_at IS NULL AND lower(c.category)=lower(m.category)
+                ORDER BY (c.category <> lower(c.category)) DESC,c.category LIMIT 1) AS category,
+               m.kind,m.inventory_item_id,
                i.sku AS inventory_sku,i.name AS inventory_name,
                sb.quantity AS stock_quantity,sb.minimum_quantity,u.name AS unit_name,
                m.sale_price,m.active,m.description,m.image_original_name,m.image_mime_type,
@@ -49,9 +53,9 @@ public class MenuItemRepository {
 
     public List<String> categories(UUID branchId) {
         return db.queryForList("""
-            SELECT category FROM gcmb.menu_item
+            SELECT DISTINCT ON (lower(category)) category FROM gcmb.menu_item
             WHERE branch_id=? AND deleted_at IS NULL
-            GROUP BY category ORDER BY lower(category)
+            ORDER BY lower(category), (category <> lower(category)) DESC, category
             """, String.class, branchId);
     }
 
@@ -133,7 +137,7 @@ public class MenuItemRepository {
             LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=m.inventory_item_id
             WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true
                 AND (?='' OR strpos(lower(m.name || ' ' || m.category),lower(?))>0)
-                AND (?='' OR m.category=?)
+                AND (?='' OR lower(m.category)=lower(?))
             ORDER BY lower(m.category),lower(m.name),m.code
             """, (rs, row) -> new PublicMenuItemView(rs.getObject("id", UUID.class), rs.getString("name"),
                 rs.getString("category"), rs.getString("kind"), rs.getBigDecimal("sale_price"),

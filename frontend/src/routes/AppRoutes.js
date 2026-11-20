@@ -12,16 +12,22 @@ import AuthPage from '../features/auth/pages/AuthPage';
 import RoleHomePage from '../features/auth/pages/RoleHomePage';
 import BookingManagementPage from '../features/booking/pages/BookingManagementPage';
 import RoomOverviewPage from '../features/booking/pages/RoomOverviewPage';
+import ReceptionCashHandoverPage from '../features/finance/pages/ReceptionCashHandoverPage';
 import ReceptionShiftPage from '../features/workforce/pages/ReceptionShiftPage';
 import TaxInvoicePage from '../features/booking/pages/TaxInvoicePage';
 import CheckoutPage from '../features/booking/pages/CheckoutPage';
 import DepositManagementPage from '../features/booking/pages/DepositManagementPage';
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
-import AccountantFinancePage from '../features/dashboard/AccountantFinancePage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
-import FinancePage from '../features/finance/pages/FinancePage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
+
 import HomePage from '../features/landing/pages/HomePage';
+
+import AccountantFinancePage from '../features/finance/pages/AccountantFinancePage';
+import AccountantOverviewPage from '../features/dashboard/AccountantDashboard';
+import AccountantReportPage from '../features/dashboard/AccountantFinancePage';
+import ExpenseBreakdownReportPage from '../features/dashboard/ExpenseBreakdownReportPage';
+
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
@@ -48,14 +54,18 @@ export default function AppRoutes() {
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
     <Route path="/le-tan/su-co" element={<BookingManagementPage />} />
+    <Route path="/le-tan/ban-giao-tien" element={<ReceptionCashHandoverPage />} />
     <Route path="/le-tan/ca-lam" element={<ReceptionShiftPage />} />
     <Route path="/le-tan/hoa-don-thue" element={<TaxInvoicePage />} />
     <Route path="/ke-toan/hoa-don-thue" element={<TaxInvoicePage accounting />} />
+    <Route path="/ke-toan/bao-cao" element={<AccountantReportPage />} />
+    <Route path="/ke-toan/bao-cao-chi-phi" element={<ExpenseBreakdownReportPage />} />
     {/* HuyDV / UC-91..101 */}
-    <Route path="/ke-toan/luong" element={<FinancePage payroll />} />
-    <Route path="/ke-toan/chot-quy" element={<FinancePage />} />
-    <Route path="/ke-toan" element={<AccountantFinancePage />} />
+    <Route path="/ke-toan/luong" element={<AccountantFinancePage mode="payroll" />} />
+    <Route path="/ke-toan/chot-quy" element={<AccountantFinancePage mode="cash-closing" />} />
+    <Route path="/ke-toan" element={<AccountantOverviewPage />} />
     <Route path="/ke-toan/hoan-coc" element={<AccountantRefundPage />} />
+    <Route path="/ke-toan/chi-phi" element={<AccountantFinancePage />} />
     <Route path="/login" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter>;

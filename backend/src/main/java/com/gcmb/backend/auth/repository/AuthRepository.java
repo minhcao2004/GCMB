@@ -63,7 +63,7 @@ public class AuthRepository {
     ) bma ON TRUE
     LEFT JOIN gcmb.branch b ON b.id = CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END
     WHERE lower(u.%s) = lower(?)
-    FOR UPDATE OF u
+    FOR NO KEY UPDATE OF u
     """.formatted(column);
         List<Account> result = db.query(sql, AuthMapper::account, value);
         return result.isEmpty() ? null : result.get(0);

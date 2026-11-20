@@ -25,9 +25,9 @@ const evidenceMimeTypes = new Set([
 ]);
 const evidenceExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf']);
 
-function errorText(error) {
+function errorText(error, fallback = 'Không tải được yêu cầu hoàn cọc.') {
   const errors = apiErrors(error);
-  return errors.form || Object.values(errors)[0] || 'Không tải được yêu cầu hoàn cọc.';
+  return errors.form || Object.values(errors)[0] || fallback;
 }
 
 function dateTimeText(value) {
@@ -46,7 +46,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
   const [confirmed, setConfirmed] = useState(false);
   const [image, setImage] = useState(null);
   const [imageError, setImageError] = useState('');
-  const [proofError, setProofError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const imageInput = useRef(null);
 
@@ -62,7 +61,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
 
   function selectImage(file) {
     setImageError('');
-    setProofError('');
     if (!file) { setImage(null); return; }
     const mimeType = (file.type || '').split(';', 2)[0].trim().toLowerCase();
     const extension = file.name?.split('.').pop()?.toLowerCase() || '';
@@ -83,23 +81,18 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
 
   return <form className="accounting-refund-action" onSubmit={(event) => {
     event.preventDefault();
-    setProofError('');
-    if (!externalReference.trim() && !image) {
-      setProofError('Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.');
-      return;
-    }
     onSubmit(externalReference.trim(), image);
   }}>
     <div className="deposit-accounting-note">
       <strong>Chỉ ghi nhận sau khi đã chuyển khoản thành công.</strong>
-      <p>GCMB sẽ lưu bút toán hoàn đúng số tiền yêu cầu vào sổ cọc và khóa yêu cầu này khỏi xử lý lại.</p>
+      <p>Việc ghi nhận lưu bút toán đúng số tiền yêu cầu vào sổ cọc và khóa yêu cầu khỏi xử lý lại.</p>
     </div>
     <label className="deposit-form-field">
-      <span>Mã giao dịch chuyển khoản <small>(không bắt buộc nếu đã tải minh chứng)</small></span>
-      <input maxLength={200} value={externalReference} onChange={(event) => { setExternalReference(event.target.value); setProofError(''); }} autoComplete="off" />
+      <span>Mã giao dịch chuyển khoản <small>(không bắt buộc)</small></span>
+      <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} autoComplete="off" />
     </label>
     <div className="deposit-form-field accounting-refund-evidence-field">
-      <span>Tệp minh chứng chuyển khoản <small>(không bắt buộc nếu đã nhập mã giao dịch)</small></span>
+      <span>Tệp minh chứng chuyển khoản <small>(không bắt buộc)</small></span>
       <label className="accounting-refund-upload">
         <input ref={imageInput} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf"
           onChange={(event) => selectImage(event.target.files?.[0] || null)}
@@ -111,7 +104,7 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
         </span>
         <span className="accounting-refund-upload-action">Chọn tệp</span>
       </label>
-      {previewUrl && <div className="accounting-refund-image-preview">
+      {previewUrl && image && <div className="accounting-refund-image-preview">
         {['image/jpeg', 'image/png', 'image/webp'].includes(image.type)
           ? <img src={previewUrl} alt="Ảnh chứng minh chuyển khoản đã chọn" />
           : <a href={previewUrl} target="_blank" rel="noreferrer">Mở tệp minh chứng đã chọn</a>}
@@ -119,11 +112,17 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
       </div>}
       {imageError && <p className="booking-inline-error" role="alert">{imageError}</p>}
     </div>
+    <section className="accounting-refund-final-check" aria-label="Đối chiếu lần cuối trước khi ghi nhận">
+      <p><span>Số tiền hoàn</span><strong>{formatVnd(item.amount)}</strong></p>
+      <p><span>Chủ tài khoản</span><strong>{item.beneficiaryName || '—'}</strong></p>
+      <p><span>Ngân hàng · số tài khoản</span><strong>{item.bankName || '—'} · {item.bankAccount || '—'}</strong></p>
+    </section>
     <label className="accounting-refund-confirm">
-      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required />
-      <span>Tôi xác nhận đã hoàn {formatVnd(item.amount)} đến đúng tài khoản người nhận ở trên.</span>
+      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required
+        aria-describedby="accounting-refund-confirm-copy" />
+      <span id="accounting-refund-confirm-copy">Tôi xác nhận đã chuyển khoản thành công {formatVnd(item.amount)} đến {item.beneficiaryName || 'chủ tài khoản'} tại {item.bankName || 'ngân hàng'}, số tài khoản {item.bankAccount || '—'}.</span>
     </label>
-    {(proofError || error) && <p className="booking-inline-error" role="alert">{proofError || error}</p>}
+    {error && <p className="booking-inline-error" role="alert">{error}</p>}
     <button className="booking-button booking-button-primary" type="submit" disabled={busy || !confirmed}>
       {busy ? 'Đang ghi nhận…' : 'Ghi nhận đã hoàn cọc'}
     </button>
@@ -170,7 +169,7 @@ function RefundEvidence({ item }) {
   </section>;
 }
 
-function RefundDetails({ item, busy, error, onComplete }) {
+function RefundDetails({ item, busy, error, onComplete, onBackToQueue }) {
   if (!item) return <aside className="deposit-details-card accounting-refund-details">
     <div className="deposit-details-empty">Chọn một yêu cầu để đối chiếu thông tin và xử lý hoàn cọc.</div>
   </aside>;
@@ -179,13 +178,17 @@ function RefundDetails({ item, busy, error, onComplete }) {
   return <aside className="deposit-details-card accounting-refund-details" aria-label="Chi tiết yêu cầu hoàn cọc">
     <div className="deposit-details-scroll">
       <header className="deposit-details-heading">
+        <button type="button" className="accounting-refund-back" onClick={onBackToQueue}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/><path d="M9 12h12"/></svg>
+          Danh sách yêu cầu
+        </button>
         <div><h2>Chi tiết yêu cầu</h2><strong>{item.bookingCode} · {item.customerName}</strong></div>
-        <span className={statusClass(item.status)}>{statusLabels[item.status] || item.status}</span>
+        <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span>
       </header>
       <section className="deposit-details-amount">
         <span>Số tiền yêu cầu hoàn</span>
         <strong>{formatVnd(item.amount)}</strong>
-        <small>Booking đã hủy</small>
+        <small>Đặt phòng đã hủy</small>
       </section>
       <dl className="deposit-detail-list">
         <div><dt>Số điện thoại</dt><dd>{item.phone || '—'}</dd></div>
@@ -224,6 +227,7 @@ export default function AccountantRefundPage() {
   const [selectedId, setSelectedId] = useState('');
   const [filter, setFilter] = useState('open');
   const [search, setSearch] = useState('');
+  const [mobileView, setMobileView] = useState('queue');
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mutationError, setMutationError] = useState('');
@@ -269,6 +273,8 @@ export default function AccountantRefundPage() {
     return matchesFilter && searchText.includes(search.trim().toLocaleLowerCase('vi'));
   }), [items, filter, search]);
   const selected = items.find((item) => item.id === selectedId) || null;
+  const emptyQueueMessage = items.length === 0 ? 'Chưa có yêu cầu hoàn cọc nào.'
+    : filter === 'open' ? 'Không có yêu cầu đang chờ xử lý.' : 'Không tìm thấy yêu cầu phù hợp.';
   const pendingItems = items.filter((item) => openStatuses.has(item.status));
   const pendingAmount = pendingItems.reduce((total, item) => total + Number(item.amount || 0), 0);
   const refundedAmount = items.filter((item) => item.status === 'PAID').reduce((total, item) => total + Number(item.amount || 0), 0);
@@ -291,12 +297,18 @@ export default function AccountantRefundPage() {
     try {
       const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
       setFilter('all');
-      setNotice(image
-        ? `Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} và lưu tệp minh chứng.`
-        : `Đã ghi nhận hoàn ${formatVnd(result.amount)} cho booking ${item.bookingCode} theo mã giao dịch.`);
+      const proofNotice = image ? ' và lưu tệp minh chứng.'
+        : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho đặt phòng ${item.bookingCode}${proofNotice}`);
       setReload((value) => value + 1);
-    } catch (error) { setMutationError(errorText(error)); }
+    } catch (error) { setMutationError(errorText(error, 'Không thể ghi nhận hoàn cọc. Dữ liệu đã nhập vẫn được giữ để bạn thử lại.')); }
     finally { setBusy(false); }
+  }
+
+  function selectRequest(id) {
+    setSelectedId(id);
+    setMutationError('');
+    setMobileView('detail');
   }
 
   if (authError) return <main className="booking-auth-state"><p>{authError}</p><button type="button" onClick={() => setRetryAuth((value) => value + 1)}>Thử lại</button></main>;
@@ -305,20 +317,27 @@ export default function AccountantRefundPage() {
     breadcrumb="Hoàn tiền cọc" activeTab="deposit" audience="accountant" hideSearch>
     <div className="deposit-page accounting-refund-page">
       <header className="deposit-page-heading">
-        <div><h1>Hoàn tiền cọc</h1><p>Đối chiếu người nhận và ghi nhận giao dịch hoàn cọc cho khách.</p></div>
+        <div>
+          <h1>Hoàn tiền cọc</h1>
+          <p>Chọn yêu cầu, đối chiếu người nhận, xác nhận đã chuyển khoản rồi ghi nhận.</p>
+          <p className="accounting-refund-scope">Phạm vi cơ sở: {queue?.branchName || (loading ? 'Đang tải…' : 'Chưa tải được')}</p>
+        </div>
       </header>
       {notice && <p className="booking-live-notice" role="status"><span aria-hidden="true">✓</span>{notice}</p>}
-      {loadError && <p className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setRetryQueue((value) => value + 1)}>Tải lại</button></p>}
+      {loadError && <p className="booking-inline-error accounting-refund-load-error" role="alert">{loadError}<button type="button" onClick={() => setRetryQueue((value) => value + 1)}>Tải lại</button></p>}
       <section className="accounting-refund-summary" aria-label="Tổng hợp yêu cầu hoàn cọc">
-        <p className="accounting-refund-metric accounting-refund-metric--pending">
-          <span>Yêu cầu chờ xử lý</span><strong>{loading ? '—' : pendingItems.length}</strong>
-        </p>
-        <p className="accounting-refund-metric">
-          <span>Giá trị chờ hoàn</span><strong>{loading ? '—' : formatVnd(pendingAmount)}</strong>
-        </p>
-        <p className="accounting-refund-metric accounting-refund-metric--paid">
-          <span>Đã hoàn cho khách</span><strong>{loading ? '—' : formatVnd(refundedAmount)}</strong>
-        </p>
+        <div className="accounting-refund-summary-heading"><h2>Tổng quan</h2><p>Số liệu theo toàn bộ yêu cầu được tải về; API hiện không lọc theo thời gian.</p></div>
+        <div className="accounting-refund-summary-metrics" aria-live="polite" aria-busy={loading}>
+          <p className="accounting-refund-metric accounting-refund-metric--pending">
+            <span>Yêu cầu chờ xử lý</span><strong>{loading ? '—' : pendingItems.length}</strong>
+          </p>
+          <p className="accounting-refund-metric">
+            <span>Giá trị chờ hoàn</span><strong>{loading ? '—' : formatVnd(pendingAmount)}</strong>
+          </p>
+          <p className="accounting-refund-metric accounting-refund-metric--paid">
+            <span>Đã hoàn cho khách</span><strong>{loading ? '—' : formatVnd(refundedAmount)}</strong>
+          </p>
+        </div>
       </section>
       <div className="accounting-refund-controls">
         <div className="accounting-refund-filters" role="group" aria-label="Lọc yêu cầu hoàn cọc">
@@ -329,36 +348,50 @@ export default function AccountantRefundPage() {
         </div>
         <label className="accounting-refund-search">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.4 4.4"/></svg>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm booking, khách hàng, ngân hàng..." aria-label="Tìm yêu cầu hoàn cọc" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã đặt phòng, khách hàng, cơ sở, SĐT, ngân hàng, số tài khoản" aria-label="Tìm theo mã đặt phòng, khách hàng, cơ sở, số điện thoại, ngân hàng hoặc số tài khoản" />
         </label>
       </div>
-      <div className="accounting-refund-content-grid">
+      <div className="accounting-refund-content-grid" data-mobile-view={mobileView}>
         <section className="deposit-table-card" aria-label="Danh sách yêu cầu hoàn cọc">
-          <div className="deposit-table-scroll">
+          <div className="deposit-table-scroll accounting-refund-desktop-list">
             <table className="deposit-table accounting-refund-table">
-              <thead><tr><th>Booking</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
+              <thead><tr><th>Mã đặt phòng · cơ sở · thời điểm gửi</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
               <tbody>
-                {loading && <tr><td className="deposit-table-message" colSpan="4">Đang tải yêu cầu hoàn cọc…</td></tr>}
-                {!loading && loadError && <tr><td className="deposit-table-message deposit-table-message--error" colSpan="4">Danh sách chưa tải được.</td></tr>}
-                {!loading && !loadError && visibleItems.length === 0 && <tr><td className="deposit-table-message" colSpan="4">
-                  {items.length === 0 ? 'Chưa có yêu cầu hoàn cọc nào.' : filter === 'open' ? 'Không có yêu cầu đang chờ xử lý.' : 'Không tìm thấy yêu cầu phù hợp.'}
+                {loading && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message" colSpan="4" role="status">Đang tải yêu cầu hoàn cọc…</td></tr>}
+                {!loading && loadError && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message deposit-table-message--error" colSpan="4">Danh sách chưa tải được.</td></tr>}
+                {!loading && !loadError && visibleItems.length === 0 && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message" colSpan="4">
+                  {emptyQueueMessage}
                 </td></tr>}
                 {!loading && visibleItems.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
-                  onClick={() => { setSelectedId(item.id); setMutationError(''); }} tabIndex={0} aria-selected={item.id === selectedId}
-                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(item.id); setMutationError(''); } }}>
-                  <td><strong>{item.bookingCode}</strong><small>{item.branchName} · {dateTimeText(item.requestedAt)}</small></td>
+                  onClick={() => selectRequest(item.id)} tabIndex={0} aria-selected={item.id === selectedId}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectRequest(item.id); } }}>
+                  <td><strong>{item.bookingCode}</strong><small><b>Cơ sở</b> · {item.branchName || '—'}</small><small><b>Gửi lúc</b> · {dateTimeText(item.requestedAt)}</small></td>
                   <td><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></td>
-                  <td><strong>{formatVnd(item.amount)}</strong></td>
-                  <td><span className={statusClass(item.status)}>{statusLabels[item.status] || item.status}</span></td>
+                  <td><small className="accounting-refund-row-label">Số tiền hoàn</small><strong>{formatVnd(item.amount)}</strong></td>
+                  <td><span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></td>
                 </tr>)}
               </tbody>
             </table>
           </div>
-          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span>
-            <button type="button" className="accounting-refund-refresh" onClick={() => setReload((value) => value + 1)} disabled={loading}>Tải lại</button>
-          </footer>
+          <div className="accounting-refund-mobile-list" aria-label="Yêu cầu hoàn cọc">
+            {loading && <p className="accounting-refund-mobile-state" role="status">Đang tải yêu cầu hoàn cọc…</p>}
+            {!loading && loadError && <p className="accounting-refund-mobile-state accounting-refund-mobile-state--error" role="alert">Danh sách chưa tải được.</p>}
+            {!loading && !loadError && visibleItems.length === 0 && <p className="accounting-refund-mobile-state">{emptyQueueMessage}</p>}
+            {!loading && visibleItems.map((item) => <button key={item.id} type="button"
+              className={`accounting-refund-mobile-card${item.id === selectedId ? ' is-selected' : ''}`}
+              aria-pressed={item.id === selectedId} onClick={() => selectRequest(item.id)}>
+              <span className="accounting-refund-mobile-card-heading"><strong>{item.bookingCode}</strong>
+                <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></span>
+              <span className="accounting-refund-mobile-customer"><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></span>
+              <span className="accounting-refund-mobile-amount"><small>Số tiền hoàn</small><strong>{formatVnd(item.amount)}</strong></span>
+              <span className="accounting-refund-mobile-meta accounting-refund-mobile-branch"><small>Cơ sở</small>{item.branchName || '—'}</span>
+              <span className="accounting-refund-mobile-meta accounting-refund-mobile-requested"><small>Gửi lúc</small>{dateTimeText(item.requestedAt)}</span>
+            </button>)}
+          </div>
+          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>
         </section>
-        <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)} />
+        <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)}
+          onBackToQueue={() => setMobileView('queue')} />
       </div>
     </div>
   </AppShell>;

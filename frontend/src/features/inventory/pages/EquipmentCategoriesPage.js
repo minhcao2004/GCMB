@@ -69,7 +69,7 @@ export default function EquipmentCategoriesPage({ headOffice = false }) {
   };
 
   return <main className="equipment-categories">
-    <div className="ec-heading"><div><p className="ec-breadcrumb">Quản lý cấp cao / Danh mục toàn chuỗi</p><h1>Nhóm thiết bị</h1><p>Danh mục nhóm dùng chung cho tất cả cơ sở</p></div>
+    <div className="ec-heading"><div><h1>Nhóm thiết bị</h1></div>
       {headOffice && <button className="ec-primary" onClick={() => openForm()} disabled={busy}>＋ Thêm nhóm</button>}</div>
     <section className="ec-filters" aria-label="Tìm kiếm và lọc nhóm thiết bị">
       <label>Tìm theo mã, tên hoặc nội dung<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." /></label>

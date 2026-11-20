@@ -84,15 +84,22 @@ public class FoodOrderRepository {
 
     public List<ComboGiftOption> comboGiftMenu(UUID branchId) {
         return db.query("""
-            SELECT m.id,m.name,m.category,m.sale_price,COALESCE(sb.quantity,0) AS stock_quantity,u.name AS unit_name
+            SELECT m.id,m.name,m.category,m.sale_price,
+                   CASE WHEN m.kind='PACKAGED' THEN COALESCE(sb.quantity,0) END AS stock_quantity,
+                   CASE WHEN m.kind='PACKAGED' THEN u.name END AS unit_name,
+                   (m.kind='PACKAGED') AS stock_tracked
             FROM gcmb.menu_item m JOIN gcmb.branch b ON b.id=m.branch_id AND b.status='ACTIVE'
-            JOIN gcmb.inventory_item i ON i.id=m.inventory_item_id AND i.branch_id=m.branch_id
-            JOIN gcmb.unit u ON u.id=i.unit_id LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=i.id
-            WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true AND m.kind='PACKAGED'
-              AND i.active=true AND i.tracking_mode='AUTO_ON_SALE'
+            LEFT JOIN gcmb.inventory_item i ON i.id=m.inventory_item_id AND i.branch_id=m.branch_id
+            LEFT JOIN gcmb.unit u ON u.id=i.unit_id
+            LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=i.id
+            WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true AND (
+                (m.kind='PACKAGED' AND i.active=true AND i.tracking_mode='AUTO_ON_SALE')
+                OR (m.kind='PREPARED' AND m.inventory_item_id IS NULL)
+            )
             ORDER BY lower(m.category),lower(m.name),m.code
             """,(rs,n)->new ComboGiftOption(rs.getObject("id",UUID.class),rs.getString("name"),rs.getString("category"),
-                rs.getBigDecimal("sale_price"),rs.getBigDecimal("stock_quantity"),rs.getString("unit_name")),branchId);
+                rs.getBigDecimal("sale_price"),rs.getBigDecimal("stock_quantity"),rs.getString("unit_name"),
+                rs.getBoolean("stock_tracked")),branchId);
     }
 
     public UUID insertGiftAllowance(UUID bookingId, UUID menuItemId, String name, BigDecimal quantity) {
@@ -256,7 +263,7 @@ public class FoodOrderRepository {
         if (itemIds.isEmpty()) return List.of();
         String placeholders = String.join(",", java.util.Collections.nCopies(itemIds.size(), "?"));
         return db.query("""
-            SELECT m.id,m.name,m.kind,m.inventory_item_id,m.sale_price,i.tracking_mode,u.name AS unit_name,
+            SELECT m.id,m.name,m.category,m.kind,m.inventory_item_id,m.sale_price,i.tracking_mode,u.name AS unit_name,
                    COALESCE(sb.quantity,0) AS stock_quantity
             FROM gcmb.menu_item m
             LEFT JOIN gcmb.inventory_item i ON i.id=m.inventory_item_id
@@ -265,7 +272,7 @@ public class FoodOrderRepository {
             WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true
                 AND m.id IN (""" + placeholders + ") ORDER BY m.id",
             (rs, row) -> new SellableItem(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("kind"), rs.getObject("inventory_item_id", UUID.class),
+                rs.getString("category"), rs.getString("kind"), rs.getObject("inventory_item_id", UUID.class),
                 rs.getBigDecimal("sale_price"), rs.getString("tracking_mode"), rs.getString("unit_name"),
                 rs.getBigDecimal("stock_quantity")), bind(branchId, itemIds));
     }
@@ -462,7 +469,7 @@ public class FoodOrderRepository {
     public record PendingLine(UUID id, UUID menuItemId, String name, BigDecimal quantity, BigDecimal unitPrice) {}
     public record ComboAllowance(UUID id, BigDecimal includedQuantity, BigDecimal usedQuantity) {}
     public record SaleMovement(UUID id, UUID inventoryItemId, BigDecimal quantity) {}
-    public record SellableItem(UUID id, String name, String kind, UUID inventoryItemId,
+    public record SellableItem(UUID id, String name, String category, String kind, UUID inventoryItemId,
                                BigDecimal salePrice, String trackingMode, String unitName, BigDecimal stockQuantity) {}
     public record OrderLock(UUID id, UUID branchId, UUID bookingId, UUID allocationId, String channel,
                             UUID qrSessionId, String status, UUID assignedEmployeeId, UUID assignedUserId) {}

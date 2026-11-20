@@ -7,6 +7,7 @@ import com.gcmb.backend.booking.repository.BookingRepository;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
 import com.gcmb.backend.booking.repository.DepositRepository;
+import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.booking.repository.DepositRepository.RefundEvidenceRow;
 import com.gcmb.backend.booking.repository.DepositRepository.RefundRequestRow;
 import java.io.IOException;
@@ -33,12 +34,14 @@ public class DepositManagementService {
     private final BookingRepository bookings;
     private final DepositRepository deposits;
     private final RefundEvidenceStorageService evidenceStorage;
+    private final FinancialPeriodService periods;
 
     public DepositManagementService(BookingRepository bookings, DepositRepository deposits,
-                                    RefundEvidenceStorageService evidenceStorage) {
+                                    RefundEvidenceStorageService evidenceStorage, FinancialPeriodService periods) {
         this.bookings = bookings;
         this.deposits = deposits;
         this.evidenceStorage = evidenceStorage;
+        this.periods = periods;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +86,7 @@ public class DepositManagementService {
 
     @Transactional
     public DepositDtos.RefundRequestResult createRefundRequest(Identity identity, DepositDtos.CreateRefundRequest request) {
+        periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "tạo yêu cầu hoàn cọc");
         if (request == null || request.bookingId() == null)
             throw new BookingFailure(400, "bookingId", "Vui lòng bổ sung booking cần yêu cầu hoàn cọc.");
         BranchScope branch = branch(identity);
@@ -124,20 +128,21 @@ public class DepositManagementService {
     @Transactional
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
                                                                String externalReference, MultipartFile image) {
+        // BR-17: Chỉ kế toán được ghi nhận hoàn cọc đã hoàn tất.
         requireAccountant(identity);
+        periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận hoàn cọc");
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
-        // BR-157: kế toán được xác nhận hoàn bằng mã giao dịch hoặc tệp minh chứng.
+        // Tạm thời cho phép kế toán ghi nhận hoàn cọc khi chưa đính kèm tệp minh chứng.
         String normalizedReference = externalReference == null ? "" : externalReference.trim();
         String reference = normalizedReference.isEmpty() ? null
             : required(normalizedReference, "externalReference", "Mã giao dịch hoàn", 200);
         boolean hasImage = image != null && !image.isEmpty();
-        if (reference == null && !hasImage)
-            throw new BookingFailure(400, "form", "Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.");
         RefundRequestRow initial = deposits.refundRequestForAccounting(requestId, false);
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
 
-        if (bookings.lockBookingId(initial.bookingId(), initial.branchId()) == null) throw notFound();
+        // Tất toán yêu cầu hiện có không phụ thuộc trạng thái hoạt động của cơ sở.
+        if (bookings.lockBookingIdForRefund(initial.bookingId(), initial.branchId()) == null) throw notFound();
         BookingRow booking = bookings.booking(initial.bookingId(), initial.branchId());
         if (booking == null) throw notFound();
         if (!"CANCELLED".equals(booking.status()))
@@ -153,7 +158,7 @@ public class DepositManagementService {
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
 
-        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? evidenceStorage.store(image) : null;
+        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? evidenceStorage.store(image, "tien-coc") : null;
         if (evidence != null && TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) {

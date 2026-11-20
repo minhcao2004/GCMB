@@ -62,7 +62,7 @@ The current scope excludes a customer booking portal, hardware barcode-scanner i
 | Backend | Java 17, Spring Boot, Maven Wrapper |
 | Database | PostgreSQL with version-controlled SQL migration scripts |
 | Communication | REST API with JSON |
-| External integrations | SePay, email service, cloud storage |
+| External integrations | SePay, email service |
 | Version control | Git and GitHub |
 | Testing | Manual testing; Java manual runner and individual API requests such as Postman |
 | Deployment target | Docker on VPS/Cloud |
@@ -73,7 +73,9 @@ Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, a
 
 GCMB uses a Web Client–Server architecture. The React frontend calls the centralized Spring Boot REST API, and the backend accesses PostgreSQL and external services.
 
-The backend is deployed as one application. The current backend contains nine peer feature packages: `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, and `dashboard`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+
+The backend is deployed as one application. Its ten peer feature packages are `auth`, `accounts`, `audit`, `branch`, `pricing`, `booking`, `inventory`, `workforce`, `dashboard`, and `finance`. Each feature keeps its own technical layers. The five feature areas above describe business scope, not a required Java package hierarchy. Frontend organization is maintained separately.
+
 
 - Keep business rules, authorization, and branch-scope checks in backend services.
 - Use DTOs for API requests and responses.
@@ -82,7 +84,8 @@ The backend is deployed as one application. The current backend contains nine pe
 
 ## Project Structure
 
-The tree below reflects the current repository structure. Inventory, workforce, and dashboard are active backend features. Payroll and cash closing are active; other finance workflows remain planned.
+
+The tree below reflects the current repository structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
 
 ```text
 GCMB/
@@ -97,6 +100,7 @@ GCMB/
 │   │   ├── dashboard/
 │   │   ├── inventory/
 │   │   ├── workforce/
+│   │   ├── finance/
 │   │   └── BackendApplication.java
 │   ├── src/main/resources/
 │   │   ├── application.yaml
@@ -104,6 +108,7 @@ GCMB/
 │   │   ├── application-prod.yml
 │   │   └── db/migration/
 │   ├── src/test/
+│   ├── scripts/
 │   ├── .mvn/wrapper/
 │   ├── pom.xml
 │   ├── mvnw
@@ -124,6 +129,7 @@ GCMB/
 │   │   │   └── pricing/
 │   │   ├── shared/
 │   │   │   ├── components/
+│   │   │   ├── styles/
 │   │   │   └── utils/
 │   │   ├── layouts/
 │   │   ├── routes/
@@ -146,13 +152,15 @@ GCMB/
 | `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
+| `shared` (frontend) | Shared admin `AppShell` for the head-office manager, branch manager, receptionist, and accountant with per-audience collapsed-sidebar persistence; presentational UI primitives for buttons, form controls, overlays, data tables, feedback, and page composition, styled with centralized design tokens and without business logic. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, walk-in check-in, room sessions, deposits, checkout bills, customer payments, and tax invoice request tracking. |
+| `booking` | Reservations, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Chain and branch performance summaries; accountant financial reports and period operations. |
-| `finance` (frontend) | Payroll and cash-closing screens. Funds, expenses, and reimbursements remain planned. |
+| `dashboard` | Head-office chain overview with URL-backed day/week/month/quarter/year or custom date ranges, historical period navigation capped at today, branch scope including suspended branches' history, scoped KPIs and charts, branch ranking, current chain-wide pending approvals, and operational alerts; its expense-detail link preserves the selected period and branch on return, mapping a multi-branch detail selection to the chain-wide overview; head-office operating expenses use payment dates, while the shared accountant/head-office financial overview recognizes finance requests by allocation month and older expenses/payroll by payment date, with matching basis on expense-detail links; shared financial reports support separate chart grouping, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; completed-bill revenue, held-deposit balance at period end, and forfeited deposits are shown separately; branch performance summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `finance` (frontend) | Accountant fund and expense workflows, configurable expense categories, one-time direct expenses, recurring expense templates and monthly payment cycles with in-app reminders, allocation schedules, daily cash-closing status by branch and submission notifications, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
+| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, reimbursements, daily cash-closing status and accountant notifications on successful submission, cash reconciliation, financial transactions, and period closing. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -293,6 +301,12 @@ spring:
 
 Set the active profile through `SPRING_PROFILES_ACTIVE`. Backend `.env` files are not loaded automatically by Spring Boot; supply variables through the terminal, IDE run configuration, or deployment environment.
 
+The boolean setting `gcmb.finance.period-close.allow-early-close` reads `GCMB_ALLOW_EARLY_PERIOD_CLOSE`. Its fallback is `false`; `application-dev.yml` explicitly defaults it to `true` for demos. Set the environment variable to `true` to enable early closing or `false` to disable it. Outside the development profile, it defaults to `false`.
+
+Set the variable before starting the backend; restart the backend after changing it. PowerShell: set `$env:GCMB_ALLOW_EARLY_PERIOD_CLOSE = "true"` to enable or `"false"` to disable. On macOS/Linux, use `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=true` or `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=false`.
+
+Do not enable early period closing in production. Keep it false and do not set the production environment variable to `true`.
+
 Keep database passwords and SePay, email, and cloud-storage credentials outside source control. Frontend `REACT_APP_*` variables are exposed in the browser bundle and must contain only public configuration.
 
 ### Database migrations
@@ -304,6 +318,15 @@ Migration ownership: V21 and V22 are the F&B menu migrations; V30 and V31 are th
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
+
+Khôi phục tính tương thích Flyway (11/11/2026): giữ nội dung đã phát hành tại các phiên bản V32–V40; các migration payroll mới được đặt tiếp theo ở V41–V43. Không đổi SQL của các migration V32–V40 đã áp dụng. V3–V5 được khôi phục theo checksum của database phát triển đang dùng: V3 `1759023455`, V4 `2097460310`, V5 `-262747397`; phần khác biệt trước đó chỉ là chú thích đầu file. Không chạy `repair` để đánh dấu migration mới là đã áp dụng. Nếu một database khác có checksum V3–V5 khác, so sánh lịch sử của database và nội dung SQL trước khi sửa checksum; không xóa schema hoặc dữ liệu.
+
+Đối chiếu database local sau merge (11/11/2026): lịch sử thực tế còn lưu payroll ở V32–V33, combo/thiết bị ở V34–V41 và payroll parts ở V42. Đã so sánh đủ 42 migration: SQL của các file chuyển phiên bản không đổi, V3–V5 chỉ khác chú thích copyright so với commit `d143a7b`. Đã sao lưu lịch sử vào `backend/target/flyway-history-before-20261111.json`, rồi chuyển metadata sang đúng phiên bản/file hiện tại bằng [script đối chiếu có điều kiện](backend/scripts/reconcile_legacy_flyway_20261111.sql). Bản sao lưu chỉ nằm trên máy local; cần lưu ra nơi riêng trước khi xóa `target`.
+
+- Script chỉ chấp nhận đúng lịch sử cũ gồm V1–V42 thành công và 14 bộ phiên bản/tên file/checksum đã xác minh; chạy trên lịch sử khác hoặc chạy lại sẽ bị từ chối. Dừng backend, sao lưu lịch sử và đối chiếu toàn bộ checksum/SQL với source trước khi dùng cho môi trường khác. Chạy bằng `psql -X -v ON_ERROR_STOP=1 -f backend/scripts/reconcile_legacy_flyway_20261111.sql` với cấu hình kết nối của môi trường đó; không truyền mật khẩu qua tham số dòng lệnh.
+- Script không chạy SQL nghiệp vụ và không đánh dấu V40 finance là đã áp dụng. Vì lịch sử sau đối chiếu đã có V43, phải chạy Flyway một lần với `outOfOrder=true` để áp dụng riêng V40 còn thiếu; kiểm tra chỉ V40 ở trạng thái pending trước khi chạy. Sau đó khởi động lại với `outOfOrder=false` như cấu hình mặc định. Database local đã hoàn tất cả hai bước, không cần chạy lại script hay bật tùy chọn này lâu dài.
+- `FinancialController` dùng `AS "month"` cho alias tháng ở cả danh sách kỳ và phản hồi chốt kỳ, giữ nguyên khóa JSON `month`; sửa lỗi PostgreSQL `syntax error at or near "month"`. Không đổi API hay quy tắc chốt kỳ.
+- Kiểm tra: backend biên dịch thành công; khởi động với cấu hình Flyway mặc định xác thực đủ 43 migration; gọi danh sách/chốt kỳ qua controller trên PostgreSQL thật thành công, toàn bộ dữ liệu thử đã rollback. Bộ unit test tổng: 180 test, 11 failure, 5 error, 1 skipped ở các test tài khoản/auth ngoài phạm vi sửa lỗi này; chưa sửa các lỗi test đó.
 
 ## Usage
 

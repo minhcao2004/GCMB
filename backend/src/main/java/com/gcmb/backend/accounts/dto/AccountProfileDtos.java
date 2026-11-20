@@ -17,14 +17,28 @@ public final class AccountProfileDtos {
         AccountView account,
         String fullName,
         String phone,
-        boolean linkedEmployee
-    ) {}
+        boolean linkedEmployee,
+        String bankName,
+        String bankAccount,
+        String bankHolder
+    ) {
+        public Profile(AccountView account, String fullName, String phone, boolean linkedEmployee) {
+            this(account, fullName, phone, linkedEmployee, null, null, null);
+        }
+    }
 
     // Không nhận ID, vai trò hoặc cơ sở từ phía trình duyệt để tránh sửa tài khoản khác.
     public record UpdateProfile(
         String fullName,
         String phone,
         String email,
-        String currentPassword
-    ) {}
+        String currentPassword,
+        String bankName,
+        String bankAccount,
+        String bankHolder
+    ) {
+        public UpdateProfile(String fullName, String phone, String email, String currentPassword) {
+            this(fullName, phone, email, currentPassword, null, null, null);
+        }
+    }
 }

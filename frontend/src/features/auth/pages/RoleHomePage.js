@@ -14,6 +14,7 @@ import '../styles/dashboard.css';
 import { authApi, apiErrors } from '../services/authApi';
 import HeadOfficeDashboard from '../components/HeadOfficeDashboard';
 import BranchManagerDashboard from '../../branch/components/BranchManagerDashboard';
+import ReceptionDashboard from '../../dashboard/ReceptionDashboard';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 
 const names = {
@@ -96,6 +97,8 @@ export default function RoleHomePage({ role }) {
               onLogout={logout}
               onProfile={() => setProfileOpen(true)}
             />
+          ) : role === 'RECEPTIONIST' ? (
+            <ReceptionDashboard user={user} />
           ) : (
             <>
               <header className="dashboard-header">
