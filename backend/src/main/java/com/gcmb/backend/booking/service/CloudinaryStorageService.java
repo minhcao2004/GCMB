@@ -52,7 +52,7 @@ public class CloudinaryStorageService {
     public String store(String mimeType, byte[] bytes, String area) {
         configured();
         if (!Set.of("tien-coc", "chot-quy", "cap-ket", "thu-chi", "kho-hang", "thuc-don",
-            "thiet-bi", "su-co-thiet-bi", "khac").contains(area)) throw new IllegalArgumentException("Invalid attachment area");
+            "thiet-bi", "su-co-thiet-bi", "luong", "khac").contains(area)) throw new IllegalArgumentException("Invalid attachment area");
         String extension = switch (mimeType) {
             case "image/jpeg" -> "jpg";
             case "image/png" -> "png";

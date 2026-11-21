@@ -46,8 +46,9 @@ public class BookingPricingService {
     }
 
     public static BigDecimal depositFor(BigDecimal amount) {
-        // BR-137, BR-178: tiền cọc bằng 30% giá booking, làm tròn lên đến đồng.
-        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.CEILING);
+        // HuyDV: cọc 30%, làm tròn lên bội số 1.000đ để không thu tiền lẻ.
+        return amount.multiply(new BigDecimal("0.30")).divide(BigDecimal.valueOf(1000), 0, RoundingMode.CEILING)
+            .multiply(BigDecimal.valueOf(1000));
     }
 
     // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.

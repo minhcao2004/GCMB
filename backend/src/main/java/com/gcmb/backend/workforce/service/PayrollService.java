@@ -8,6 +8,11 @@ import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.finance.service.AccountantFund;
+import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.math.*;
 import java.sql.Timestamp;
 import java.time.*;
@@ -20,6 +25,9 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 @Transactional
 public class PayrollService {
+
+  @Autowired
+  private EquipmentAssetFileStorageService evidenceStorage;
 
   private final JdbcTemplate db;
   private final FinanceAccess access;
@@ -541,7 +549,9 @@ public class PayrollService {
       row.put(
         "payments",
         db.queryForList(
-          "SELECT status,amount,paid_at,external_reference,failure_reason FROM gcmb.salary_payment WHERE payroll_entry_id=? ORDER BY created_at",
+          "SELECT p.id,p.status,p.amount,p.paid_at,p.external_reference,p.failure_reason,e.original_name AS evidence_name "
+            + "FROM gcmb.salary_payment p LEFT JOIN gcmb.salary_payment_evidence e ON e.payment_id=p.id "
+            + "WHERE p.payroll_entry_id=? ORDER BY p.created_at",
           row.get("id")
         )
       );
@@ -1019,6 +1029,10 @@ public class PayrollService {
   }
 
   private void validatePay(Pay p) {
+    validatePay(p, false);
+  }
+
+  private void validatePay(Pay p, boolean hasEvidence) {
     if (
       p == null ||
       p.employeeId() == null ||
@@ -1028,12 +1042,46 @@ public class PayrollService {
       p.result() == null ||
       !Set.of("PAID", "FAILED", "PENDING").contains(p.result())
     ) throw bad("Thông tin kết quả thanh toán không hợp lệ.");
-    if (text(p.reference(), "Mã tham chiếu", "PAID".equals(p.result())).length() > 200) throw bad(
+    if (text(p.reference(), "Mã tham chiếu", "PAID".equals(p.result()) && !hasEvidence).length() > 200) throw bad(
       "Mã tham chiếu chỉ được chứa tối đa 200 ký tự."
     );
   }
 
+  // HuyDV: file mới chỉ tồn tại khi toàn bộ lượt ghi nhận lương commit thành công.
+  private void savePaymentEvidence(UUID paymentId, MultipartFile proof) {
+    if (proof == null) return;
+    var stored = evidenceStorage.store(proof, "luong");
+    try {
+      TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+        @Override public void afterCompletion(int status) {
+          if (status != STATUS_COMMITTED) evidenceStorage.deleteQuietly(stored.objectKey());
+        }
+      });
+      db.update("""
+        INSERT INTO gcmb.salary_payment_evidence(payment_id,object_key,original_name,mime_type,byte_size,sha256)
+        VALUES (?,?,?,?,?,?)
+        """, paymentId, stored.objectKey(), stored.originalName(), stored.mimeType(), stored.byteSize(), stored.sha256());
+    } catch (RuntimeException failure) {
+      evidenceStorage.deleteQuietly(stored.objectKey());
+      throw failure;
+    }
+  }
+
+  public Map<String, Object> paymentEvidence(Identity actor, UUID paymentId) {
+    access.accountant(actor);
+    var rows = db.queryForList("SELECT * FROM gcmb.salary_payment_evidence WHERE payment_id=?", paymentId);
+    if (rows.isEmpty()) throw new AuthFailure(404, "form", "Không tìm thấy bằng chứng trả lương.");
+    var file = rows.get(0);
+    try { file.put("bytes", evidenceStorage.read((String) file.get("object_key"))); }
+    catch (java.io.IOException failure) { throw new AuthFailure(404, "form", "Không đọc được bằng chứng trả lương."); }
+    return file;
+  }
+
   public Map<String, Object> pay(Identity actor, String value, Payments input) {
+    return pay(actor, value, input, Map.of());
+  }
+
+  public Map<String, Object> pay(Identity actor, String value, Payments input, Map<String, MultipartFile> proofs) {
     access.accountant(actor);
     access.lock();
     var p = period(month(value), false);
@@ -1046,7 +1094,7 @@ public class PayrollService {
     ) throw bad("Vui lòng chọn nhân viên để ghi nhận thanh toán.");
     var outcomes = new ArrayList<Map<String, Object>>();
     for (var payment : input.payments()) {
-      validatePay(payment);
+      validatePay(payment, payment != null && proofs.containsKey("proof_" + payment.employeeId()));
       var entries = db.queryForList(
         "SELECT * FROM gcmb.payroll_entry WHERE period_id=? AND employee_id=?",
         p.get("id"),
@@ -1125,6 +1173,7 @@ public class PayrollService {
         payment.requestId()
       );
       if ("PAID".equals(status)) post(actor, payment.accountId(), id, false, amount, null);
+      savePaymentEvidence(id, proofs.get("proof_" + payment.employeeId()));
       access.audit(actor, null, id, "RECORD_SALARY_PAYMENT", null, payment);
       String name = db.queryForObject(
         "SELECT full_name FROM gcmb.employee WHERE id=?",

@@ -499,7 +499,7 @@ public class BookingService {
                 || normalizedDepositAmount.precision() - normalizedDepositAmount.scale() > 18)
             throw new BookingFailure(400, "depositAmount", "Số tiền cọc phải là số nguyên không âm, tối đa 18 chữ số");
         if (depositAmount.signum() > 0 && depositAmount.compareTo(BookingPricingService.depositFor(quote.expectedAmount())) != 0)
-            throw new BookingFailure(400, "depositAmount", "Tiền cọc phải bằng 30% giá booking đã báo, làm tròn đến đồng");
+            throw new BookingFailure(400, "depositAmount", "Tiền cọc phải bằng 30% giá booking đã báo, làm tròn lên bội số 1.000đ");
         String paymentMethod = null;
         String paymentReference = null;
         if (depositAmount.signum() > 0) {

@@ -73,7 +73,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const chosenRoom = availableRooms.find((room) => room.id === form.roomId) || null;
   const quote = availability?.quote;
   const estimatedAmount = Number(quote?.expectedAmount || selectedCombo?.price || 0);
-  const depositAmount = form.depositEnabled ? Number(quote?.depositRequired ?? Math.round(estimatedAmount * 0.3)) : 0;
+  const depositAmount = form.depositEnabled ? Number(quote?.depositRequired ?? Math.ceil(estimatedAmount * 0.3 / 1000) * 1000) : 0;
   const paymentMethod = String(form.paymentMethod || '').trim().toUpperCase();
   const cashPayment = paymentMethod === 'CASH';
   const guestCount = Number(form.guestCount);
@@ -106,7 +106,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     bookingBlockers.push(availabilityError ? 'Không xác nhận được phòng trống; hãy đổi lịch hoặc hạng phòng để thử lại.' : availableRooms.length ? 'Chọn một phòng còn trống.' : 'Đổi thời gian hoặc hạng phòng để tìm phòng trống.');
   }
   if (form.depositEnabled && !depositAmountValid) bookingBlockers.push('Chưa tính được cọc 30%; hãy kiểm tra lại báo giá booking.');
-  if (!paymentReferenceValid) bookingBlockers.push('Nhập mã giao dịch / ghi chú khi thu tiền cọc.');
+  if (!paymentReferenceValid) bookingBlockers.push('Nhập mã giao dịch của khoản tiền cọc đã nhận.');
   const bookingReady = !optionsLoading && !loadingAvailability && !availabilityError && bookingBlockers.length === 0 && Boolean(chosenRoom);
   const showContactNameError = Boolean(touched.contactName && !form.contactName.trim());
   const showContactPhoneError = Boolean((touched.contactPhone || form.contactPhone) && contactPhoneError);
@@ -118,9 +118,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   const showDurationError = Boolean(form.pricingMode === 'HOURLY' && !hourlyDurationValid && touched.durationHours);
   const showDepositAmountError = Boolean(form.depositEnabled && !depositAmountValid && (touched.depositEnabled || touched.depositAmount));
   const showPaymentReferenceError = Boolean(paymentReferenceRequired && !paymentReferenceValid && touched.transaction);
-  const paymentReferenceServerError = /mã giao dịch\s*\/\s*ghi chú/i.test(formError) ? formError : '';
+  const paymentReferenceServerError = /mã giao dịch/i.test(formError) ? formError : '';
   const paymentReferenceFieldError = showPaymentReferenceError || Boolean(paymentReferenceServerError);
-  const paymentReferenceFieldErrorText = paymentReferenceServerError || 'Nhập mã giao dịch / ghi chú khi thu tiền cọc.';
+  const paymentReferenceFieldErrorText = paymentReferenceServerError || 'Nhập mã giao dịch của khoản tiền cọc đã nhận.';
   const scheduleErrorMessage = plannedStart && plannedStart <= new Date()
     ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
     : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.';
@@ -320,8 +320,8 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             {showDepositAmountError && <small id="booking-deposit-error" className="booking-field-error" aria-live="polite">Chưa tính được cọc 30%; hãy kiểm tra lại báo giá booking.</small>}
           </Field>
           <Field label="Phương thức"><select name="paymentMethod" value={form.paymentMethod} onChange={change} disabled={!form.depositEnabled}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></Field>
-          <Field label={`Mã giao dịch / ghi chú${paymentReferenceRequired ? ' *' : ''}`} className={paymentReferenceFieldError ? 'is-invalid' : ''}>
-            <input ref={paymentReferenceInput} name="transaction" value={form.transaction} onChange={change} onBlur={() => markTouched('transaction')} disabled={!form.depositEnabled} required={paymentReferenceRequired} maxLength={120} placeholder="Mã giao dịch / ghi chú" aria-invalid={paymentReferenceFieldError} aria-describedby={paymentReferenceFieldError ? 'booking-deposit-reference-error' : undefined} />
+          <Field label={`${cashPayment ? 'Ghi chú' : 'Mã giao dịch'}${paymentReferenceRequired ? ' *' : ''}`} className={paymentReferenceFieldError ? 'is-invalid' : ''}>
+            <input ref={paymentReferenceInput} name="transaction" value={form.transaction} onChange={change} onBlur={() => markTouched('transaction')} disabled={!form.depositEnabled} required={paymentReferenceRequired} maxLength={120} placeholder={cashPayment ? 'Ghi chú khoản cọc' : 'Nhập mã giao dịch đã nhận cọc'} aria-invalid={paymentReferenceFieldError} aria-describedby={paymentReferenceFieldError ? 'booking-deposit-reference-error' : undefined} />
             {paymentReferenceFieldError && <small id="booking-deposit-reference-error" className="booking-field-error" aria-live="polite">{paymentReferenceFieldErrorText}</small>}
           </Field>
         </div>
@@ -350,7 +350,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         </dl>
         <div className="booking-summary-separator" />
         <div className="booking-summary-money"><span>Giá dự kiến</span><strong>{formatVnd(estimatedAmount)}</strong></div>
-        <div className="booking-summary-money booking-deposit-money"><span>{cashPayment ? 'Tiền cọc đã nhận' : 'Tiền cọc cần chuyển'}</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
+        <div className="booking-summary-money booking-deposit-money"><span>Tiền cọc đã nhận</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
         <div className="booking-summary-total"><strong>Còn lại sau khi thu cọc</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
         <div className="booking-summary-hint">Booking giữ phòng theo ngày/giờ đã chọn.<br />Giá cuối có thể thay đổi khi checkout.</div>
         <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || !bookingReady}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>

@@ -44,6 +44,7 @@ export default function PayrollPage() {
   });
   const [available, setAvailable] = useState(null);
   const [results, setResults] = useState({});
+  const [evidence, setEvidence] = useState({});
   const [page, setPage] = useState(1);
   const detailRef = useRef(null);
   useEffect(() => {
@@ -70,6 +71,7 @@ export default function PayrollPage() {
     setData(null);
     setDetail(null);
     setSelected([]);
+    setEvidence({});
     setReviewed(false);
     setDialog('');
     Promise.all([api.get(`${base}/${month}`), api.get(`${base}/options`)])
@@ -122,6 +124,19 @@ export default function PayrollPage() {
   const toggle = (id) => {
     setReviewed(false);
     setSelected((old) => (old.includes(id) ? old.filter((item) => item !== id) : [...old, id]));
+  };
+  const submitPayments = () => {
+    const command = {
+      version: data.version,
+      payments: selected.map((employeeId) => ({ ...results[employeeId], employeeId, accountId: payment.accountId })),
+    };
+    let body = command;
+    if (selected.some((id) => evidence[id])) {
+      body = new FormData();
+      body.append('command', new Blob([JSON.stringify(command)], { type: 'application/json' }));
+      selected.forEach((id) => { if (evidence[id]) body.append(`proof_${id}`, evidence[id]); });
+    }
+    return mutate(`${base}/${month}/payments`, body, 'Đã ghi nhận kết quả thanh toán.');
   };
   const moneyInput = (key, label, state, setter) => (
     <label>
@@ -190,21 +205,6 @@ export default function PayrollPage() {
           />
         </label>
         <label>
-          Cơ sở
-          <select value={branchFilter} disabled={busy} onChange={(event) => {
-            setBranchFilter(event.target.value);
-            setSelected([]);
-            setDialog('');
-            setDetail(null);
-            setReviewed(false);
-          }}>
-            <option value="">Tất cả cơ sở</option>
-            {(options?.branches || []).map((branch) => (
-              <option key={branch.id} value={branch.id}>{branch.name}</option>
-            ))}
-          </select>
-        </label>
-        <label>
           Tìm nhân viên
           <input
             value={search}
@@ -238,7 +238,22 @@ export default function PayrollPage() {
               </span>
               <strong className="finance-total">Còn phải trả: {vnd(totalDue)}</strong>
             </div>
-            <div className="finance-actions">
+            <div className="finance-actions payroll-list-actions">
+              <label className="finance-branch-filter">
+                Cơ sở
+                <select aria-label="Lọc lương theo cơ sở" value={branchFilter} disabled={busy} onChange={(event) => {
+                  setBranchFilter(event.target.value);
+                  setSelected([]);
+                  setDialog('');
+                  setDetail(null);
+                  setReviewed(false);
+                }}>
+                  <option value="">Tất cả cơ sở</option>
+                  {(options?.branches || []).map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </label>
               <button
                 disabled={busy}
                 onClick={() => {
@@ -268,6 +283,7 @@ export default function PayrollPage() {
                     (data.status === 'CONFIRMED' || r.submitted_branch_id)))}
                 onClick={() => {
                   setDialog('payments');
+                  setEvidence({});
                   setPayment((p) => ({ ...p, accountId: '' }));
                   setReviewed(false);
                   setResults(
@@ -369,18 +385,7 @@ export default function PayrollPage() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      mutate(
-                        `${base}/${month}/payments`,
-                        {
-                          version: data.version,
-                          payments: selected.map((employeeId) => ({
-                            ...results[employeeId],
-                            employeeId,
-                            accountId: payment.accountId,
-                          })),
-                        },
-                        'Đã ghi nhận kết quả thanh toán.',
-                      );
+                      submitPayments();
                     }}
                   >
                     <FundInput
@@ -399,8 +404,23 @@ export default function PayrollPage() {
                             <SalaryBankDetails entry={r} />
                             <ResultInputs
                               value={results[id]}
+                              hasEvidence={Boolean(evidence[id])}
                               onChange={(v) => setResults({ ...results, [id]: v })}
                             />
+                            <label>Ảnh / chứng từ trả lương (không bắt buộc)
+                              <input type="file" disabled={busy}
+                                aria-label={`Bằng chứng trả lương ${r.name}`}
+                                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0] || null;
+                                  const invalid = file && (file.size === 0 || file.size > 20000000 ||
+                                    !['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'].includes(file.type));
+                                  if (invalid) event.target.value = '';
+                                  setEvidence((old) => ({ ...old, [id]: invalid ? null : file }));
+                                  setError(invalid ? 'Chọn ảnh JPEG, PNG, WebP, HEIC, HEIF hoặc PDF, tối đa 20 MB.' : '');
+                                  setReviewed(false);
+                                }} />
+                            </label>
                           </div>
                         )
                       );
@@ -507,10 +527,16 @@ export default function PayrollPage() {
                 </div>
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
                 <SalaryBankDetails entry={detail} />
+                {error && <p className="finance-error" role="alert">{error}</p>}
                 {detail.payments.map((p, i) => (
                   <p key={i}>
                     {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
                     {p.external_reference}
+                    {p.evidence_name && <button type="button" className="finance-link"
+                      onClick={async () => {
+                        try { await api.download(`${base}/payments/${p.id}/evidence`, p.evidence_name); }
+                        catch { setError('Không tải được bằng chứng trả lương. Vui lòng thử lại.'); }
+                      }}>Tải bằng chứng: {p.evidence_name}</button>}
                   </p>
                 ))}
                 </div>
@@ -590,7 +616,7 @@ function FundInput({ options, value, onChange }) {
     </label>
   );
 }
-function ResultInputs({ value, onChange }) {
+function ResultInputs({ value, onChange, hasEvidence = false }) {
   return (
     <div className="finance-grid">
       <label>
@@ -605,9 +631,9 @@ function ResultInputs({ value, onChange }) {
         </select>
       </label>
       <label>
-        Mã chứng từ / tham chiếu {value.result === 'PAID' ? '*' : '(không bắt buộc)'}
+        Mã chứng từ / tham chiếu {value.result === 'PAID' && !hasEvidence ? '*' : '(không bắt buộc)'}
         <input
-          required={value.result === 'PAID'}
+          required={value.result === 'PAID' && !hasEvidence}
           maxLength={200}
           value={value.reference}
           onChange={(e) => onChange({ ...value, reference: e.target.value })}
