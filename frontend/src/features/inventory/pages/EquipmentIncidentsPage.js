@@ -9,6 +9,7 @@ import {useCallback,useEffect,useState} from 'react';
 import apiClient from '../../../api/client';
 import {equipmentIncidentApi} from '../services/equipmentIncidentApi';
 import './equipment-incidents.css';
+import './equipment-harmony.css';
 const blank={assetId:'',description:'',roomUnusable:false,severity:'MEDIUM',priority:'NORMAL',expectedCompletionOn:'',handlingPlan:'REPAIR',serviceProvider:'',replacementDetails:'',estimatedCost:'',proposedSolution:''};
 const labels={REPORTED:'Chờ duyệt',WAITING_APPROVAL:'Chờ duyệt',REJECTED:'Bị từ chối',ASSESSED:'Đã duyệt',IN_PROGRESS:'Đang xử lý',VERIFIED:'Hoàn tất chờ đóng',CLOSED:'Đã đóng'};
 // BR-111: Hiển thị lỗi kiểm tra nghiệp vụ trả về từ máy chủ.

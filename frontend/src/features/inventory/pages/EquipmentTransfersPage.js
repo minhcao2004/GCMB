@@ -9,6 +9,7 @@ import apiClient from '../../../api/client';
 import {equipmentAssetApi} from '../services/equipmentAssetApi';
 import {equipmentIncidentApi} from '../services/equipmentIncidentApi';
 import './equipment-incidents.css';
+import './equipment-harmony.css';
 const states={REQUESTED:'Chờ bàn giao',IN_TRANSIT:'Đang vận chuyển',COMPLETED:'Đã tiếp nhận',CANCELLED:'Đã hủy'};
 // BR-111: Hiển thị lỗi điều kiện và phân quyền do backend trả về.
 const err=e=>e.response?.data?.detail||e.response?.data?.message||'Không thể hoàn tất thao tác.';

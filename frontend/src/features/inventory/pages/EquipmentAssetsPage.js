@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../../../api/client';
 import { equipmentAssetApi } from '../services/equipmentAssetApi';
 import './equipment-assets.css';
+import './equipment-harmony.css';
 
 const blank = { code: '', name: '', categoryId: '', roomId: '', locationNote: '', serialNumber: '', purchaseDate: '', purchaseValue: '', warrantyExpiry: '', status: 'IN_USE' };
 const statuses = [ ['IN_USE', 'Đang sử dụng'], ['BROKEN', 'Bị hỏng'], ['REPAIRING', 'Đang sửa'], ['IN_TRANSIT', 'Đang chuyển'], ['RETIRED', 'Đã thanh lý'] ];

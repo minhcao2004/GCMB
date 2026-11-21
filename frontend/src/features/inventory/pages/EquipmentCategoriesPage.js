@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { equipmentCategoryApi } from '../services/equipmentCategoryApi';
 import './equipment-categories.css';
+import './equipment-harmony.css';
 
 const blank = { code: '', name: '', description: '' };
 // BR-111: Hiển thị thông báo nghiệp vụ do backend trả về để người dùng sửa dữ liệu.
