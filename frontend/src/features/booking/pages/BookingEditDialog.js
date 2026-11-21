@@ -157,16 +157,16 @@ if (!periodValid) return setFormError(
 );
     if (form.pricingMode === 'COMBO' && !form.comboId) return setFormError('Vui lòng chọn combo.');
     if (!quote) return setFormError('Chưa có báo giá cho thời gian đã chọn.');
-    if (!form.roomId) return setFormError('Vui lòng chọn phòng.');
+    if (booking.roomId && !form.roomId) return setFormError('Vui lòng chọn phòng.');
     const selectedRoom = rooms.find((room) => room.id === form.roomId);
-    if (!selectedRoom) return setFormError('Phòng đã chọn không còn trống trong khung giờ này.');
+    if (booking.roomId && !selectedRoom) return setFormError('Phòng đã chọn không còn trống trong khung giờ này.');
     if (selectedRoom && selectedRoom.capacity < Number(booking.guestCount)) {
       return setFormError(`Phòng này nhận tối đa ${selectedRoom.capacity} khách, booking đang có ${booking.guestCount} khách.`);
     }
 
     setSubmitting(true);
     const result = await onUpdate(bookingId, {
-      roomId: form.roomId,
+      roomId: booking.roomId ? form.roomId : null,
       plannedStart,
       plannedEnd,
       pricingMode: form.pricingMode,
@@ -254,15 +254,15 @@ if (!periodValid) return setFormError(
           </select>
           <small>Đổi combo sẽ đặt lại giờ trả theo thời lượng gói. Có thể chỉnh giờ trả sau đó; thời gian vượt gói được tính phụ phí.</small>
         </label>}
-        <div className="booking-section-title-row booking-edit-section-title"><h3>Phòng</h3><span>{loadingRooms ? 'Đang kiểm tra phòng…' : `${rooms.length} phòng còn trống`}</span></div>
-        <label className="booking-form-field">
+         {booking.roomId ? <><div className="booking-section-title-row booking-edit-section-title"><h3>Phòng</h3><span>{loadingRooms ? 'Đang kiểm tra phòng…' : `${rooms.length} phòng còn trống`}</span></div>
+         <label className="booking-form-field">
           <span>Phòng sử dụng</span>
           <select name="roomId" value={form.roomId} onChange={change}>
             {!hasRoomOption && form.roomId && <option value={form.roomId}>{booking.roomCode || booking.roomName || 'Phòng hiện tại'} · hiện không có trong danh sách trống</option>}
             {rooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name} · tối đa {room.capacity} khách</option>)}
             {!form.roomId && <option value="">Chọn phòng</option>}
           </select>
-        </label>
+         </label></> : <p className="booking-feature-note">Hạng phòng {booking.roomTypeName} · Chọn phòng cụ thể khi check-in.</p>}
         {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
         <label className="booking-form-field booking-note-field"><span>Ghi chú booking</span><textarea name="note" rows="3" maxLength="2000" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></label>
         <div className="booking-cancel-deposit-summary booking-edit-summary"><span>Giá hiện tại: <strong>{formatVnd(booking.expectedAmount)}</strong></span><span>Giá sau sửa: <strong>{quote ? formatVnd(quote.expectedAmount) : 'Đang tính…'}</strong></span><span>Tiền cọc đã ghi: <strong>{formatVnd(detail?.deposit?.balance ?? booking.depositBalance)}</strong></span></div>

@@ -269,22 +269,20 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
   </div>;
 }
 
-// Xác nhận hủy hoặc no-show trong luồng dữ liệu minh họa.
+// Xác nhận hủy trong luồng dữ liệu minh họa.
 export function BookingCancelDialog({ booking, onClose, onConfirm }) {
-  const [cancelType, setCancelType] = useState('customer');
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
-  useEffect(() => { setCancelType('customer'); setReason(''); setNote(''); }, [booking?.id]);
+  useEffect(() => { setReason(''); setNote(''); }, [booking?.id]);
   if (!booking) return null;
 
   const start = fromDateAndTime(booking.startDate, booking.startTime);
   const minutesBeforeStart = start ? (start.getTime() - Date.now()) / 60000 : -1;
   const hasDeposit = booking.depositAmount > 0 && booking.depositStatus === 'paid';
-  const refundEligible = hasDeposit && cancelType === 'customer' && minutesBeforeStart >= 40;
+  const refundEligible = hasDeposit && minutesBeforeStart >= 40;
   const outcomeLabel = !hasDeposit ? 'Booking chưa ghi nhận tiền cọc.'
     : refundEligible ? 'Đủ điều kiện tạo yêu cầu hoàn cọc (hủy trước giờ bắt đầu ít nhất 40 phút).'
       : 'Tiền cọc không được hoàn theo điều kiện hủy booking này.';
-  const canMarkNoShow = Boolean(start && start <= new Date());
 
   return <div className="booking-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="booking-modal booking-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="booking-cancel-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}>
@@ -296,32 +294,21 @@ export function BookingCancelDialog({ booking, onClose, onConfirm }) {
         <span>Khung giờ</span><strong>{formatDate(booking.startDate)} {booking.startTime} – {formatDate(booking.endDate)} {booking.endTime}</strong>
         <span>Tiền cọc đã nhận</span><strong>{formatVnd(hasDeposit ? booking.depositAmount : 0)}</strong>
       </div>
-      <fieldset className="booking-fieldset booking-cancel-type">
-        <legend>Loại ghi nhận</legend>
-        <label className={cancelType === 'customer' ? 'booking-choice is-selected' : 'booking-choice'}>
-          <input type="radio" name="cancelType" value="customer" checked={cancelType === 'customer'} onChange={() => { setCancelType('customer'); setReason(''); }} />
-          <span><strong>Khách yêu cầu hủy</strong><small>GCMB ghi nhận yêu cầu hủy booking.</small></span>
-        </label>
-        <label className={`${cancelType === 'noShow' ? 'booking-choice is-selected' : 'booking-choice'}${canMarkNoShow ? '' : ' is-unavailable'}`}>
-          <input type="radio" name="cancelType" value="noShow" checked={cancelType === 'noShow'} disabled={!canMarkNoShow} onChange={() => { setCancelType('noShow'); setReason(''); }} />
-          <span><strong>Khách không đến (no-show)</strong><small>{canMarkNoShow ? 'Ghi nhận khách không có mặt theo giờ đặt.' : 'Chỉ ghi nhận no-show từ giờ bắt đầu booking.'}</small></span>
-        </label>
-      </fieldset>
       <div className="booking-cancel-reason-fields">
-        <label className="booking-field"><span>Lý do ghi nhận *</span><select value={reason} onChange={(event) => setReason(event.target.value)}><option value="">Chọn lý do</option>{cancelType === 'customer' ? <><option>Khách thay đổi kế hoạch</option><option>Khách đổi thời gian đặt</option><option>Khách cung cấp nhầm thông tin</option><option>Lý do khác</option></> : <><option>Khách không có mặt</option><option>Không liên hệ được với khách</option><option>Khách báo không đến</option></>}</select></label>
+        <label className="booking-field"><span>Lý do ghi nhận *</span><select value={reason} onChange={(event) => setReason(event.target.value)}><option value="">Chọn lý do</option><option>Khách thay đổi kế hoạch</option><option>Khách đổi thời gian đặt</option><option>Khách cung cấp nhầm thông tin</option><option>Lý do khác</option></select></label>
         <label className="booking-field booking-reason-field"><span>Ghi chú thêm</span><textarea rows="2" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thông tin cần lưu lại tại quầy (không bắt buộc)" /></label>
       </div>
-      {!reason && <p className="booking-reason-hint">Chọn lý do để lưu cùng trạng thái hủy hoặc no-show.</p>}
+      {!reason && <p className="booking-reason-hint">Chọn lý do để lưu cùng trạng thái hủy.</p>}
       <div className={`booking-deposit-outcome${refundEligible ? ' is-refundable' : ''}`} role="status">
         <span className="booking-outcome-icon">{refundEligible ? '↗' : '!'}</span>
         <div><strong>{refundEligible ? 'Đủ điều kiện yêu cầu hoàn cọc' : hasDeposit ? 'Cọc không hoàn' : 'Không có tiền cọc'}</strong><p>{outcomeLabel}{refundEligible ? ' Khoản cọc chưa được hoàn tự động.' : ''}</p></div>
       </div>
       <div className="booking-dialog-actions booking-dialog-actions-inline">
         <button className="booking-button booking-button-danger" type="button" disabled={!reason} onClick={() => onConfirm({
-          status: cancelType === 'noShow' ? 'noShow' : 'cancelled',
+          status: 'cancelled',
           depositOutcome: !hasDeposit ? '' : refundEligible ? 'eligible_refund' : 'forfeited',
           cancellationReason: `${reason}${note.trim() ? ` · ${note.trim()}` : ''}`,
-        })}>{cancelType === 'noShow' ? 'Ghi nhận no-show' : 'Xác nhận hủy booking'}</button>
+        })}>Xác nhận hủy booking</button>
         <button className="booking-button booking-button-secondary" type="button" onClick={onClose}>Quay lại</button>
       </div>
     </section>

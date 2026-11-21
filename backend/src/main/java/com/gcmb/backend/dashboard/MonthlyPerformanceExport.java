@@ -19,17 +19,17 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 final class MonthlyPerformanceExport {
   private MonthlyPerformanceExport() {}
 
-  static final List<String> KEYS = List.of("name","billRevenue","heldDeposits","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue","expenses","salary","investment","profit","margin","netCashFlow","bookingCount","completedBookings","cancelledNoShowBookings","occupancyRate","periodStatus");
-  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu hóa đơn hoàn tất","Cọc đang giữ cuối kỳ","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Chi đầu tư","Lợi nhuận vận hành (Thu nhập vận hành − chi phí vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng");
+  static final List<String> KEYS = List.of("name","billRevenue","heldDeposits","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue","expenses","salary","investment","profit","margin","netCashFlow","bookingCount","completedBookings","cancelledBookings","occupancyRate","periodStatus");
+  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu hóa đơn hoàn tất","Cọc đang giữ cuối kỳ","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Chi đầu tư","Lợi nhuận vận hành (Thu nhập vận hành − chi phí vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy","Lấp đầy (%)","Tháng");
   private static final String[] SUMMARY_HEADERS = {
     "Cơ sở","Mã cơ sở","Doanh thu hóa đơn hoàn tất","Cọc đang giữ cuối kỳ","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác",
     "Chi phí vận hành đã thanh toán","Lương và ứng lương","Tổng chi phí vận hành","Chi đầu tư","Lợi nhuận vận hành","Biên lợi nhuận vận hành (%)",
-    "Dòng tiền thuần","Số hóa đơn","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng","Trạng thái kỳ"
+    "Dòng tiền thuần","Số hóa đơn","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy","Lấp đầy (%)","Tháng","Trạng thái kỳ"
   };
   private static final String[] SUMMARY_KEYS = {
     "name","code","billRevenue","heldDeposits","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue",
     "operatingExpense","salary","expenses","investment","profit","margin","netCashFlow","billCount","bookingCount",
-    "completedBookings","cancelledNoShowBookings","occupancyRate","month","periodStatus"
+    "completedBookings","cancelledBookings","occupancyRate","month","periodStatus"
   };
   private static final String[] DETAIL_HEADERS = {
     "Ngày ghi sổ","Thời điểm phát sinh","Cơ sở","Mã giao dịch","Mã dòng sổ","Mã giao dịch nguồn",

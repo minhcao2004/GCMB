@@ -36,6 +36,7 @@ export const bookingApi = {
   list: async (params) => (await api.get('/reception/bookings', { params })).data,
   listAll,
   detail: async (id) => (await api.get(`/reception/bookings/${id}`)).data,
+  checkInRooms: async (id) => (await api.get(`/reception/bookings/${id}/check-in-rooms`)).data,
   comboGiftRequirements: async (id) => (await api.get(`/reception/bookings/${id}/combo-gift-requirements`)).data,
   comboGiftMenu: foodOrderApi.comboGiftMenu,
   // Thao tác trong thời gian khách đang ở phòng.
@@ -57,5 +58,4 @@ export const bookingApi = {
   startHourlyMeter: (id) => mutate('post', `/reception/bookings/${id}/hourly-meter/start`, {}),
   stopHourlyMeter: (id) => mutate('post', `/reception/bookings/${id}/hourly-meter/stop`, {}),
   cancel: (id, body) => mutate('post', `/reception/bookings/${id}/cancel`, body),
-  markNoShow: (id, body) => mutate('post', `/reception/bookings/${id}/no-show`, body),
 };

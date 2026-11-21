@@ -567,3 +567,19 @@
 }
 .cash-closing-notifications h2:focus { outline: 3px solid var(--gcmb-color-info, #087f93); outline-offset: 4px; }
 
+.finance-request-panel .finance-receipt-picker { min-width:0; margin:0; padding:0 0 16px; border:0; border-bottom:1px solid var(--finance-line,#e8ecf2); }
+.finance-receipt-picker legend { padding:0 0 6px; color:var(--finance-ink,#263247); font-size:14px; font-weight:700; }
+.finance-receipt-picker p { margin:0 0 12px; color:var(--finance-copy,#46556c); font-size:12px; line-height:1.5; }
+.finance-receipt-options { max-height:250px; overflow-y:auto; border-top:1px solid var(--finance-line,#e8ecf2); }
+.finance-request-panel .finance-form .finance-receipt-option { display:grid; grid-template-columns:20px minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 8px; border-bottom:1px solid var(--finance-line,#e8ecf2); color:var(--finance-ink,#263247); cursor:pointer; }
+.finance-receipt-option:hover,.finance-receipt-option:has(input:checked) { background:var(--gcmb-color-primary-soft,#fdecf5); }
+.finance-request-panel .finance-form .finance-receipt-option input[type=checkbox] { width:18px; min-width:18px; height:18px; min-height:18px; margin:0; padding:0; accent-color:var(--finance-accent,#bd287b); }
+.finance-receipt-option span { display:grid; gap:3px; min-width:0; }
+.finance-receipt-option strong,.finance-receipt-option b { font-size:12px; font-variant-numeric:tabular-nums; }
+.finance-receipt-option small { overflow-wrap:anywhere; font-weight:400; }
+.finance-receipt-empty { padding:12px 8px; }
+.finance-receipt-total { display:flex; justify-content:space-between; align-items:center; gap:12px; padding-top:12px; color:var(--finance-copy,#46556c); font-size:12px; }
+.finance-receipt-total strong { color:var(--finance-ink,#263247); font-size:15px; font-variant-numeric:tabular-nums; }
+.finance-request-panel .finance-form input[readonly] { background:var(--gcmb-color-bg,#f8fafc); cursor:default; }
+@media(max-width:600px) { .finance-receipt-option b { grid-column:2 / -1; justify-self:end; } }
+

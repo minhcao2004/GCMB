@@ -2,6 +2,7 @@ package com.gcmb.backend.inventory.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,7 +21,8 @@ public final class InventoryDtos {
 
     public record InventoryMetadata(List<UnitOption> units, List<String> categories) {}
 
-    public record ReceiptLineCommand(UUID inventoryItemId, BigDecimal quantity, BigDecimal unitCost) {}
+    public record ReceiptLineCommand(UUID inventoryItemId, BigDecimal quantity, BigDecimal unitCost,
+                                     LocalDate expiryDate) {}
 
     public record StockReceiptCommand(Instant receivedAt, String supplierName, String supplierInvoice,
                                       List<ReceiptLineCommand> items) {}
@@ -40,7 +42,8 @@ public final class InventoryDtos {
     public record StockMovementView(UUID id, Instant occurredAt, String kind,
                                     BigDecimal quantityDelta, BigDecimal quantityAfter,
                                     BigDecimal unitCost, String source, String actor,
-                                    String reason, String evidenceName, String evidenceUrl) {}
+                                    String reason, String evidenceName, String evidenceUrl,
+                                    String supplierName, LocalDate expiryDate) {}
 
     public record EvidenceContent(String originalName, String mimeType, byte[] bytes) {}
 }

@@ -131,6 +131,11 @@ public class BookingController {
         return bookings.detail(identity, bookingId);
     }
 
+    @GetMapping("/bookings/{bookingId}/check-in-rooms")
+    public List<BookingDtos.AvailableRoom> checkInRooms(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
+        return bookings.checkInRooms(identity, bookingId);
+    }
+
     @GetMapping("/bookings/{bookingId}/edit-options")
     // GET: trả phòng có thể chọn khi sửa booking.
     public BookingDtos.BookingEditOptions editOptions(@AuthenticationPrincipal Identity identity,
@@ -239,10 +244,4 @@ public class BookingController {
         return audit.record("BOOKING_CANCELLED","BOOKING",bookingId,()->bookings.cancel(identity, bookingId, request),null);
     }
 
-    @PostMapping("/bookings/{bookingId}/no-show")
-    // POST: đánh dấu khách không đến nhận phòng.
-    public BookingDtos.NoShowResult markNoShow(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
-            @RequestBody(required = false) BookingDtos.NoShowRequest request) {
-        return audit.record("BOOKING_NO_SHOW","BOOKING",bookingId,()->bookings.markNoShow(identity, bookingId, request),null);
-    }
 }

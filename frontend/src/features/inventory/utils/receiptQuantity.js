@@ -2,7 +2,7 @@
 export const RECEIVING_UNITS = ['Thùng', 'Lốc', 'Hộp', 'Túi', 'Gói', 'Bao', 'Khay'];
 
 export const newReceiptLine = (id) => ({
-  id, inventoryItemId: '', quantity: '', unitCost: '', receivingUnit: '', customUnit: '', unitsPerPack: '',
+  id, inventoryItemId: '', quantity: '', unitCost: '', expiryDate: '', receivingUnit: '', customUnit: '', unitsPerPack: '',
 });
 
 export const receivingUnitName = (line, item) => line.receivingUnit === 'CUSTOM'

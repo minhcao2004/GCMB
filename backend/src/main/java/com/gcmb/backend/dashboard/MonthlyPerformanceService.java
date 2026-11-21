@@ -17,7 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class MonthlyPerformanceService {
   static final int MAX_REPORT_BRANCH_IDS = 50;
   private static final List<String> MONEY_METRICS = List.of("revenue", "billRevenue", "roomRevenue", "fnbRevenue", "overtimeRevenue", "otherRevenue", "expenses", "operatingExpense", "salary", "investment", "profit", "netCashFlow", "forfeitedDeposits", "heldDeposits");
-  private static final List<String> COUNT_METRICS = List.of("billCount", "bookingCount", "completedBookings", "cancelledNoShowBookings", "expenseCount");
+  private static final List<String> COUNT_METRICS = List.of("billCount", "bookingCount", "completedBookings", "cancelledBookings", "expenseCount");
   private final JdbcTemplate db;
 
   public MonthlyPerformanceService(JdbcTemplate db) { this.db = db; }
@@ -605,7 +605,7 @@ public class MonthlyPerformanceService {
       ), bookings AS (
         SELECT b.branch_id,count(*) FILTER (WHERE b.status<>'CANCELLED') booking_count,
           count(*) FILTER (WHERE b.status<>'CANCELLED' AND EXISTS (SELECT 1 FROM gcmb.bill x WHERE x.booking_id=b.id AND x.status='SETTLED')) completed,
-          count(*) FILTER (WHERE b.status IN ('CANCELLED','NO_SHOW')) cancelled_no_show
+          count(*) FILTER (WHERE b.status = 'CANCELLED') cancelled_bookings
         FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id
         WHERE (b.planned_start AT TIME ZONE br.timezone)::date>=? AND (b.planned_start AT TIME ZONE br.timezone)::date<?
         GROUP BY b.branch_id
@@ -668,7 +668,7 @@ public class MonthlyPerformanceService {
         CASE WHEN COALESCE(rv.bill_revenue,0)>0 THEN
           (COALESCE(rv.bill_revenue,0)-COALESCE(c.opex,0)-COALESCE(s.amount,0))*100/COALESCE(rv.bill_revenue,0) END margin,
         COALESCE(bk.booking_count,0) "bookingCount",COALESCE(bk.completed,0) "completedBookings",
-        COALESCE(bk.cancelled_no_show,0) "cancelledNoShowBookings",
+        COALESCE(bk.cancelled_bookings,0) "cancelledBookings",
         CASE WHEN COALESCE(rc.rooms,0)>0 THEN COALESCE(o.occupied_hours,0)/(rc.rooms*((?-?)::numeric)*12)*100 END "occupancyRate",
         COALESCE(o.occupied_hours,0) "occupiedRoomHours",COALESCE(rc.rooms,0)*((?-?)::numeric)*12 "sellableRoomHours",
         COALESCE(fp.status,'OPEN') "periodStatus"

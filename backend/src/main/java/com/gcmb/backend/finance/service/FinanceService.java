@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,7 +53,25 @@ public class FinanceService {
 
     public Map<String,Object> branchSummary(Identity who) {
         UUID branch = branch(who);
-        return Map.of("categories", categories(true), "requests", requests(branch));
+        return Map.of("categories", categories(true), "requests", requests(branch),
+            "stockReceipts", availableStockReceipts(branch));
+    }
+
+    private List<Map<String,Object>> availableStockReceipts(UUID branch) {
+        return db.queryForList("""
+            SELECT sr.id,sr.code,sr.supplier_name,sr.received_at,cost.amount
+            FROM gcmb.stock_receipt sr
+            JOIN LATERAL (
+                SELECT COALESCE(SUM(round(rl.quantity * rl.unit_cost, 0)),0) AS amount
+                FROM gcmb.stock_receipt_line rl WHERE rl.receipt_id=sr.id
+            ) cost ON cost.amount>0
+            WHERE sr.branch_id=? AND sr.status='POSTED'
+              AND NOT EXISTS (
+                  SELECT 1 FROM gcmb.finance_request_stock_receipt linked
+                  WHERE linked.receipt_id=sr.id AND linked.active=true
+              )
+            ORDER BY sr.received_at DESC,sr.code DESC
+            """,branch);
     }
 
     private List<Map<String,Object>> branches() {
@@ -184,11 +203,47 @@ public class FinanceService {
 
     @Transactional
     public Map<String,Object> createRequest(Identity who, String kind, UUID categoryId, BigDecimal amount,
-            LocalDate expenseOn, String description, String beneficiaryName, String bankAccount, String bankName) {
+            LocalDate expenseOn, String description, String beneficiaryName, String bankAccount, String bankName,
+            List<UUID> receiptIds) {
         UUID branch=branch(who);
         if(!"PAYMENT".equals(kind)&&!"REIMBURSEMENT".equals(kind)) bad("Loại đề nghị không hợp lệ.");
         if("REIMBURSEMENT".equals(kind)&&!"BRANCH_MANAGER".equals(who.role())) forbidden("Chỉ quản lý cơ sở được tạo đề nghị hoàn ứng.");
+        Map<UUID,BigDecimal> linkedReceipts=new LinkedHashMap<>();
+        if(receiptIds!=null&&!receiptIds.isEmpty()) {
+            if(!"REIMBURSEMENT".equals(kind)) bad("Chỉ chọn phiếu nhập cho đề nghị hoàn ứng tiền đã chi.");
+            if(receiptIds.contains(null)) bad("Danh sách phiếu nhập không hợp lệ.");
+            // BR-33, BR-94, BR-197: tính lại giá trị phiếu đã nhận, khóa phiếu và chặn hoàn ứng trùng; nhập kho không ghi thanh toán.
+            for(UUID receiptId:receiptIds.stream().sorted().toList()) {
+                if(linkedReceipts.containsKey(receiptId)) bad("Mỗi phiếu nhập chỉ được chọn một lần.");
+                List<Map<String,Object>> rows=db.queryForList("""
+                    SELECT sr.id,sr.status,
+                      (SELECT COALESCE(SUM(round(rl.quantity * rl.unit_cost, 0)),0)
+                       FROM gcmb.stock_receipt_line rl WHERE rl.receipt_id=sr.id) AS amount
+                    FROM gcmb.stock_receipt sr WHERE sr.id=? AND sr.branch_id=? FOR UPDATE OF sr
+                    """,receiptId,branch);
+                if(rows.isEmpty()||!"POSTED".equals(rows.get(0).get("status")))
+                    bad("Phiếu nhập không thuộc cơ sở hoặc chưa được xác nhận.");
+                List<String> claims=db.queryForList("""
+                    SELECT request.status FROM gcmb.finance_request_stock_receipt linked
+                    JOIN gcmb.finance_expense_request request ON request.id=linked.request_id
+                    WHERE linked.receipt_id=? AND linked.active=true
+                    """,String.class,receiptId);
+                if(!claims.isEmpty()) {
+                    // BR-94 / MSG99: khoản đã hoàn ứng không được dùng lần nữa.
+                    if("PAID".equals(claims.get(0))) conflict("Khoản chi này đã được hoàn ứng. Vui lòng kiểm tra khoản hoàn ứng đã ghi nhận.");
+                    conflict("Phiếu nhập đã có trong đề nghị đang xử lý. Vui lòng tải lại danh sách.");
+                }
+                BigDecimal value=(BigDecimal)rows.get(0).get("amount");
+                if(value.signum()<=0) bad("Phiếu nhập không có giá trị cần hoàn ứng.");
+                linkedReceipts.put(receiptId,value);
+            }
+            BigDecimal calculated=linkedReceipts.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add);
+            if(amount==null||amount.compareTo(calculated)!=0)
+                conflict("Tổng tiền phiếu nhập đã thay đổi. Vui lòng tải lại và kiểm tra.");
+            amount=calculated;
+        }
         if(amount==null||amount.signum()<=0) bad("Số tiền phải lớn hơn 0.");
+        if(amount.compareTo(new BigDecimal("999999999999.99"))>0) bad("Tổng tiền vượt giới hạn đề nghị chi.");
         if(categoryId==null) bad("Vui lòng chọn loại chi phí đang hoạt động.");
         Map<String,Object> category=activeCategory(categoryId);
         if("REIMBURSEMENT".equals(kind)&&!Boolean.TRUE.equals(category.get("reimbursement_allowed")))
@@ -201,8 +256,9 @@ public class FinanceService {
         periods.requireOpen(expenseOn, "tạo đề nghị chi hoặc hoàn ứng");
         if(clean(description,1000).isBlank()) bad("Vui lòng nhập nội dung chi.");
         if(clean(beneficiaryName,160).isBlank()||clean(bankAccount,80).isBlank()||clean(bankName,120).isBlank()) bad("Vui lòng nhập người nhận, số tài khoản và ngân hàng.");
-        // BR-91: đề nghị của cơ sở trên 3.000.000đ cần Quản lý cấp cao duyệt.
-        String status=amount.compareTo(HEAD_OFFICE_APPROVAL_LIMIT)>0?"WAITING_HEAD_OFFICE":"WAITING_ACCOUNTANT";
+        // BR-91, BR-93: đề nghị thanh toán trên 3.000.000đ cần Quản lý cấp cao duyệt; hoàn ứng do Kế toán duyệt.
+        String status="PAYMENT".equals(kind)&&amount.compareTo(HEAD_OFFICE_APPROVAL_LIMIT)>0
+            ?"WAITING_HEAD_OFFICE":"WAITING_ACCOUNTANT";
         UUID id=UUID.randomUUID();
         db.update("""
             INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
@@ -210,6 +266,10 @@ public class FinanceService {
             VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
             """,id,code("EXP"),kind,branch,categoryId,categoryType,recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),
             clean(bankAccount,80),clean(bankName,120),who.id(),status);
+        // BR-92, BR-94: requester lấy từ phiên đăng nhập; liên kết phiếu nhập giữ nguyên chứng cứ khoản chi và chặn dùng lại.
+        for(var linked:linkedReceipts.entrySet())
+            db.update("INSERT INTO gcmb.finance_request_stock_receipt(request_id,receipt_id,amount) VALUES(?,?,?)",
+                id,linked.getKey(),linked.getValue());
         db.update("INSERT INTO gcmb.finance_request_history(request_id,actor_id,action,note) VALUES(?,?,?,?)",id,who.id(),"SUBMITTED",
             status.equals("WAITING_HEAD_OFFICE")?"Gửi quản lý cấp cao duyệt do khoản chi trên 3.000.000đ":"Gửi kế toán duyệt");
         return request(id);
@@ -264,6 +324,7 @@ public class FinanceService {
             db.update("UPDATE gcmb.finance_expense_request SET status=?,accountant_reviewed_by=?,accountant_reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
                 approve?"APPROVED_TO_PAY":"REJECTED",who.id(),id);
         } else forbidden("Bạn không có quyền xét duyệt đề nghị chi.");
+        if(!approve) db.update("UPDATE gcmb.finance_request_stock_receipt SET active=false WHERE request_id=?",id);
         String action=approve?"APPROVED":"REJECTED";
         db.update("INSERT INTO gcmb.finance_request_history(request_id,actor_id,action,note) VALUES(?,?,?,?)",id,who.id(),action,clean(note,1000));
         return request(id);
@@ -477,7 +538,8 @@ public class FinanceService {
             FROM gcmb.finance_expense_request r JOIN gcmb.branch b ON b.id=r.branch_id
             JOIN gcmb.finance_expense_category c ON c.id=r.category_id JOIN gcmb.user_account req ON req.id=r.requested_by WHERE r.id=?
             """,id).stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy đề nghị chi."));
-        item.put("attachments",attachments(id)); item.put("history",history(id)); item.put("allocations",allocations(id)); return item;
+        item.put("attachments",attachments(id)); item.put("history",history(id)); item.put("allocations",allocations(id));
+        item.put("stockReceipts",linkedStockReceipts(id)); return item;
     }
     private List<Map<String,Object>> requests(UUID branchId) {
         List<Map<String,Object>> rows=db.queryForList("""
@@ -489,7 +551,15 @@ public class FinanceService {
             JOIN gcmb.finance_expense_category c ON c.id=r.category_id JOIN gcmb.user_account req ON req.id=r.requested_by
             WHERE (?::uuid IS NULL OR r.branch_id=?) ORDER BY r.requested_at DESC
             """,branchId,branchId);
-        rows.forEach(r->{UUID id=(UUID)r.get("id");r.put("attachments",attachments(id));r.put("history",history(id));r.put("allocations",allocations(id));}); return rows;
+        rows.forEach(r->{UUID id=(UUID)r.get("id");r.put("attachments",attachments(id));r.put("history",history(id));r.put("allocations",allocations(id));r.put("stockReceipts",linkedStockReceipts(id));}); return rows;
+    }
+    private List<Map<String,Object>> linkedStockReceipts(UUID requestId) {
+        return db.queryForList("""
+            SELECT sr.code,sr.supplier_name,linked.amount
+            FROM gcmb.finance_request_stock_receipt linked
+            JOIN gcmb.stock_receipt sr ON sr.id=linked.receipt_id
+            WHERE linked.request_id=? ORDER BY sr.received_at,sr.code
+            """,requestId);
     }
     private BigDecimal balance() {
         return AccountantFund.balance(db);

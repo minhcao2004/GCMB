@@ -48,7 +48,7 @@ function dateInputInZone(value, timezone) {
 }
 
 function bookingStatusText(status) {
-  return ({ CONFIRMED: 'Đã đặt', IN_HOUSE: 'Đang sử dụng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', NO_SHOW: 'No-show', DRAFT: 'Nháp' })[status] || status;
+  return ({ CONFIRMED: 'Đã đặt', IN_HOUSE: 'Đang sử dụng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', DRAFT: 'Nháp' })[status] || status;
 }
 
 function floorOf(code) {

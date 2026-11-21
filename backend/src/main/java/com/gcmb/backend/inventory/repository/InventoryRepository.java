@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -52,10 +53,14 @@ public class InventoryRepository {
     }
 
     public List<String> categories(UUID branchId) {
-        return db.queryForList("""
-            SELECT category FROM gcmb.inventory_item
-            WHERE branch_id=? AND active=true GROUP BY category ORDER BY lower(category)
-            """, String.class, branchId);
+        List<String> categories = new ArrayList<>(List.of("Đồ uống", "Đồ ăn", "Nguyên liệu", "Vật tư", "Khác"));
+        for (String category : db.queryForList("""
+                SELECT category FROM gcmb.inventory_item
+                WHERE branch_id=? GROUP BY category ORDER BY lower(category)
+                """, String.class, branchId)) {
+            if (categories.stream().noneMatch(existing -> existing.equalsIgnoreCase(category))) categories.add(category);
+        }
+        return categories;
     }
 
     public boolean activeBranch(UUID branchId) {
@@ -151,9 +156,9 @@ public class InventoryRepository {
 
     public UUID insertReceiptLine(UUID receiptId, UUID branchId, ReceiptLineCommand line) {
         return db.queryForObject("""
-            INSERT INTO gcmb.stock_receipt_line(receipt_id,branch_id,inventory_item_id,quantity,unit_cost)
-            VALUES (?,?,?,?,?) RETURNING id
-            """, UUID.class, receiptId, branchId, line.inventoryItemId(), line.quantity(), line.unitCost());
+            INSERT INTO gcmb.stock_receipt_line(receipt_id,branch_id,inventory_item_id,quantity,unit_cost,expiry_date)
+            VALUES (?,?,?,?,?,?) RETURNING id
+            """, UUID.class, receiptId, branchId, line.inventoryItemId(), line.quantity(), line.unitCost(), line.expiryDate());
     }
 
     public void postReceipt(UUID receiptId, UUID actorId) {
@@ -225,7 +230,8 @@ public class InventoryRepository {
 
     private static final String MOVEMENT_SELECT = """
         SELECT m.id,COALESCE(m.occurred_at,sr.received_at,m.created_at) AS created_at,m.kind,m.quantity_delta,m.quantity_after,m.unit_cost,m.reason,
-               COALESCE(e.full_name,u.username,'Quản lý cơ sở') AS actor,
+                COALESCE(e.full_name,u.username,'Quản lý cơ sở') AS actor,
+                sr.supplier_name,rl.expiry_date,
                CASE WHEN m.kind='RECEIPT' THEN sr.code || ' · Nhập'
                     WHEN m.kind='SALE' THEN 'OD-' || upper(left(replace(ol.order_id::text,'-',''),6)) || ' · Bán'
                     WHEN m.kind='ADJUSTMENT' THEN 'DC-' || upper(left(replace(m.id::text,'-',''),6)) || ' · Kiểm kê'
@@ -256,7 +262,8 @@ public class InventoryRepository {
         return new StockMovementView(rs.getObject("id", UUID.class), createdAt == null ? null : createdAt.toInstant(),
             rs.getString("kind"), rs.getBigDecimal("quantity_delta"), rs.getBigDecimal("quantity_after"),
             rs.getBigDecimal("unit_cost"), rs.getString("source"), rs.getString("actor"), rs.getString("reason"),
-            rs.getString("evidence_name"), rs.getString("evidence_url"));
+            rs.getString("evidence_name"), rs.getString("evidence_url"),
+            rs.getString("supplier_name"), rs.getObject("expiry_date", LocalDate.class));
     }
 
     public record LockedItem(UUID id, UUID unitId, boolean active, BigDecimal quantity, long version) {}

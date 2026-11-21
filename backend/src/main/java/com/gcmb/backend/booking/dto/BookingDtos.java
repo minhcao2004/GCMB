@@ -23,7 +23,11 @@ public final class BookingDtos {
                               BigDecimal price, BigDecimal depositRequired, Instant validFrom, Instant validTo,
                               int includedFnbQuantity, int includedFoodQuantity) {}
     public record ComboGiftItem(UUID menuItemId, int quantity) {}
-    public record CheckInRequest(List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {}
+    public record CheckInRequest(UUID roomId, List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {
+        public CheckInRequest(List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {
+            this(null, drinkItems, foodItems);
+        }
+    }
     public record ComboGiftRequirements(int drinkQuantity, int foodQuantity) {}
     // Phòng còn phù hợp với khoảng giờ và sức chứa yêu cầu.
     public record AvailableRoom(UUID id, String code, String name, int capacity, String operatingStatus) {}
@@ -72,10 +76,18 @@ public final class BookingDtos {
                             Instant stoppedAt, Integer billedMinutes, BigDecimal hourlyPrice, BigDecimal amount) {}
 
     // Dữ liệu tạo booking; khoản cọc chỉ ghi khi lễ tân xác nhận đã thu.
-    public record CreateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd,
+    public record CreateBookingRequest(UUID roomId, UUID roomTypeId, Instant plannedStart, Instant plannedEnd,
                                        String pricingMode, UUID comboId, String contactName,
                                        String contactPhone, String channel, String note, Integer guestCount,
-                                       BigDecimal depositAmount, String paymentMethod, String paymentReference) {}
+                                        BigDecimal depositAmount, String paymentMethod, String paymentReference) {
+        public CreateBookingRequest(UUID roomId, Instant plannedStart, Instant plannedEnd,
+                                    String pricingMode, UUID comboId, String contactName, String contactPhone,
+                                    String channel, String note, Integer guestCount, BigDecimal depositAmount,
+                                    String paymentMethod, String paymentReference) {
+            this(roomId, null, plannedStart, plannedEnd, pricingMode, comboId, contactName, contactPhone,
+                channel, note, guestCount, depositAmount, paymentMethod, paymentReference);
+        }
+    }
     public record WalkInRequest(UUID roomId, String pricingMode, UUID comboId, Integer durationMinutes,
                                 String contactName, String contactPhone, String note, Integer guestCount,
                                 List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {}
@@ -84,8 +96,6 @@ public final class BookingDtos {
                                        String contactName, String contactPhone, String note) {}
     // Lý do hủy và thông tin người nhận nếu cần hoàn cọc.
     public record CancelBookingRequest(String reason, String beneficiaryName, String bankAccount, String bankName) {}
-    // Lý do đánh dấu khách không đến nhận phòng.
-    public record NoShowRequest(String reason) {}
 
     // Dữ liệu tóm tắt cho danh sách, gồm số đã thu và số dư cọc.
     public record BookingSummary(UUID id, String code, String contactName, String contactPhone,
@@ -116,7 +126,4 @@ public final class BookingDtos {
     // Kết quả hủy và ID yêu cầu hoàn cọc nếu được tạo.
     public record CancellationResult(BookingDetail booking, String depositOutcome,
                                      BigDecimal depositAmount, Instant cancelledAt, UUID refundRequestId) {}
-    // Kết quả no-show, cọc bị giữ và phòng được giải phóng.
-    public record NoShowResult(BookingDetail booking, String depositOutcome,
-                               BigDecimal depositAmount, Instant markedAt, UUID releasedRoomId) {}
 }

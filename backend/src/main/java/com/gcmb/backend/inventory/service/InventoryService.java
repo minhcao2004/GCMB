@@ -19,6 +19,8 @@ import com.gcmb.backend.inventory.repository.InventoryRepository.LockedItem;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -77,7 +79,7 @@ public class InventoryService {
         if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
         // Mã mặt hàng được cấp tự động trong phạm vi từng cơ sở.
         InventoryItemCommand command = validate(new InventoryItemCommand(repository.nextInventorySku(branchId),
-            input.name(), input.category(), input.unitId(), input.trackingMode(), input.minimumQuantity(), input.active()));
+            input.name(), input.category(), input.unitId(), input.trackingMode(), input.minimumQuantity(), input.active()), branchId);
         try {
             UUID id = repository.create(branchId, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity());
@@ -92,7 +94,7 @@ public class InventoryService {
         UUID branchId = writableBranch(actor);
         LockedItem existing = repository.lockItem(branchId, id);
         if (existing == null) throw notFound();
-        InventoryItemCommand command = validate(input);
+        InventoryItemCommand command = validate(input, branchId);
         if (existing.active() && !Boolean.TRUE.equals(command.active()) && repository.hasActiveMenuLink(id)) {
             throw conflict("Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi ngừng sử dụng.");
         }
@@ -243,17 +245,24 @@ public class InventoryService {
             if (item == null || !item.active()) throw conflict("Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.");
             BigDecimal received = quantity(line.quantity(), "Số lượng nhận", false);
             BigDecimal unitCost = money(line.unitCost(), "Đơn giá");
-            lines.add(new ReceiptLineCommand(line.inventoryItemId(), received, unitCost));
+            LocalDate expiryDate = line.expiryDate();
+            if (expiryDate == null) throw bad("Vui lòng bổ sung hạn sử dụng.");
+            if (expiryDate.isBefore(input.receivedAt().atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate())) {
+                throw bad("Hạn sử dụng không được trước ngày nhận hàng.");
+            }
+            lines.add(new ReceiptLineCommand(line.inventoryItemId(), received, unitCost, expiryDate));
         }
         return new StockReceiptCommand(input.receivedAt(), supplier, invoice, lines);
     }
 
-    private InventoryItemCommand validate(InventoryItemCommand input) {
+    private InventoryItemCommand validate(InventoryItemCommand input, UUID branchId) {
         if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
         String sku = required(input.sku(), "Mã mặt hàng", 60).toUpperCase(Locale.ROOT);
         if (!sku.matches("[A-Z0-9_-]+")) throw bad("Mã mặt hàng chỉ dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới.");
         String name = required(input.name(), "Tên mặt hàng", 200);
-        String category = required(input.category(), "Nhóm hàng", 100);
+        String requestedCategory = required(input.category(), "Nhóm hàng", 100);
+        String category = repository.categories(branchId).stream().filter(option -> option.equalsIgnoreCase(requestedCategory))
+            .findFirst().orElseThrow(() -> bad("Vui lòng chọn nhóm hàng trong danh sách."));
         if (input.unitId() == null || repository.units().stream().noneMatch(unit -> unit.id().equals(input.unitId()))) {
             throw bad("Vui lòng chọn đơn vị tính hợp lệ.");
         }

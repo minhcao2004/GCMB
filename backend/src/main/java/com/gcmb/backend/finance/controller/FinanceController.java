@@ -6,6 +6,7 @@ import com.gcmb.backend.finance.service.FinanceService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -97,7 +98,7 @@ public class FinanceController {
     @PostMapping("/branch-management/finance/requests")
     public Map<String,Object> createRequest(@AuthenticationPrincipal Identity who,@RequestBody ExpenseRequest body) {
         return finance.createRequest(who,body.kind(),body.categoryId(),body.amount(),body.expenseOn(),body.description(),
-            body.beneficiaryName(),body.bankAccount(),body.bankName());
+            body.beneficiaryName(),body.bankAccount(),body.bankName(),body.receiptIds());
     }
     @PostMapping(value="/branch-management/finance/requests/{id}/attachments",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> requestAttachment(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
@@ -121,7 +122,7 @@ public class FinanceController {
     public record Review(boolean approve,String note) {}
     public record FundTransfer(BigDecimal amount,LocalDate sentOn,String reference) {}
     public record ExpenseRequest(String kind,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
-            String description,String beneficiaryName,String bankAccount,String bankName) {}
+            String description,String beneficiaryName,String bankAccount,String bankName,List<UUID> receiptIds) {}
     public record DirectExpenseRequest(UUID idempotencyKey,UUID branchId,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
             String beneficiaryName,String bankAccount,String bankName,String description,String reference,
             Integer allocationMonths,LocalDate allocationStart) {}
