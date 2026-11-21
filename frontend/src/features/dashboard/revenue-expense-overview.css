@@ -156,6 +156,13 @@
 .rx-alert-badge { background: var(--rx-bad-soft); color: var(--rx-bad); }
 .rx-budget-badge { background: var(--gcmb-color-warning-soft, #fff5e5); color: color-mix(in srgb, var(--gcmb-color-warning, #d18a17) 65%, var(--gcmb-color-ink, #1a1a2e)); }
 .rx-chart--branch { height: 282px; }
+.rx-ranking-scroll { width: 100%; overflow-x: auto; }
+.rx-chart--ranking { height: 390px; }
+.rx--compact { margin: 20px 0 24px; }
+.rx--compact .rx-head--compact { align-items: center; margin: 4px 0 12px; }
+.rx--compact .rx-grid { margin-bottom: 14px; }
+.rx--compact .rx-ranking { margin-top: 0; }
+.rx--compact .rx-card { border-radius: 15px; box-shadow: 0 8px 28px rgb(35 48 78 / 3.5%); }
 .rx-table-wrap { width: 100%; overflow: auto; }
 .rx-table-wrap table { width: 100%; border-collapse: collapse; min-width: 680px; }
 .rx-table-wrap caption { padding: 0 0 8px; color: var(--rx-muted); text-align: left; }
@@ -182,5 +189,6 @@
   .rx-donut-wrap { grid-template-columns: 1fr; }
   .rx-donut { height: 210px; }
   .rx-chart--main { height: 260px; }
+  .rx-chart--ranking { height: 350px; }
   .rx-skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

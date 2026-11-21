@@ -112,16 +112,8 @@ function budgetValue(budgets, categoryKey, branchIds) {
   return matches.length ? matches.reduce((sum, item) => sum + number(item.amount), 0) : null;
 }
 
-function sortRows(rows, sort) {
-  return [...rows].sort((a, b) => {
-    const left = a[sort.key] == null ? Number.NEGATIVE_INFINITY : number(a[sort.key]);
-    const right = b[sort.key] == null ? Number.NEGATIVE_INFINITY : number(b[sort.key]);
-    return (left - right) * (sort.direction === 'asc' ? 1 : -1);
-  });
-}
-
 /** budgets: [{ categoryKey, amount, branchId? }] or { [categoryKey]: amount }. */
-export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '' }) {
+export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '', compact = false, onReportData }) {
   const navigate = useNavigate();
   const [range, setRange] = useState(() => month ? monthRange(month) : initialRange());
   const [branchIds, setBranchIds] = useState(() => branchId ? [branchId] : []);
@@ -135,7 +127,6 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   const [rangeError, setRangeError] = useState('');
   const [revision, setRevision] = useState(0);
   const [exporting, setExporting] = useState('');
-  const [sort, setSort] = useState({ key: 'revenue', direction: 'desc' });
   const [monthFilter, setMonthFilter] = useState('');
   const selectedBranchIds = useMemo(() => branchId ? [branchId] : branchIds, [branchId, branchIds]);
 
@@ -163,11 +154,12 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
       if (!active) return;
       setData(result);
       setBranchOptions(result.branchOptions || []);
+      onReportData?.(result);
     }).catch((cause) => {
-      if (active) { setData(null); setError(requestError(cause)); }
+      if (active) { setData(null); onReportData?.(null); setError(requestError(cause)); }
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [range.from, range.to, selectedBranchIds, comparison, granularity, revision]);
+  }, [range.from, range.to, selectedBranchIds, comparison, granularity, revision, onReportData]);
 
   const params = useMemo(() => ({
     from: range.from, to: range.to, compare: comparison, granularity,
@@ -193,7 +185,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
     expense: selectedCategory ? number(row.expensesByCategory?.[selectedCategory]) : number(row.expenses),
     compareExpense: selectedCategory ? number(row.comparisonExpensesByCategory?.[selectedCategory]) : number(row.comparisonExpenses),
   })), [rows, selectedCategory]);
-  const branchRows = useMemo(() => sortRows(data?.branches || [], sort), [data?.branches, sort]);
+  const branchRows = useMemo(() => data?.branches || EMPTY_ROWS, [data?.branches]);
   const selectedMeta = categories.find((item) => item.categoryKey === selectedCategory);
 
   useEffect(() => {
@@ -226,10 +218,6 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   function chooseBranches(event) {
     const selected = Array.from(event.target.selectedOptions, (option) => option.value);
     setBranchIds(selected.includes(ALL_BRANCHES) || selected.length === 0 ? [] : selected);
-  }
-
-  function toggleSort(key) {
-    setSort((current) => ({ key, direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc' }));
   }
 
   function drillDown(category) {
@@ -268,8 +256,8 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
     { id: 'prev', label: 'Kỳ trước' }, { id: 'yoy', label: 'Cùng kỳ năm trước' },
   ];
 
-  return <section className="rx" aria-label="Tổng quan thu nhập và chi phí" aria-busy={loading}>
-    <header className="rx-head">
+  return <section className={`rx${compact ? ' rx--compact' : ''}`} aria-label="Phân tích chi phí vận hành" aria-busy={loading}>
+    {compact ? <header className="rx-head rx-head--compact"><div><h2 className="rx-title">Phân tích chi phí vận hành</h2></div><div className="rx-export-actions" aria-label="Xuất báo cáo"><button type="button" disabled={loading || Boolean(exporting)} onClick={() => exportFile('csv')}>{exporting === 'csv' ? 'Đang xuất…' : 'Xuất CSV'}</button><button type="button" disabled={loading || Boolean(exporting)} onClick={() => exportFile('xlsx')}>{exporting === 'xlsx' ? 'Đang xuất…' : 'Xuất XLSX'}</button></div></header> : <header className="rx-head">
       <div><h2 className="rx-title">Thu nhập và chi phí</h2>
         <p className="rx-sub">Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu. Chi phí vận hành chỉ tính khoản đã thanh toán, không tính chuyển quỹ nội bộ. Chi đầu tư được trình bày riêng.</p>
       </div>
@@ -277,9 +265,9 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
         <button type="button" disabled={loading || Boolean(exporting)} onClick={() => exportFile('csv')}>{exporting === 'csv' ? 'Đang xuất…' : 'Xuất CSV'}</button>
         <button type="button" disabled={loading || Boolean(exporting)} onClick={() => exportFile('xlsx')}>{exporting === 'xlsx' ? 'Đang xuất…' : 'Xuất XLSX'}</button>
       </div>
-    </header>
+    </header>}
 
-    <div className="rx-filters">
+    {!compact && <div className="rx-filters">
       <div className="rx-filter-row">
         <Segmented label="Khoảng thời gian" options={rangePresets} value={rangePresets.some((item) => item.id === monthFilter) ? monthFilter : ''} onChange={choosePreset} />
         <label className="rx-filter">Kỳ tài chính<input type="month" value={monthFilter} max={vietnamToday().slice(0, 7)} onChange={(event) => applyMonth(event.target.value)} aria-label="Chọn kỳ tài chính theo tháng" /></label>
@@ -294,12 +282,12 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
         <Segmented label="Gom nhóm biểu đồ" options={groupOptions} value={granularity} onChange={setGranularity} />
         {rangeError && <p className="rx-range-error" role="alert">{rangeError}</p>}
       </div>
-    </div>
+    </div>}
 
     {error && <div className="rx-error" role="alert"><span>{error}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>Thử lại</button></div>}
 
     {loading ? <div className="rx-skeleton" role="status" aria-label="Đang tải báo cáo"><i /><i /><i /><i /></div> : data && <>
-      <div className="rx-kpis">
+      {!compact && <div className="rx-kpis">
         <Kpi label="Thu nhập vận hành" value={money(totals.revenue)} current={totals.revenue} previous={previous.revenue}
           footnote={`Hóa đơn hoàn tất ${money(totals.billRevenue)} · Cọc bị tịch thu ${money(totals.forfeitedDeposits)}`} tone={metricTone(totals.revenue, previous.revenue)} />
         <Kpi label="Chi phí vận hành" value={money(totals.expenses)} current={totals.expenses} previous={previous.expenses} invert
@@ -308,12 +296,12 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
           footnote="Thu nhập vận hành − chi phí vận hành đã thanh toán." tone={metricTone(totals.profit, previous.profit)} />
         <Kpi label="Biên lợi nhuận vận hành" value={percent(totals.margin)} current={totals.margin} previous={previous.margin} points
           footnote="Lợi nhuận ÷ thu nhập vận hành." tone={metricTone(totals.margin, previous.margin)} />
-      </div>
-      <div className="rx-capex"><div><strong>Chi đầu tư</strong><span>Mua sắm, sửa chữa lớn · trình bày riêng, không trừ vào lợi nhuận vận hành.</span></div><strong>{money(totals.investment)}</strong></div>
+      </div>}
+      {!compact && <div className="rx-capex"><div><strong>Chi đầu tư</strong><span>Mua sắm, sửa chữa lớn · trình bày riêng, không trừ vào lợi nhuận vận hành.</span></div><strong>{money(totals.investment)}</strong></div>}
 
       {!data.hasData && <div className="rx-empty" role="status">Không có giao dịch thu hoặc chi trong khoảng ngày và phạm vi đã chọn.</div>}
       {data.hasData && <>
-        <article className="rx-card">
+        {!compact && <article className="rx-card">
           <div className="rx-card__head"><div><h3 className="rx-card__title">Thu nhập vận hành và chi phí theo thời gian</h3>
             <p className="rx-card__hint">{range.from.split('-').reverse().join('/')} – {range.to.split('-').reverse().join('/')} · So sánh với {data.comparisonFrom.split('-').reverse().join('/')} – {data.comparisonTo.split('-').reverse().join('/')}{selectedMeta ? ` · Chi phí: ${selectedMeta.categoryName}` : ' · Chi phí vận hành'}</p>
           </div></div>
@@ -328,7 +316,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
             <Line type="monotone" dataKey="comparisonRevenue" name="Thu nhập kỳ so sánh" stroke="var(--rx-revenue-compare)" strokeDasharray="6 4" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="compareExpense" name="Chi phí kỳ so sánh" stroke="var(--rx-expense-compare)" strokeDasharray="4 4" strokeWidth={2} dot={false} />
           </ComposedChart></ResponsiveContainer></div>
-        </article>
+        </article>}
 
         <div className="rx-grid">
           <article className="rx-card">
@@ -375,12 +363,16 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
         </div>
 
         <article className="rx-card rx-ranking">
-          <div className="rx-card__head"><div><h3 className="rx-card__title">Xếp hạng cơ sở</h3><p className="rx-card__hint">Bấm tiêu đề cột để sắp xếp tăng hoặc giảm dần.</p></div></div>
-          <div className="rx-table-wrap"><table><caption>Thu nhập, chi phí và biên lợi nhuận theo cơ sở</caption><thead><tr>
-            {[['name','Cơ sở'],['revenue','Thu nhập vận hành'],['expenses','Chi phí vận hành'],['profit','Lợi nhuận vận hành'],['margin','Biên lợi nhuận']].map(([key,label]) => <th scope="col" key={key}><button type="button" onClick={() => key !== 'name' && toggleSort(key)} aria-label={`Sắp xếp theo ${label}`}>{label}{sort.key === key ? (sort.direction === 'asc' ? ' ▲' : ' ▼') : ''}</button></th>)}
-          </tr></thead><tbody>{branchRows.length ? branchRows.map((branch) => <tr key={branch.id}>
-            <th scope="row">{branch.name}<small>{branch.code}</small></th><td>{money(branch.revenue)}</td><td>{money(branch.expenses)}</td><td>{money(branch.profit)}</td><td>{percent(branch.margin)}</td>
-          </tr>) : <tr><td colSpan="5">Không có cơ sở trong phạm vi đã chọn.</td></tr>}</tbody></table></div>
+          <div className="rx-card__head"><div><h3 className="rx-card__title">Xếp hạng cơ sở</h3><p className="rx-card__hint">So sánh thu nhập, chi phí và lợi nhuận vận hành theo cơ sở.</p></div></div>
+          {branchRows.length ? <div className="rx-ranking-scroll"><div className="rx-chart rx-chart--ranking" style={{ minWidth: `${Math.max(820, branchRows.length * 74)}px` }}><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((a, b) => number(b.revenue) - number(a.revenue))} margin={{ top: 8, right: 16, left: 8, bottom: 58 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rx-border)" />
+            <XAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={76} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={compactMoney} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} width={58} />
+            <Tooltip content={<ChartTooltip />} /><Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="revenue" name="Thu nhập vận hành" fill="var(--rx-revenue)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+            <Bar dataKey="expenses" name="Chi phí vận hành" fill="var(--rx-expense)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+            <Bar dataKey="profit" name="Lợi nhuận vận hành" fill="var(--rx-revenue-compare)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+          </BarChart></ResponsiveContainer></div></div> : <div className="rx-empty">Không có cơ sở trong phạm vi đã chọn.</div>}
         </article>
       </>}
     </>}

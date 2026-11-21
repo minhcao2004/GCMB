@@ -5,13 +5,13 @@ import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
 import BranchFilterSelect from './BranchFilterSelect';
 import './dashboard.css';
-import MonthlyPerformanceSummary from './MonthlyPerformanceSummary';
 import RevenueExpenseOverview from './RevenueExpenseOverview';
+import ImportedSourceReport from './ImportedSourceReport';
+import './accountantDashboard.css';
 
 const currentVnMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
 const monthNow = currentVnMonth();
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)} ₫`;
-const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}%`;
 const formatMonth = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
 const formatDate = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
 const label = { report: 'Tổng quan', periods: 'Chốt kỳ', transactions: 'Giao dịch', export: 'Xuất dữ liệu' };
@@ -32,6 +32,12 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [branchOptions, setBranchOptions] = useState([]);
   const [branchId, setBranchId] = useState('');
   const [rows, setRows] = useState([]);
+  const [sourceTransactions, setSourceTransactions] = useState([]);
+  const [operatingReport, setOperatingReport] = useState(null);
+  const [sepayExceptions, setSepayExceptions] = useState([]);
+  const [exceptionFilter, setExceptionFilter] = useState('UNRESOLVED');
+  const [resolutionTarget, setResolutionTarget] = useState(null);
+  const [resolutionNote, setResolutionNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,7 +51,6 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [evidence, setEvidence] = useState(null);
   const [transactionKind, setTransactionKind] = useState('');
   const [transactionQuery, setTransactionQuery] = useState('');
-  const [loadedAt, setLoadedAt] = useState(null);
   const [periodInfo, setPeriodInfo] = useState(null);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [periodError, setPeriodError] = useState(false);
@@ -92,7 +97,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
 
   useEffect(() => {
     let live = true;
-    setError(''); setData(null); setDataTab(null); setRows([]); setLoadedAt(null); setLoading(true);
+    setError(''); setData(null); setDataTab(null); setRows([]); setLoading(true);
     const path = tab === 'report' ? '/accounting/reports/monthly'
       : tab === 'periods' ? '/accounting/financial-periods'
         : tab === 'transactions' ? '/accounting/transactions' : null;
@@ -109,12 +114,29 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         : result;
       if (tab === 'periods' || tab === 'transactions') setRows(result);
       else { setData(report); setDataTab(tab); }
-      setLoadedAt(new Date());
       if (tab === 'report' && !branchId) setBranchOptions(report.results);
     })
       .catch((e) => { if (live) setError(errorText(e)); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [tab, month, branchId, revision, transactionKind, transactionQuery]);
+
+  useEffect(() => {
+    if (tab !== 'report') { setSourceTransactions([]); return undefined; }
+    let live = true;
+    api.get('/accounting/transactions', { params: { month, ...(branchId ? { branchId } : {}) } })
+      .then(({ data: result }) => { if (live) setSourceTransactions(result || []); })
+      .catch(() => { if (live) setSourceTransactions([]); });
+    return () => { live = false; };
+  }, [tab, month, branchId, revision]);
+
+  useEffect(() => {
+    if (tab !== 'transactions' || reportsOnly) { setSepayExceptions([]); return undefined; }
+    let live = true;
+    api.get('/accounting/dashboard-details', { params: { month, ...(branchId ? { branchId } : {}) } })
+      .then(({ data: result }) => { if (live) setSepayExceptions(result.sepayExceptions || []); })
+      .catch(() => { if (live) setSepayExceptions([]); });
+    return () => { live = false; };
+  }, [tab, month, branchId, reportsOnly]);
 
   useEffect(() => {
     if (tab !== 'export') { setRevenueSummary(null); return undefined; }
@@ -182,6 +204,19 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     finally { setBusy(false); }
   }
 
+  async function resolveSePayException() {
+    if (!resolutionTarget || !resolutionNote.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const { data: csrf } = await api.get('/auth/csrf');
+      const { data: resolved } = await api.post(`/accounting/sepay-exceptions/${resolutionTarget.id}/resolve`,
+        { resolutionNote }, { headers: { [csrf.headerName]: csrf.token } });
+      setSepayExceptions((current) => current.map((item) => item.id === resolved.id ? { ...item, ...resolved } : item));
+      setResolutionTarget(null); setResolutionNote('');
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+
   async function downloadEvidence(file) {
     setBusy(true); setError('');
     try {
@@ -213,8 +248,8 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const content = <section className="performance-dashboard accountant-finance" aria-labelledby="finance-title">
     <header className="finance-heading">
       <div><h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
-      {<div className="finance-filters">
-        <label className="finance-month">Kỳ báo cáo<input type="month" value={month} max={currentVnMonth()} onChange={(e) => e.target.value && setMonth(e.target.value)} /></label>
+      {<div className={`finance-filters${tab === 'report' ? ' finance-filters--report' : ''}`}>
+        <label className="finance-month">Kỳ báo cáo<input type="month" value={month} max={currentVnMonth()} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label>
       {tab === 'report' && <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} value={branchId} onChange={setBranchId} /></div>}
       </div>}
     </header>
@@ -237,23 +272,8 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         </div>
         <button type="button" onClick={() => selectTab('periods')}>Xem kỳ tài chính</button>
       </section>}
-      <div className="finance-section-heading">
-        <div><h2>Kết quả tháng {formatMonth(month)}</h2><p>{branchId ? 'Cơ sở đang chọn' : `Toàn bộ ${data.results.length} cơ sở`} · Đơn vị: đồng (VND)</p></div>
-        <div className="finance-freshness"><span>{loadedAt ? `Tải trên màn hình lúc ${loadedAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}` : ''}</span><Link to={reportsOnly ? { pathname: '/quan-ly-he-thong', search: `?${new URLSearchParams({ screen: 'Báo cáo chi phí' })}` } : '/ke-toan/bao-cao-chi-phi'}>Báo cáo chi phí</Link><button type="button" onClick={() => setRevision((value) => value + 1)}>Tải lại</button></div>
-      </div>
-      {/* BR-103/104/107/108/211: thu nhập vận hành gồm bill hoàn tất và cọc tịch thu; CAPEX tách riêng. */}
-      <dl className="finance-metrics">
-        <div><dt>Doanh thu hóa đơn hoàn tất</dt><dd>{money(data.totals.billRevenue)}</dd><small>Giá trị hóa đơn sau giảm trừ</small></div>
-        <div><dt>Cọc bị tịch thu</dt><dd>{money(data.totals.forfeitedDeposits)}</dd><small>Ghi nhận theo ngày phát sinh</small></div>
-        <div><dt>Thu nhập vận hành</dt><dd>{money(data.totals.revenue)}</dd><small>Hóa đơn hoàn tất + cọc bị tịch thu</small></div>
-        <div><dt>Chi phí vận hành đã thanh toán</dt><dd>{money(data.totals.expenses)}</dd><small>Gồm lương và ứng lương; không gồm chi đầu tư</small></div>
-        <div><dt>Lợi nhuận vận hành</dt><dd className={Number(data.totals.profit) < 0 ? 'finance-negative' : ''}>{money(data.totals.profit)}</dd><small>Thu nhập vận hành − chi phí vận hành đã thanh toán</small></div>
-        <div><dt>Biên lợi nhuận vận hành</dt><dd>{percent(data.totals.margin)}</dd><small>Lợi nhuận vận hành ÷ Thu nhập vận hành</small></div>
-        <div><dt>Dòng tiền thuần</dt><dd className={Number(data.totals.netCashFlow) < 0 ? 'finance-negative' : ''}>{money(data.totals.netCashFlow)}</dd><small>Tiền vào trừ tiền ra theo sổ; không phải số dư quỹ</small></div>
-      </dl>
-      <MonthlyPerformanceSummary report={data} month={month} branchId={branchId} />
-       <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} />
-      <DataTable caption={`Kết quả của ${data.results.length} cơ sở trong tháng ${formatMonth(month)}`} columns={['Cơ sở', 'Hóa đơn hoàn tất', 'Doanh thu hóa đơn hoàn tất', 'Cọc bị tịch thu', 'Thu nhập vận hành', 'Chi phí vận hành', 'Trong đó · lương và ứng lương', 'Chi đầu tư', 'Lợi nhuận vận hành', 'Biên lợi nhuận', 'Dòng tiền thuần']} numericColumns={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]} rows={data.results} values={(r) => [r.name, r.billCount, money(r.billRevenue), money(r.forfeitedDeposits), money(r.revenue), money(r.expenses), money(r.salary), money(r.investment), money(r.profit), percent(r.margin), money(r.netCashFlow)]} />
+      <ImportedSourceReport month={month} branchId={branchId} branchOptions={branchOptions} onMonthChange={setMonth} onBranchChange={setBranchId} reportTotals={data.totals} financialReport={operatingReport} operationalTransactions={sourceTransactions} />
+      <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} compact onReportData={setOperatingReport} />
     </>}
     {!reportsOnly && tab === 'report' && <p className="finance-shortcuts"><span>Nghiệp vụ liên quan</span><Link to="/ke-toan/hoan-coc">Yêu cầu hoàn cọc</Link><Link to="/ke-toan/hoa-don-thue">Hóa đơn thuế</Link></p>}
     {!reportsOnly && tab === 'periods' && !loading && !error && <>
@@ -271,6 +291,11 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     </>}
     {!reportsOnly && closingMonth && <div className="finance-period-dialog-backdrop" role="presentation"><section className="finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="closing-period-title"><h2 id="closing-period-title">Xác nhận khóa kỳ {formatMonth(closingMonth)}</h2><p>Thao tác này khóa kỳ vĩnh viễn. Các giao dịch ngày thuộc kỳ sẽ không thể tạo, sửa hoặc xóa.</p>{periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning">{EARLY_CLOSE_WARNING}</p>}<label>Ghi chú khóa kỳ<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} maxLength={1000} /></label><div className="finance-period-dialog-actions"><button type="button" disabled={busy} onClick={() => setClosingMonth(null)}>Hủy</button><button className="finance-period-dialog-primary" type="button" disabled={busy} onClick={() => closePeriod(closingMonth)}>{busy ? 'Đang khóa…' : 'Xác nhận khóa kỳ'}</button></div></section></div>}
     {!reportsOnly && tab === 'transactions' && !loading && !error && <>
+      <section className="accountant-dash-panel accountant-table-panel finance-sepay-panel" aria-labelledby="finance-sepay-title">
+        <div className="accountant-panel-heading"><div><h2 id="finance-sepay-title">Giao dịch SePay ngoại lệ</h2><p>Kiểm tra và ghi nhận kết quả xử lý giao dịch ngân hàng chưa khớp.</p></div><label>Trạng thái<select value={exceptionFilter} onChange={(event) => setExceptionFilter(event.target.value)}><option value="UNRESOLVED">Chưa xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="ALL">Tất cả</option></select></label></div>
+        {sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Lý do ngoại lệ', 'Nội dung chuyển khoản', 'Người xử lý', 'Thời điểm xử lý', 'Ghi chú xử lý', 'Thao tác'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).map((row) => <tr key={row.id}><td>{row.externalId}</td><td>{row.branchName}</td><td>{formatDate(String(row.occurredAt || '').slice(0, 10))}</td><td>{money(row.amount)}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? 'Chưa xử lý' : 'Đã xử lý'}</td><td>{row.exceptionReason || '—'}</td><td>{row.reason || '—'}</td><td>{row.resolvedBy || '—'}</td><td>{row.resolvedAt ? new Date(row.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—'}</td><td>{row.resolutionNote || '—'}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? <button type="button" onClick={() => { setResolutionTarget(row); setResolutionNote(''); }}>Đánh dấu đã xử lý</button> : 'Đã xử lý'}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch ngoại lệ theo bộ lọc.</p>}
+      </section>
+      {resolutionTarget && <div className="accountant-exception-backdrop" role="presentation"><section className="accountant-exception-dialog" role="dialog" aria-modal="true" aria-labelledby="resolve-sepay-title"><h2 id="resolve-sepay-title">Đánh dấu ngoại lệ đã xử lý</h2><p>Giao dịch {resolutionTarget.externalId} · {money(resolutionTarget.amount)}. Thao tác chỉ ghi nhận trạng thái và ghi chú, không tạo bút toán tiền.</p><label>Ghi chú xử lý<textarea value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} maxLength={1000} required /></label><div><button type="button" disabled={busy} onClick={() => setResolutionTarget(null)}>Hủy</button><button type="button" disabled={busy || !resolutionNote.trim()} onClick={resolveSePayException}>{busy ? 'Đang lưu…' : 'Xác nhận đã xử lý'}</button></div></section></div>}
       <div className="finance-filters">
         <label className="finance-month">Cơ sở<select value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">Tất cả cơ sở</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
         <label className="finance-month">Loại giao dịch<select value={transactionKind} onChange={(e) => setTransactionKind(e.target.value)}><option value="">Tất cả</option>{Object.entries(transactionKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
