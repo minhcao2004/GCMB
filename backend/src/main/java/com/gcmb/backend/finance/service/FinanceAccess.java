@@ -14,12 +14,12 @@ import tools.jackson.databind.ObjectMapper;
 public class FinanceAccess {
 
   private final JdbcTemplate db;
-  private final AccountRepository accounts;
+  private final AccountRepository accountRepository;
   private final ObjectMapper json;
 
-  public FinanceAccess(JdbcTemplate db, AccountRepository accounts, ObjectMapper json) {
+  public FinanceAccess(JdbcTemplate db, AccountRepository accountRepository, ObjectMapper json) {
     this.db = db;
-    this.accounts = accounts;
+    this.accountRepository = accountRepository;
     this.json = json;
   }
 
@@ -45,7 +45,7 @@ public class FinanceAccess {
   public UUID branch(Identity actor, boolean write) {
     role(actor, "BRANCH_MANAGER");
     if (
-      actor.branchId() == null || !accounts.manages(actor.id(), actor.branchId(), false)
+      actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
     ) throw new AuthFailure(403, "form", "Bạn không có quyền xem đối với cơ sở này.");
     // HuyDV / BR-177: chỉ thao tác ghi cần giữ khóa cơ sở; FOR SHARE bị cấm trong transaction chỉ đọc.
     var branch = db.queryForMap(

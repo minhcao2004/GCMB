@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import inventoryApi from '../services/inventoryApi';
 import { newReceiptLine, RECEIVING_UNITS, receiptAmount, receiptQuantity, receivingUnitName } from '../utils/receiptQuantity';
 import './inventory.css';
@@ -609,7 +610,7 @@ export default function InventoryPage({ user }) {
                   <option value="CUSTOM">Khác…</option>
                 </select></label>
                 <label className="inv-field inv-line-quantity"><span>SL nhận *</span><input required disabled={!item || !line.receivingUnit || busy} type="text" inputMode={line.receivingUnit === 'BASE' ? 'decimal' : 'numeric'} autoComplete="off" maxLength="19" aria-describedby={`receipt-quantity-hint-${line.id}`} value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /><small id={`receipt-quantity-hint-${line.id}`}>{line.receivingUnit === 'BASE' ? 'Có thể nhập tối đa 3 chữ số thập phân.' : 'Nhập số nguyên theo đơn vị nhận đã chọn.'}</small></label>
-                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><input required disabled={!item || busy} type="text" inputMode="numeric" autoComplete="off" maxLength="18" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value.replace(/[^0-9]/g, ''))} /></label>
+                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><MoneyInput required disabled={!item || busy} autoComplete="off" maxDigits={18} value={line.unitCost} onValueChange={(unitCost) => updateReceiptLine(line.id, 'unitCost', unitCost)} /></label>
                 <label className="inv-field inv-line-expiry"><span>Hạn sử dụng *</span><input required disabled={!item || busy} type="date" min={receiptDraft?.receivedAt?.slice(0, 10)} value={line.expiryDate} onChange={(event) => updateReceiptLine(line.id, 'expiryDate', event.target.value)} /></label>
                 {line.receivingUnit === 'CUSTOM' && <label className="inv-field inv-line-custom-unit"><span>Tên đơn vị nhận *</span><input required disabled={busy} maxLength="30" value={line.customUnit} onChange={(event) => updateReceiptLine(line.id, 'customUnit', event.target.value)} placeholder="Ví dụ: Kiện, can…" /></label>}
                 {line.receivingUnit && line.receivingUnit !== 'BASE' && <label className="inv-field inv-line-conversion"><span>Quy cách *</span>

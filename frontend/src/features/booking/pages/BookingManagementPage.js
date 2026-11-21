@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import BankNameInput from '../../../shared/components/BankNameInput';
 import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { EmptyState } from '../../../shared/components/Feedback';
@@ -30,16 +31,14 @@ const accountingNavigation = [
     { label: 'Doanh thu & khoản thu', icon: 'report', target: '/ke-toan/bao-cao' },
     { label: 'Hóa đơn thuế', icon: 'tax', target: '/ke-toan/hoa-don-thue' },
   ] },
-  // BR-108: Cọc đang giữ không được trình bày như doanh thu hóa đơn.
-  { label: 'Hoàn tiền cọc', hint: 'Tiền cọc không phải doanh thu hóa đơn', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
+  { label: 'Hoàn tiền cọc', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
   { title: 'Chi phí & quỹ', short: 'Chi', items: [
     { label: 'Đề nghị chi', icon: 'plus', target: '/ke-toan/chi-phi?section=plus&tab=requests', countKey: 'expenses', countLabel: 'đề nghị chi chờ xử lý' },
     { label: 'Chi định kỳ', icon: 'calendar', target: '/ke-toan/chi-phi?section=plus&tab=recurring', countKey: 'recurring', countLabel: 'kỳ chi định kỳ cần xử lý' },
     { label: 'Cấp tiền két', icon: 'payments', target: '/ke-toan/chi-phi?section=plus&tab=drawer' },
     { label: 'Lịch sử chi & hoàn ứng', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=history' },
     { label: 'Hạng mục chi phí', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=categories' },
-    // BR-82: Tiền cấp quỹ từ quản lý cấp cao là luân chuyển nội bộ.
-    { label: 'Quỹ kế toán', hint: 'Tiền cấp quỹ là luân chuyển nội bộ', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
+    { label: 'Quỹ kế toán', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
     { label: 'Lương nhân viên', icon: 'booking', target: '/ke-toan/luong' },
   ] },
   { title: 'Báo cáo & đối soát', short: 'BC', items: [
@@ -73,15 +72,6 @@ const cancellationReasons = [
   'Khác',
 ];
 // BR-186, BR-187: gợi ý ngân hàng nhận hoàn và vẫn hỗ trợ ngân hàng ngoài danh sách.
-const vietnameseBanks = [
-  'Agribank', 'ABBank', 'ACB', 'Bac A Bank', 'BaoVietBank', 'BIDV', 'BVBank', 'Cake by VPBank',
-  'CBBank', 'Citibank', 'Co-opBank', 'Eximbank', 'GPBank', 'HDBank', 'Hong Leong Bank', 'HSBC',
-  'Indovina Bank', 'KBank', 'KienlongBank', 'LPBank', 'MB Bank', 'MSB', 'Nam A Bank', 'NCB',
-  'OCB', 'PGBank', 'Public Bank Vietnam', 'PVcomBank', 'Sacombank', 'Saigonbank', 'SeABank',
-  'SHB', 'Shinhan Bank', 'Standard Chartered', 'Techcombank', 'TPBank', 'VIB', 'Viet A Bank',
-  'VietBank', 'Vietcombank', 'VietinBank', 'VPBank', 'VRB', 'Woori Bank',
-];
-
 const iconPaths = {
   handover: <><path d="M3 7h14m-4-4 4 4-4 4M21 17H7m4-4-4 4 4 4"/></>,
   shifts: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 4h3m3 0h3m-9 4h3"/></>,
@@ -248,14 +238,14 @@ export function AppShell({
   }, [isAccountant]);
 
   if (isAccountant) {
-    const accountingLink = ({ label, hint, icon, target, countKey, countLabel }) => {
+    const accountingLink = ({ label, icon, target, countKey, countLabel }) => {
       const active = accountingLinkIsCurrent(target, location);
       const pendingCount = accountingPending[countKey] || 0;
-      const accessibleLabel = `${label}${hint ? `. ${hint}` : ''}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
+      const accessibleLabel = `${label}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
       return <button type="button" className="accounting-nav-link" key={target} aria-current={active ? 'page' : undefined}
         aria-label={accessibleLabel} title={accessibleLabel} onClick={() => navigate(target)}>
         <Icon name={icon} />
-        <span className="accounting-nav-link__copy"><span>{label}</span>{hint && <small>{hint}</small>}</span>
+        <span className="accounting-nav-link__copy"><span>{label}</span></span>
         {pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
       </button>;
     };
@@ -836,7 +826,8 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
         <div className="booking-cancel-account-grid">
           <label className="booking-form-field"><span>Chủ tài khoản *</span><input maxLength="200" value={beneficiaryName} onChange={(event) => setBeneficiaryName(event.target.value)} placeholder="Tên chủ tài khoản" /></label>
           <label className="booking-form-field"><span>Số tài khoản *</span><input maxLength="60" value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} inputMode="numeric" placeholder="Nhập số tài khoản" /></label>
-          <label className="booking-form-field"><span>Ngân hàng *</span><input list="vietnamese-bank-suggestions" maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Nhập tên ngân hàng" /><datalist id="vietnamese-bank-suggestions">{vietnameseBanks.map((name) => <option key={name} value={name} />)}</datalist></label>
+          {/* BR-186 / BR-187: lưu ngân hàng nhận hoàn, tối đa 200 ký tự. */}
+          <label className="booking-form-field"><span>Ngân hàng *</span><BankNameInput maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Chọn hoặc nhập tên ngân hàng" /></label>
         </div>
         <div className="booking-cancel-next-step"><strong>Tạo yêu cầu hoàn {formatVnd(depositAmount)} và chuyển Kế toán xử lý.</strong><p>Lễ tân không đánh dấu giao dịch là đã hoàn.</p></div>
       </>}

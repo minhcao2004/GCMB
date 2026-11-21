@@ -78,9 +78,11 @@ public class FinanceController {
     @PostMapping(value="/accounting/finance/requests/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> pay(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
             @RequestParam(required=false) String reference,@RequestPart("proof") MultipartFile proof,
+            @RequestParam String paymentMethod,@RequestParam(required=false) String bankAccount,
+            @RequestParam(required=false) String bankName,
             @RequestParam(required=false) Integer allocationMonths,
             @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate allocationStart) {
-        return finance.pay(who,id,reference,proof,allocationMonths,allocationStart);
+        return finance.pay(who,id,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart);
     }
 
     @PostMapping(value="/accounting/finance/requests/direct",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -89,7 +91,7 @@ public class FinanceController {
             @RequestPart(value="invoice",required=false) MultipartFile invoice) {
         return audit.record("CREATE_ACCOUNTANT_DIRECT_EXPENSE","FINANCE_EXPENSE_REQUEST",null,
             () -> finance.createDirectExpense(who,body.idempotencyKey(),body.branchId(),body.categoryId(),body.amount(),body.expenseOn(),
-                body.description(),body.beneficiaryName(),body.bankAccount(),body.bankName(),body.reference(),body.allocationMonths(),
+                body.description(),body.beneficiaryName(),body.bankAccount(),body.bankName(),body.paymentMethod(),body.reference(),body.allocationMonths(),
                 body.allocationStart(),proof,invoice),result -> (UUID)result.get("id"));
     }
 
@@ -98,7 +100,7 @@ public class FinanceController {
     @PostMapping("/branch-management/finance/requests")
     public Map<String,Object> createRequest(@AuthenticationPrincipal Identity who,@RequestBody ExpenseRequest body) {
         return finance.createRequest(who,body.kind(),body.categoryId(),body.amount(),body.expenseOn(),body.description(),
-            body.beneficiaryName(),body.bankAccount(),body.bankName(),body.receiptIds());
+            body.beneficiaryName(),body.bankAccount(),body.bankName(),body.paymentMethod(),body.receiptIds());
     }
     @PostMapping(value="/branch-management/finance/requests/{id}/attachments",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> requestAttachment(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
@@ -122,8 +124,8 @@ public class FinanceController {
     public record Review(boolean approve,String note) {}
     public record FundTransfer(BigDecimal amount,LocalDate sentOn,String reference) {}
     public record ExpenseRequest(String kind,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
-            String description,String beneficiaryName,String bankAccount,String bankName,List<UUID> receiptIds) {}
+            String description,String beneficiaryName,String bankAccount,String bankName,String paymentMethod,List<UUID> receiptIds) {}
     public record DirectExpenseRequest(UUID idempotencyKey,UUID branchId,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
-            String beneficiaryName,String bankAccount,String bankName,String description,String reference,
+            String beneficiaryName,String bankAccount,String bankName,String paymentMethod,String description,String reference,
             Integer allocationMonths,LocalDate allocationStart) {}
 }

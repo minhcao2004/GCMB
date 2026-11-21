@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import BankNameInput from '../../../shared/components/BankNameInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { financeApi, today } from '../services/financeApi';
 
 const blankDraft = () => ({
@@ -93,10 +95,10 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
       <label>Hạng mục đang dùng *<select required value={draft.categoryId} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}><option value="">Chọn hạng mục</option>{activeCategories.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
       <label>Người nhận *<input required maxLength="160" value={draft.beneficiaryName} onChange={(event) => setDraft({ ...draft, beneficiaryName: event.target.value })} /></label>
       <label>Số tài khoản *<input required maxLength="80" value={draft.bankAccount} onChange={(event) => setDraft({ ...draft, bankAccount: event.target.value })} /></label>
-      <label>Ngân hàng *<input required maxLength="120" value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>
+      <label>Ngân hàng *<BankNameInput required maxLength="120" value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>
       <label>Ngày đến hạn trong tháng *<input required type="number" min="1" max="31" step="1" value={draft.dueDay} onChange={(event) => setDraft({ ...draft, dueDay: event.target.value })} /><small>Ngày 29–31 tự chuyển về ngày cuối tháng nếu tháng ngắn hơn.</small></label>
-      <label>Số tiền cố định (VND)<input type="number" min="1" step="1" value={draft.monthlyAmount} onChange={(event) => setDraft({ ...draft, monthlyAmount: event.target.value })} placeholder="Để trống nếu thay đổi" /></label>
-      <label>Số tiền dự kiến (tùy chọn)<input type="number" min="1" step="1" value={draft.expectedAmount} onChange={(event) => setDraft({ ...draft, expectedAmount: event.target.value })} placeholder="Gợi ý khi thanh toán" /></label>
+      <label>Số tiền cố định (VND)<MoneyInput min="1" value={draft.monthlyAmount} onValueChange={(monthlyAmount) => setDraft({ ...draft, monthlyAmount })} placeholder="Để trống nếu thay đổi" /></label>
+      <label>Số tiền dự kiến (tùy chọn)<MoneyInput min="1" value={draft.expectedAmount} onValueChange={(expectedAmount) => setDraft({ ...draft, expectedAmount })} placeholder="Gợi ý khi thanh toán" /></label>
       <label>Ghi nhận chi phí vào *<select required value={draft.expenseBelongsTo} onChange={(event) => setDraft({ ...draft, expenseBelongsTo: event.target.value })}><option value="SAME_MONTH">Tháng đến hạn</option><option value="PREVIOUS_MONTH">Tháng trước tháng đến hạn</option></select></label>
       <label>Tháng bắt đầu *<input required type="month" value={draft.startMonth} onChange={(event) => setDraft({ ...draft, startMonth: event.target.value })} /></label>
       <label>Tháng kết thúc<input type="month" value={draft.endMonth} onChange={(event) => setDraft({ ...draft, endMonth: event.target.value })} /></label>

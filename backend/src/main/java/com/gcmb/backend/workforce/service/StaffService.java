@@ -25,11 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class StaffService {
 
     private final StaffRepository staff;
-    private final AccountRepository accounts;
+    private final AccountRepository accountRepository;
 
-    public StaffService(StaffRepository staff, AccountRepository accounts) {
+    public StaffService(StaffRepository staff, AccountRepository accountRepository) {
         this.staff = staff;
-        this.accounts = accounts;
+        this.accountRepository = accountRepository;
     }
 
     public static final Set<String> POSITIONS = Set.of(
@@ -49,9 +49,9 @@ public class StaffService {
         if (!staff.actorActive(actor.id(), actor.role())) throw denied();
         if ("HEAD_OFFICE_MANAGER".equals(actor.role())) return null;
         if (
-            actor.branchId() == null || !accounts.manages(actor.id(), actor.branchId(), false)
+            actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
         ) throw denied();
-        if (writing && !accounts.manages(actor.id(), actor.branchId(), true)) throw new AuthFailure(
+        if (writing && !accountRepository.manages(actor.id(), actor.branchId(), true)) throw new AuthFailure(
             403,
             "form",
             "Cơ sở " +
@@ -287,12 +287,12 @@ public class StaffService {
             throw new AuthFailure(400, "contactEmail", e.getMessage());
         }
         // UC-77/79: chặn ngay tại hồ sơ, không đợi đến bước cấp tài khoản (mở rộng BR-134/MSG35).
-        if (email != null && accounts.emailReserved(email, id, null)) throw new AuthFailure(
+        if (email != null && accountRepository.emailReserved(email, id, null)) throw new AuthFailure(
             409,
             "contactEmail",
             "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
         );
-        if (phone != null && accounts.staffPhoneTaken(phone, id, null)) throw new AuthFailure(
+        if (phone != null && accountRepository.staffPhoneTaken(phone, id, null)) throw new AuthFailure(
             409,
             "phone",
             "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."

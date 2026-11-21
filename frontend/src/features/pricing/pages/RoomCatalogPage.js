@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { catalogError, roomCatalogApi } from '../services/roomCatalogApi';
 import '../styles/room-catalog.css';
 const tabs = ['Hạng phòng', 'Giá theo thời gian', 'Combo'];
@@ -557,9 +558,10 @@ Hạng phòng
               </label>
               <label>
 Giá áp dụng / giờ
-<input required min="0" type="number" value={form.hourlyPrice} onChange={e => setForm({
+{/* BR-168: đơn giá giờ là số nguyên VND. */}
+<MoneyInput required min="0" value={form.hourlyPrice} onValueChange={hourlyPrice => setForm({
                   ...form,
-                  hourlyPrice: e.target.value
+                  hourlyPrice
                 })} />
               </label>
               <label>
@@ -669,9 +671,10 @@ Thời lượng (phút)
               </label>
               <label>
 Giá combo
-<input required min="0" type="number" value={form.price} onChange={e => setForm({
+{/* BR-168: giá combo là số nguyên VND. */}
+<MoneyInput required min="0" value={form.price} onValueChange={price => setForm({
                   ...form,
-                  price: e.target.value
+                  price
                 })} />
               </label>
               <label>

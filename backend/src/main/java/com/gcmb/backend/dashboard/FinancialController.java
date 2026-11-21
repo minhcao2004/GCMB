@@ -62,19 +62,19 @@ public class FinancialController {
     }
     private final JdbcTemplate db;
     private final MutationAudit mutationAudit;
-    private final EquipmentAssetFileStorageService files;
-    private final FinancialPeriodService periods;
+    private final EquipmentAssetFileStorageService fileStorage;
+    private final FinancialPeriodService financialPeriodService;
     private final MonthlyPerformanceService performance;
     private final AccountingWorkbookService accountingWorkbook;
     private final FinanceAccess financeAccess;
 
-    public FinancialController(JdbcTemplate db, MutationAudit mutationAudit, EquipmentAssetFileStorageService files,
-                               FinancialPeriodService periods, MonthlyPerformanceService performance,
+    public FinancialController(JdbcTemplate db, MutationAudit mutationAudit, EquipmentAssetFileStorageService fileStorage,
+                               FinancialPeriodService financialPeriodService, MonthlyPerformanceService performance,
                                AccountingWorkbookService accountingWorkbook, FinanceAccess financeAccess) {
         this.db = db;
         this.mutationAudit = mutationAudit;
-        this.files = files;
-        this.periods = periods;
+        this.fileStorage = fileStorage;
+        this.financialPeriodService = financialPeriodService;
         this.performance = performance;
         this.accountingWorkbook = accountingWorkbook;
         this.financeAccess = financeAccess;
@@ -291,24 +291,24 @@ public class FinancialController {
     @PostMapping("/sepay-exceptions/{id}/resolve")
     public Map<String, Object> resolveSePayException(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
                                                       @RequestBody(required = false) ResolveSePayExceptionCommand command) {
-        return periods.resolveSePayException(actor, id, command == null ? null : command.resolutionNote());
+        return financialPeriodService.resolveSePayException(actor, id, command == null ? null : command.resolutionNote());
     }
 
     @GetMapping("/financial-periods")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> periods(@AuthenticationPrincipal Identity actor) {
-        return periods.list(actor);
+        return financialPeriodService.list(actor);
     }
 
     @GetMapping("/financial-periods/{month}/readiness")
     public Map<String, Object> periodReadiness(@AuthenticationPrincipal Identity actor, @PathVariable String month) {
-        return periods.readiness(actor, month(month));
+        return financialPeriodService.readiness(actor, month(month));
     }
 
     @PostMapping("/financial-periods/{month}/close")
     public Map<String, Object> closePeriod(@AuthenticationPrincipal Identity actor, @PathVariable String month,
                                            @RequestBody(required = false) ClosePeriodCommand command) {
-        return periods.close(actor, month(month), command != null && command.confirmed(), command == null ? "" : command.note());
+        return financialPeriodService.close(actor, month(month), command != null && command.confirmed(), command == null ? "" : command.note());
     }
 
     @GetMapping("/transactions")
@@ -427,7 +427,7 @@ public class FinancialController {
                 db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
                     newId, entry.get("account_id"), entry.get("branch_id"), amount);
                 if (evidence != null && !evidence.isEmpty()) {
-                    stored[0] = files.store(evidence, "thu-chi");
+                    stored[0] = fileStorage.store(evidence, "thu-chi");
                     StoredFile file = stored[0];
                     db.update("""
                         INSERT INTO gcmb.finance_attachment(id,owner_type,owner_id,kind,object_key,original_name,mime_type,byte_size,sha256,created_by)
@@ -442,7 +442,7 @@ public class FinancialController {
                 FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id WHERE t.id=?
                 """, adjustment);
         } catch (RuntimeException failure) {
-            if (stored[0] != null) files.deleteQuietly(stored[0].objectKey());
+            if (stored[0] != null) fileStorage.deleteQuietly(stored[0].objectKey());
             throw failure;
         }
     }

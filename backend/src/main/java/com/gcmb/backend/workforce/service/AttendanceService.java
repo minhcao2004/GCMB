@@ -24,16 +24,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AttendanceService {
 
     private final AttendanceRepository repo;
-    private final ShiftRepository shifts;
+    private final ShiftRepository shiftRepository;
     private final ShiftService shiftService;
 
     public AttendanceService(
         AttendanceRepository repo,
-        ShiftRepository shifts,
+        ShiftRepository shiftRepository,
         ShiftService shiftService
     ) {
         this.repo = repo;
-        this.shifts = shifts;
+        this.shiftRepository = shiftRepository;
         this.shiftService = shiftService;
     }
 
@@ -52,7 +52,7 @@ public class AttendanceService {
         );
         result.put("rows", decorate(repo.rows(actor.branchId(), day, day.plusDays(1))));
         result.put("issues", repo.issues(actor.branchId(), day, day.plusDays(1)));
-        result.put("templates", shifts.templates());
+        result.put("templates", shiftRepository.templates());
         return result;
     }
 
@@ -71,7 +71,7 @@ public class AttendanceService {
             "Bạn không có quyền xem đối với công cá nhân."
         ); // MSG24
         var branch = shiftService.scope(actor, false, false);
-        UUID employee = shifts.linkedEmployee(actor.id());
+        UUID employee = shiftRepository.linkedEmployee(actor.id());
         if (employee == null) throw new AuthFailure(
             403,
             "form",

@@ -26,16 +26,16 @@ public class AccountService {
 
     private final AccountRepository repository;
     private final AuthCrypto crypto;
-    private final BranchAdministrationService branches;
+    private final BranchAdministrationService branchAdministrationService;
 
     public AccountService(
         AccountRepository repository,
         AuthCrypto crypto,
-        BranchAdministrationService branches
+        BranchAdministrationService branchAdministrationService
     ) {
         this.repository = repository;
         this.crypto = crypto;
-        this.branches = branches;
+        this.branchAdministrationService = branchAdministrationService;
     }
 
     @Transactional(readOnly = true)
@@ -193,7 +193,7 @@ public class AccountService {
                 role,
                 actor
             );
-            if ("BRANCH_MANAGER".equals(input.role())) branches.syncAccountManager(id, actor);
+            if ("BRANCH_MANAGER".equals(input.role())) branchAdministrationService.syncAccountManager(id, actor);
             return repository.find(id);
         } catch (DuplicateKeyException ex) {
             throw new AuthFailure(

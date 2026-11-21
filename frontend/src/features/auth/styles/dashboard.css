@@ -272,8 +272,7 @@
 }
 
 .booking-app--accountant .accounting-nav-group__short { display: none; }
-.booking-app--accountant .accounting-nav-link__copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.booking-app--accountant .accounting-nav-link__copy small { color: #687587; font-size: 10px; line-height: 1.35; }
+.booking-app--accountant .accounting-nav-link__copy { min-width: 0; display: flex; }
 
 .booking-app--accountant .accounting-nav-group__toggle:focus-visible,
 .booking-app--accountant .accounting-nav-group__items button:focus-visible {

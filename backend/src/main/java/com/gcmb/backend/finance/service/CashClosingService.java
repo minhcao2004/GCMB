@@ -24,20 +24,20 @@ public class CashClosingService {
   private final FinanceAccess access;
   private final ObjectMapper json;
   private final RefundEvidenceStorageService storage;
-  private final FinancialPeriodService periods;
+  private final FinancialPeriodService financialPeriodService;
 
   public CashClosingService(
     JdbcTemplate db,
     FinanceAccess access,
     ObjectMapper json,
     RefundEvidenceStorageService storage,
-    FinancialPeriodService periods
+    FinancialPeriodService financialPeriodService
   ) {
     this.db = db;
     this.access = access;
     this.json = json;
     this.storage = storage;
-    this.periods = periods;
+    this.financialPeriodService = financialPeriodService;
   }
 
   public record Submit(LocalDate date, BigDecimal actual, String explanation,

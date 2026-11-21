@@ -44,14 +44,14 @@ public class BookingService {
     private final BookingRepository repository;
     private final BookingPricingService pricing;
     private final ObjectMapper json;
-    private final FoodOrderService foodOrders;
-    private final FinancialPeriodService periods;
+    private final FoodOrderService foodOrderService;
+    private final FinancialPeriodService financialPeriodService;
 
     // Kết hợp truy vấn, tính giá và snapshot JSON trong các giao dịch booking.
     public BookingService(BookingRepository repository, BookingPricingService pricing, ObjectMapper json,
-                          FoodOrderService foodOrders, FinancialPeriodService periods) {
-        this.repository = repository; this.pricing = pricing; this.json = json; this.foodOrders = foodOrders;
-        this.periods = periods;
+                          FoodOrderService foodOrderService, FinancialPeriodService financialPeriodService) {
+        this.repository = repository; this.pricing = pricing; this.json = json; this.foodOrderService = foodOrderService;
+        this.financialPeriodService = financialPeriodService;
     }
 
     @Transactional(readOnly = true)
@@ -552,7 +552,7 @@ public class BookingService {
             paymentReference = nullable(request.paymentReference(), "paymentReference", 120);
             if (!"CASH".equals(paymentMethod) && !"BANK_TRANSFER".equals(paymentMethod) && paymentReference == null)
                 throw new BookingFailure(400, "paymentReference", "Nhập mã giao dịch / ghi chú khi thu cọc bằng phương thức này");
-            if (!"BANK_TRANSFER".equals(paymentMethod)) periods.requireOpen(
+            if (!"BANK_TRANSFER".equals(paymentMethod)) financialPeriodService.requireOpen(
                 java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận tiền cọc khi tạo booking");
         }
         String code = "BK-" + java.time.LocalDate.now(branch.timezone()).toString().replace("-", "") + "-" +
@@ -662,7 +662,7 @@ public class BookingService {
         List<BookingDtos.ComboGiftItem> food = request == null || request.foodItems() == null ? List.of() : request.foodItems();
         validateGiftChoices(drinks, giftRequirements.drinkQuantity(), "đồ uống");
         validateGiftChoices(food, giftRequirements.foodQuantity(), "đồ ăn");
-        foodOrders.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
+        foodOrderService.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
 
         // Giữ plannedStart làm giờ hẹn gốc; chỉ dời allocation và plannedEnd khi khách đến sớm.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
@@ -900,7 +900,7 @@ public class BookingService {
         if (allocation != null && !"RESERVED".equals(allocation.state()))
             throw new BookingFailure(409, "form", "Booking không còn lịch giữ phòng để hủy");
         if (request == null) throw new BookingFailure(400, "form", "Vui lòng nhập thông tin hủy booking");
-        foodOrders.returnComboGiftStock(identity,bookingId);
+        foodOrderService.returnComboGiftStock(identity,bookingId);
         String reason = required(request.reason(), "reason", "Lý do hủy", 1000);
         UUID depositId = repository.lockDeposit(bookingId);
         BigDecimal deposit = repository.depositBalance(bookingId);
@@ -919,7 +919,7 @@ public class BookingService {
         }
         // Trong mốc không hoàn, số dư cọc được đưa vào bút toán giữ cọc.
         if (deposit.signum() > 0 && !eligible) {
-            periods.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "tịch thu tiền cọc khi hủy booking");
+            financialPeriodService.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "tịch thu tiền cọc khi hủy booking");
             repository.forfeitDeposit(bookingId, actorId, "Hủy booking trong thời hạn không hoàn cọc", "FORFEIT-CANCEL-" + bookingId);
         }
         if (allocation != null) repository.releaseAllocation(allocation.id(), "Booking đã hủy");

@@ -6,6 +6,7 @@
  * Description: Xem, sửa và hủy chỉnh sửa thông tin của chính người đang đăng nhập.
  */
 import { useEffect, useRef, useState } from 'react';
+import BankNameInput from '../../../../shared/components/BankNameInput';
 import { apiErrors } from '../../../auth/services/authApi';
 import { accountProfileApi } from '../services/accountProfileApi';
 import { roleNames } from '../services/accountAccessApi';
@@ -282,11 +283,14 @@ export default function AccountProfileDialog({ onClose }) {
                     ].map(([key, label, max]) => (
                       <div className="account-field" key={key}>
                         <label htmlFor={'profile-' + key}>{label}</label>
-                        <input id={'profile-' + key} name={key} type="text"
+                        {key === 'bankName' ? <BankNameInput id={'profile-' + key} name={key}
                           value={form[key]} onChange={change} maxLength={max}
-                          required={hasBankDetails}
-                          pattern={key === 'bankAccount' ? '[A-Za-z0-9 ]{3,60}' : undefined}
-                          autoComplete="off" />
+                          required={hasBankDetails} autoComplete="off" />
+                          : <input id={'profile-' + key} name={key} type="text"
+                            value={form[key]} onChange={change} maxLength={max}
+                            required={hasBankDetails}
+                            pattern={key === 'bankAccount' ? '[A-Za-z0-9 ]{3,60}' : undefined}
+                            autoComplete="off" />}
                       </div>
                     ))}
                   </section>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { apiAssetUrl } from '../../../api/client';
 import menuItemApi from '../services/menuItemApi';
 import './menu-items.css';
@@ -617,7 +618,6 @@ function MenuItemInfo({ item, branchName, titleId, onClose, closeDisabled = fals
 
 function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions, imageFile, imagePreview,
   reviewing, saving, onChange, onImage, onRemoveImage, onReview, onConfirm, onBackToEdit, onBack }) {
-  const [priceFocused, setPriceFocused] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
   const categoryOptions = [draft.category, ...categories, ...inventoryOptions.map((item) => item.category)]
     .filter((value, index, values) => {
@@ -630,9 +630,6 @@ function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions,
   const previewMime = imageFile?.type || draft.imageMimeType;
   const isPdf = previewMime === 'application/pdf' || /\.pdf$/i.test(previewName || '');
   const inventory = inventoryOptions.find((item) => item.id === draft.inventoryItemId);
-  const changePrice = (event) => {
-    onChange('salePrice', event.currentTarget.value.replace(/\D/g, '').slice(0, 18));
-  };
   let pricePreview = '—';
   if (/^\d{1,18}$/.test(draft.salePrice)) {
     pricePreview = `${groupPriceDigits(draft.salePrice)}đ`;
@@ -708,9 +705,9 @@ function MenuItemEditor({ mode, draft, branchName, categories, inventoryOptions,
 
         <label className="menu-editor-field" htmlFor="menu-item-price">Giá bán *
           <div className="menu-price-input">
-            <input id="menu-item-price" type="text" inputMode="numeric" maxLength={23}
-              aria-label="Giá bán bằng đồng Việt Nam" value={priceFocused ? draft.salePrice : groupPriceDigits(draft.salePrice)}
-              onFocus={() => setPriceFocused(true)} onBlur={() => setPriceFocused(false)} onChange={changePrice}
+            <MoneyInput id="menu-item-price" maxDigits={18}
+              aria-label="Giá bán bằng đồng Việt Nam" value={draft.salePrice}
+              onValueChange={(salePrice) => onChange('salePrice', salePrice)}
               placeholder="Nhập số tiền" required />
             <span aria-hidden="true">đ</span>
           </div>
