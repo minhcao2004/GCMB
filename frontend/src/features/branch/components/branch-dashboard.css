@@ -222,3 +222,60 @@
   .bm-revenue-controls { display:grid; grid-template-columns:1fr 1fr; padding:0 13px 12px; }
   .bm-revenue-controls select,.bm-revenue-controls input { min-width:0; width:100%; }
 }
+
+/* Reporting scope and revenue trend controls. */
+.bm-report-filter {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:22px;
+  margin:0 0 16px;
+  padding:14px 18px;
+  border:1px solid var(--bm-line);
+  border-radius:13px;
+  background:#fff;
+  box-shadow:0 3px 12px rgba(24,46,69,.03);
+}
+.bm-filter-summary { display:grid; flex:0 0 auto; gap:5px; }
+.bm-filter-summary>span { color:#788797; font-size:9px; font-weight:800; letter-spacing:.09em; }
+.bm-filter-summary>strong { color:#20384b; font-size:14px; font-variant-numeric:tabular-nums; }
+.bm-period-controls { display:flex; flex:1 1 auto; flex-wrap:wrap; align-items:end; justify-content:flex-end; gap:9px; }
+.bm-period-controls label { display:grid; min-width:116px; gap:5px; color:#657587; font-size:10px; font-weight:750; }
+.bm-period-controls select,.bm-period-controls input {
+  width:100%; min-width:0; height:38px; padding:0 10px; border:1px solid #dce4eb; border-radius:9px;
+  background:#fff; color:#24394b; font:inherit; font-size:12px; font-weight:600;
+}
+.bm-period-controls select:focus-visible,.bm-period-controls input:focus-visible { outline:2px solid #2586a0; outline-offset:2px; }
+.bm-revenue-controls { padding:0 18px 11px; }
+.bm-revenue-controls .bm-period-controls { justify-content:flex-start; gap:8px; }
+.bm-revenue-controls .bm-period-controls label { min-width:108px; }
+.bm-revenue-total { display:flex; align-items:baseline; flex-wrap:wrap; gap:7px; margin:0 18px 3px; }
+.bm-revenue-total>span { color:#667789; font-size:10px; font-weight:700; }
+.bm-revenue-total>strong { color:#17384b; font-size:15px; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+.bm-revenue-total>small { margin-left:auto; color:#8391a0; font-size:10px; }
+.bm-revenue-chart {
+  position:relative; height:218px; margin:2px 13px 13px 8px; color:#176b68;
+}
+.bm-revenue-chart:before,.bm-revenue-chart:after { display:none; }
+.bm-revenue-chart>div { position:relative; }
+.bm-revenue-chart svg { position:relative; inset:auto; width:100%; height:100%; overflow:visible; }
+.bm-chart-tooltip { display:grid; min-width:132px; gap:5px; padding:9px 11px; border:1px solid #e1e9ed; border-radius:10px; background:rgba(255,255,255,.97); box-shadow:0 8px 24px rgba(23,43,61,.12); }
+.bm-chart-tooltip>span { color:#6c7d8c; font-size:10px; }
+.bm-chart-tooltip>strong { color:#17384b; font-size:13px; font-variant-numeric:tabular-nums; }
+.bm-chart-empty { margin:12px 18px 22px; color:#718191; font-size:12px; }
+@media(max-width:850px) {
+  .bm-report-filter { align-items:stretch; flex-direction:column; gap:12px; }
+  .bm-period-controls { justify-content:flex-start; }
+}
+@media(max-width:600px) {
+  .bm-report-filter { gap:11px; margin-bottom:12px; padding:13px; border-radius:11px; }
+  .bm-period-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .bm-period-controls label { min-width:0; }
+  .bm-period-controls select,.bm-period-controls input { height:40px; padding:0 8px; font-size:11px; }
+  .bm-revenue-controls { padding:0 13px 10px; }
+  .bm-revenue-controls .bm-period-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .bm-revenue-controls .bm-period-controls label { min-width:0; }
+  .bm-revenue-total { margin-right:13px; margin-left:13px; }
+  .bm-revenue-total>small { margin-left:0; }
+  .bm-revenue-chart { height:205px; margin:0 6px 12px 2px; }
+}

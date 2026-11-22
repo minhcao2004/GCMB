@@ -457,6 +457,12 @@ Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_
 - API phòng quản lý gửi X-GCMB-Branch-Id theo màn hình đang mở. SessionFilter xác minh lại phân công trước khi đặt phạm vi Identity, giúp các tab đang xem cơ sở khác nhau không ghi nhầm dữ liệu khi phiên đổi lựa chọn. Khách API không gửi header dùng cơ sở đang chọn của phiên. Header không tự cấp thêm quyền.
 - File ảnh hưởng: branch/BranchAdministrationService, auth/{AuthRepository,AuthService,AuthController,SessionFilter,AuthSecurity}, accounts/{DTO,AccountRepository,AccountAccessService}; frontend BranchManagerDashboard, DashboardTopbar, RoleHomePage, AccountAccessDialog, BranchManagementPage, BranchRoomsPage và các API/styles liên quan. Không thêm file test.
 
+### Bộ lọc tổng quan quản lý cơ sở (23/11/2026)
+
+- Trang Tổng quan có phạm vi báo cáo theo tháng (Tháng 1–12 và năm), năm hoặc khoảng ngày; doanh thu, giao dịch, F&B, hiệu suất hạng phòng và khung giờ cao điểm bám theo phạm vi này.
+- Biểu đồ xu hướng doanh thu có bộ lọc riêng theo tháng, năm hoặc khoảng ngày. Biểu đồ vùng có tooltip theo ngày/tháng; khoảng ngày dài được gom theo tháng để dễ đọc. Khoảng ngày tùy chọn tối đa 366 ngày.
+- API `/api/v1/branch-management/dashboard` nhận `scopePeriod`, `scopeFrom`, `scopeTo` cho phạm vi tổng quan và `revenuePeriod`, `revenueDate`, `revenueFrom`, `revenueTo` riêng cho biểu đồ; hai bộ lọc không ghi đè nhau. File ảnh hưởng: `frontend/src/features/branch/components/BranchOverviewDashboard.js`, `frontend/src/features/branch/components/branch-dashboard.css`, `backend/src/main/java/com/gcmb/backend/dashboard/DashboardController.java`.
+
 ### Giới hạn hai quản lý và bố trí dropdown (25/10/2026)
 
 - Yêu cầu hiện hành: mỗi cơ sở tối đa 2 quản lý; một quản lý vẫn có thể quản lý nhiều cơ sở. BranchAdministrationService chặn người thứ ba, kể cả khi gán từ màn tài khoản; giao diện phân quyền và bộ đếm cơ sở hiển thị giới hạn 2.

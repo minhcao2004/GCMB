@@ -72,14 +72,22 @@ public class DashboardController {
     @GetMapping("/api/v1/branch-management/dashboard")
     @Transactional(readOnly = true)
     public Map<String, Object> branch(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+                                      @RequestParam(required = false) String scopePeriod,
+                                      @RequestParam(required = false) String scopeFrom,
+                                      @RequestParam(required = false) String scopeTo,
                                       @RequestParam(required = false) String revenuePeriod,
-                                      @RequestParam(required = false) String revenueDate) {
+                                      @RequestParam(required = false) String revenueDate,
+                                      @RequestParam(required = false) String revenueFrom,
+                                      @RequestParam(required = false) String revenueTo) {
         requireRole(actor, "BRANCH_MANAGER");
         // Phạm vi được kiểm tra lại tại máy chủ, kể cả khi không có header chọn cơ sở.
         if (actor.branchId() == null || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
         LocalDate start = month(month);
-        RevenueRange selectedRevenue = revenueRange(revenuePeriod, revenueDate, start);
+        String timezone = db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
+        LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
+        ReportRange selectedReport = reportRange(scopePeriod, scopeFrom, scopeTo, start, today);
+        RevenueRange selectedRevenue = revenueRange(revenuePeriod, revenueDate, revenueFrom, revenueTo, start, today);
         Map<String,Object> report = performance.report(actor,start,actor.branchId());
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
@@ -108,22 +116,26 @@ public class DashboardController {
             WHERE s.branch_id=? AND s.work_date=(CURRENT_TIMESTAMP AT TIME ZONE (SELECT timezone FROM gcmb.branch WHERE id=?))::date
               AND a.status='CONFIRMED' AND s.status<>'CANCELLED'
             """, Long.class, actor.branchId(), actor.branchId()));
-        String timezone = db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
-        LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
         List<Map<String,Object>> dailyRevenue = performance.dailyRevenue(selectedRevenue.from(), selectedRevenue.to(), actor.branchId());
         Map<String,Object> revenueSummary = revenueSummary(dailyRevenue);
+        List<Map<String,Object>> reportDailyRevenue = performance.dailyRevenue(selectedReport.from(), selectedReport.toExclusive(), actor.branchId());
+        Map<String,Object> reportSummary = revenueSummary(reportDailyRevenue);
         return Map.ofEntries(
             Map.entry("month", month),
+            Map.entry("scopePeriod", selectedReport.period()),
+            Map.entry("scopeFrom", selectedReport.from().toString()),
+            Map.entry("scopeTo", selectedReport.to().toString()),
             Map.entry("result", rows.get(0)),
             Map.entry("operations", operational),
             Map.entry("revenuePeriod", selectedRevenue.period()),
             Map.entry("revenueDate", selectedRevenue.date()),
             Map.entry("revenueSummary", revenueSummary),
+            Map.entry("reportSummary", reportSummary),
             Map.entry("dailyRevenue", dailyRevenue),
-            Map.entry("revenueMix", revenueMix(start, actor.branchId())),
-            Map.entry("hourlyOccupancy", hourlyOccupancy(start, actor.branchId())),
-            Map.entry("roomTypePerformance", roomTypePerformance(start, actor.branchId())),
-            Map.entry("topItems", topItems(start, actor.branchId())),
+            Map.entry("revenueMix", revenueMix(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
+            Map.entry("hourlyOccupancy", hourlyOccupancy(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
+            Map.entry("roomTypePerformance", roomTypePerformance(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
+            Map.entry("topItems", topItems(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
             Map.entry("lowStockItems", lowStock(actor.branchId())),
             Map.entry("openIncidents", openIncidents(actor.branchId())),
             Map.entry("todayShifts", todayShifts(actor.branchId(), today)));
@@ -133,7 +145,7 @@ public class DashboardController {
         return performance.dailyRevenue(start,branchId);
     }
 
-    private RevenueRange revenueRange(String period, String date, LocalDate defaultMonth) {
+    private RevenueRange revenueRange(String period, String date, String fromValue, String toValue, LocalDate defaultMonth, LocalDate today) {
         String selectedPeriod = period == null ? "MONTH" : period.trim().toUpperCase(Locale.ROOT);
         String selectedDate = date == null || date.isBlank()
             ? ("DAY".equals(selectedPeriod) ? defaultMonth.toString() : "YEAR".equals(selectedPeriod) ? String.valueOf(defaultMonth.getYear()) : YearMonth.from(defaultMonth).toString())
@@ -145,13 +157,50 @@ public class DashboardController {
                 case "DAY" -> { from = LocalDate.parse(selectedDate); to = from.plusDays(1); }
                 case "MONTH" -> { YearMonth month = YearMonth.parse(selectedDate); from = month.atDay(1); to = month.plusMonths(1).atDay(1); }
                 case "YEAR" -> { int year = java.time.Year.parse(selectedDate).getValue(); from = LocalDate.of(year, 1, 1); to = from.plusYears(1); }
+                case "RANGE" -> {
+                    if (fromValue == null || fromValue.isBlank() || toValue == null || toValue.isBlank())
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc.");
+                    from = LocalDate.parse(fromValue.trim());
+                    LocalDate inclusiveEnd = LocalDate.parse(toValue.trim());
+                    if (from.isAfter(inclusiveEnd) || inclusiveEnd.isAfter(today)
+                            || java.time.temporal.ChronoUnit.DAYS.between(from, inclusiveEnd) >= 366)
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày của biểu đồ không hợp lệ hoặc vượt quá 366 ngày.");
+                    to = inclusiveEnd.plusDays(1);
+                    selectedDate = from + "/" + inclusiveEnd;
+                }
                 default -> throw new DateTimeParseException("invalid period", selectedPeriod, 0);
             }
-            LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-            if (from.isAfter(today)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem doanh thu ở thời điểm trong tương lai.");
+            if (from.isAfter(today) && !"MONTH".equals(selectedPeriod))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem doanh thu ở thời điểm trong tương lai.");
             return new RevenueRange(selectedPeriod, selectedDate, from, to);
         } catch (java.time.DateTimeException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày hoặc phạm vi doanh thu không hợp lệ.");
+        }
+    }
+
+    private ReportRange reportRange(String period, String fromValue, String toValue, LocalDate defaultMonth, LocalDate today) {
+        String selectedPeriod = period == null ? "MONTH" : period.trim().toUpperCase(Locale.ROOT);
+        boolean hasFrom = fromValue != null && !fromValue.isBlank();
+        boolean hasTo = toValue != null && !toValue.isBlank();
+        if (hasFrom != hasTo)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc.");
+        try {
+            LocalDate from = hasFrom ? LocalDate.parse(fromValue.trim()) : defaultMonth;
+            LocalDate to;
+            if (hasTo) {
+                to = LocalDate.parse(toValue.trim());
+            } else {
+                LocalDate monthEnd = defaultMonth.plusMonths(1).minusDays(1);
+                to = !defaultMonth.isAfter(today) && monthEnd.isAfter(today) ? today : monthEnd;
+            }
+            if (!List.of("MONTH", "YEAR", "RANGE").contains(selectedPeriod)
+                    || from.isAfter(to)
+                    || java.time.temporal.ChronoUnit.DAYS.between(from, to) >= 366
+                    || ("RANGE".equals(selectedPeriod) && to.isAfter(today)))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phạm vi báo cáo không hợp lệ hoặc vượt quá 366 ngày.");
+            return new ReportRange(selectedPeriod, from, to);
+        } catch (java.time.DateTimeException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày hoặc phạm vi báo cáo không hợp lệ.");
         }
     }
 
@@ -173,6 +222,9 @@ public class DashboardController {
     }
 
     private record RevenueRange(String period, String date, LocalDate from, LocalDate to) {}
+    private record ReportRange(String period, LocalDate from, LocalDate to) {
+        LocalDate toExclusive() { return to.plusDays(1); }
+    }
 
     private List<Map<String, Object>> revenueMix(LocalDate start, UUID branchId) {
         return revenueMix(start, start.plusMonths(1), branchId);
@@ -229,7 +281,7 @@ public class DashboardController {
             """, branchId, branchId);
     }
 
-    private List<Map<String, Object>> roomTypePerformance(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> roomTypePerformance(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return db.queryForList("""
             SELECT rt.name,COUNT(DISTINCT a.id) AS count,COALESCE(SUM(bl.amount),0) AS revenue,
               COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(a.actual_end,a.ends_at)-COALESCE(a.actual_start,a.starts_at)))/60),0) AS minutes
@@ -245,10 +297,10 @@ public class DashboardController {
               AND (COALESCE(a.actual_end,a.ends_at) AT TIME ZONE br.timezone)::date >= ?
               AND (COALESCE(a.actual_end,a.ends_at) AT TIME ZONE br.timezone)::date < ?
             GROUP BY rt.id,rt.name ORDER BY revenue DESC,rt.name
-            """, start, start.plusMonths(1), branchId, start, start.plusMonths(1));
+            """, start, endExclusive, branchId, start, endExclusive);
     }
 
-    private List<Map<String, Object>> hourlyOccupancy(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> hourlyOccupancy(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return db.queryForList("""
             SELECT EXTRACT(ISODOW FROM local_day)::int AS weekday, hour_slot AS hour,
               COUNT(*) AS occupied_room_hours
@@ -263,7 +315,7 @@ public class DashboardController {
               AND a.starts_at < ((slots.local_day + slots.hour_slot * interval '1 hour' + interval '1 hour') AT TIME ZONE br.timezone)
               AND COALESCE(a.actual_end,a.ends_at) > ((slots.local_day + slots.hour_slot * interval '1 hour') AT TIME ZONE br.timezone)
             GROUP BY weekday,hour_slot ORDER BY weekday,hour_slot
-            """, start, start.plusMonths(1), branchId);
+            """, start, endExclusive, branchId);
     }
 
     private List<Map<String, Object>> openIncidents(UUID branchId) {
@@ -295,7 +347,7 @@ public class DashboardController {
             """, branchId, today, today.plusDays(2));
     }
 
-    private List<Map<String, Object>> topItems(LocalDate start, UUID branchId) {
+    private List<Map<String, Object>> topItems(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return db.queryForList("""
             SELECT ol.name_snapshot AS name,COALESCE(SUM(ol.quantity),0) AS quantity,
               COALESCE(SUM(bl.amount),0) AS revenue
@@ -305,7 +357,7 @@ public class DashboardController {
             WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date >= ?
               AND (b.completed_at AT TIME ZONE br.timezone)::date < ? AND b.branch_id=?
             GROUP BY ol.name_snapshot ORDER BY quantity DESC,revenue DESC LIMIT 10
-            """, start, start.plusMonths(1), branchId);
+            """, start, endExclusive, branchId);
     }
 
     private List<Map<String, Object>> lowStock(UUID branchId) {
