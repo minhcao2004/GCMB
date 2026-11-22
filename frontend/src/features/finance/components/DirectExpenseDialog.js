@@ -1,5 +1,6 @@
-import MoneyInput from './MoneyInput';
 import { useMemo, useState } from 'react';
+import BankNameInput from '../../../shared/components/BankNameInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { today } from '../services/financeApi';
 import ExpenseAllocationFields from './ExpenseAllocationFields';
 import { calculateExpenseAllocation } from '../utils/expenseAllocation';
@@ -13,7 +14,7 @@ const newUuid = () => {
 };
 const blankDraft = () => ({
   idempotencyKey: newUuid(), branchId: '', categoryId: '', amount: '', expenseOn: today(), beneficiaryName: '',
-  bankAccount: '', bankName: '', description: '', reference: '', allocationMonths: '', allocationStart: today().slice(0, 7),
+  bankAccount: '', bankName: '', paymentMethod: '', description: '', reference: '', allocationMonths: '', allocationStart: today().slice(0, 7),
   reason: '', proof: null, invoice: null,
 });
 
@@ -38,10 +39,10 @@ export default function DirectExpenseDialog({ branches, categories, busy, onClos
 
   async function submit(event) {
     event.preventDefault();
-    if (!draft.proof || (selectedCategory?.invoice_required && !draft.invoice)) return;
+    if (!draft.proof || (!recurringPeriod && selectedCategory?.invoice_required && !draft.invoice)) return;
     if (recurringPeriod) {
       if (fixedAmountChanged && !draft.reason.trim()) return;
-      if (await onSubmit({ amount: draft.amount, reason: draft.reason }, draft.proof, draft.invoice)) onClose();
+      if (await onSubmit({ amount: draft.amount, reason: draft.reason }, draft.proof)) onClose();
       return;
     }
     if (allocated && preview.error) return;
@@ -54,6 +55,7 @@ export default function DirectExpenseDialog({ branches, categories, busy, onClos
       beneficiaryName: draft.beneficiaryName,
       bankAccount: draft.bankAccount,
       bankName: draft.bankName,
+      paymentMethod: draft.paymentMethod,
       description: draft.description,
       reference: draft.reference,
       allocationMonths: allocated ? Number(draft.allocationMonths || selectedCategory.default_allocation_months) : null,
@@ -84,23 +86,24 @@ export default function DirectExpenseDialog({ branches, categories, busy, onClos
       <form className="finance-form finance-direct-expense-form" onSubmit={submit}>
         <label>Cơ sở *<select required disabled={Boolean(recurringPeriod)} value={draft.branchId} onChange={(event) => setDraft({ ...draft, branchId: event.target.value })}><option value="">Chọn cơ sở</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
         <label>Hạng mục *<select required disabled={Boolean(recurringPeriod)} value={draft.categoryId} onChange={chooseCategory}><option value="">Chọn hạng mục đang dùng</option>{categories.filter((item) => item.active || String(item.id) === String(recurringPeriod?.category_id)).map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
-        <label>Số tiền (VND) *<MoneyInput required min="1"    value={draft.amount} onValueChange={value => setDraft({ ...draft, amount: value })} />
+        <label>Số tiền (VND) *<MoneyInput required min="1" value={draft.amount} onValueChange={(amount) => setDraft({ ...draft, amount })} />
           {recurringPeriod && recurringPeriod.default_amount != null && <small>Số tiền cố định: {Number(recurringPeriod.default_amount).toLocaleString('vi-VN')} ₫</small>}
           {recurringPeriod && recurringPeriod.default_amount == null && <small>{recurringPeriod.expected_amount ? `Số tiền dự kiến: ${Number(recurringPeriod.expected_amount).toLocaleString('vi-VN')} ₫ · có thể nhập số thực tế.` : 'Nhập số tiền thực tế của kỳ này.'}</small>}
         </label>
         {!recurringPeriod && <label>Ngày chi *<input required type="date" value={draft.expenseOn} onChange={(event) => setDraft((current) => ({ ...current, expenseOn: event.target.value, ...(!allocationStartEdited ? { allocationStart: event.target.value.slice(0, 7) } : {}) }))} /></label>}
         {!recurringPeriod && <label>Người nhận *<input required maxLength="160" value={draft.beneficiaryName} onChange={(event) => setDraft({ ...draft, beneficiaryName: event.target.value })} /></label>}
-        {!recurringPeriod && <label>Số tài khoản *<input required maxLength="80" value={draft.bankAccount} onChange={(event) => setDraft({ ...draft, bankAccount: event.target.value })} /></label>}
-        {!recurringPeriod && <label>Ngân hàng *<input required maxLength="120" value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>}
+        {!recurringPeriod && <label>Cách kế toán chi *<select required value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}><option value="">Chọn cách chi</option><option value="CASH">Tiền mặt</option><option value="BANK">Tiền tài khoản</option></select></label>}
+        {!recurringPeriod && draft.paymentMethod === 'BANK' && <label>Số tài khoản *<input required maxLength="80" value={draft.bankAccount} onChange={(event) => setDraft({ ...draft, bankAccount: event.target.value })} /></label>}
+        {!recurringPeriod && draft.paymentMethod === 'BANK' && <label>Ngân hàng *<BankNameInput required maxLength="120" value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></label>}
         {!recurringPeriod && <label>Mã giao dịch (tùy chọn)<input maxLength="200" value={draft.reference} onChange={(event) => setDraft({ ...draft, reference: event.target.value })} /></label>}
         {!recurringPeriod && <label className="wide">Nội dung chi *<textarea required maxLength="1000" rows="3" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>}
         {recurringPeriod && <label className="wide">Lý do chênh lệch{fixedAmountChanged ? ' *' : ' (tùy chọn)'}<textarea required={fixedAmountChanged} maxLength="1000" rows="2" value={draft.reason} onChange={(event) => setDraft({ ...draft, reason: event.target.value })} placeholder="Bắt buộc khi số tiền khác mức cố định" /></label>}
-        <label>Chứng từ chuyển khoản *<input required type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf" onChange={(event) => setDraft({ ...draft, proof: event.target.files?.[0] || null })} /><small>{draft.proof?.name || 'Ảnh hoặc PDF · tối đa 20 MB'}</small></label>
-        <label>Hóa đơn{selectedCategory?.invoice_required ? ' *' : ''}<input required={Boolean(selectedCategory?.invoice_required)} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf" onChange={(event) => setDraft({ ...draft, invoice: event.target.files?.[0] || null })} /><small>{selectedCategory?.invoice_required ? 'Hạng mục này bắt buộc hóa đơn.' : 'Có thể đính kèm nếu có.'}</small></label>
+        <label className={recurringPeriod ? 'wide' : undefined}>{recurringPeriod || draft.paymentMethod === 'BANK' ? 'Chứng từ chuyển khoản' : 'Chứng từ chi tiền mặt'} *<input required type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf" onChange={(event) => setDraft({ ...draft, proof: event.target.files?.[0] || null })} /><small>{draft.proof?.name || 'Ảnh hoặc PDF · tối đa 20 MB'}</small></label>
+        {!recurringPeriod && <label>Hóa đơn{selectedCategory?.invoice_required ? ' *' : ''}<input required={Boolean(selectedCategory?.invoice_required)} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf" onChange={(event) => setDraft({ ...draft, invoice: event.target.files?.[0] || null })} /><small>{selectedCategory?.invoice_required ? 'Hạng mục này bắt buộc hóa đơn.' : 'Có thể đính kèm nếu có.'}</small></label>}
         {allocated && <div className="wide"><p className="finance-category-hint">Hạng mục này phân bổ chi phí. Kế toán có thể sửa số tháng và tháng bắt đầu ngay khi thanh toán.</p>
           <ExpenseAllocationFields amount={draft.amount} months={draft.allocationMonths || selectedCategory.default_allocation_months} startMonth={draft.allocationStart} onMonthsChange={(value) => setDraft({ ...draft, allocationMonths: value })} onStartMonthChange={(value) => { setAllocationStartEdited(true); setDraft({ ...draft, allocationStart: value }); }} disabled={busy} />
         </div>}
-        <div className="finance-confirm-actions wide"><button type="button" disabled={busy} onClick={onClose}>Hủy</button><button type="submit" className="confirm-approve" disabled={busy || !draft.proof || (selectedCategory?.invoice_required && !draft.invoice) || (allocated && Boolean(preview.error)) || (fixedAmountChanged && !draft.reason.trim())}>{busy ? 'Đang ghi nhận…' : recurringPeriod ? 'Thanh toán kỳ này' : 'Ghi nhận chi'}</button></div>
+        <div className="finance-confirm-actions wide"><button type="button" disabled={busy} onClick={onClose}>Hủy</button><button type="submit" className="confirm-approve" disabled={busy || !draft.proof || (!recurringPeriod && selectedCategory?.invoice_required && !draft.invoice) || (allocated && Boolean(preview.error)) || (fixedAmountChanged && !draft.reason.trim())}>{busy ? 'Đang ghi nhận…' : recurringPeriod ? 'Thanh toán kỳ này' : 'Ghi nhận chi'}</button></div>
       </form>
     </section>
   </div>;

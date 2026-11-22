@@ -1,4 +1,4 @@
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';

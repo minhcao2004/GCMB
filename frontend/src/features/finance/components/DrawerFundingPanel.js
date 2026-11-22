@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd } from '../services/financeApi';
-import MoneyInput from './MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 
 const statusLabel = { REQUESTED: 'Chờ kế toán thanh toán', PAID: 'Đã thanh toán', REJECTED: 'Đã từ chối' };
 const message = (error) => Object.values(apiErrors(error)).join(' ');

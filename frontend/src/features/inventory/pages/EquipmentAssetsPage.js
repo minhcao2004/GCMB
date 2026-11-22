@@ -1,4 +1,4 @@
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *

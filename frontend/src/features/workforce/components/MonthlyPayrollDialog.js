@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi, vnd } from '../../finance/services/financeApi';
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { attendanceApi, dateTimeLabel, hoursLabel } from '../services/attendanceApi';
 
 const base = '/branch-management/payroll';

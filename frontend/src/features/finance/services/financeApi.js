@@ -83,15 +83,15 @@ export const financeApi = {
   updateRecurringExpense: (id, command) => mutate('put',`/accounting/finance/recurring-expenses/${id}`,command),
   terminateRecurringExpense: (id) => mutate('post',`/accounting/finance/recurring-expenses/${id}/terminate`),
   skipRecurringPeriod: (id, reason) => mutate('post',`/accounting/finance/recurring-expenses/periods/${id}/skip`,{reason}),
-  payRecurringPeriod: (id, command, proof, invoice) => mutate('post',`/accounting/finance/recurring-expenses/periods/${id}/pay`,form({
-    command: new Blob([JSON.stringify(command)], { type: 'application/json' }), proof, invoice,
+  payRecurringPeriod: (id, command, proof) => mutate('post',`/accounting/finance/recurring-expenses/periods/${id}/pay`,form({
+    command: new Blob([JSON.stringify(command)], { type: 'application/json' }), proof,
   }),true),
   recurringReminderCount: () => apiClient.get('/accounting/finance/recurring-expenses/reminder-count').then(({ data }) => data.count),
   createRequest: (values) => mutate('post','/branch-management/finance/requests',values),
   uploadRequestAttachment: (id, kind, file) => mutate('post',`/branch-management/finance/requests/${id}/attachments?kind=${kind}`,form({file}),true),
   review: (role, id, approve, note='') => mutate('post',`${route[role]}/requests/${id}/review`,{ approve, note }),
-  pay: (id, reference, proof, allocationMonths, allocationStart) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({
-    reference, proof, allocationMonths, allocationStart,
+  pay: (id, reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({
+    reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart,
   }),true),
 };
 

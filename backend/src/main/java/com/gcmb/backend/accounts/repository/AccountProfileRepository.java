@@ -17,15 +17,15 @@ import org.springframework.stereotype.Repository;
 public class AccountProfileRepository {
 
     private final JdbcTemplate db;
-    private final AccountRepository accounts;
+    private final AccountRepository accountRepository;
 
-    public AccountProfileRepository(JdbcTemplate db, AccountRepository accounts) {
+    public AccountProfileRepository(JdbcTemplate db, AccountRepository accountRepository) {
         this.db = db;
-        this.accounts = accounts;
+        this.accountRepository = accountRepository;
     }
 
     public Profile find(UUID id) {
-        var account = accounts.find(id);
+        var account = accountRepository.find(id);
         var employees = db.query(
             "SELECT full_name,phone,bank_name,bank_account,bank_holder FROM gcmb.employee WHERE user_id=?",
             (rs, row) ->
@@ -74,11 +74,11 @@ public class AccountProfileRepository {
     }
 
     public boolean emailTaken(UUID id, String email) {
-        return accounts.emailReserved(email, null, id);
+        return accountRepository.emailReserved(email, null, id);
     }
 
     public boolean phoneTaken(UUID id, String phone) {
-        return accounts.staffPhoneTaken(phone, null, id);
+        return accountRepository.staffPhoneTaken(phone, null, id);
     }
 
     public void update(UUID id, String fullName, String phone, String email, boolean emailChanged) {

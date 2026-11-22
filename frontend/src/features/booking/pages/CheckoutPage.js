@@ -6,12 +6,13 @@
  * Updated: 15/10/2026 - Hiển thị cọc đã áp dụng và phần tiền còn phải thu.
  */
 import CheckoutReceipt, { Info, Lines, Summary } from '../components/CheckoutReceipt';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { checkoutApi as api } from '../services/checkoutApi';
-import { formatVnd, formatMoneyInput } from '../data/bookingData';
+import { formatVnd } from '../data/bookingData';
 import '../styles/checkout.css';
 const usedTime = (data) => {
   const minutes = Math.max(
@@ -450,21 +451,19 @@ export default function CheckoutPage() {
                         )
                       }
                     />
-                    <input
+                    {/* BR-160: phụ phí nhập theo số nguyên VND. */}
+                    <MoneyInput
                       aria-label={`Số tiền phụ phí ${index + 1}`}
-                      type="text"
-                      inputMode="numeric"
                       required
                       placeholder="Số tiền"
-                      value={formatMoneyInput(fee.amount)}
-                      onChange={(e) =>
-                        /^[0-9.]*$/.test(e.target.value) &&
+                      value={fee.amount}
+                      onValueChange={(amount) =>
                         setFees(
                           fees.map((f, i) =>
                             i === index
                               ? {
                                   ...f,
-                                  amount: e.target.value.replace(/\./g, ''),
+                                  amount,
                                 }
                               : f
                           )
@@ -611,16 +610,12 @@ export default function CheckoutPage() {
                       <>
                         <label className="co-field">
                           Tiền mặt khách đưa
-                          <input
-                            type="text"
-                            inputMode="numeric"
+                          {/* BR-160: tiền mặt khách đưa là số nguyên VND. */}
+                          <MoneyInput
                             required
-                            value={formatMoneyInput(cashTendered)}
+                            value={cashTendered}
                             aria-describedby="co-cash-tendered-help"
-                            onChange={(e) =>
-                              /^[0-9.]*$/.test(e.target.value) &&
-                              setCashTendered(e.target.value.replace(/\./g, ''))
-                            }
+                            onValueChange={setCashTendered}
                           />
                           <small id="co-cash-tendered-help">
                             {method === 'MIXED'

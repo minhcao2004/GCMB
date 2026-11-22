@@ -20,7 +20,7 @@ function Field({ label, children, className = '' }) {
   return <label className={`booking-form-field ${className}`}><span>{label}</span>{children}</label>;
 }
 
-// Thu thông tin khách, phòng, giá và xác nhận thu cọc trước khi tạo booking.
+// Thu thông tin khách, hạng phòng, giá và xác nhận thu cọc trước khi tạo booking.
 export default function BookingCreatePage({ user, options, optionsLoading, optionsError, onBack, onCreate }) {
   const now = new Date();
   now.setMinutes(Math.ceil((now.getMinutes() + 30) / 15) * 15, 0, 0);
@@ -28,11 +28,12 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const initialTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const savedDraft = useRef(readBookingDraft(user));
   const [form, setForm] = useState(() => ({
-    contactName: '', contactPhone: '', channel: 'PHONE', date: initialDate, time: initialTime,
-    guestCount: '2', roomTypeId: '', roomId: '', pricingMode: 'COMBO', comboId: '',
+    contactName: '', contactPhone: '', date: initialDate, time: initialTime,
+    guestCount: '2', roomTypeId: '', pricingMode: 'COMBO', comboId: '',
     durationHours: '2', note: '', depositEnabled: false,
     paymentMethod: 'BANK_TRANSFER', transaction: '',
     ...savedDraft.current?.form,
+    channel: ['FACEBOOK', 'TIKTOK', 'ZALO', 'INSTAGRAM', 'WALK_IN'].includes(savedDraft.current?.form?.channel) ? savedDraft.current.form.channel : '',
   }));
   const [availability, setAvailability] = useState(null);
   const [availabilityError, setAvailabilityError] = useState('');
@@ -41,7 +42,6 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const [formError, setFormError] = useState('');
   const [touched, setTouched] = useState({});
   const paymentReferenceInput = useRef(null);
-  const autoSelectRoom = useRef(!savedDraft.current?.form?.roomId);
 
   useEffect(() => { saveBookingDraft(user, form, false); }, [user, form]);
 
@@ -70,18 +70,17 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
     return new Date(plannedStart.getTime() + durationMinutes * 60000);
   }, [plannedStart, durationMinutes]);
   const availableRooms = useMemo(() => availability?.rooms || [], [availability?.rooms]);
-  const chosenRoom = availableRooms.find((room) => room.id === form.roomId) || null;
   const quote = availability?.quote;
   const estimatedAmount = Number(quote?.expectedAmount || selectedCombo?.price || 0);
   const depositAmount = form.depositEnabled ? Number(quote?.depositRequired ?? Math.ceil(estimatedAmount * 0.3 / 1000) * 1000) : 0;
   const paymentMethod = String(form.paymentMethod || '').trim().toUpperCase();
   const cashPayment = paymentMethod === 'CASH';
   const guestCount = Number(form.guestCount);
-  // BR-150, BR-128; MSG44, MSG54: validate and explain the booking guest count.
+  // BR-128: kiểm tra sức chứa theo hạng phòng trước khi gán phòng cụ thể.
   const guestCountError = !Number.isInteger(guestCount) || guestCount < 1
     ? 'Số lượng khách phải là số nguyên lớn hơn 0.'
-    : chosenRoom && guestCount > chosenRoom.capacity
-      ? `Phòng ${chosenRoom.code} chỉ phù hợp tối đa ${chosenRoom.capacity} khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.`
+    : selectedType && guestCount > selectedType.capacity
+      ? `Hạng phòng ${selectedType.name} chỉ phù hợp tối đa ${selectedType.capacity} khách. Vui lòng giảm số khách hoặc chọn hạng phòng khác.`
       : '';
   const guestCountValid = !guestCountError;
   const validSchedule = Boolean(plannedStart && plannedEnd && plannedStart > new Date() && plannedEnd > plannedStart);
@@ -94,6 +93,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
 const paymentReferenceRequired = form.depositEnabled && depositAmountValid && !cashPayment;
 const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transaction.trim());
   const bookingBlockers = [];
+  if (!['FACEBOOK', 'TIKTOK', 'ZALO', 'INSTAGRAM', 'WALK_IN'].includes(form.channel)) bookingBlockers.push('Chọn nguồn khách.');
   if (!form.contactName.trim()) bookingBlockers.push('Nhập họ tên khách.');
   if (contactPhoneError) bookingBlockers.push(contactPhoneError);
   if (!selectedType) bookingBlockers.push('Chọn hạng phòng.');
@@ -102,18 +102,17 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.');
   if (guestCountError) bookingBlockers.push(guestCountError);
   if (!pricingSelectionValid) bookingBlockers.push(form.pricingMode === 'COMBO' ? 'Chọn một combo dịch vụ.' : 'Nhập thời lượng thuê từ 1 đến 24 giờ, theo bước 0,5 giờ.');
-  if (!loadingAvailability && !chosenRoom) {
-    bookingBlockers.push(availabilityError ? 'Không xác nhận được phòng trống; hãy đổi lịch hoặc hạng phòng để thử lại.' : availableRooms.length ? 'Chọn một phòng còn trống.' : 'Đổi thời gian hoặc hạng phòng để tìm phòng trống.');
+  if (!loadingAvailability && !availableRooms.some((room) => room.capacity >= guestCount)) {
+    bookingBlockers.push(availabilityError ? 'Không xác nhận được phòng trống; hãy đổi lịch hoặc hạng phòng để thử lại.' : 'Đổi thời gian hoặc hạng phòng để tìm phòng trống.');
   }
   if (form.depositEnabled && !depositAmountValid) bookingBlockers.push('Chưa tính được cọc 30%; hãy kiểm tra lại báo giá booking.');
-  if (!paymentReferenceValid) bookingBlockers.push('Nhập mã giao dịch của khoản tiền cọc đã nhận.');
-  const bookingReady = !optionsLoading && !loadingAvailability && !availabilityError && bookingBlockers.length === 0 && Boolean(chosenRoom);
+  if (!paymentReferenceValid) bookingBlockers.push('Nhập mã giao dịch / ghi chú khi thu tiền cọc.');
+  const bookingReady = !optionsLoading && !loadingAvailability && !availabilityError && bookingBlockers.length === 0;
   const showContactNameError = Boolean(touched.contactName && !form.contactName.trim());
   const showContactPhoneError = Boolean((touched.contactPhone || form.contactPhone) && contactPhoneError);
   const showScheduleError = Boolean((touched.date || touched.time) && !validSchedule);
   const showGuestCountError = Boolean(touched.guestCount && !guestCountValid);
   const showRoomTypeError = Boolean(touched.roomTypeId && !selectedType);
-  const showRoomError = Boolean(validSchedule && selectedType && !loadingAvailability && !chosenRoom && (touched.roomId || touched.date || touched.time || touched.roomTypeId));
   const showComboError = Boolean(form.pricingMode === 'COMBO' && !selectedCombo && (touched.pricingMode || touched.comboId));
   const showDurationError = Boolean(form.pricingMode === 'HOURLY' && !hourlyDurationValid && touched.durationHours);
   const showDepositAmountError = Boolean(form.depositEnabled && !depositAmountValid && (touched.depositEnabled || touched.depositAmount));
@@ -124,11 +123,6 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
   const scheduleErrorMessage = plannedStart && plannedStart <= new Date()
     ? 'Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.'
     : 'Nhập ngày hợp lệ và giờ theo định dạng HH:mm, từ 00:00 đến 23:59.';
-  const roomErrorMessage = availabilityError
-    ? 'Không xác nhận được phòng trống. Hãy đổi lịch hoặc hạng phòng để thử lại.'
-    : availableRooms.length
-      ? 'Chọn một phòng còn trống.'
-      : 'Không có phòng trống; hãy đổi ngày giờ hoặc hạng phòng.';
 
   useEffect(() => {
     if (paymentReferenceServerError) {
@@ -181,19 +175,6 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
     return () => { active = false; };
   }, [selectedType, selectedCombo, plannedStart, plannedEnd, form.pricingMode ]);
 
-  useEffect(() => {
-    if (!availability) return;
-    if (form.roomId && !availableRooms.some((room) => room.id === form.roomId)) {
-      autoSelectRoom.current = false;
-      setForm((current) => ({ ...current, roomId: '' }));
-      setFormError('Phòng đã chọn không còn trống trong khung giờ này. Vui lòng chọn lại phòng.');
-      return;
-    }
-    if (!form.roomId && availableRooms.length && autoSelectRoom.current) {
-      setForm((current) => ({ ...current, roomId: availableRooms[0].id }));
-    }
-  }, [availability, availableRooms, form.roomId]);
-
   // Đánh dấu trường đã được người dùng kiểm tra để chỉ hiện lỗi sau tương tác.
   const markTouched = (field) => setTouched((current) => current[field] ? current : { ...current, [field]: true });
 
@@ -213,9 +194,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
 
     setSubmitting(true);
     try {
-      // BR-03: backend khóa phòng và kiểm tra lại khoảng đặt trong giao dịch tạo booking.
+      // BR-02, BR-127: backend kiểm tra lại hạng phòng, giá và khung giờ trong giao dịch tạo booking.
       const result = await onCreate({
-        roomId: chosenRoom.id,
+        roomTypeId: selectedType.id,
         plannedStart: dateTimeIso(form.date, form.time),
         plannedEnd: plannedEnd.toISOString(),
         pricingMode: form.pricingMode,
@@ -248,6 +229,18 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
       <section className="booking-create-card">
         <header className="booking-card-heading"><h2>Thông tin khách &amp; lịch đặt</h2></header>
 
+        <Field label="Nguồn khách *" className={`booking-source-field${touched.channel && !form.channel ? ' is-invalid' : ''}`}>
+          <select name="channel" value={form.channel} onChange={change} onBlur={() => markTouched('channel')} required aria-invalid={Boolean(touched.channel && !form.channel)}>
+            <option value="">Chọn nguồn khách</option>
+            <option value="FACEBOOK">FB</option>
+            <option value="TIKTOK">TikTok</option>
+            <option value="ZALO">Zalo</option>
+            <option value="INSTAGRAM">IG</option>
+            <option value="WALK_IN">Khách ngoài</option>
+          </select>
+          {touched.channel && !form.channel && <small className="booking-field-error" aria-live="polite">Chọn nguồn khách.</small>}
+        </Field>
+
         <div className="booking-form-grid booking-customer-grid">
           <Field label="Họ tên khách *" className={showContactNameError ? 'is-invalid' : ''}>
             <input name="contactName" value={form.contactName} onChange={change} onBlur={() => markTouched('contactName')} autoComplete="name" placeholder="Nhập họ tên khách" required aria-invalid={showContactNameError} aria-describedby={showContactNameError ? 'booking-contact-name-error' : undefined} />
@@ -271,7 +264,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             {showGuestCountError && <small id="booking-guest-count-error" className="booking-field-error" aria-live="polite">{guestCountError}</small>}
           </Field>
           <Field label="Hạng phòng *" className={showRoomTypeError ? 'is-invalid' : ''}>
-            <select name="roomTypeId" value={selectedType?.id || ''} onChange={(event) => { markTouched('roomTypeId'); autoSelectRoom.current = false; setFormError(''); setForm((current) => ({ ...current, roomTypeId: event.target.value, roomId: '' })); }} required aria-invalid={showRoomTypeError} aria-describedby={showRoomTypeError ? 'booking-room-type-error' : undefined}>
+             <select name="roomTypeId" value={selectedType?.id || ''} onChange={(event) => { markTouched('roomTypeId'); setFormError(''); setForm((current) => ({ ...current, roomTypeId: event.target.value })); }} required aria-invalid={showRoomTypeError} aria-describedby={showRoomTypeError ? 'booking-room-type-error' : undefined}>
               <option value="" disabled>Chọn hạng phòng</option>{roomTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
             </select>
             {showRoomTypeError && <small id="booking-room-type-error" className="booking-field-error" aria-live="polite">Chọn hạng phòng.</small>}
@@ -280,16 +273,8 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         {showScheduleError && <small id="booking-schedule-error" className="booking-field-error booking-schedule-error" aria-live="polite">{scheduleErrorMessage}</small>}
 
         <div className={`booking-availability-banner${availabilityError ? ' is-error' : ''}`} role="status">
-          {loadingAvailability ? 'Đang kiểm tra phòng trống…' : availabilityError || `Còn ${availableRooms.length} phòng ${selectedType?.name || ''} phù hợp lúc ${form.time}, ${formatDate(form.date)}`}
+           {loadingAvailability ? 'Đang kiểm tra phòng trống…' : availabilityError || `Còn ${availableRooms.filter((room) => room.capacity >= guestCount).length} phòng hạng ${selectedType?.name || ''} phù hợp lúc ${form.time}, ${formatDate(form.date)}. Chọn phòng cụ thể khi check-in.`}
         </div>
-
-        <div className={`booking-section-title-row${showRoomError ? ' is-invalid' : ''}`}><h3>Chọn phòng cụ thể *</h3><span>Bắt buộc chọn phòng trống</span></div>
-        <div className={`booking-room-choice-grid${showRoomError ? ' is-invalid' : ''}`} role="group" aria-label="Chọn phòng cụ thể" aria-describedby={showRoomError ? 'booking-room-error' : undefined} onClick={() => markTouched('roomId')}>
-          {availableRooms.length ? availableRooms.map((room) => <button key={room.id} type="button" className={`booking-room-choice${form.roomId === room.id ? ' is-selected' : ''}`} onClick={() => { autoSelectRoom.current = false; setFormError(''); setForm((current) => ({ ...current, roomId: room.id })); }}>
-            <strong>{room.code} · {room.name}</strong><small>{selectedType?.name} · tối đa {room.capacity} khách</small>{form.roomId === room.id && <span className="booking-choice-check">✓</span>}
-          </button>) : <div className="booking-room-empty">{loadingAvailability ? 'Đang tải phòng…' : 'Không có phòng trống trong khung giờ đã chọn.'}</div>}
-        </div>
-        {showRoomError && <small id="booking-room-error" className="booking-field-error booking-room-error" role="status">{roomErrorMessage}</small>}
 
         <div className="booking-form-divider" />
         <h3 className="booking-section-heading">Gói dịch vụ</h3>
@@ -341,10 +326,11 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         </div>
         <div className="booking-summary-separator" />
         <dl className="booking-summary-list">
+          <div><dt>Nguồn khách</dt><dd>{({ FACEBOOK: 'FB', TIKTOK: 'TikTok', ZALO: 'Zalo', INSTAGRAM: 'IG', WALK_IN: 'Khách ngoài' })[form.channel] || 'Chưa chọn'}</dd></div>
           <div><dt>Ngày giờ</dt><dd>{form.time} · {formatDate(form.date)}</dd></div>
           <div><dt>Khách</dt><dd>{form.contactName || '—'}</dd></div>
           <div><dt>Số khách</dt><dd>{form.guestCount} người</dd></div>
-          <div><dt>Phòng</dt><dd>{chosenRoom ? `${chosenRoom.code} · ${chosenRoom.name}` : 'Chưa chọn'}</dd></div>
+           <div><dt>Phòng</dt><dd>Chọn khi check-in</dd></div>
           <div><dt>Hạng phòng</dt><dd>{selectedType?.name || '—'}</dd></div>
           <div><dt>Gói</dt><dd>{form.pricingMode === 'COMBO' ? selectedCombo?.name || 'Chưa chọn combo' : `Tính giờ · ${form.durationHours} giờ`}</dd></div>
         </dl>
@@ -352,7 +338,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         <div className="booking-summary-money"><span>Giá dự kiến</span><strong>{formatVnd(estimatedAmount)}</strong></div>
         <div className="booking-summary-money booking-deposit-money"><span>Tiền cọc đã nhận</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
         <div className="booking-summary-total"><strong>Còn lại sau khi thu cọc</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
-        <div className="booking-summary-hint">Booking giữ phòng theo ngày/giờ đã chọn.<br />Giá cuối có thể thay đổi khi checkout.</div>
+         <div className="booking-summary-hint">Booking giữ chỗ theo hạng phòng và ngày/giờ đã chọn. Phòng cụ thể sẽ chọn khi khách check-in.<br />Giá cuối có thể thay đổi khi checkout.</div>
         <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || !bookingReady}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>
         <button className="booking-summary-cancel" type="button" onClick={cancelDraft}>Hủy</button>
       </aside>

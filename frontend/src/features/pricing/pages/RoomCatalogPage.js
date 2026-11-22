@@ -1,4 +1,4 @@
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -558,6 +558,7 @@ Hạng phòng
               </label>
               <label>
 Giá áp dụng / giờ
+{/* BR-168: đơn giá giờ là số nguyên VND. */}
 <MoneyInput required min="0"  value={form.hourlyPrice} onValueChange={value => setForm({
                   ...form,
                   hourlyPrice: value
@@ -670,6 +671,7 @@ Thời lượng (phút)
               </label>
               <label>
 Giá combo
+{/* BR-168: giá combo là số nguyên VND. */}
 <MoneyInput required min="0"  value={form.price} onValueChange={value => setForm({
                   ...form,
                   price: value

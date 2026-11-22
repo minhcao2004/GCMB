@@ -23,11 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class ShiftService {
 
     private final ShiftRepository repo;
-    private final AccountRepository accounts;
+    private final AccountRepository accountRepository;
 
-    public ShiftService(ShiftRepository repo, AccountRepository accounts) {
+    public ShiftService(ShiftRepository repo, AccountRepository accountRepository) {
         this.repo = repo;
-        this.accounts = accounts;
+        this.accountRepository = accountRepository;
     }
 
     Map<String, Object> scope(Identity actor, boolean write, boolean manager) {
@@ -41,7 +41,7 @@ public class ShiftService {
         if (!repo.actor(actor.id(), actor.role(), actor.branchId())) throw denied();
         if (
             "BRANCH_MANAGER".equals(actor.role()) &&
-            !accounts.manages(actor.id(), actor.branchId(), false)
+            !accountRepository.manages(actor.id(), actor.branchId(), false)
         ) throw denied();
         var branch = repo.branch(actor.branchId(), write);
         if (branch == null) throw denied();

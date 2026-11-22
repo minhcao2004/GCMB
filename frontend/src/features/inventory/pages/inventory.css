@@ -310,7 +310,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
 .inv-table-card { border: 1px solid var(--inv-line); border-radius: 14px; }
 .inv-table { min-width: 740px; }
 .inv-items-table { min-width: 900px; }
-.inv-history-table { min-width: 760px; }
+.inv-history-table { min-width: 1020px; }
 .inv-table th { height: 46px; padding: 0 18px; color: #5a6678; background: #f7f9fc; font-size: 11px; }
 .inv-table td { padding: 13px 18px; color: #465267; font-size: 13px; }
 .inv-table tbody tr:hover { background: #fffafd; }
@@ -441,6 +441,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
 .inv-receipt-create-actions small { max-width: 52ch; color: var(--inv-copy); font-size: 11px; line-height: 1.45; }
 .inv-receipt-line .inv-remove-line { grid-column: 3; grid-row: 1; justify-self: end; align-self: end; }
 .inv-line-quantity, .inv-line-unit, .inv-line-cost { grid-row: 2; }
+.inv-line-expiry { grid-column: 1 / -1; grid-row: 3; }
 .inv-line-custom-unit, .inv-line-conversion, .inv-line-result { grid-column: 1 / -1; }
 .inv-pack-size { display: flex; align-items: center; gap: 9px; color: var(--inv-ink); font-size: 13px; font-weight: 600; }
 .inv-pack-size input { flex: 0 1 150px; min-width: 70px; }
@@ -464,6 +465,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   .inv-line-unit { grid-column: 1; grid-row: 2; }
   .inv-line-quantity { grid-column: 1; grid-row: 3; }
   .inv-line-cost { grid-column: 2; grid-row: 3; }
+  .inv-line-expiry { grid-column: 1 / -1; grid-row: 4; }
   .inv-pack-size { flex-wrap: wrap; }
 }
 

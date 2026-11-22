@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, today, vnd } from '../services/financeApi';
-import MoneyInput from './MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import '../styles/finance.css';
 import '../styles/cashHandover.css';
 

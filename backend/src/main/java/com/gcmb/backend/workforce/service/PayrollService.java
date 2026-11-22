@@ -32,7 +32,7 @@ public class PayrollService {
   private final JdbcTemplate db;
   private final FinanceAccess access;
   private final ObjectMapper json;
-  private final FinancialPeriodService periods;
+  private final FinancialPeriodService financialPeriodService;
   private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
   public record BranchSettlement(UUID employeeId, BigDecimal bonus, BigDecimal penalty,
@@ -262,7 +262,7 @@ public class PayrollService {
     if (send) access.lock();
     UUID branch = access.branch(actor, send);
     LocalDate m = month(value);
-    if (send) periods.requireOpen(m, "chốt dữ liệu payroll tại cơ sở");
+    if (send) financialPeriodService.requireOpen(m, "chốt dữ liệu payroll tại cơ sở");
     if (m.isAfter(LocalDate.now(ZONE).withDayOfMonth(1))) throw bad("Không thể chốt lương cho tháng tương lai.");
     requireSettlementEmployee(actor, value, input.employeeId());
     // HuyDV / BR-64 / MSG87: cho chốt lương sớm khi công nhân viên đã khóa cả tháng, kể cả ở cơ sở khác.
@@ -377,11 +377,11 @@ public class PayrollService {
       """, entry, employee, period.get("id"));
   }
 
-  public PayrollService(JdbcTemplate db, FinanceAccess access, ObjectMapper json, FinancialPeriodService periods) {
+  public PayrollService(JdbcTemplate db, FinanceAccess access, ObjectMapper json, FinancialPeriodService financialPeriodService) {
     this.db = db;
     this.access = access;
     this.json = json;
-    this.periods = periods;
+    this.financialPeriodService = financialPeriodService;
   }
 
   public record Setting(
@@ -448,7 +448,7 @@ public class PayrollService {
 
   private Map<String, Object> period(LocalDate month, boolean create) {
     if (create) {
-      periods.requireOpen(month, "tạo hoặc cập nhật bảng lương");
+      financialPeriodService.requireOpen(month, "tạo hoặc cập nhật bảng lương");
       db.update(
         "INSERT INTO gcmb.payroll_period(month,status) VALUES (?,'DRAFT') ON CONFLICT(month) DO NOTHING",
         month
@@ -941,7 +941,7 @@ public class PayrollService {
     access.accountant(actor);
     access.lock();
     LocalDate m = month(value);
-    periods.requireOpen(m, "ghi nhận ứng lương cho kỳ này");
+    financialPeriodService.requireOpen(m, "ghi nhận ứng lương cho kỳ này");
     var p = period(m, true);
     validatePay(input);
     var repeated = db.queryForList(
@@ -1225,7 +1225,7 @@ public class PayrollService {
         " đ. Vui lòng kiểm tra lại nguồn tiền hoặc số tiền."
     ); // MSG93.
     LocalDate today = LocalDate.now(ZONE);
-    periods.requireOpen(today, "ghi nhận chi trả payroll");
+    financialPeriodService.requireOpen(today, "ghi nhận chi trả payroll");
     db.update(
       "INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING",
       today.withDayOfMonth(1)
