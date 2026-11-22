@@ -69,4 +69,58 @@
 .equipment-management .ei-drawer header { border-bottom-color: var(--gcmb-color-line); }
 .equipment-management .ei-drawer footer { border-top-color: var(--gcmb-color-line); }
 .equipment-management :where(button, input, select, textarea):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; }
+.equipment-management .ei-transfer-actions { min-width: 220px; }
+.equipment-management .ei-receipt-action { display: grid; gap: 7px; min-width: 190px; }
+.equipment-management .ei-transfer-actions select { box-sizing: border-box; width: 100%; min-height: 38px; padding: 0 9px; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); background: var(--gcmb-color-panel); color: var(--gcmb-color-ink); font: inherit; font-size: 12px; }
+.equipment-management .ei-transfer-actions button { min-height: 40px; padding: 8px 12px; border-color: var(--gcmb-color-primary); border-radius: var(--gcmb-radius-control); background: var(--gcmb-color-primary); color: var(--gcmb-color-on-primary); font-weight: 700; }
+.equipment-management .ei-transfer-actions button:hover:not(:disabled) { border-color: var(--gcmb-color-primary-hover); background: var(--gcmb-color-primary-hover); color: var(--gcmb-color-on-primary-hover); }
+.equipment-management .ei-transfer-actions button:disabled { opacity: .6; cursor: not-allowed; }
+.equipment-management .ei-transfer-actions small { color: var(--gcmb-color-warning); font-size: 11px; }
+.equipment-management .ei-heading > button { min-height: 40px; padding: 0 13px; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); background: var(--gcmb-color-panel); color: var(--gcmb-color-ink); font: inherit; font-weight: 650; cursor: pointer; }
+.equipment-management .ei-heading > button:hover:not(:disabled) { border-color: var(--gcmb-color-primary); color: var(--gcmb-color-primary); }
+.equipment-management .ei-heading > button:disabled { opacity: .6; cursor: wait; }
+.equipment-management .ei-transfer-page { padding: 26px clamp(16px, 2.8vw, 36px) 34px; color: var(--gcmb-color-ink); }
+.equipment-management .ei-transfer-page .ei-heading { align-items: center; margin-bottom: 18px; }
+.equipment-management .ei-transfer-page .ei-heading h1 { margin-top: 4px; font-size: clamp(24px, 2vw, 30px); letter-spacing: -.035em; }
+.equipment-management .ei-transfer-page .ei-heading p { margin: 6px 0 0; color: var(--gcmb-color-text); font-size: 13px; }
+.equipment-management .ei-transfer-eyebrow { color: var(--gcmb-color-primary); font-size: 10px; font-weight: 750; letter-spacing: .1em; }
+.equipment-management .ei-transfer-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 14px; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); background: var(--gcmb-color-panel); color: var(--gcmb-color-ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease; }
+.equipment-management .ei-transfer-refresh svg { width: 17px; height: 17px; }
+.equipment-management .ei-transfer-refresh:hover:not(:disabled) { border-color: var(--gcmb-color-primary); background: var(--gcmb-color-primary-soft); color: var(--gcmb-color-primary); }
+.equipment-management .ei-transfer-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+.equipment-management .ei-transfer-summary article { display: flex; align-items: center; gap: 12px; min-height: 82px; padding: 15px 17px; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); background: var(--gcmb-color-panel); box-shadow: var(--gcmb-shadow-sm); }
+.equipment-management .ei-summary-mark { width: 10px; height: 36px; flex: 0 0 10px; border-radius: 999px; background: var(--gcmb-color-warning); }
+.equipment-management .ei-summary-mark.is-transit { background: var(--gcmb-color-info); }
+.equipment-management .ei-summary-mark.is-completed { background: var(--gcmb-color-success); }
+.equipment-management .ei-transfer-summary article div { display: grid; gap: 3px; }
+.equipment-management .ei-transfer-summary small { color: var(--gcmb-color-text); font-size: 12px; font-weight: 600; }
+.equipment-management .ei-transfer-summary strong { color: var(--gcmb-color-ink); font-size: 22px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.equipment-management .ei-transfer-form { margin-bottom: 16px; padding: 0; overflow: hidden; box-shadow: var(--gcmb-shadow-sm); }
+.equipment-management .ei-transfer-form-heading { padding: 16px 20px 13px; border-bottom: 1px solid var(--gcmb-color-line); }
+.equipment-management .ei-transfer-form-heading h2,.equipment-management .ei-transfer-records-heading h2 { margin: 0; color: var(--gcmb-color-ink); font-size: 15px; font-weight: 720; }
+.equipment-management .ei-transfer-form-heading p,.equipment-management .ei-transfer-records-heading p { margin: 4px 0 0; color: var(--gcmb-color-text); font-size: 12px; }
+.equipment-management .ei-transfer-form>div:not(.ei-transfer-form-heading) { align-items: end; padding: 16px 20px 20px; }
+.equipment-management .ei-transfer-form label { color: var(--gcmb-color-text); font-size: 12px; }
+.equipment-management .ei-transfer-form input,.equipment-management .ei-transfer-form select { min-height: 42px; }
+.equipment-management .ei-transfer-form .ei-primary { min-height: 42px; white-space: nowrap; }
+.equipment-management .ei-transfer-records { overflow: hidden; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-panel); background: var(--gcmb-color-panel); box-shadow: var(--gcmb-shadow-sm); }
+.equipment-management .ei-transfer-records-heading { padding: 17px 20px 14px; }
+.equipment-management .ei-transfer-records .ei-table-wrap { border: 0; border-top: 1px solid var(--gcmb-color-line); border-radius: 0; }
+.equipment-management .ei-transfer-records .ei-table-wrap table { min-width: 850px; }
+.equipment-management .ei-transfer-records .ei-table-wrap th { padding: 12px 14px; font-size: 11px; letter-spacing: .035em; text-transform: uppercase; }
+.equipment-management .ei-transfer-records .ei-table-wrap td { padding: 13px 14px; vertical-align: middle; }
+.equipment-management .ei-transfer-records .ei-table-wrap td small { display: block; margin-top: 4px; color: var(--gcmb-color-text); font-size: 11px; }
+.equipment-management .ei-transfer-page .ei-footnote { margin: 11px 2px 0; font-size: 12px; line-height: 1.5; }
+@media(max-width:900px) {
+  .equipment-management .ei-transfer-form>div:not(.ei-transfer-form-heading) { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  .equipment-management .ei-transfer-page { padding: 18px 12px 25px; }
+  .equipment-management .ei-transfer-page .ei-heading { align-items: flex-start; flex-direction: column; }
+  .equipment-management .ei-transfer-summary { grid-template-columns: 1fr; gap: 8px; }
+  .equipment-management .ei-transfer-summary article { min-height: 68px; }
+  .equipment-management .ei-transfer-form>div:not(.ei-transfer-form-heading) { grid-template-columns: 1fr; padding: 14px; }
+  .equipment-management .ei-transfer-form-heading,.equipment-management .ei-transfer-records-heading { padding: 14px; }
+  .equipment-management .ei-transfer-records .ei-table-wrap table { min-width: 780px; }
+}
 @media (max-width: 600px) { .equipment-management .ei-drawer { border-radius: 0; } }

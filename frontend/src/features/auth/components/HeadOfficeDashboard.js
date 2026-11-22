@@ -60,6 +60,32 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     const search = params.toString();
     navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
+  const openPendingApprovals = () => {
+    const params = new URLSearchParams(location.search);
+    params.set('screen', 'Phê duyệt chi');
+    params.set('tab', 'expense_requests');
+    params.delete('section');
+    navigate({ pathname: dashboardPath, search: `?${params.toString()}` });
+  };
+  const openAlertDestination = (alert) => {
+    const params = new URLSearchParams();
+    if (alert.id?.startsWith('finance-')) {
+      params.set('screen', alert.id.includes('profit') ? 'Báo cáo chi phí' : 'Báo cáo kinh doanh');
+      if (alert.from && alert.to) { params.set('from', alert.from); params.set('to', alert.to); }
+      if (alert.from) params.set('month', alert.from.slice(0, 7));
+      if (alert.branchId) params.set('branchId', alert.branchId);
+    } else if (alert.kind === 'Sự cố thiết bị') {
+      params.set('screen', 'Thiết bị'); params.set('equipmentTab', 'incidents');
+      if (alert.id) params.set('incidentId', alert.id);
+      if (alert.branchId) params.set('equipmentBranchId', alert.branchId);
+    } else {
+      params.set('screen', 'Cơ sở');
+      if (alert.branchId) params.set('branchId', alert.branchId);
+      params.set('alertKind', alert.kind || 'Cảnh báo vận hành');
+      params.set('alertDetail', alert.detail || '');
+    }
+    navigate({ pathname: dashboardPath, search: `?${params.toString()}` });
+  };
   return <AppShell
     audience="head-office-manager"
     sidebarLabel="Quản lý cấp cao"
@@ -80,13 +106,13 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     )}
   >
     {activeTab === 'Tổng quan' ? (
-        <ExecutiveDashboard user={user} />
+        <ExecutiveDashboard user={user} onNavigate={openPendingApprovals} onAlertNavigate={openAlertDestination} />
       ) : activeTab === 'Báo cáo kinh doanh' ? (
         <AccountantFinancePage reportsOnly />
       ) : activeTab === 'Báo cáo chi phí' ? (
         <ExpenseBreakdownReportPage initialUser={user} />
       ) : activeTab === 'Cơ sở' ? (
-        <BranchManagementPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
+        <BranchManagementPage initialBranchId={new URLSearchParams(location.search).get('branchId')} initialAlert={{ kind: new URLSearchParams(location.search).get('alertKind'), detail: new URLSearchParams(location.search).get('alertDetail') }} onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Phòng & bảng giá' ? (
         <section className="manager-content manager-content-catalog">
           <RoomCatalogPage />
@@ -105,7 +131,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
-        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
+        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice initialSection={new URLSearchParams(location.search).get('equipmentTab')} initialIncidentId={new URLSearchParams(location.search).get('incidentId')} initialBranchId={new URLSearchParams(location.search).get('equipmentBranchId')} /></section>
       ) : activeTab === 'Phê duyệt chi' ? (
         <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}

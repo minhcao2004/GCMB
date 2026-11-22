@@ -84,6 +84,10 @@
   margin-bottom: 18px;
 }
 
+.ba-alert-context { display:grid; gap:4px; margin:0 0 16px; padding:13px 15px; border:1px solid #efd39a; border-radius:10px; background:#fff9ec; color:#775317; }
+.ba-alert-context strong { font-size:13px; }
+.ba-alert-context span { font-size:12px; line-height:1.45; }
+
 .ba-card h2 {
   font-size: 16px;
   margin: 0 0 22px;

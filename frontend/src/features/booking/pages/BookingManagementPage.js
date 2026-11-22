@@ -26,16 +26,10 @@ const navigation = [
   ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
-  ['Hóa đơn thuế', 'tax'],
-  ['Tổng quan', 'overview'],
-  ['Báo cáo chi tiết', 'report'],
-  ['Thu & cấp quỹ', 'payments'],
-  ['Chi & hoàn ứng', 'plus'],
-  ['Đối soát chốt quỹ', 'calendar'],
-
-  ['Hoàn tiền cọc', 'deposit'],
-  ['Lương nhân viên', 'booking'],
-  ['Báo cáo chi phí', 'orders'],
+  { label: 'Tổng quan', items: [['Tổng quan tài chính', 'overview'], ['Báo cáo & thống kê', 'report']] },
+  { label: 'Thu chi & thanh toán', items: [['Thu & cấp quỹ', 'payments'], ['Chi & hoàn ứng', 'plus'], ['Hoàn tiền cọc', 'deposit'], ['Hóa đơn thuế', 'tax']] },
+  { label: 'Đối soát & kiểm soát', items: [['Đối soát chốt quỹ', 'calendar']] },
+  { label: 'Nhân sự & chi phí', items: [['Lương nhân viên', 'booking'], ['Báo cáo chi phí', 'orders']] },
 ];
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
@@ -213,8 +207,10 @@ export function AppShell({
           sidebarLabel="Kế toán thu chi"
           brand={<div className="manager-brand"><BrandWordmark /></div>}
           roleLabel="KẾ TOÁN THU CHI"
-          navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
-                {navItems.map(([label, icon, unavailable]) => {
+          navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
+                {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
+                  <summary>{group.label}</summary>
+                  {group.items.map(([label, icon, unavailable]) => {
                   const pendingCount = icon === 'payments' ? accountingPending.payments
                     : icon === 'plus' ? accountingPending.recurring
                       : icon === 'deposit' ? accountingPending.refunds
@@ -245,6 +241,7 @@ export function AppShell({
                     <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
                   </button>
                 );})}
+                </details>)}
               </nav>}
           footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>

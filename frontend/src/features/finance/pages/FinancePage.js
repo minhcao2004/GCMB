@@ -196,6 +196,10 @@ function FinanceWorkspace({ user }) {
     setAccountTab(section==='payments'?'incoming':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
   },[location.pathname,location.search,navigate,role]);
   useEffect(()=>{
+    const requestedTab=new URLSearchParams(location.search).get('tab');
+    if(['fund','expense_requests'].includes(requestedTab)) setHeadOfficeTab(requestedTab);
+  },[location.search]);
+  useEffect(()=>{
     if(!fundDialogOpen)return;
     const trigger = fundDialogTriggerRef.current;
     fundDialogFirstFieldRef.current?.focus();
