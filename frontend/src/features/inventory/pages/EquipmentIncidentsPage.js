@@ -13,15 +13,17 @@ const labels={REPORTED:'Chờ duyệt',WAITING_APPROVAL:'Chờ duyệt',REJECTED
 // BR-111: Hiển thị lỗi kiểm tra nghiệp vụ trả về từ máy chủ.
 const errorText=e=>e.response?.data?.detail||e.response?.data?.message||e.response?.data?.errors?.form||'Không thể hoàn tất thao tác.';
 // UC-70–UC-73: Giao diện báo cáo, tra cứu, đánh giá và nghiệm thu sự cố theo cơ sở.
-export default function EquipmentIncidentsPage({user,headOffice=false}){
+export default function EquipmentIncidentsPage({user,headOffice=false,initialIncidentId='',initialBranchId=''}){
  const [rows,setRows]=useState([]),[assets,setAssets]=useState([]),[search,setSearch]=useState(''),[status,setStatus]=useState(''),[date,setDate]=useState('');
  const [mode,setMode]=useState(''),[selected,setSelected]=useState(null),[form,setForm]=useState(blank),[busy,setBusy]=useState(false),[assetsLoading,setAssetsLoading]=useState(false),[error,setError]=useState('');
- const [branches,setBranches]=useState([]),[branchId,setBranchId]=useState(headOffice?'':user?.branchId||''),[history,setHistory]=useState([]),[repairDocs,setRepairDocs]=useState({}),[repairDocsLoading,setRepairDocsLoading]=useState(false);
+ const [branches,setBranches]=useState([]),[branchId,setBranchId]=useState(headOffice?(initialBranchId||''):user?.branchId||''),[history,setHistory]=useState([]),[repairDocs,setRepairDocs]=useState({}),[repairDocsLoading,setRepairDocsLoading]=useState(false);
  const role=headOffice?'HEAD_OFFICE_MANAGER':user?.role;
  useEffect(()=>{if(headOffice)apiClient.get('/head-office/branches').then(r=>setBranches(r.data||[])).catch(e=>setError(errorText(e)))},[headOffice]);
  // UC-72: Tải kết quả tìm kiếm/lọc theo cơ sở và trạng thái được chọn.
  const load=useCallback(async()=>{try{const params={search,status};if(headOffice&&branchId)params.branchId=branchId;setRows(await equipmentIncidentApi.list(params,role))}catch(e){setError(errorText(e))}},[search,status,headOffice,branchId,role]);
  useEffect(()=>{load()},[load]);
+ useEffect(()=>{if(headOffice&&initialBranchId)setBranchId(initialBranchId)},[headOffice,initialBranchId]);
+ useEffect(()=>{if(initialIncidentId){const incident=rows.find(row=>String(row.id)===String(initialIncidentId));if(incident)setSelected(incident)}},[initialIncidentId,rows]);
  useEffect(()=>{if(selected?.id)equipmentIncidentApi.history(selected.id,role).then(setHistory).catch(()=>setHistory([]));else setHistory([])},[selected?.id,role]);
  useEffect(()=>{let active=true;const urls=[];setRepairDocs({});if(!selected?.id||!selected?.outcome){setRepairDocsLoading(false);return()=>{active=false}}setRepairDocsLoading(true);Promise.all(['invoice','transfer-proof'].map(async kind=>{try{const response=await equipmentIncidentApi.document(selected.id,kind,role);if(!active)return;const url=URL.createObjectURL(response.data);urls.push(url);setRepairDocs(current=>({...current,[kind]:{url,mimeType:response.data.type,name:kind==='invoice'?'Hóa đơn sửa chữa':'Chứng từ chuyển khoản'}}))}catch{if(active)setRepairDocs(current=>({...current,[kind]:{error:true,name:kind==='invoice'?'Hóa đơn sửa chữa':'Chứng từ chuyển khoản'}}))}})).finally(()=>{if(active)setRepairDocsLoading(false)});return()=>{active=false;urls.forEach(URL.revokeObjectURL)}},[selected?.id,selected?.outcome,role]);
  // UC-70/BR-41: Chỉ cho chọn tài sản đang hoạt động thuộc cơ sở phiên hiện tại.

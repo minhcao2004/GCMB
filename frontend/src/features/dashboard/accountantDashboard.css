@@ -120,6 +120,57 @@
 .accountant-period-status{display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--ad-line);border-radius:10px;background:#fff;color:var(--ad-copy);font-size:12px}.accountant-period-status strong{color:var(--ad-ink)}.accountant-period-status a{margin-left:auto;color:#8f0e5a;font-weight:700}
 @media(max-width:600px){.accountant-period-status{align-items:flex-start;flex-direction:column}.accountant-period-status a{margin-left:0}}
 
+/* Ledger-first finance dashboard: compact figures, reconciled cash flows, no decorative pie charts. */
+.accountant-dash { --ad-green:#167252; --ad-red:#b33d45; --ad-blue:#365f91; background:#f4f7fa; }
+.accountant-dash-header { margin-bottom:14px; }
+.accountant-dash-header h1 { color:#172b3d; letter-spacing:-.035em; }
+.accountant-dash-header p { color:#67798a; }
+.accountant-overview-filterbar { gap:10px; margin-bottom:14px; padding:13px; border-color:#dfe7ec; border-radius:12px; box-shadow:0 3px 12px rgba(31,52,70,.035); }
+.accountant-overview-filterbar label { min-width:150px; color:#526779; }
+.accountant-overview-filterbar input,.accountant-overview-filterbar select { min-height:42px; border-color:#d4dfe6; border-radius:8px; }
+.accountant-kpis { gap:10px; margin-bottom:14px; }
+.accountant-kpi { min-height:112px; padding:15px 17px; border-color:#e0e7ec!important; border-radius:11px; box-shadow:0 3px 12px rgba(31,52,70,.035); }
+.accountant-kpi>span { color:#596d7f; }
+.accountant-kpi strong { color:#1b3041; font-variant-numeric:tabular-nums; }
+.accountant-kpi small { color:#718292; }
+.accountant-overview-primary { grid-template-columns:minmax(0,1.8fr) minmax(280px,.85fr); }
+.accountant-overview-secondary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.accountant-dash-panel { padding:18px; border-color:#e0e7ec; border-radius:12px; box-shadow:0 3px 13px rgba(31,52,70,.035); }
+.accountant-panel-heading h2 { font-size:14px; color:#1b3041; }
+.accountant-panel-heading p { color:#6f8190; }
+.accountant-period-chip { border-color:#dce6ea; background:#f4f8f9; color:#536a7a!important; }
+.accountant-overview-chart .accountant-chart-income-line { stroke:#167a70; }
+.accountant-overview-chart .accountant-chart-expense-line { stroke:#bf5960; }
+.accountant-overview-chart .accountant-chart-key .is-income { background:#167a70; }
+.accountant-overview-chart .accountant-chart-key .is-expense { background:#bf5960; }
+.accountant-method-ledger { display:grid; gap:4px; margin-top:10px; }
+.accountant-method-ledger-row { display:grid; grid-template-columns:30px minmax(100px,1fr) minmax(70px,1.25fr) minmax(105px,auto) 50px; align-items:center; gap:10px; min-height:45px; padding:5px 0; border-bottom:1px solid #edf1f3; font-variant-numeric:tabular-nums; }
+.accountant-method-index { color:#8a98a4; font-size:10px; font-weight:750; }
+.accountant-method-name { color:#405667; font-size:11px; font-weight:650; }
+.accountant-method-track { height:8px; overflow:hidden; border-radius:99px; background:#e8eef0; }
+.accountant-method-track i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#4b9b8d,#176b68); }
+.accountant-method-ledger-row:nth-child(2) .accountant-method-track i { background:linear-gradient(90deg,#7b9aba,#365f91); }
+.accountant-method-ledger-row:nth-child(3) .accountant-method-track i { background:linear-gradient(90deg,#d8ae5c,#a77a24); }
+.accountant-method-ledger-row strong { color:#203748; font-size:11px; text-align:right; white-space:nowrap; }
+.accountant-method-ledger-row small { color:#758593; font-size:10px; text-align:right; }
+.accountant-method-panel>.accountant-panel-heading>strong { color:#1d3546; font-size:15px; font-variant-numeric:tabular-nums; }
+.accountant-overview-tasks>a { border-color:#e8eef1; }
+.accountant-overview-tasks>a b { background:#fff4e7; color:#8c5e18; }
+.accountant-dash .accountant-table-panel { border-color:#e0e7ec; border-radius:12px; box-shadow:0 3px 13px rgba(31,52,70,.035); }
+.accountant-dash .accountant-table-scroll th { background:#f1f5f7; color:#5d7181; letter-spacing:.04em; }
+.accountant-dash .accountant-table-scroll td { color:#344b5c; }
+.accountant-dash .accountant-table-scroll td.accountant-deviation { color:#a83e45; }
+.accountant-dash .accountant-table-scroll td.accountant-matched { color:#176b50; }
+.accountant-dash .accountant-table-scroll tbody tr:hover { background:#f5f9f9; }
+@media(max-width:1050px) { .accountant-overview-primary,.accountant-overview-secondary { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+ .accountant-dash-panel { padding:14px; }
+ .accountant-method-ledger-row { grid-template-columns:23px minmax(85px,1fr) minmax(42px,.7fr) minmax(88px,auto) 40px; gap:6px; }
+ .accountant-method-name,.accountant-method-ledger-row strong { font-size:10px; }
+ .accountant-method-track { height:7px; }
+ .accountant-overview-filterbar label { min-width:calc(50% - 6px); }
+}
+
 /* Accountant dashboard uses the shared backoffice palette and contrast-safe semantic text. */
 .accountant-dash {
   --ad-ink: var(--gcmb-color-ink, #1a1a2e);

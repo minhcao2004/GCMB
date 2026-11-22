@@ -10,7 +10,15 @@ import ImportedSourceReport from './ImportedSourceReport';
 import './accountantDashboard.css';
 
 const currentVnMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
+const currentVnDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const monthNow = currentVnMonth();
+const monthDateRange = (value) => {
+  const [year, monthNumber] = value.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+  const today = currentVnDate();
+  return { from: `${value}-01`, to: value === monthNow && lastDay > today ? today : lastDay };
+};
+const monthNames = Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1).padStart(2, '0'), label: `Tháng ${index + 1}` }));
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)} ₫`;
 const formatMonth = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
 const formatDate = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
@@ -25,12 +33,25 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const availableTabs = reportsOnly ? ['report'] : Object.keys(label);
   const [tab, setTab] = useState(() => availableTabs.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'report');
-  const [month, setMonth] = useState(monthNow);
+  const queryMonth = searchParams.get('month') || '';
+  const queryFrom = searchParams.get('from') || '';
+  const queryTo = searchParams.get('to') || '';
+  const validQueryMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(queryMonth) && queryMonth <= monthNow;
+  const rangeMonth = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryFrom) && queryFrom <= currentVnDate() ? queryFrom.slice(0, 7) : '';
+  const initialMonth = validQueryMonth ? queryMonth : rangeMonth || monthNow;
+  const [month, setMonth] = useState(initialMonth);
+  const [reportRange, setReportRange] = useState(() => {
+    const validDates = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryFrom)
+      && /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryTo)
+      && queryFrom <= queryTo && queryTo <= currentVnDate()
+      && queryFrom.slice(0, 7) === queryTo.slice(0, 7) && queryFrom.slice(0, 7) === initialMonth;
+    return validDates ? { from: queryFrom, to: queryTo } : monthDateRange(initialMonth);
+  });
   const [data, setData] = useState(null);
   const [revenueSummary, setRevenueSummary] = useState(null);
   const [dataTab, setDataTab] = useState(null);
   const [branchOptions, setBranchOptions] = useState([]);
-  const [branchId, setBranchId] = useState('');
+  const [branchId, setBranchId] = useState(() => searchParams.get('branchId') || '');
   const [rows, setRows] = useState([]);
   const [sourceTransactions, setSourceTransactions] = useState([]);
   const [operatingReport, setOperatingReport] = useState(null);
@@ -114,11 +135,17 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         : result;
       if (tab === 'periods' || tab === 'transactions') setRows(result);
       else { setData(report); setDataTab(tab); }
-      if (tab === 'report' && !branchId) setBranchOptions(report.results);
+      if (tab === 'report' && !reportsOnly && !branchId) setBranchOptions(report.results);
     })
       .catch((e) => { if (live) setError(errorText(e)); }).finally(() => { if (live) setLoading(false); });
+    if (tab === 'report' && reportsOnly) api.get('/head-office/dashboard', { params: { month } })
+      .then(({ data: dashboard }) => { if (live) setBranchOptions(dashboard.branches || []); })
+      .catch(() => { if (live) setBranchOptions([]); });
+    if (tab === 'report' && !reportsOnly && branchId) api.get('/accounting/reports/monthly', { params: { month } })
+      .then(({ data: report }) => { if (live) setBranchOptions(report.results || []); })
+      .catch(() => { if (live) setBranchOptions([]); });
     return () => { live = false; };
-  }, [tab, month, branchId, revision, transactionKind, transactionQuery]);
+  }, [tab, month, branchId, revision, transactionKind, transactionQuery, reportsOnly]);
 
   useEffect(() => {
     if (tab !== 'report') { setSourceTransactions([]); return undefined; }
@@ -245,14 +272,35 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     finally { setLogoutBusy(false); }
   }
 
+  function updateReportMonth(year, monthNumber) {
+    const nextMonth = `${year}-${monthNumber}`;
+    if (nextMonth > currentVnMonth()) return;
+    setMonth(nextMonth);
+    setReportRange(monthDateRange(nextMonth));
+  }
+
+  const reportYears = Array.from({ length: Number(monthNow.slice(0, 4)) - 2020 + 1 }, (_, index) => String(Number(monthNow.slice(0, 4)) - index));
+  const selectedBranchName = branchId
+    ? branchOptions.find((branch) => String(branch.id) === String(branchId))?.name || 'Cơ sở đã chọn'
+    : 'Toàn chuỗi';
+
   const content = <section className="performance-dashboard accountant-finance" aria-labelledby="finance-title">
-    <header className="finance-heading">
-      <div><h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
-      {<div className={`finance-filters${tab === 'report' ? ' finance-filters--report' : ''}`}>
-        <label className="finance-month">Kỳ báo cáo<input type="month" value={month} max={currentVnMonth()} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label>
-      {tab === 'report' && <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} value={branchId} onChange={setBranchId} /></div>}
-      </div>}
+    <header className={`finance-heading${tab === 'report' ? ' finance-heading--report' : ''}`}>
+      <div className="finance-heading-copy">{tab === 'report' && <span className="finance-heading-eyebrow">KẾ TOÁN · BÁO CÁO</span>}<h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
+      {tab !== 'report' && <div className="finance-filters" aria-label="Kỳ báo cáo"><label className="finance-month">Tháng<input aria-label="Chọn tháng báo cáo" type="month" value={month} max={currentVnMonth()} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} /></label></div>}
     </header>
+    {tab === 'report' && <div className="finance-report-filters" aria-label="Bộ lọc báo cáo">
+      <label className="finance-report-filter-field">Kỳ báo cáo<select value={month.slice(5, 7)} onChange={(event) => updateReportMonth(month.slice(0, 4), event.target.value)} aria-label="Chọn kỳ báo cáo">
+        {monthNames.map((item) => <option key={item.value} value={item.value} disabled={`${month.slice(0, 4)}-${item.value}` > currentVnMonth()}>{item.label}</option>)}
+      </select></label>
+      <label className="finance-report-filter-field">Năm<select value={month.slice(0, 4)} onChange={(event) => updateReportMonth(event.target.value, month.slice(5, 7))} aria-label="Chọn năm báo cáo">
+        {reportYears.map((year) => <option key={year} value={year}>{year}</option>)}
+      </select></label>
+      <label className="finance-report-filter-field">Từ ngày<input type="date" required value={reportRange.from} min={`${month}-01`} max={monthDateRange(month).to} onChange={(event) => { if (event.target.value) setReportRange((current) => ({ from: event.target.value, to: current.to < event.target.value ? event.target.value : current.to })); }} /></label>
+      <label className="finance-report-filter-field">Đến ngày<input type="date" required value={reportRange.to} min={reportRange.from} max={monthDateRange(month).to} onChange={(event) => { if (event.target.value) setReportRange((current) => ({ ...current, to: event.target.value })); }} /></label>
+      <div className="finance-report-filter-field"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} value={branchId} onChange={setBranchId} /></div>
+      <span className="finance-report-scope-summary">{selectedBranchName}</span>
+    </div>}
     <nav className="finance-tabs" aria-label="Nghiệp vụ tài chính">{Object.entries(label).filter(([key]) => availableTabs.includes(key)).map(([key, value]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => selectTab(key)}>{value}</button>)}</nav>
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải dữ liệu…</p>}
@@ -272,22 +320,28 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         </div>
         <button type="button" onClick={() => selectTab('periods')}>Xem kỳ tài chính</button>
       </section>}
-      <ImportedSourceReport month={month} branchId={branchId} branchOptions={branchOptions} onMonthChange={setMonth} onBranchChange={setBranchId} reportTotals={data.totals} financialReport={operatingReport} operationalTransactions={sourceTransactions} />
-      <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} compact onReportData={setOperatingReport} />
+      <ImportedSourceReport month={month} range={reportRange} branchId={branchId} reportTotals={data.totals} financialReport={operatingReport} operationalTransactions={sourceTransactions} />
+      <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} from={reportRange.from} to={reportRange.to} compact onReportData={setOperatingReport} />
     </>}
     {!reportsOnly && tab === 'report' && <p className="finance-shortcuts"><span>Nghiệp vụ liên quan</span><Link to="/ke-toan/hoan-coc">Yêu cầu hoàn cọc</Link><Link to="/ke-toan/hoa-don-thue">Hóa đơn thuế</Link></p>}
     {!reportsOnly && tab === 'periods' && !loading && !error && <>
       <section className="finance-period-readiness" aria-labelledby="period-readiness-title">
-        <div className="finance-section-heading"><div><h2 id="period-readiness-title">Điều kiện khóa kỳ {formatMonth(month)}</h2><p>Điều kiện được kiểm tra lại khi khóa kỳ.</p></div>
-          <button type="button" disabled={busy || readinessLoading || !periodReadiness?.canClose} onClick={() => { setCloseNote(''); setClosingMonth(month); }}>Khóa kỳ</button></div>
+        <div className="finance-close-head"><div className="finance-close-title"><span>KỲ TÀI CHÍNH</span><h2 id="period-readiness-title">Chốt kỳ {formatMonth(month)}</h2><p>Rà soát điều kiện trước khi khóa sổ.</p></div>
+          <div className="finance-close-summary" aria-label="Tình trạng điều kiện chốt kỳ">
+            <div><span>Điều kiện đạt</span><strong>{readinessLoading ? '…' : periodReadiness ? `${periodReadiness.checks.filter((item) => item.passed).length}/${periodReadiness.checks.length}` : '—'}</strong></div>
+            <div><span>Chưa đạt</span><strong>{readinessLoading ? '…' : periodReadiness ? periodReadiness.checks.filter((item) => !item.passed).length : '—'}</strong></div>
+            <span className={`finance-close-badge${periodReadiness?.canClose || periodReadiness?.status === 'CLOSED' ? ' is-ready' : ''}`}>{readinessLoading ? 'Đang kiểm tra' : periodReadiness?.status === 'CLOSED' ? 'Đã khóa' : periodReadiness?.canClose ? 'Sẵn sàng' : 'Cần xử lý'}</span>
+            <button type="button" disabled={busy || readinessLoading || !periodReadiness?.canClose} onClick={() => { setCloseNote(''); setClosingMonth(month); }}>{periodReadiness?.status === 'CLOSED' ? 'Đã khóa' : 'Khóa kỳ'}</button>
+          </div>
+        </div>
         {periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning" role="status">{EARLY_CLOSE_WARNING}</p>}
         {readinessLoading && <p role="status">Đang kiểm tra điều kiện…</p>}
         {periodReadiness && <>
-          <ul className="finance-period-checks">{periodReadiness.checks.map((item) => <li key={item.key} className={item.passed ? 'is-passed' : 'is-pending'}><span>{item.passed ? 'Đạt' : 'Chưa đạt'}</span><strong>{item.label}</strong><span>Còn {item.pendingCount}</span><small>{item.detail}</small></li>)}</ul>
+          <ul className="finance-period-checks">{periodReadiness.checks.map((item) => <li key={item.key} className={item.passed ? 'is-passed' : 'is-pending'}><span className="finance-check-status">{item.passed ? 'Đạt' : 'Cần xử lý'}</span><div className="finance-check-copy"><strong>{item.label}</strong><small>{item.detail}</small></div><span className="finance-check-count">Còn {item.pendingCount}</span></li>)}</ul>
           <p className="finance-period-limitation">Lưu ý: {periodReadiness.cashCalendarLimitation}</p>
         </>}
       </section>
-    <DataTable caption="Lịch sử kỳ tài chính" columns={['Kỳ', 'Trạng thái', 'Phiếu chốt quỹ chưa đối soát', 'Người khóa', 'Thời điểm khóa', 'Ghi chú']} numericColumns={[2]} rows={rows} values={(r) => [formatMonth(String(r.month).slice(0, 7)), r.status === 'CLOSED' ? 'Đã khóa' : 'Đang mở', r.unreconciledClosings, r.closedBy || '—', r.closedAt ? new Date(r.closedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—', r.closeNote || '—']} />
+    <section className="finance-period-history" aria-label="Lịch sử chốt kỳ"><div><h2>Lịch sử kỳ tài chính</h2><p>Các kỳ đã khóa và trạng thái đối soát.</p></div><DataTable caption="Lịch sử kỳ tài chính" columns={['Kỳ', 'Trạng thái', 'Phiếu chốt quỹ chưa đối soát', 'Người khóa', 'Thời điểm khóa', 'Ghi chú']} numericColumns={[2]} rows={rows} values={(r) => [formatMonth(String(r.month).slice(0, 7)), r.status === 'CLOSED' ? 'Đã khóa' : 'Đang mở', r.unreconciledClosings, r.closedBy || '—', r.closedAt ? new Date(r.closedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—', r.closeNote || '—']} /></section>
     </>}
     {!reportsOnly && closingMonth && <div className="finance-period-dialog-backdrop" role="presentation"><section className="finance-period-dialog" role="dialog" aria-modal="true" aria-labelledby="closing-period-title"><h2 id="closing-period-title">Xác nhận khóa kỳ {formatMonth(closingMonth)}</h2><p>Thao tác này khóa kỳ vĩnh viễn. Các giao dịch ngày thuộc kỳ sẽ không thể tạo, sửa hoặc xóa.</p>{periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning">{EARLY_CLOSE_WARNING}</p>}<label>Ghi chú khóa kỳ<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} maxLength={1000} /></label><div className="finance-period-dialog-actions"><button type="button" disabled={busy} onClick={() => setClosingMonth(null)}>Hủy</button><button className="finance-period-dialog-primary" type="button" disabled={busy} onClick={() => closePeriod(closingMonth)}>{busy ? 'Đang khóa…' : 'Xác nhận khóa kỳ'}</button></div></section></div>}
     {!reportsOnly && tab === 'transactions' && !loading && !error && <>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './imported-source-report.css';
 
@@ -7,21 +7,12 @@ const tabs = [
   ['method', 'Phương thức thanh toán'], ['branch', 'So sánh cơ sở'],
 ];
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
-const dayString = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const todayString = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const years = () => { const current = Number(todayString().slice(0, 4)); return Array.from({ length: current - 2019 }, (_, index) => current - index); };
 const dateLabel = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
 const reportNames = {
   cashflow: 'Báo cáo thu chi theo thời gian', revenue: 'Doanh thu theo thời gian',
   cost: 'Chi phí theo thời gian', method: 'Khoản thu theo phương thức thanh toán',
   branch: 'So sánh các cơ sở',
 };
-
-function bounds(month) {
-  const [year, monthNumber] = month.split('-').map(Number);
-  const lastDay = dayString(new Date(year, monthNumber, 0));
-  return { from: `${month}-01`, to: month === todayString().slice(0, 7) && lastDay > todayString() ? todayString() : lastDay };
-}
 
 function paymentMethod(row) {
   if (row.paymentMethod) return row.paymentMethod;
@@ -49,7 +40,7 @@ function SourceChart({ type, rows, financialReport }) {
   }
   if (type === 'method') {
     const methods = new Map();
-    rows.filter((row) => row.recordType === 'BOOKING').forEach((row) => {
+    rows.filter((row) => row.recordType === 'BOOKING' || row.recordType === 'KIOT_INVOICE').forEach((row) => {
       const method = paymentMethod(row);
       methods.set(method, (methods.get(method) || 0) + Number(row.paidAmount || 0));
     });
@@ -120,9 +111,7 @@ function SourceChart({ type, rows, financialReport }) {
   </svg><p className="isr-chart-caption">{type === 'revenue' ? 'Doanh thu sau giảm giá theo ngày ghi trên hóa đơn.' : 'Số khách đã trả theo ngày ghi trên hóa đơn.'}</p></div>;
 }
 
-export default function ImportedSourceReport({ month, branchId, branchOptions = [], onMonthChange, onBranchChange, reportTotals, financialReport, operationalTransactions = [] }) {
-  const initial = useMemo(() => bounds(month), [month]);
-  const [range, setRange] = useState(initial);
+export default function ImportedSourceReport({ month, range, branchId, reportTotals, financialReport, operationalTransactions = [] }) {
   const [reportType, setReportType] = useState('cashflow');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -131,7 +120,7 @@ export default function ImportedSourceReport({ month, branchId, branchOptions = 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => { setRange(bounds(month)); setPage(1); }, [month]);
+  useEffect(() => { setPage(1); }, [month, range.from, range.to, branchId]);
   useEffect(() => {
     let active = true;
     setLoading(true); setError('');
@@ -154,7 +143,7 @@ export default function ImportedSourceReport({ month, branchId, branchOptions = 
   }));
   const rowsByType = reportType === 'revenue' || reportType === 'branch'
     ? allRows.filter((row) => row.recordType === 'KIOT_INVOICE')
-    : reportType === 'method' ? allRows.filter((row) => row.recordType === 'BOOKING')
+    : reportType === 'method' ? allRows.filter((row) => row.recordType === 'BOOKING' || row.recordType === 'KIOT_INVOICE')
       : reportType === 'cost' ? ledgerExpenses : [...allRows, ...ledgerExpenses];
   const filteredRows = rowsByType.filter((row) => {
     const haystack = [row.sourceKey, row.invoiceNumber, row.branchName, row.sourceSheet, row.recordType, row.paymentMethod, row.room, row.reason]
@@ -168,32 +157,27 @@ export default function ImportedSourceReport({ month, branchId, branchOptions = 
   const amountLabel = reportType === 'method' ? 'Tiền khách trả' : reportType === 'revenue' || reportType === 'branch' ? 'Doanh thu' : 'Số tiền';
 
   return <section className="imported-source-report" aria-labelledby="isr-title" aria-busy={loading}>
-    <header className="isr-heading"><h2 id="isr-title">Báo cáo &amp; thống kê</h2></header>
-    <div className="isr-filter-row"><label>Từ ngày<input type="date" min={`${month}-01`} max={bounds(month).to} value={range.from} onChange={(event) => { setRange((current) => ({ ...current, from: event.target.value })); setPage(1); }} /></label><label>Đến ngày<input type="date" min={range.from} max={bounds(month).to} value={range.to} onChange={(event) => { setRange((current) => ({ ...current, to: event.target.value })); setPage(1); }} /></label><span>{dateLabel(range.from)} – {dateLabel(range.to)} · {branchId ? 'Cơ sở đang chọn' : 'Toàn chuỗi'}</span></div>
+    <header className="isr-heading"><div><span className="isr-eyebrow">SỔ KẾ TOÁN</span><h2 id="isr-title">Báo cáo &amp; thống kê</h2></div></header>
     {allRows.some((row) => row.sourceSystem === 'SYNTHETIC_DEMO') && <p className="isr-data-notice" role="status"><strong>Báo cáo có dữ liệu mô phỏng.</strong> Các dòng mô phỏng được ghi nhãn trong bảng chi tiết.</p>}
     <nav className="isr-tabs" aria-label="Loại báo cáo">{tabs.map(([key, title]) => <button type="button" key={key} aria-pressed={reportType === key} onClick={() => { setReportType(key); setPage(1); }}>{title}</button>)}</nav>
     <div className="isr-kpis" aria-label="Tổng hợp báo cáo">
-      <article><span>Tổng khoản thu</span><strong>{money(receipts)}</strong><small>{invoices.length.toLocaleString('vi-VN')} hóa đơn trong kỳ</small></article>
-      <article><span>Tổng chi vận hành</span><strong>{expenseAvailable ? money(expenses) : '—'}</strong><small>Chi phí đã thanh toán trong kỳ</small></article>
-      <article><span>Chênh lệch thu − chi</span><strong>{expenseAvailable ? money(receipts - expenses) : '—'}</strong><small>Khoản thu trừ chi phí vận hành</small></article>
-      <article><span>Số giao dịch</span><strong>{(allRows.length + ledgerExpenses.length).toLocaleString('vi-VN')}</strong><small>{allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · {invoices.length.toLocaleString('vi-VN')} hóa đơn</small></article>
+      <article><span>Thu khách hàng</span><strong>{money(receipts)}</strong><small>{invoices.length.toLocaleString('vi-VN')} hóa đơn</small></article>
+      <article><span>Chi vận hành</span><strong>{expenseAvailable ? money(expenses) : '—'}</strong><small>Đã thanh toán</small></article>
+      <article><span>Thuần vận hành</span><strong>{expenseAvailable ? money(receipts - expenses) : '—'}</strong><small>Thu − chi</small></article>
+      <article><span>Giao dịch</span><strong>{(allRows.length + ledgerExpenses.length).toLocaleString('vi-VN')}</strong><small>{allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · {invoices.length.toLocaleString('vi-VN')} hóa đơn</small></article>
     </div>
     <article className="isr-card">
       <div className="isr-card-heading"><div><h3>{reportNames[reportType]}</h3><p>{reportType === 'cost' ? 'Chi phí vận hành theo kỳ đã chọn.' : 'Dữ liệu theo ngày và cơ sở đang chọn.'}</p></div><span>{reportType === 'cost' ? `${money(expenses)} chi phí` : `${filteredRows.length.toLocaleString('vi-VN')} giao dịch`}</span></div>
       {error ? <div className="isr-state isr-error" role="alert">{error}</div> : loading ? <div className="isr-state" role="status">Đang tải báo cáo…</div> : <SourceChart type={reportType} rows={allRows} financialReport={financialReport} />}
     </article>
     <article className="isr-card isr-table-card">
-      <div className="isr-card-heading"><div><h3>Chi tiết giao dịch nguồn</h3><p>Tra cứu hóa đơn, booking và chi phí đã ghi sổ.</p></div><span>{filteredRows.length.toLocaleString('vi-VN')} dòng</span></div>
+      <div className="isr-card-heading"><div><h3>Chi tiết giao dịch</h3></div><span>{filteredRows.length.toLocaleString('vi-VN')} dòng</span></div>
       <div className="isr-table-tools">
-        <label>Ngày<input type="date" min={`${month}-01`} max={bounds(month).to} value={range.from === range.to ? range.from : ''} onChange={(event) => { if (!event.target.value) return; setRange({ from: event.target.value, to: event.target.value }); setPage(1); }} /></label>
-        <label>Tháng<select value={month.slice(5, 7)} onChange={(event) => onMonthChange?.(`${month.slice(0, 4)}-${event.target.value}`)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1).padStart(2, '0')}>Tháng {index + 1}</option>)}</select></label>
-        <label>Năm<select value={month.slice(0, 4)} onChange={(event) => onMonthChange?.(`${event.target.value}-${month.slice(5, 7)}`)}>{years().map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
-        <label>Cơ sở<select value={branchId} onChange={(event) => { onBranchChange?.(event.target.value); setPage(1); }}><option value="">Tất cả cơ sở</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
         <label className="isr-search-filter">Tìm kiếm<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Mã giao dịch, cơ sở…" /></label>
-        <label className="isr-page-size-filter">Dòng mỗi trang<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="10">10 dòng/trang</option><option value="25">25 dòng/trang</option><option value="50">50 dòng/trang</option></select></label>
+        <label className="isr-page-size-filter">Số dòng<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="10">10 dòng</option><option value="25">25 dòng</option><option value="50">50 dòng</option></select></label>
       </div>
       <div className="isr-table-scroll"><table><caption>{reportNames[reportType]} · {dateLabel(range.from)} – {dateLabel(range.to)}</caption><thead><tr><th scope="col">Ngày</th><th scope="col">Mã giao dịch</th><th scope="col">Cơ sở</th><th scope="col">Danh mục</th><th scope="col">Phương thức</th><th scope="col" className="isr-number">{amountLabel}</th><th scope="col">Nguồn</th></tr></thead><tbody>
-        {visibleRows.map((row) => <tr key={row.id}><td>{dateLabel(row.businessDate)}</td><td>{row.invoiceNumber || row.sourceKey || `${row.sourceSheet || 'LEDGER'}-${row.id}`}</td><td>{row.branchName}</td><td>{row.recordType === 'KIOT_INVOICE' ? 'Hóa đơn doanh thu' : row.recordType === 'BOOKING' ? 'Booking' : 'Chi phí vận hành'}</td><td>{row.recordType === 'KIOT_INVOICE' ? (row.paymentMethod || 'Theo hóa đơn') : row.recordType === 'BOOKING' ? paymentMethod(row) : (row.paymentMethod || '—')}</td><td className="isr-number">{money(reportType === 'revenue' || reportType === 'branch' ? row.amount : row.paidAmount)}</td><td><span className={`isr-origin${row.sourceSystem === 'SYNTHETIC_DEMO' ? ' is-synthetic' : row.sourceSystem === 'LEDGER' ? ' is-ledger' : ''}`}>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Mô phỏng' : row.sourceSystem === 'LEDGER' ? 'Sổ kế toán' : 'File gốc'}</span></td></tr>)}
+        {visibleRows.map((row) => <tr key={row.id}><td>{dateLabel(row.businessDate)}</td><td>{row.invoiceNumber || row.sourceKey || `${row.sourceSheet || 'LEDGER'}-${row.id}`}</td><td>{row.branchName}</td><td>{row.recordType === 'KIOT_INVOICE' ? 'Hóa đơn doanh thu' : row.recordType === 'BOOKING' ? 'Booking' : 'Chi phí vận hành'}</td><td>{row.recordType === 'KIOT_INVOICE' ? (row.paymentMethod || 'Theo hóa đơn') : row.recordType === 'BOOKING' ? paymentMethod(row) : (row.paymentMethod || '—')}</td><td className="isr-number">{money(reportType === 'revenue' || reportType === 'branch' ? row.amount : row.paidAmount)}</td><td><span className={`isr-origin${row.sourceSystem === 'SYNTHETIC_DEMO' ? ' is-synthetic' : row.sourceSystem === 'LEDGER' ? ' is-ledger' : row.sourceSystem === 'OPERATIONAL' ? ' is-operational' : ''}`}>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Mô phỏng' : row.sourceSystem === 'LEDGER' ? 'Sổ kế toán' : row.sourceSystem === 'OPERATIONAL' ? 'Hóa đơn vận hành' : 'File gốc'}</span></td></tr>)}
         {!loading && visibleRows.length === 0 && <tr><td colSpan="7" className="isr-no-rows">Không có dữ liệu trong bộ lọc này.</td></tr>}
       </tbody></table></div>
       <div className="isr-pager"><span>Trang {safePage} / {pageCount}</span><div><button type="button" disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Trước</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Tiếp</button></div></div>

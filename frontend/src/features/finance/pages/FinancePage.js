@@ -154,7 +154,7 @@ function FinanceWorkspace({ user }) {
   const accountantSection=initialTab||'plus';
   const requestedTab=initialParams.get('tab');
   const [accountTab,setAccountTab]=useState(accountantSection==='payments'?'incoming':accountantSection==='inventory'?'categories':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
-  const [headOfficeTab,setHeadOfficeTab]=useState('fund');
+  const [headOfficeTab,setHeadOfficeTab]=useState(requestedTab==='expense_requests'?'expense_requests':'fund');
   const [fundDialogOpen,setFundDialogOpen]=useState(false);
   const [directDialogOpen,setDirectDialogOpen]=useState(false);
   const [recurringPayPeriod,setRecurringPayPeriod]=useState(null);
@@ -183,6 +183,10 @@ function FinanceWorkspace({ user }) {
     const requestedTab=params.get('tab');
     setAccountTab(section==='payments'?'incoming':['requests','recurring','drawer','history','categories'].includes(requestedTab)?requestedTab:'requests');
   },[location.pathname,location.search,navigate]);
+  useEffect(()=>{
+    const requestedTab=new URLSearchParams(location.search).get('tab');
+    if(['fund','expense_requests'].includes(requestedTab)) setHeadOfficeTab(requestedTab);
+  },[location.search]);
   useEffect(()=>{
     if(!fundDialogOpen)return;
     const trigger = fundDialogTriggerRef.current;

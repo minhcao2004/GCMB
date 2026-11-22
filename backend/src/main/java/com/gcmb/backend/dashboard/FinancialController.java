@@ -141,6 +141,41 @@ public class FinancialController {
             FROM imported
             ORDER BY "businessDate" DESC,"branchName", "recordType", "sourceRow"
             """, start,end,branchId,branchId,syntheticFilter,syntheticFilter,syntheticFilter);
+        if ("ALL".equals(selectedSource)) {
+            List<Map<String, Object>> operationalBills = db.queryForList("""
+                WITH bill_payments AS (
+                  SELECT bill_id,SUM(amount) paid_amount,
+                    COUNT(DISTINCT method) method_count,BOOL_OR(method='CASH') has_cash,BOOL_OR(method='BANK_TRANSFER') has_bank,
+                    COALESCE(SUM(amount) FILTER (WHERE method='CASH'),0) cash_amount,
+                    COALESCE(SUM(amount) FILTER (WHERE method='BANK_TRANSFER'),0) bank_amount
+                  FROM gcmb.payment WHERE purpose='BILL' GROUP BY bill_id
+                )
+                SELECT b.id,'KIOT_INVOICE'::varchar AS "recordType",'OPERATIONAL'::varchar AS "sourceSystem",
+                  (b.completed_at AT TIME ZONE br.timezone)::date AS "businessDate",'BILL'::text AS "sourceSheet",
+                  row_number() OVER (ORDER BY b.completed_at DESC,b.number)::integer AS "sourceRow",
+                  b.number AS "sourceKey",br.id AS "branchId",br.name AS "branchName",b.number AS "invoiceNumber",
+                  ''::text AS room,
+                  CASE WHEN p.method_count>1 THEN 'Kết hợp' WHEN p.has_bank THEN 'Chuyển khoản'
+                       WHEN p.has_cash THEN 'Tiền mặt' ELSE '' END AS "paymentMethod",
+                  b.net_amount AS amount,COALESCE(p.paid_amount,0) AS "paidAmount",
+                  COALESCE(p.cash_amount,0) AS "cashAmount",COALESCE(p.bank_amount,0) AS "bankAmount"
+                FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
+                LEFT JOIN bill_payments p ON p.bill_id=b.id
+                WHERE b.status='SETTLED'
+                  AND (b.completed_at AT TIME ZONE br.timezone)::date>=?
+                  AND (b.completed_at AT TIME ZONE br.timezone)::date<=?
+                  AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM gcmb.source_import_record r
+                    WHERE r.branch_id=b.branch_id AND r.record_type='KIOT_INVOICE'
+                      AND r.business_date>=? AND r.business_date<=?
+                  )
+                ORDER BY "businessDate" DESC,"branchName","sourceRow"
+                """, start,end,branchId,branchId,start,end);
+            rows.addAll(operationalBills);
+        }
+        rows.sort(java.util.Comparator.comparing((Map<String, Object> row) -> String.valueOf(row.get("businessDate"))).reversed()
+            .thenComparing(row -> String.valueOf(row.get("branchName"))));
         List<Map<String, Object>> branches = db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
         return Map.of("from", start.toString(), "to", end.toString(), "source", selectedSource,
             "branchOptions", branches, "rows", rows);
@@ -313,9 +348,20 @@ public class FinancialController {
     @Transactional(readOnly = true)
     public Map<String, Object> dashboardDetails(@AuthenticationPrincipal Identity actor,
                                                 @RequestParam String month,
-                                                @RequestParam(required = false) UUID branchId) {
+                                                @RequestParam(required = false) UUID branchId,
+                                                @RequestParam(required = false) String from,
+                                                @RequestParam(required = false) String to) {
         requireAccountant(actor);
-        LocalDate start = month(month);
+        LocalDate start;
+        LocalDate endExclusive;
+        try {
+            start = from == null || from.isBlank() ? month(month) : LocalDate.parse(from);
+            LocalDate end = to == null || to.isBlank() ? start.plusMonths(1).minusDays(1) : LocalDate.parse(to);
+            if (end.isBefore(start)) throw bad("Khoảng ngày không hợp lệ.");
+            endExclusive = end.plusDays(1);
+        } catch (java.time.format.DateTimeParseException invalidDate) {
+            throw bad("Khoảng ngày không hợp lệ.");
+        }
         List<Map<String, Object>> methods = db.queryForList("""
             WITH bills AS (
               SELECT b.id,b.net_amount,
@@ -328,7 +374,7 @@ public class FinancialController {
                 AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
               GROUP BY b.id,b.net_amount
             ) SELECT method AS label,SUM(net_amount) AS value FROM bills GROUP BY method ORDER BY method
-            """, start, start.plusMonths(1), branchId, branchId);
+            """, start, endExclusive, branchId, branchId);
         List<Map<String, Object>> exceptions = db.queryForList("""
             SELECT bt.id,bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
               bt.match_status AS status,bt.exception_reason AS "exceptionReason",bt.transfer_content AS reason,
@@ -342,7 +388,7 @@ public class FinancialController {
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
             """, Timestamp.from(start.atStartOfDay(FinancialPeriodService.ZONE).toInstant()),
-                Timestamp.from(start.plusMonths(1).atStartOfDay(FinancialPeriodService.ZONE).toInstant()), branchId, branchId);
+                Timestamp.from(endExclusive.atStartOfDay(FinancialPeriodService.ZONE).toInstant()), branchId, branchId);
         return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
     }
 

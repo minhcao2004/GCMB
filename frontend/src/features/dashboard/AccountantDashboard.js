@@ -76,10 +76,9 @@ export default function AccountantDashboard() {
   const [dateFrom, setDateFrom] = useState(() => monthBounds(monthNow()).start);
   const [dateTo, setDateTo] = useState(() => monthBounds(monthNow()).end);
   const [branchId, setBranchId] = useState('');
-  const [dateBasis, setDateBasis] = useState('cash');
+  const dateBasis = 'cash';
   const [branches, setBranches] = useState([]);
   const [refunds, setRefunds] = useState([]);
-  const [payroll, setPayroll] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [sourceTransactions, setSourceTransactions] = useState([]);
@@ -108,14 +107,13 @@ export default function AccountantDashboard() {
     Promise.allSettled([
       api.get('/accounting/reports/monthly', { params }),
       api.get('/accounting/deposits/refund-requests'),
-      api.get(`/accounting/payroll/${month}`),
       api.get('/accounting/financial-periods'),
-      api.get('/accounting/dashboard-details', { params }),
+      api.get('/accounting/dashboard-details', { params: { month, from: dateFrom, to: dateTo, ...(branchId ? { branchId } : {}) } }),
       api.get('/accounting/transactions', { params }),
       api.get('/accounting/reports/source-imports', { params: { from: monthBounds(month).start, to: monthBounds(month).end, ...(branchId ? { branchId } : {}) } }),
     ]).then((results) => {
       if (!active) return;
-      const [summary, refund, payrollResult, periodResult, details, transactions, imported] = results;
+      const [summary, refund, periodResult, details, transactions, imported] = results;
       if (summary.status === 'fulfilled') {
         const list = summary.value.data.results || [];
         setBranches((current) => {
@@ -125,7 +123,6 @@ export default function AccountantDashboard() {
         });
       } else { setError(errorText(summary.reason)); }
       setRefunds(refund.status === 'fulfilled' ? refund.value.data.items || [] : []);
-      setPayroll(payrollResult.status === 'fulfilled' ? payrollResult.value.data : null);
       setPeriods(periodResult.status === 'fulfilled' ? periodResult.value.data || [] : []);
       setPaymentMethods(details.status === 'fulfilled' ? details.value.data.paymentMethods || [] : []);
       setRecentTransactions(transactions.status === 'fulfilled' ? transactions.value.data || [] : []);
@@ -138,7 +135,7 @@ export default function AccountantDashboard() {
       if (results.slice(1, 6).some((item) => item.status === 'rejected')) setError((current) => current || 'Một số bảng nghiệp vụ không tải được; số liệu bị thiếu được để trống.');
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [month, branchId]);
+  }, [month, branchId, dateFrom, dateTo]);
 
   const displayBranches = branches;
   const activeRefunds = refunds;
@@ -146,10 +143,6 @@ export default function AccountantDashboard() {
     && String(row.requestedAt || '').slice(0, 10) >= dateFrom && String(row.requestedAt || '').slice(0, 10) <= dateTo);
   const selectedRefunds = branchId ? refundRows.filter((row) => row.branchId === branchId || row.branchName === displayBranches.find((item) => item.id === branchId)?.name) : refundRows;
   const refundAmount = selectedRefunds.reduce((sum, row) => sum + Number(row.amount || row.refundAmount || 0), 0);
-  const activePayroll = payroll;
-  const payrollRows = activePayroll?.rows || activePayroll?.entries || [];
-  const payrollTotal = payrollRows.reduce((sum, row) => sum + Number(row.netAmount || row.net_amount || 0), 0);
-  const payrollPaid = payrollRows.filter((row) => row.paid).reduce((sum, row) => sum + Number(row.netAmount || row.net_amount || 0), 0);
   const currentPeriod = periods.find((row) => String(row.month).slice(0, 7) === month);
   const branchLabel = branchId ? displayBranches.find((item) => item.id === branchId)?.name || 'Cơ sở đang chọn' : 'Toàn chuỗi';
   const canonicalBranches = new Set(recentTransactions.filter((row) => row.kind === 'PAYMENT' && Number(row.amount) > 0).map((row) => row.branchId).filter(Boolean));
@@ -160,18 +153,12 @@ export default function AccountantDashboard() {
       && date >= dateFrom && date <= dateTo;
   });
   const chartTransactions = filteredTransactions;
-  const activePaymentMethods = paymentMethods.length ? paymentMethods : [...sourceTransactions.reduce((methods, row) => {
+  const activePaymentMethods = paymentMethods.length ? paymentMethods : [...sourceTransactions.filter((row) => row.bookingDate >= dateFrom && row.bookingDate <= dateTo && (!branchId || row.branchId === branchId)).reduce((methods, row) => {
     const label = row.method || 'Theo dữ liệu nguồn';
     methods.set(label, (methods.get(label) || 0) + Math.max(0, Number(row.amount) || 0));
     return methods;
   }, new Map()).entries()].map(([label, value]) => ({ label, value }));
   const paymentTotal = activePaymentMethods.reduce((sum, item) => sum + Number(item.value || 0), 0);
-  let paymentOffset = 0;
-  const methodParts = activePaymentMethods.map((item, index) => {
-    const start = paymentOffset;
-    paymentOffset += paymentTotal ? Number(item.value || 0) / paymentTotal * 100 : 0;
-    return `${['#168b87', '#6a3ee8', '#df9b28'][index % 3]} ${start}% ${paymentOffset}%`;
-  }).join(', ');
   const cashIncome = filteredTransactions.reduce((sum, row) => sum + Math.max(0, Number(row.amount) || 0), 0);
   const cashExpense = filteredTransactions.reduce((sum, row) => sum + Math.max(0, -(Number(row.amount) || 0)), 0);
   const recentRows = filteredTransactions.filter((row) => !recentDay || ledgerDate(row, dateBasis) === recentDay);
@@ -192,14 +179,13 @@ export default function AccountantDashboard() {
 
   return <AppShell user={user} branchName="toàn chuỗi" busy={busy} onLogout={logout} breadcrumb="Tổng quan kế toán" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>
     <main className="accountant-dash" aria-labelledby="accountant-dash-title">
-      <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1><p>Theo dõi tình hình tài chính và các công việc cần xử lý trên toàn chuỗi.</p></div></header>
+      <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1><p>Thu chi · đối soát · hoàn cọc</p></div></header>
       <div className="accountant-overview-filterbar">
         <label>Kỳ báo cáo<select aria-label="Chọn kỳ báo cáo theo tháng" value={month.slice(5, 7)} onChange={(event) => { const nextMonth = `${month.slice(0, 4)}-${event.target.value}`; setMonth(nextMonth); const bounds = monthBounds(nextMonth); setDateFrom(bounds.start); setDateTo(bounds.end); setRecentDay(''); setRecentPage(1); }}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1).padStart(2, '0')}>Tháng {index + 1}</option>)}</select></label>
         <label>Năm<select value={month.slice(0, 4)} onChange={(event) => { const nextMonth = `${event.target.value}-${month.slice(5, 7)}`; setMonth(nextMonth); const bounds = monthBounds(nextMonth); setDateFrom(bounds.start); setDateTo(bounds.end); setRecentDay(''); setRecentPage(1); }}>{availableYears().map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
         <label>Từ ngày<input type="date" min={`${month}-01`} max={`${month}-${monthBounds(month).end.slice(-2)}`} value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); if (event.target.value > dateTo) setDateTo(event.target.value); setRecentDay(''); setRecentPage(1); }} /></label>
         <label>Đến ngày<input type="date" min={dateFrom} max={monthBounds(month).end} value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRecentDay(''); setRecentPage(1); }} /></label>
         <label>Cơ sở<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setRecentPage(1); }}><option value="">Tất cả cơ sở</option>{displayBranches.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label>Cơ sở thời gian<select value={dateBasis} onChange={(event) => { setDateBasis(event.target.value); setRecentPage(1); }}><option value="cash">Dòng tiền thực tế</option><option value="recognized">Ghi nhận nghiệp vụ</option></select></label>
         <span>{branchLabel}</span>
       </div>
       {error && <p className="accountant-dash-error" role="alert">{error}</p>}{loading && <p role="status">Đang tải số liệu…</p>}
@@ -221,7 +207,7 @@ export default function AccountantDashboard() {
         </section>
       </div>
       <div className="accountant-dash-grid accountant-overview-secondary">
-        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu theo phương thức</h2><p>Tỷ trọng tiền mặt, SePay và thanh toán kết hợp</p></div></div>{activePaymentMethods.length ? <div className="accountant-methods"><div className="accountant-method-donut" style={{ '--method-parts': methodParts }}><div><strong>{money(paymentTotal)}</strong><span>Tổng thu</span></div></div><div className="accountant-method-legend">{activePaymentMethods.map((item, index) => <div key={item.label}><span><i style={{ background: ['#168b87', '#6a3ee8', '#df9b28'][index % 3] }} />{item.label}</span><strong>{money(item.value)}</strong></div>)}</div></div> : <p className="accountant-dash-empty">Không có giao dịch thu từ hóa đơn trong kỳ.</p>}</section>
+        <section className="accountant-dash-panel accountant-method-panel"><div className="accountant-panel-heading"><div><h2>Thu theo phương thức</h2></div><strong>{money(paymentTotal)}</strong></div>{activePaymentMethods.length ? <div className="accountant-method-ledger">{activePaymentMethods.map((item, index) => { const amount = Number(item.value) || 0; const share = paymentTotal ? amount / paymentTotal * 100 : 0; return <div className="accountant-method-ledger-row" key={item.label}><span className="accountant-method-index">{String(index + 1).padStart(2, '0')}</span><span className="accountant-method-name">{item.label}</span><span className="accountant-method-track"><i style={{ width: `${share}%` }} /></span><strong>{money(amount)}</strong><small>{share.toFixed(1)}%</small></div>; })}</div> : <p className="accountant-dash-empty">Không có giao dịch thu từ hóa đơn trong kỳ.</p>}</section>
         <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <div className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((a, b) => b.revenue - a.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</div> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
       </div>
       <section className="accountant-dash-panel accountant-table-panel accountant-recent-panel">
@@ -229,9 +215,6 @@ export default function AccountantDashboard() {
         {visibleRecentRows.length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Thời gian', 'Cơ sở', 'Loại', 'Phương thức', 'Trạng thái', 'Số tiền'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{visibleRecentRows.map((row) => <tr key={row.id}><td title={row.id}>{String(row.id).slice(0, 11).toUpperCase()}</td><td>{dateVi(ledgerDate(row, dateBasis))}</td><td>{row.branchName || 'Toàn chuỗi'}</td><td>{({ PAYMENT: 'Thu thanh toán', REFUND: 'Hoàn cọc', EXPENSE: 'Chi phí', SALARY: 'Trả lương', ADVANCE: 'Ứng lương', TRANSFER: 'Chuyển quỹ', OPENING: 'Số dư đầu kỳ', ADJUSTMENT: 'Điều chỉnh' })[row.kind] || row.kind}</td><td>{row.method || '—'}</td><td>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : row.sourceSystem ? 'Dữ liệu nhập nguồn' : row.status ? statusVi(row.status) : 'Đã ghi sổ'}</td><td className={Number(row.amount) < 0 ? 'accountant-deviation' : 'accountant-matched'}>{money(row.amount)}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch trong ngày và kỳ đã chọn.</p>}
         <div className="accountant-recent-pager"><span>Trang {Math.min(recentPage, recentPageCount)} / {recentPageCount}</span><div><button type="button" disabled={recentPage <= 1} onClick={() => setRecentPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={recentPage >= recentPageCount} onClick={() => setRecentPage((page) => Math.min(recentPageCount, page + 1))}>Tiếp</button></div></div>
       </section>
-      <div className="accountant-dash-grid">
-        <section className="accountant-dash-panel accountant-payroll"><div className="accountant-panel-heading"><div><h2>Quỹ lương kỳ</h2><p>Trạng thái kỳ lương</p></div><span>{statusVi(activePayroll?.period?.status)}</span></div><strong className="accountant-payroll-total">{money(payrollRows.length ? payrollTotal : null)}</strong><div className="accountant-payroll-progress"><div><span>Đã chi</span><strong>{money(payrollRows.length ? payrollPaid : null)}</strong></div><div className="accountant-expense-track"><i style={{ width: `${payrollTotal ? payrollPaid / payrollTotal * 100 : 0}%` }} /></div><div><span>{payrollTotal ? `${Math.round(payrollPaid / payrollTotal * 100)}% đã chi` : '—'}</span><strong>{money(payrollRows.length ? payrollTotal - payrollPaid : null)} chưa chi</strong></div></div></section>
-      </div>
     </main>
   </AppShell>;
 }

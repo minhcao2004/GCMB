@@ -1,5 +1,6 @@
 /** Author: HuyDV. UC-91..97 / BR-64..81/213/225/227: bảng lương kế toán. */
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
 import MoneyInput from '../../finance/components/MoneyInput';
@@ -18,14 +19,17 @@ const componentNames = {
 const paymentStatusNames = { PAID: 'Đã thanh toán', FAILED: 'Không thành công', PENDING: 'Chờ xác nhận' };
 const requestId = () => window.crypto.randomUUID();
 export default function PayrollPage() {
-  const [month, setMonth] = useState(today().slice(0, 7));
+  const [searchParams] = useSearchParams();
+  const requestedMonth = searchParams.get('month') || '';
+  const requestedBranch = searchParams.get('branchId') || '';
+  const [month, setMonth] = useState(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : today().slice(0, 7));
   const [data, setData] = useState(null),
     [options, setOptions] = useState(null),
     [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState([]),
     [search, setSearch] = useState(''),
     [filter, setFilter] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState(requestedBranch);
   const [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false),

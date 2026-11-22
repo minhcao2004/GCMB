@@ -31,17 +31,55 @@ public class DashboardController {
             Map.entry("totals",report.get("totals")),Map.entry("previousTotals",report.get("previousTotals")),
             Map.entry("changes",report.get("changes")),Map.entry("revenueGroups",report.get("revenueGroups")),
             Map.entry("expenseGroups",report.get("expenseGroups")),Map.entry("dailyRevenue",dailyRevenue(start,branchId)),
-            Map.entry("revenueMix",revenueMix(start,branchId)),Map.entry("occupancyByBranch",rows));
+            Map.entry("revenueMix",revenueMix(start,branchId)),Map.entry("occupancyByBranch",rows),
+            Map.entry("warnings",operationalWarnings(branchId)));
+    }
+
+    private List<Map<String,Object>> operationalWarnings(UUID branchId) {
+        return db.queryForList("""
+            SELECT id,branch_id AS "branchId",branch,kind,detail,level FROM (
+              SELECT 'branch-'||b.id::text AS id,b.id AS branch_id,b.name AS branch,'Cơ sở tạm ngừng' AS kind,
+                COALESCE(NULLIF(b.status_reason,''),'Cơ sở đang ở trạng thái '||b.status||'.') AS detail,
+                'critical' AS level,1 AS priority,b.updated_at AS created_at
+              FROM gcmb.branch b WHERE b.status<>'ACTIVE' AND (CAST(? AS uuid) IS NULL OR b.id=?)
+              UNION ALL
+              SELECT i.id::text,i.branch_id,b.name,'Sự cố thiết bị',a.name||' · '||i.description,
+                CASE WHEN i.severity IN ('HIGH','CRITICAL') OR i.priority IN ('HIGH','URGENT') THEN 'critical' ELSE 'warning' END,
+                CASE WHEN i.severity IN ('HIGH','CRITICAL') OR i.priority IN ('HIGH','URGENT') THEN 2 ELSE 3 END,
+                i.created_at
+              FROM gcmb.asset_incident i JOIN gcmb.branch b ON b.id=i.branch_id
+              JOIN gcmb.asset a ON a.id=i.asset_id
+              WHERE i.status IN ('REPORTED','WAITING_APPROVAL','ASSESSED','IN_PROGRESS')
+                AND (CAST(? AS uuid) IS NULL OR i.branch_id=?)
+              UNION ALL
+              SELECT 'stock-'||i.id::text,i.branch_id,b.name,'Tồn kho thấp',
+                i.name||' còn '||s.quantity||' '||u.name||' (định mức '||s.minimum_quantity||' '||u.name||').',
+                'warning',4,s.created_at
+              FROM gcmb.inventory_item i JOIN gcmb.stock_balance s ON s.inventory_item_id=i.id
+              JOIN gcmb.branch b ON b.id=i.branch_id JOIN gcmb.unit u ON u.id=i.unit_id
+              WHERE i.active AND s.minimum_quantity>0 AND s.quantity<s.minimum_quantity
+                AND (CAST(? AS uuid) IS NULL OR i.branch_id=?)
+              UNION ALL
+              SELECT 'room-'||r.id::text,r.branch_id,b.name,'Phòng đang bảo trì',
+                COALESCE(NULLIF(r.code,''),r.name)||' đang tạm ngưng phục vụ.',
+                'warning',5,r.created_at
+              FROM gcmb.room r JOIN gcmb.branch b ON b.id=r.branch_id
+              WHERE r.operating_status='UNDER_MAINTENANCE' AND (CAST(? AS uuid) IS NULL OR r.branch_id=?)
+            ) alerts ORDER BY priority,created_at DESC LIMIT 24
+            """,branchId,branchId,branchId,branchId,branchId,branchId,branchId,branchId);
     }
 
     @GetMapping("/api/v1/branch-management/dashboard")
     @Transactional(readOnly = true)
-    public Map<String, Object> branch(@AuthenticationPrincipal Identity actor, @RequestParam String month) {
+    public Map<String, Object> branch(@AuthenticationPrincipal Identity actor, @RequestParam String month,
+                                      @RequestParam(required = false) String revenuePeriod,
+                                      @RequestParam(required = false) String revenueDate) {
         requireRole(actor, "BRANCH_MANAGER");
         // Phạm vi được kiểm tra lại tại máy chủ, kể cả khi không có header chọn cơ sở.
         if (actor.branchId() == null || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
         LocalDate start = month(month);
+        RevenueRange selectedRevenue = revenueRange(revenuePeriod, revenueDate, start);
         Map<String,Object> report = performance.report(actor,start,actor.branchId());
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
@@ -72,11 +110,16 @@ public class DashboardController {
             """, Long.class, actor.branchId(), actor.branchId()));
         String timezone = db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
         LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
+        List<Map<String,Object>> dailyRevenue = performance.dailyRevenue(selectedRevenue.from(), selectedRevenue.to(), actor.branchId());
+        Map<String,Object> revenueSummary = revenueSummary(dailyRevenue);
         return Map.ofEntries(
             Map.entry("month", month),
             Map.entry("result", rows.get(0)),
             Map.entry("operations", operational),
-            Map.entry("dailyRevenue", dailyRevenue(start, actor.branchId())),
+            Map.entry("revenuePeriod", selectedRevenue.period()),
+            Map.entry("revenueDate", selectedRevenue.date()),
+            Map.entry("revenueSummary", revenueSummary),
+            Map.entry("dailyRevenue", dailyRevenue),
             Map.entry("revenueMix", revenueMix(start, actor.branchId())),
             Map.entry("hourlyOccupancy", hourlyOccupancy(start, actor.branchId())),
             Map.entry("roomTypePerformance", roomTypePerformance(start, actor.branchId())),
@@ -90,21 +133,79 @@ public class DashboardController {
         return performance.dailyRevenue(start,branchId);
     }
 
+    private RevenueRange revenueRange(String period, String date, LocalDate defaultMonth) {
+        String selectedPeriod = period == null ? "MONTH" : period.trim().toUpperCase(Locale.ROOT);
+        String selectedDate = date == null || date.isBlank()
+            ? ("DAY".equals(selectedPeriod) ? defaultMonth.toString() : "YEAR".equals(selectedPeriod) ? String.valueOf(defaultMonth.getYear()) : YearMonth.from(defaultMonth).toString())
+            : date.trim();
+        try {
+            LocalDate from;
+            LocalDate to;
+            switch (selectedPeriod) {
+                case "DAY" -> { from = LocalDate.parse(selectedDate); to = from.plusDays(1); }
+                case "MONTH" -> { YearMonth month = YearMonth.parse(selectedDate); from = month.atDay(1); to = month.plusMonths(1).atDay(1); }
+                case "YEAR" -> { int year = java.time.Year.parse(selectedDate).getValue(); from = LocalDate.of(year, 1, 1); to = from.plusYears(1); }
+                default -> throw new DateTimeParseException("invalid period", selectedPeriod, 0);
+            }
+            LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+            if (from.isAfter(today)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem doanh thu ở thời điểm trong tương lai.");
+            return new RevenueRange(selectedPeriod, selectedDate, from, to);
+        } catch (java.time.DateTimeException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày hoặc phạm vi doanh thu không hợp lệ.");
+        }
+    }
+
+    private Map<String,Object> revenueSummary(List<Map<String,Object>> rows) {
+        java.math.BigDecimal revenue = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal fnbRevenue = java.math.BigDecimal.ZERO;
+        long billCount = 0;
+        for (Map<String,Object> row : rows) {
+            revenue = revenue.add(decimal(row.get("revenue")));
+            fnbRevenue = fnbRevenue.add(decimal(row.get("fnbRevenue")));
+            billCount += ((Number) row.getOrDefault("billCount", 0L)).longValue();
+        }
+        return Map.of("revenue", revenue, "fnbRevenue", fnbRevenue, "billCount", billCount);
+    }
+
+    private static java.math.BigDecimal decimal(Object value) {
+        if (value == null) return java.math.BigDecimal.ZERO;
+        return value instanceof java.math.BigDecimal amount ? amount : new java.math.BigDecimal(value.toString());
+    }
+
+    private record RevenueRange(String period, String date, LocalDate from, LocalDate to) {}
+
     private List<Map<String, Object>> revenueMix(LocalDate start, UUID branchId) {
+        return revenueMix(start, start.plusMonths(1), branchId);
+    }
+
+    @GetMapping("/api/v1/head-office/dashboard/revenue-mix")
+    @Transactional(readOnly = true)
+    public Map<String,Object> chainRevenueMix(@AuthenticationPrincipal Identity actor,
+            @RequestParam String from, @RequestParam String to, @RequestParam(required = false) UUID branchId) {
+        requireRole(actor, "HEAD_OFFICE_MANAGER");
+        try {
+            LocalDate start = LocalDate.parse(from), end = LocalDate.parse(to);
+            if (start.isAfter(end) || end.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")))
+                    || java.time.temporal.ChronoUnit.DAYS.between(start, end) >= 366)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo không hợp lệ.");
+            return Map.of("from", start.toString(), "to", end.toString(), "revenueMix", revenueMix(start, end.plusDays(1), branchId));
+        } catch (DateTimeParseException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày báo cáo không hợp lệ.");
+        }
+    }
+
+    private List<Map<String, Object>> revenueMix(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return db.queryForList("""
-            WITH bill_methods AS (
-              SELECT b.id AS bill_id,
-                CASE WHEN COUNT(DISTINCT p.method)>1 THEN 'Kết hợp'
-                     WHEN BOOL_OR(p.method='BANK_TRANSFER') THEN 'SePay' ELSE 'Tiền mặt' END AS method,
-                b.net_amount
+            WITH revenue_mix AS (
+              SELECT CASE WHEN p.method='BANK_TRANSFER' THEN 'Chuyển khoản'
+                          WHEN p.method='CASH' THEN 'Tiền mặt' ELSE p.method END AS label,
+                SUM(p.amount) AS value
               FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
               JOIN gcmb.payment p ON p.bill_id=b.id AND p.purpose='BILL'
               WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date >= ?
                 AND (b.completed_at AT TIME ZONE br.timezone)::date < ?
                 AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
-              GROUP BY b.id,b.net_amount
-            ), revenue_mix AS (
-              SELECT method AS label, SUM(net_amount) AS value FROM bill_methods GROUP BY method
+              GROUP BY label
               UNION ALL
               SELECT 'Cọc tịch thu', COALESCE(SUM(de.amount),0)
               FROM gcmb.deposit_entry de JOIN gcmb.deposit d ON d.id=de.deposit_id
@@ -112,8 +213,8 @@ public class DashboardController {
               WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
                 AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (CAST(? AS uuid) IS NULL OR bk.branch_id=?)
             ) SELECT label,value FROM revenue_mix ORDER BY label
-            """, start, start.plusMonths(1), branchId, branchId,
-                start, start.plusMonths(1), branchId, branchId);
+            """, start, endExclusive, branchId, branchId,
+                start, endExclusive, branchId, branchId);
     }
 
     private List<Map<String, Object>> occupancy(UUID branchId) {

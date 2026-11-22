@@ -113,9 +113,9 @@ function budgetValue(budgets, categoryKey, branchIds) {
 }
 
 /** budgets: [{ categoryKey, amount, branchId? }] or { [categoryKey]: amount }. */
-export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '', compact = false, onReportData }) {
+export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '', from = '', to = '', compact = false, onReportData }) {
   const navigate = useNavigate();
-  const [range, setRange] = useState(() => month ? monthRange(month) : initialRange());
+  const [range, setRange] = useState(() => from && to ? { from, to } : month ? monthRange(month) : initialRange());
   const [branchIds, setBranchIds] = useState(() => branchId ? [branchId] : []);
   const [branchOptions, setBranchOptions] = useState([]);
   const [granularity, setGranularity] = useState('day');
@@ -189,10 +189,11 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   const selectedMeta = categories.find((item) => item.categoryKey === selectedCategory);
 
   useEffect(() => {
+    if (from && to) { setRange({ from, to }); setMonthFilter(''); return; }
     if (!month) return;
     setRange(monthRange(month));
     setMonthFilter(month);
-  }, [month]);
+  }, [month, from, to]);
 
   useEffect(() => {
     setBranchIds(branchId ? [branchId] : []);
@@ -221,7 +222,14 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   }
 
   function drillDown(category) {
-    if (category.categoryKey === 'PAYROLL') return;
+    if (category.categoryKey === 'PAYROLL') {
+      if (role === 'ACCOUNTANT') {
+        const query = new URLSearchParams({ month: range.from.slice(0, 7) });
+        if (selectedBranchIds.length === 1) query.set('branchId', selectedBranchIds[0]);
+        navigate(`/ke-toan/luong?${query.toString()}`);
+      }
+      return;
+    }
     const query = new URLSearchParams();
     query.set('from', range.from); query.set('to', range.to);
     query.set('costType', 'OPEX'); query.set('categoryId', category.categoryKey);
@@ -342,7 +350,8 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
                       <span className={`rx-legend__delta${delta == null ? '' : delta > 0 ? ' bad' : delta < 0 ? ' good' : ''}`}>{delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`}</span>
                     </button>
                     {item.categoryKey !== 'PAYROLL' && <button className="rx-link" type="button" onClick={() => drillDown(item)}>Chi tiết</button>}
-                    {item.categoryKey === 'PAYROLL' && <span className="rx-legend__detail-hint">Chi tiết ở bảng lương</span>}
+                    {item.categoryKey === 'PAYROLL' && role === 'ACCOUNTANT' && <button className="rx-link" type="button" onClick={() => drillDown(item)}>Xem bảng lương</button>}
+                    {item.categoryKey === 'PAYROLL' && role !== 'ACCOUNTANT' && <span className="rx-legend__detail-hint">Bảng lương</span>}
                   </div>
                   {anomaly && <span className="rx-alert-badge" title={`Danh mục tăng ${delta.toFixed(1)}% so với kỳ so sánh.`}>Tăng trên {ALERT_THRESHOLD_PERCENT}%</span>}
                   {overBudget && <span className="rx-budget-badge" title="Khoản thực chi đã vượt ngân sách được truyền vào dashboard.">Vượt ngân sách {money(item.budget)}</span>}

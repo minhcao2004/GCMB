@@ -427,6 +427,10 @@ public class MonthlyPerformanceService {
   }
 
   public List<Map<String,Object>> dailyRevenue(LocalDate start, UUID branchId) {
+    return dailyRevenue(start, start.plusMonths(1), branchId);
+  }
+
+  public List<Map<String,Object>> dailyRevenue(LocalDate start, LocalDate end, UUID branchId) {
     return db.queryForList("""
       WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS report_date,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
@@ -444,15 +448,15 @@ public class MonthlyPerformanceService {
           AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (?::uuid IS NULL OR bk.branch_id=?)
         GROUP BY bk.branch_id,report_date)
       SELECT bills.report_date AS date,sum(room) "roomRevenue",sum(fnb) "fnbRevenue",sum(overtime) "overtimeRevenue",
-        sum(net_amount-room-fnb-overtime) "otherRevenue",sum(net_amount) "billRevenue",
+        sum(net_amount-room-fnb-overtime) "otherRevenue",sum(net_amount) "billRevenue",count(*) "billCount",
         COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) "forfeitedDeposits",
         sum(net_amount)+COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) revenue
       FROM bills GROUP BY bills.report_date
       UNION ALL
-      SELECT f.report_date,0,0,0,0,0,sum(f.amount),sum(f.amount) FROM forfeitures f
+      SELECT f.report_date,0,0,0,0,0,0,sum(f.amount),sum(f.amount) FROM forfeitures f
       WHERE NOT EXISTS (SELECT 1 FROM bills WHERE bills.report_date=f.report_date) GROUP BY f.report_date
       ORDER BY date
-      """,start,start.plusMonths(1),branchId,branchId,start,start.plusMonths(1),branchId,branchId);
+      """,start,end,branchId,branchId,start,end,branchId,branchId);
   }
 
   private List<Map<String, Object>> rows(LocalDate start, UUID selected) {

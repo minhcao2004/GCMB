@@ -26,6 +26,12 @@
 - `PUT /api/v1/branch-management/equipment-transfers/{id}/handover` — xác nhận bàn giao nguồn.
 - `PUT /api/v1/branch-management/equipment-transfers/{id}/receipt` — xác nhận tiếp nhận và phòng đích.
 
+## Thao tác điều chuyển trên dashboard quản lý cơ sở
+
+- Với phiếu gửi tới cơ sở đang chọn, luôn hiển thị vị trí nhận và nút **Xác nhận tiếp nhận** trong cột Thao tác. Khi phiếu còn `REQUESTED`, nút bị khóa và ghi rõ đang chờ cơ sở nguồn bàn giao; quản lý đích có thể chuẩn bị chọn phòng nhận trước.
+- Sau khi cơ sở nguồn xác nhận bàn giao, danh sách tự cập nhật mỗi 15 giây hoặc khi người dùng quay lại tab. Với phiếu `IN_TRANSIT`, nút tiếp nhận hoạt động khi đã chọn phòng thuộc cơ sở đích.
+- Bấm **Xác nhận tiếp nhận** gọi API UC-76; backend kiểm tra phòng thuộc cơ sở đích và chưa ở trạng thái `INACTIVE`. Chỉ sau khi xác nhận thành công, cơ sở và vị trí của thiết bị mới chuyển sang cơ sở đích.
+
 ## Ghi chú
 
 
