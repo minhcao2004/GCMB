@@ -20,6 +20,7 @@ import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+import BusinessAssistant from '../../dashboard/BusinessAssistant';
 
 import StaffPage from '../../workforce/pages/StaffPage';
 
@@ -109,5 +110,6 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       ) : activeTab === 'Phê duyệt chi' ? (
         <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
+    <BusinessAssistant key={user.id} user={user} />
   </AppShell>;
 }

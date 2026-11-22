@@ -81,6 +81,10 @@ public class MenuItemRepository {
         return Boolean.TRUE.equals(active);
     }
 
+    public String branchName(UUID branchId) {
+        return db.queryForObject("SELECT name FROM gcmb.branch WHERE id=?", String.class, branchId);
+    }
+
     public MenuItemView create(UUID branchId, MenuItemCommand command, StoredImage image) {
         String prefix = "SERVICE".equals(command.kind()) ? "DV-" : "FB-";
         String code = nextCode(branchId, prefix);

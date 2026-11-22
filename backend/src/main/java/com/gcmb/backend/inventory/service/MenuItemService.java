@@ -58,7 +58,7 @@ public class MenuItemService {
 
     @Transactional
     public MenuItemView create(Identity actor, MenuItemCommand input, MultipartFile image) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "tạo món");
         MenuItemCommand command = validate(branchId, input, null);
         StoredImage stored = store(image);
         try {
@@ -76,7 +76,7 @@ public class MenuItemService {
 
     @Transactional
     public MenuItemView update(Identity actor, UUID id, MenuItemCommand input, MultipartFile image) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "cập nhật món");
         MenuItemView existing = repository.get(branchId, id);
         if (existing == null) throw notFound();
         MenuItemCommand command = validate(branchId, input, existing.inventoryItemId());
@@ -104,14 +104,14 @@ public class MenuItemService {
         if (command == null || command.active() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn trạng thái bán hợp lệ.");
         }
-        MenuItemView updated = repository.changeStatus(writableBranch(actor), id, command.active());
+        MenuItemView updated = repository.changeStatus(writableBranch(actor, "đổi trạng thái món"), id, command.active());
         if (updated == null) throw notFound();
         return updated;
     }
 
     @Transactional
     public void delete(Identity actor, UUID id) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "xóa món");
         if (!repository.softDelete(branchId, id, actor.id())) throw notFound();
     }
 
@@ -146,9 +146,11 @@ public class MenuItemService {
         if (!Set.of("PACKAGED", "PREPARED", "SERVICE").contains(kind)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn loại món hợp lệ.");
         }
-        if (input.salePrice() == null || input.salePrice().signum() < 0
-                || input.salePrice().stripTrailingZeros().scale() > 0
-                || input.salePrice().precision() - input.salePrice().scale() > 18) {
+        if (input.salePrice() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung giá bán.");
+        if (input.salePrice().signum() < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giá bán phải lớn hơn hoặc bằng 0.");
+        if (input.salePrice().stripTrailingZeros().scale() > 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            "Giá bán phải là số tiền nguyên đồng, không có phần thập phân.");
+        if (input.salePrice().precision() - input.salePrice().scale() > 18) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.");
         }
         if (input.active() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng chọn tình trạng bán.");
@@ -165,7 +167,7 @@ public class MenuItemService {
         }
         String description = clean(input.description());
         if (description != null && description.length() > 1000) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mô tả không được vượt quá 1.000 ký tự.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mô tả chỉ được chứa tối đa 1000 ký tự.");
         }
         return new MenuItemCommand(name, category, kind, inventoryId, input.salePrice(), input.active(),
             description, input.removeImage());
@@ -173,8 +175,8 @@ public class MenuItemService {
 
     private String required(String value, String field, int maxLength) {
         String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, field + " không được để trống.");
-        if (normalized.length() > maxLength) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, field + " không được vượt quá " + maxLength + " ký tự.");
+        if (normalized.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung " + field.toLowerCase(Locale.ROOT) + ".");
+        if (normalized.length() > maxLength) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, field + " chỉ được chứa tối đa " + maxLength + " ký tự.");
         return normalized;
     }
 
@@ -216,17 +218,22 @@ public class MenuItemService {
             "Mã món đã tồn tại hoặc liên kết kho không còn hợp lệ. Vui lòng tải lại và thử lại.", cause);
     }
 
-    private UUID writableBranch(Identity actor) {
-        UUID branchId = branch(actor);
+    private UUID writableBranch(Identity actor, String action) {
+        UUID branchId = branch(actor, action);
         if (!repository.activeBranch(branchId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cơ sở đang tạm ngưng; không thể thay đổi thực đơn.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cơ sở " + repository.branchName(branchId)
+                + " đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
         }
         return branchId;
     }
 
     private UUID branch(Identity actor) {
+        return branch(actor, "xem");
+    }
+
+    private UUID branch(Identity actor, String action) {
         if (actor == null || !"BRANCH_MANAGER".equals(actor.role()) || actor.branchId() == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được phân quyền quản lý cơ sở.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền " + action + " đối với thực đơn.");
         }
         return actor.branchId();
     }

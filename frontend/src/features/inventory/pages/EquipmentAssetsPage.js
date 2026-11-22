@@ -88,9 +88,10 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   // BR-202/BR-111: Kiểm tra trường bắt buộc ở form trước khi gửi; server vẫn xác thực cuối cùng.
   const save = async (event) => {
     event.preventDefault(); setError('');
-    if (!form.code.trim() || !form.name.trim() || !form.categoryId || (!form.roomId && !form.locationNote.trim())) {
-      setError('Vui lòng nhập mã, tên, nhóm và ít nhất một vị trí phòng/khu vực.'); return;
-    }
+    if (!form.code.trim()) { setError('Vui lòng bổ sung mã thiết bị.'); return; }
+    if (!form.name.trim()) { setError('Vui lòng bổ sung tên thiết bị.'); return; }
+    if (!form.categoryId) { setError('Vui lòng bổ sung nhóm thiết bị.'); return; }
+    if (!form.roomId && !form.locationNote.trim()) { setError('Vui lòng bổ sung vị trí thiết bị.'); return; }
     setBusy(true);
     try {
       const payload = { ...form, categoryId: form.categoryId, roomId: form.roomId || null,

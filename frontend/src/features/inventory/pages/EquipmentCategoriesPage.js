@@ -38,7 +38,8 @@ export default function EquipmentCategoriesPage({ headOffice = false }) {
   const save = async (event) => {
     event.preventDefault();
     setError('');
-    if (!form.code.trim() || !form.name.trim()) { setError('Mã và tên nhóm thiết bị là bắt buộc.'); return; }
+    if (!form.code.trim()) { setError('Vui lòng bổ sung mã nhóm thiết bị.'); return; }
+    if (!form.name.trim()) { setError('Vui lòng bổ sung tên nhóm thiết bị.'); return; }
     setBusy(true);
     try {
       if (editing) await equipmentCategoryApi.update(headOffice, null, editing.id, form);
