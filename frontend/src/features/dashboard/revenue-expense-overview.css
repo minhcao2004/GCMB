@@ -155,7 +155,7 @@
 .rx-budget-badge { display: inline-flex; padding: 3px 7px; border-radius: 999px; font-size: var(--gcmb-font-size-xs, 11px); }
 .rx-alert-badge { background: var(--rx-bad-soft); color: var(--rx-bad); }
 .rx-budget-badge { background: var(--gcmb-color-warning-soft, #fff5e5); color: color-mix(in srgb, var(--gcmb-color-warning, #d18a17) 65%, var(--gcmb-color-ink, #1a1a2e)); }
-.rx-chart--branch { height: 282px; }
+.rx-chart--branch { height: 440px; }
 .rx-ranking-scroll { width: 100%; overflow-x: auto; }
 .rx-chart--ranking { height: 390px; }
 .rx--compact { margin: 20px 0 24px; }

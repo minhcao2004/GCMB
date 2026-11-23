@@ -123,7 +123,7 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
   useEffect(() => { setPage(1); }, [month, range.from, range.to, branchId]);
   useEffect(() => {
     let active = true;
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setData(null);
     api.get('/accounting/reports/source-imports', { params: { ...range, ...(branchId ? { branchId } : {}) } })
       .then(({ data: result }) => { if (active) setData(result); })
       .catch((cause) => { if (active) setError(cause.response?.data?.detail || cause.response?.data?.message || 'Không tải được dữ liệu nguồn.'); })
@@ -131,7 +131,8 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
     return () => { active = false; };
   }, [range, branchId]);
 
-  const allRows = data?.rows || [];
+  const incomeAvailable = !loading && !error && data != null;
+  const allRows = incomeAvailable ? data.rows || [] : [];
   const invoices = allRows.filter((row) => row.recordType === 'KIOT_INVOICE');
   const receipts = invoices.reduce((sum, row) => sum + Number(row.paidAmount || 0), 0);
   const expenses = Number(financialReport?.totals?.expenses ?? reportTotals?.expenses ?? 0);
@@ -161,10 +162,10 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
     {allRows.some((row) => row.sourceSystem === 'SYNTHETIC_DEMO') && <p className="isr-data-notice" role="status"><strong>Báo cáo có dữ liệu mô phỏng.</strong> Các dòng mô phỏng được ghi nhãn trong bảng chi tiết.</p>}
     <nav className="isr-tabs" aria-label="Loại báo cáo">{tabs.map(([key, title]) => <button type="button" key={key} aria-pressed={reportType === key} onClick={() => { setReportType(key); setPage(1); }}>{title}</button>)}</nav>
     <div className="isr-kpis" aria-label="Tổng hợp báo cáo">
-      <article><span>Thu khách hàng</span><strong>{money(receipts)}</strong><small>{invoices.length.toLocaleString('vi-VN')} hóa đơn</small></article>
+      <article><span>Thu khách hàng</span><strong>{incomeAvailable ? money(receipts) : '—'}</strong><small>{incomeAvailable ? `${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa tải được số liệu thu'}</small></article>
       <article><span>Chi vận hành</span><strong>{expenseAvailable ? money(expenses) : '—'}</strong><small>Đã thanh toán</small></article>
-      <article><span>Thuần vận hành</span><strong>{expenseAvailable ? money(receipts - expenses) : '—'}</strong><small>Thu − chi</small></article>
-      <article><span>Giao dịch</span><strong>{(allRows.length + ledgerExpenses.length).toLocaleString('vi-VN')}</strong><small>{allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · {invoices.length.toLocaleString('vi-VN')} hóa đơn</small></article>
+      <article><span>Thuần vận hành</span><strong>{incomeAvailable && expenseAvailable ? money(receipts - expenses) : '—'}</strong><small>Thu − chi</small></article>
+      <article><span>Giao dịch</span><strong>{incomeAvailable ? (allRows.length + ledgerExpenses.length).toLocaleString('vi-VN') : '—'}</strong><small>{incomeAvailable ? `${allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · ${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa đủ dữ liệu'}</small></article>
     </div>
     <article className="isr-card">
       <div className="isr-card-heading"><div><h3>{reportNames[reportType]}</h3><p>{reportType === 'cost' ? 'Chi phí vận hành theo kỳ đã chọn.' : 'Dữ liệu theo ngày và cơ sở đang chọn.'}</p></div><span>{reportType === 'cost' ? `${money(expenses)} chi phí` : `${filteredRows.length.toLocaleString('vi-VN')} giao dịch`}</span></div>

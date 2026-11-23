@@ -15,6 +15,13 @@ const number = (value) => Number(value) || 0;
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(number(value))} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(number(value))}%`;
 const compactMoney = (value) => new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(number(value));
+
+function BranchExpenseTick({ x, y, payload }) {
+  const name = String(payload.value || '');
+  return <text x={x - 8} y={y} dy="0.35em" textAnchor="end" fontSize={12} fill="var(--rx-text)">
+    <title>{name}</title>{name.length > 23 ? `${name.slice(0, 22)}…` : name}
+  </text>;
+}
 const requestError = (error) => error.response?.data?.detail || error.response?.data?.message || (error.request
   ? 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.'
   : 'Không tải được báo cáo. Vui lòng thử lại.');
@@ -365,7 +372,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
             <div className="rx-chart rx-chart--branch"><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((a,b)=>number(b.expenses)-number(a.expenses)).slice(0, 10)} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--rx-border)" />
               <XAxis type="number" tickFormatter={compactMoney} tick={{ fontSize: 11, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="name" width={126} tick={{ fontSize: 11, fill: 'var(--rx-text)' }} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="name" width={172} interval={0} tick={<BranchExpenseTick />} tickLine={false} axisLine={false} />
               <Tooltip content={<ChartTooltip />} /><Bar dataKey="expenses" name="Chi phí vận hành" fill="var(--rx-expense)" radius={[0, 4, 4, 0]} maxBarSize={22} />
             </BarChart></ResponsiveContainer></div>
           </article>
@@ -377,7 +384,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rx-border)" />
             <XAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={76} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={compactMoney} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} width={58} />
-            <Tooltip content={<ChartTooltip />} /><Legend wrapperStyle={{ fontSize: 11 }} />
+            <Tooltip content={<ChartTooltip />} /><Legend wrapperStyle={{ fontSize: 11, bottom: 24 }} />
             <Bar dataKey="revenue" name="Thu nhập vận hành" fill="var(--rx-revenue)" radius={[4, 4, 0, 0]} maxBarSize={22} />
             <Bar dataKey="expenses" name="Chi phí vận hành" fill="var(--rx-expense)" radius={[4, 4, 0, 0]} maxBarSize={22} />
             <Bar dataKey="profit" name="Lợi nhuận vận hành" fill="var(--rx-revenue-compare)" radius={[4, 4, 0, 0]} maxBarSize={22} />

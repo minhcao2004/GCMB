@@ -132,7 +132,9 @@ export default function AccountantDashboard() {
         .map((row) => ({ id: `source-${row.id}`, bookingDate: row.businessDate, occurredAt: `${row.businessDate}T12:00:00`, branchId: row.branchId, branchName: row.branchName,
           kind: 'PAYMENT', amount: Number(row.paidAmount || 0), method: row.paymentMethod || 'Theo dữ liệu nguồn',
           reason: row.invoiceNumber || row.sourceKey || 'Booking nhập nguồn', status: row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : 'Dữ liệu nguồn', sourceSystem: row.sourceSystem })));
-      if (results.slice(1, 6).some((item) => item.status === 'rejected')) setError((current) => current || 'Một số bảng nghiệp vụ không tải được; số liệu bị thiếu được để trống.');
+      const sections = ['Báo cáo tháng', 'Hoàn tiền cọc', 'Kỳ tài chính', 'Phương thức thanh toán', 'Giao dịch', 'Dữ liệu nguồn'];
+      const failedSections = results.flatMap((item, index) => item.status === 'rejected' ? [sections[index]] : []);
+      if (failedSections.length) setError(`Không tải được: ${failedSections.join(', ')}. Số liệu có thể chưa đầy đủ. Vui lòng thử lại.`);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [month, branchId, dateFrom, dateTo]);

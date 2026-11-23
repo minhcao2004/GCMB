@@ -71,6 +71,8 @@ export default function BusinessAssistant({ user }) {
   const [storageError, setStorageError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState(null);
+  const [launcherPosition, setLauncherPosition] = useState(null);
+  const launcherDrag = useRef(null), launcherMoved = useRef(false);
   const [refresh, setRefresh] = useState(0);
   const launcher = useRef(null), composer = useRef(null), conversation = useRef(null), sending = useRef(false);
   const mounted = useRef(true);
@@ -95,6 +97,23 @@ export default function BusinessAssistant({ user }) {
   useEffect(() => {
     if (conversation.current) conversation.current.scrollTop = conversation.current.scrollHeight;
   }, [messages, busy]);
+
+  const moveLauncher = (position) => {
+    const rect = launcher.current?.getBoundingClientRect();
+    if (!rect) return;
+    setLauncherPosition({
+      x: Math.max(8, Math.min(window.innerWidth - rect.width - 8, position.x)),
+      y: Math.max(8, Math.min(window.innerHeight - rect.height - 8, position.y)),
+    });
+  };
+  useEffect(() => {
+    const keepVisible = () => {
+      const rect = launcher.current?.getBoundingClientRect();
+      if (rect) moveLauncher({ x: rect.left, y: rect.top });
+    };
+    window.addEventListener('resize', keepVisible);
+    return () => window.removeEventListener('resize', keepVisible);
+  }, []);
 
   if (user?.role !== 'HEAD_OFFICE_MANAGER') return null;
   const close = () => {
@@ -227,7 +246,34 @@ export default function BusinessAssistant({ user }) {
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 12V4h8M8 12V8h4" /></svg>
       </button>}
     </section>}
-    <button type="button" ref={launcher} className={`business-assistant-launcher${open ? ' is-open' : ''}`} onClick={() => open ? close() : setOpen(true)}
+    <button type="button" ref={launcher} className={`business-assistant-launcher${open ? ' is-open' : ''}`}
+      style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: 'auto', bottom: 'auto' } : undefined}
+      title="Kéo để di chuyển; dùng phím mũi tên khi chọn nút"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        launcherMoved.current = false;
+        launcherDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const drag = launcherDrag.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+        if (Math.hypot(dx, dy) > 5) launcherMoved.current = true;
+        if (launcherMoved.current) moveLauncher({ x: drag.left + dx, y: drag.top + dy });
+      }}
+      onPointerUp={() => { launcherDrag.current = null; }}
+      onPointerCancel={() => { launcherDrag.current = null; }}
+      onLostPointerCapture={() => { launcherDrag.current = null; }}
+      onKeyDown={(event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        moveLauncher({ x: rect.left + (event.key === 'ArrowLeft' ? -24 : event.key === 'ArrowRight' ? 24 : 0),
+          y: rect.top + (event.key === 'ArrowUp' ? -24 : event.key === 'ArrowDown' ? 24 : 0) });
+      }}
+      onClick={(event) => { if (event.detail > 0 && launcherMoved.current) return; open ? close() : setOpen(true); }}
       aria-label={open ? 'Thu gọn trợ lý AI' : 'Mở trợ lý AI kinh doanh'} aria-expanded={open} aria-controls={open ? 'business-assistant-panel' : undefined}>
       <Robot /><span>Trợ lý AI</span>
     </button>
