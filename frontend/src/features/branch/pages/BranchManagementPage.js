@@ -6,6 +6,7 @@
  * Description: Danh sách, chi tiết, thêm/sửa, gán quản lý và ngừng hoạt động cơ sở.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { branchAdministrationApi as api, branchError } from '../services/branchAdministrationApi';
 import { actionNames } from '../../backoffice/accounts/services/accountAccessApi';
 import './branch-administration.css';
@@ -14,7 +15,7 @@ const statuses = { ACTIVE: 'Đang hoạt động', SUSPENDED: 'Tạm ngừng', C
 const emptyForm = { code: '', name: '', address: '', phone: '', notes: '' };
 const time = (value) => (value ? new Date(value).toLocaleString('vi-VN') : '—');
 
-export default function BranchManagementPage({ onAccounts }) {
+export default function BranchManagementPage({ onAccounts, initialBranchId = '', initialAlert = null }) {
   const [branches, setBranches] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState('');
@@ -59,6 +60,12 @@ export default function BranchManagementPage({ onAccounts }) {
   useEffect(() => {
     refresh();
   }, []);
+  useEffect(() => {
+    if (initialBranchId && branches.some((branch) => String(branch.branchId) === String(initialBranchId))) {
+      setSelectedId(initialBranchId);
+      setTab('Thông tin');
+    }
+  }, [initialBranchId, branches]);
   useEffect(() => {
     setPage(0);
   }, [query, status]);
@@ -217,10 +224,11 @@ export default function BranchManagementPage({ onAccounts }) {
           {error} <button onClick={refresh}>Thử lại</button>
         </div>
       )}
-      {notice && (
-        <div className="ba-success" role="status">
-          {notice}
-        </div>
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
+      {selected && initialAlert?.kind && (
+        <aside className="ba-alert-context" role="status">
+          <strong>{initialAlert.kind}</strong><span>{initialAlert.detail}</span>
+        </aside>
       )}
       {!selected ? (
         <>

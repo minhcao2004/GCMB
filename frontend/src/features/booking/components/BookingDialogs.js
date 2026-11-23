@@ -1,3 +1,4 @@
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { useEffect, useMemo, useState } from 'react';
 import {
   bookingRooms,
@@ -57,10 +58,12 @@ function formFromBooking(booking) {
 }
 
 // Hiển thị trường nhập và lỗi xác thực cùng một kiểu.
-function TextField({ label, name, value, onChange, error, ...inputProps }) {
+function TextField({ label, name, value, onChange, error, money = false, ...inputProps }) {
   return <label className="booking-field">
     <span>{label}</span>
-    <input name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)} {...inputProps} />
+    {money
+      ? <MoneyInput name={name} value={value} onValueChange={(amount) => onChange({ target: { name, value: amount, type: 'text' } })} aria-invalid={Boolean(error)} {...inputProps} />
+      : <input name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)} {...inputProps} />}
     {error && <small className="booking-field-error">{error}</small>}
   </label>;
 }
@@ -243,7 +246,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
                 <input type="checkbox" name="depositReceived" checked={form.depositReceived} onChange={updateField} />
                 <span><strong>Đã thực nhận tiền cọc</strong><small>Chỉ ghi nhận khoản đã nhận xác nhận tại quầy.</small></span>
               </label>
-              {form.depositReceived && <TextField label="Số tiền cọc đã nhận (VNĐ)" name="depositAmount" type="number" min="1" step="1000" value={form.depositAmount} onChange={updateField} error={errors.depositAmount} placeholder="150000" />}
+              {form.depositReceived && <TextField label="Số tiền cọc đã nhận (VNĐ)" name="depositAmount" money min="1" value={form.depositAmount} onChange={updateField} error={errors.depositAmount} placeholder="150.000" />}
             </fieldset>}
           </div>
 

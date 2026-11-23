@@ -62,9 +62,13 @@ public final class BookingDtos {
     public record RoomChangeResult(BookingDetail booking, BigDecimal previousAmount,
                                    BigDecimal updatedAmount, BigDecimal adjustmentAmount) {}
     // Yêu cầu gia hạn bằng combo hoặc số giờ cho client cũ.
-    public record ExtendStayRequest(String pricingMode, UUID comboId, Integer hours, String idempotencyKey) {
+    public record ExtendStayRequest(String pricingMode, UUID comboId, Integer hours, String idempotencyKey,
+                                    List<ComboGiftItem> drinkItems, List<ComboGiftItem> foodItems) {
         public ExtendStayRequest(String pricingMode, UUID comboId, Integer hours) {
-            this(pricingMode, comboId, hours, null);
+            this(pricingMode, comboId, hours, null, List.of(), List.of());
+        }
+        public ExtendStayRequest(String pricingMode, UUID comboId, Integer hours, String idempotencyKey) {
+            this(pricingMode, comboId, hours, idempotencyKey, List.of(), List.of());
         }
     }
     // Mốc gia hạn và báo giá trước khi ghi dữ liệu.

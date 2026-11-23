@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BankNameInput from '../../../shared/components/BankNameInput';
@@ -14,6 +15,7 @@ import { financeApi } from '../../finance/services/financeApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
+import ComboGiftPicker from '../components/ComboGiftPicker';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
@@ -26,52 +28,20 @@ const navigation = [
   ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
-  { label: 'Tổng quan tài chính', icon: 'overview', target: '/ke-toan' },
-  { title: 'Thu nhập & doanh thu', short: 'Thu', items: [
-    { label: 'Doanh thu & khoản thu', icon: 'report', target: '/ke-toan/bao-cao' },
-    { label: 'Hóa đơn thuế', icon: 'tax', target: '/ke-toan/hoa-don-thue' },
-  ] },
-  { label: 'Hoàn tiền cọc', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
-  { title: 'Chi phí & quỹ', short: 'Chi', items: [
-    { label: 'Đề nghị chi', icon: 'plus', target: '/ke-toan/chi-phi?section=plus&tab=requests', countKey: 'expenses', countLabel: 'đề nghị chi chờ xử lý' },
-    { label: 'Chi định kỳ', icon: 'calendar', target: '/ke-toan/chi-phi?section=plus&tab=recurring', countKey: 'recurring', countLabel: 'kỳ chi định kỳ cần xử lý' },
-    { label: 'Cấp tiền két', icon: 'payments', target: '/ke-toan/chi-phi?section=plus&tab=drawer' },
-    { label: 'Lịch sử chi & hoàn ứng', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=history' },
-    { label: 'Hạng mục chi phí', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=categories' },
-    { label: 'Quỹ kế toán', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
-    { label: 'Lương nhân viên', icon: 'booking', target: '/ke-toan/luong' },
-  ] },
-  { title: 'Báo cáo & đối soát', short: 'BC', items: [
-    { label: 'Báo cáo chi phí', icon: 'orders', target: '/ke-toan/bao-cao-chi-phi' },
-    { label: 'Giao dịch & đối soát', icon: 'report', target: '/ke-toan/bao-cao?tab=transactions' },
-    { label: 'Chốt quỹ', icon: 'calendar', target: '/ke-toan/chot-quy', countKey: 'closings', countLabel: 'phiếu chốt quỹ chờ đối soát' },
-    { label: 'Chốt kỳ tài chính', icon: 'calendar', target: '/ke-toan/bao-cao?tab=periods' },
-    { label: 'Xuất dữ liệu', icon: 'report', target: '/ke-toan/bao-cao?tab=export' },
-  ] },
+  { label: 'Tổng quan', items: [['Tổng quan tài chính', 'overview'], ['Báo cáo & thống kê', 'report']] },
+  { label: 'Thu chi & thanh toán', items: [['Thu & cấp quỹ', 'payments'], ['Chi & hoàn ứng', 'plus'], ['Hoàn tiền cọc', 'deposit'], ['Hóa đơn thuế', 'tax']] },
+  { label: 'Đối soát & kiểm soát', items: [['Đối soát chốt quỹ', 'calendar']] },
+  { label: 'Nhân sự & chi phí', items: [['Lương nhân viên', 'booking'], ['Báo cáo chi phí', 'orders']] },
 ];
-function accountingLinkIsCurrent(target, location) {
-  const [path, search = ''] = target.split('?');
-  if (location.pathname !== path) return false;
-  const selected = new URLSearchParams(location.search);
-  const expected = new URLSearchParams(search);
-  if (path === '/ke-toan/chi-phi') return (selected.get('section') || 'plus') === (expected.get('section') || 'plus')
-    && ((expected.get('section') === 'payments') || (selected.get('tab') || 'requests') === (expected.get('tab') || 'requests'));
-  if (path === '/ke-toan/bao-cao') return (selected.get('tab') || 'report') === (expected.get('tab') || 'report');
-  return true;
-}
-function readAccountingGroups() {
-  try { return JSON.parse(window.localStorage.getItem('gcmb:accountant:nav-groups') || '{}') || {}; }
-  catch { return {}; }
-}
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
+  'Khách không đến',
   'Khách không còn nhu cầu',
   'Khách đặt nhầm booking',
   'Khách không đồng ý giá hoặc phụ phí',
   'Khác',
 ];
-// BR-186, BR-187: gợi ý ngân hàng nhận hoàn và vẫn hỗ trợ ngân hàng ngoài danh sách.
 const iconPaths = {
   handover: <><path d="M3 7h14m-4-4 4 4-4 4M21 17H7m4-4-4 4 4 4"/></>,
   shifts: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 4h3m3 0h3m-9 4h3"/></>,
@@ -176,19 +146,6 @@ export function AppShell({
   const [accountingPending, setAccountingPending] = useState({});
   const isAccountant = audience === 'accountant';
   const location = useLocation();
-  const accountingNavRef = useRef(null);
-  const [openAccountingGroups, setOpenAccountingGroups] = useState(readAccountingGroups);
-
-  useEffect(() => {
-    if (!isAccountant) return;
-    try { window.localStorage.setItem('gcmb:accountant:nav-groups', JSON.stringify(openAccountingGroups)); }
-    catch { /* Keep group choices in memory when browser storage is unavailable. */ }
-  }, [isAccountant, openAccountingGroups]);
-
-  useEffect(() => {
-    if (!isAccountant) return;
-    accountingNavRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [isAccountant, location.pathname, location.search]);
 
   useEffect(() => {
     if (!isAccountant) return undefined;
@@ -238,17 +195,7 @@ export function AppShell({
   }, [isAccountant]);
 
   if (isAccountant) {
-    const accountingLink = ({ label, icon, target, countKey, countLabel }) => {
-      const active = accountingLinkIsCurrent(target, location);
-      const pendingCount = accountingPending[countKey] || 0;
-      const accessibleLabel = `${label}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
-      return <button type="button" className="accounting-nav-link" key={target} aria-current={active ? 'page' : undefined}
-        aria-label={accessibleLabel} title={accessibleLabel} onClick={() => navigate(target)}>
-        <Icon name={icon} />
-        <span className="accounting-nav-link__copy"><span>{label}</span></span>
-        {pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
-      </button>;
-    };
+    const navItems = accountingNavigation;
     const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
@@ -264,25 +211,41 @@ export function AppShell({
           sidebarLabel="Kế toán thu chi"
           brand={<div className="manager-brand"><BrandWordmark /></div>}
           roleLabel="KẾ TOÁN THU CHI"
-          navigation={<nav ref={accountingNavRef} id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
-                {accountingNavigation.map((entry, index) => {
-                  if (!entry.items) return accountingLink(entry);
-                  const { title, short, items } = entry;
-                  const hasCurrentPage = items.some(({ target }) => accountingLinkIsCurrent(target, location));
-                  const open = hasCurrentPage || Boolean(openAccountingGroups[title]);
-                  return <div className="accounting-nav-group" key={title}>
-                    <button type="button" className="accounting-nav-group__toggle" aria-label={title} title={title}
-                      aria-expanded={open} aria-controls={`accounting-nav-group-${index}`}
-                      onClick={() => setOpenAccountingGroups((current) => ({ ...current, [title]: hasCurrentPage || !open }))}>
-                      <span className="accounting-nav-group__title">{title}</span>
-                      <span className="accounting-nav-group__short" aria-hidden="true">{short}</span>
-                      <span aria-hidden="true" className="accounting-nav-group__chevron" />
-                    </button>
-                    <div id={`accounting-nav-group-${index}`} hidden={!open} className="accounting-nav-group__items">
-                      {items.map(accountingLink)}
-                    </div>
-                  </div>;
-                })}
+          navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
+                {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
+                  <summary>{group.label}</summary>
+                  {group.items.map(([label, icon, unavailable]) => {
+                  const pendingCount = icon === 'payments' ? accountingPending.payments
+                    : icon === 'plus' ? accountingPending.recurring
+                      : icon === 'deposit' ? accountingPending.refunds
+                        : icon === 'calendar' ? accountingPending.closings : 0;
+                  const pendingDescription = icon === 'plus' ? 'kỳ chi định kỳ cần xử lý' : 'yêu cầu cần xử lý';
+                  return (
+                  <button
+                    type="button"
+                    key={label}
+                    aria-label={pendingCount ? `${label}, ${pendingCount} ${pendingDescription}` : label}
+                    aria-current={icon === activeTab ? 'page' : undefined}
+                    aria-disabled={Boolean(unavailable)}
+                    disabled={Boolean(unavailable)}
+                    title={unavailable ? 'Đang phát triển' : pendingCount ? `${label} · ${pendingCount} ${pendingDescription}` : label}
+                    onClick={() => {
+                      if (unavailable) return;
+                      // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
+                      if (icon === 'calendar') navigate('/ke-toan/chot-quy');
+                      if (icon === 'booking') navigate('/ke-toan/luong');
+                      if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
+                      if (icon === 'overview') navigate('/ke-toan');
+                      if (icon === 'report') navigate('/ke-toan/bao-cao');
+                      if (icon === 'orders') navigate('/ke-toan/bao-cao-chi-phi');
+                      if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
+                      if (['payments', 'plus'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
+                    }}
+                  >
+                    <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
+                  </button>
+                );})}
+                </details>)}
               </nav>}
           footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>
@@ -499,17 +462,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const [giftRequirementsError, setGiftRequirementsError] = useState('');
   const [drinkSelections, setDrinkSelections] = useState([]);
   const [foodSelections, setFoodSelections] = useState([]);
-  const [giftPicker, setGiftPicker] = useState(null);
-  const [giftSearch, setGiftSearch] = useState('');
-  const [giftCategoryFilter, setGiftCategoryFilter] = useState('all');
-  const [giftStockFilter, setGiftStockFilter] = useState('all');
-  const giftPickerTriggerRef = useRef(null);
-  useEffect(() => {
-    if (!giftPicker) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [giftPicker]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
@@ -572,10 +524,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const selectedRoom = availableRooms.find((room) => room.id === selectedRoomId);
   const checkInRoom = selectedRoom ? { ...booking, roomCode: selectedRoom.code, roomName: selectedRoom.name, roomOperatingStatus: selectedRoom.operatingStatus } : booking;
   const roomReady = checkInRoom?.roomOperatingStatus === 'AVAILABLE' && Boolean(checkInRoom?.roomCode);
-  const plannedStartMs = booking ? new Date(booking.plannedStart).getTime() : NaN;
   const plannedEndMs = booking ? new Date(booking.plannedEnd).getTime() : NaN;
-  const earlyCheckIn = Boolean(booking) && now.getTime() < plannedStartMs;
-  const shiftedCheckout = earlyCheckIn ? new Date(now.getTime() + (plannedEndMs - plannedStartMs)) : null;
   const checkInTimeValid = booking && plannedEndMs > now.getTime();
   const giftMenuRequired = (giftRequirements?.drinkQuantity || 0) + (giftRequirements?.foodQuantity || 0) > 0;
   const giftSelectionsValid = giftRequirements && drinkSelections.length === giftRequirements.drinkQuantity
@@ -583,58 +532,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const giftSelectionBlocked = booking?.status === 'CONFIRMED'
     && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
       || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
-  const openGiftPicker = (event, label, prefix, index) => {
-    giftPickerTriggerRef.current = event.currentTarget;
-    setGiftSearch('');
-    setGiftCategoryFilter('all');
-    setGiftStockFilter('all');
-    setGiftPicker({ label, prefix, index });
-  };
-  const closeGiftPicker = () => {
-    setGiftPicker(null);
-    window.requestAnimationFrame(() => {
-      if (giftPickerTriggerRef.current?.isConnected) giftPickerTriggerRef.current.focus();
-    });
-  };
-  const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
-    const selectedItem = giftMenu.find((item) => item.id === selectedId);
-    return <div className="booking-gift-slot" key={`${prefix}-${index}`}>
-      <span>{label} {index + 1}</span>
-      <button className="booking-gift-picker-trigger" type="button" onClick={(event) => openGiftPicker(event, label, prefix, index)}>
-        <span>{selectedItem?.name || `Chọn ${label.toLowerCase()}`}</span>
-        <small>{selectedItem ? selectedItem.stockTracked ? `Tồn ${selectedItem.stockQuantity} ${selectedItem.unitName}` : 'Không theo dõi tồn kho' : 'Mở danh sách món'}</small>
-      </button>
-    </div>;
-  });
-  const pickerTypeKeyword = giftPicker?.prefix === 'drink' ? 'uống' : 'ăn';
-  const pickerItems = giftPicker
-    ? giftMenu.filter((item) => (item.category || '').toLocaleLowerCase('vi-VN').includes(pickerTypeKeyword))
-    : [];
-  const pickerSlots = giftPicker ? [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
-    ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))] : [];
-  const pickerUsedElsewhere = pickerSlots
-    .filter((slot) => slot.key !== `${giftPicker?.prefix}-${giftPicker?.index}` && slot.id)
-    .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
-  const pickerCategories = [...new Map(pickerItems.map((item) => [
-    (item.category || '').trim().toLocaleLowerCase('vi-VN'), item.category,
-  ]).filter(([key]) => key)).values()];
-  const normalizedGiftSearch = giftSearch.trim().toLocaleLowerCase('vi-VN');
-  const filteredPickerItems = pickerItems.filter((item) => {
-    const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-    const matchesSearch = !normalizedGiftSearch || `${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(normalizedGiftSearch);
-    const matchesCategory = giftCategoryFilter === 'all' || (item.category || '').toLocaleLowerCase('vi-VN') === giftCategoryFilter;
-    const matchesStock = giftStockFilter === 'all'
-      || (giftStockFilter === 'available' && selectable)
-      || (giftStockFilter === 'untracked' && !item.stockTracked)
-      || (giftStockFilter === 'out' && !selectable);
-    return matchesSearch && matchesCategory && matchesStock;
-  });
-  const chooseGift = (item) => {
-    const setter = giftPicker?.prefix === 'drink' ? setDrinkSelections : setFoodSelections;
-    const index = giftPicker?.index;
-    setter((current) => current.map((id, position) => position === index ? item.id : id));
-    closeGiftPicker();
-  };
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
   if (!booking) return <div className="booking-checkin-overlay"><button className="booking-overlay-dismiss" type="button" onClick={onClose} aria-label="Đóng" /><aside className="booking-checkin-panel"><button className="booking-panel-close" type="button" onClick={onClose}>×</button><p role="status">Đang tải thông tin booking…</p></aside></div>;
@@ -664,8 +561,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
           {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
-          {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
-          {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
+          <ComboGiftPicker drinkSelections={drinkSelections} setDrinkSelections={setDrinkSelections} foodSelections={foodSelections} setFoodSelections={setFoodSelections} giftMenu={giftMenu} disabled={busy} />
         </section>}
         <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
            <strong>{checkInRoomTitle(checkInRoom, roomReady)}</strong>
@@ -673,7 +569,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         </div></div>
         <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
         <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
-        {booking.status === 'CONFIRMED' && earlyCheckIn && roomReady && checkInTimeValid && <p className="booking-checkin-time-note is-info">Nhận phòng sớm sẽ giữ giờ hẹn {timeText(booking.plannedStart, timezone)} và dời giờ trả dự kiến đến {timeText(shiftedCheckout, timezone)} · {dateText(shiftedCheckout, timezone)}, để khách vẫn dùng đủ thời lượng đã đặt. Hệ thống sẽ kiểm tra khung giờ mới có trùng booking khác không.</p>}
         <section className="booking-checkin-receipt"><strong>Tóm tắt</strong><div><span>{detail?.charges?.[0]?.description || 'Dịch vụ phòng'}</span><b>{formatVnd(charge)}</b></div><p>Tiền cọc đang giữ {formatVnd(depositBalance)} sẽ được đối chiếu khi checkout.</p></section>
         {booking.status === 'CANCELLED' && <p className="booking-checkin-time-note">Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.</p>}
         {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && booking.status !== 'CANCELLED' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
@@ -684,43 +579,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
          <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { roomId: selectedRoomId || booking.roomId, drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
-    {giftPicker && <div className="booking-gift-picker-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGiftPicker(); }}>
-      <section className="booking-gift-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-gift-picker-title" onKeyDown={(event) => {
-        if (event.key === 'Escape') closeGiftPicker();
-        if (event.key === 'Tab') {
-          const focusable = event.currentTarget.querySelectorAll('button:not(:disabled),input,select');
-          const first = focusable[0], last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-        }
-      }}>
-        <header className="booking-gift-picker-heading">
-          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2></div>
-          <button type="button" aria-label="Đóng danh sách món" onClick={closeGiftPicker}>×</button>
-        </header>
-        <label className="booking-gift-picker-search"><span>Tìm món</span><input autoFocus value={giftSearch} onChange={(event) => setGiftSearch(event.target.value)} placeholder="Nhập tên món…" /></label>
-        <div className="booking-gift-picker-filters">
-          <label><span>Danh mục</span><select value={giftCategoryFilter} onChange={(event) => setGiftCategoryFilter(event.target.value)}>
-            <option value="all">Tất cả danh mục</option>
-            {pickerCategories.map((category) => <option key={category} value={(category || '').toLocaleLowerCase('vi-VN')}>{category}</option>)}
-          </select></label>
-          <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
-            {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
-          </div>
-        </div>
-        <div className="booking-gift-picker-list" aria-live="polite">
-          {filteredPickerItems.length ? filteredPickerItems.map((item) => {
-            const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-            const selected = (giftPicker.prefix === 'drink' ? drinkSelections : foodSelections)[giftPicker.index] === item.id;
-            return <button key={item.id} type="button" className={`booking-gift-picker-item${selected ? ' is-selected' : ''}`} disabled={!selectable} onClick={() => chooseGift(item)}>
-              <span><strong>{item.name}</strong><small>{item.category}</small></span>
-              <span className={`booking-gift-picker-stock${item.stockTracked ? '' : ' is-untracked'}`}>{item.stockTracked ? selectable ? `Tồn ${item.stockQuantity} ${item.unitName}` : 'Hết tồn' : 'Không theo dõi tồn'}</span>
-            </button>;
-          }) : <p className="booking-gift-picker-empty">Không tìm thấy món phù hợp với bộ lọc.</p>}
-        </div>
-        <footer className="booking-gift-picker-footer"><span>{filteredPickerItems.length} món</span><button type="button" onClick={closeGiftPicker}>Đóng</button></footer>
-      </section>
-    </div>}
   </div>;
 }
 
@@ -765,8 +623,10 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const hasDeposit = depositAmount !== null && depositAmount > 0;
   const cutoffMinutes = Number(currentDetail?.deposit?.refundCutoffMinutes || 40);
   const millisecondsUntilStart = new Date(currentBooking.plannedStart).getTime() - now.getTime();
-  const refundEligible = hasDeposit && millisecondsUntilStart >= cutoffMinutes * 60000;
-  const cancellationAllowed = millisecondsUntilStart > 0 && ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
+  // BR-14, BR-15, BR-16: quá giờ hẹn vẫn hủy được nếu chưa check-in; khách không đến không hoàn cọc.
+  const noShow = reasonOption === 'Khách không đến';
+  const refundEligible = hasDeposit && !noShow && millisecondsUntilStart >= cutoffMinutes * 60000;
+  const cancellationAllowed = ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
   const remainingMinutes = Math.max(0, Math.floor(millisecondsUntilStart / 60000));
   let remainingLabel;
   if (millisecondsUntilStart <= 0) remainingLabel = 'Đã đến giờ nhận phòng';
@@ -789,15 +649,19 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeTitle = 'Không tải được thông tin tiền cọc';
     outcomeDescription = 'Vui lòng thử mở lại hộp thoại trước khi hủy booking.';
   } else if (!cancellationAllowed) {
-    outcomeTitle = 'Đã đến giờ sử dụng';
-    outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in.';
+    outcomeTitle = 'Không thể hủy booking';
+    outcomeDescription = 'Không thể hủy booking này vì khách đã nhận phòng hoặc lượt sử dụng đã kết thúc.';
   } else if (refundEligible) {
     outcomeTitle = '✓ Đủ điều kiện hoàn cọc';
     outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
   } else if (hasDeposit) {
     outcomeTitle = '! Không đủ điều kiện hoàn cọc';
-    // MSG16: giải thích việc giữ cọc và yêu cầu lễ tân xác nhận tiếp tục hủy.
-    outcomeDescription = `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
+    // MSG16, MSG65: nêu đúng nguyên nhân không hoàn cọc trước khi xác nhận.
+    outcomeDescription = noShow
+      ? `Hủy booking ${currentBooking.code} với lý do khách không đến sẽ không hoàn lại tiền cọc. Bạn có muốn tiếp tục?`
+      : millisecondsUntilStart <= 0
+        ? `Booking đã quá giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`
+        : `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
   } else {
     outcomeTitle = 'Không có tiền cọc';
     outcomeDescription = 'Booking sẽ được hủy và phòng được giải phóng.';
@@ -826,7 +690,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
         <div className="booking-cancel-account-grid">
           <label className="booking-form-field"><span>Chủ tài khoản *</span><input maxLength="200" value={beneficiaryName} onChange={(event) => setBeneficiaryName(event.target.value)} placeholder="Tên chủ tài khoản" /></label>
           <label className="booking-form-field"><span>Số tài khoản *</span><input maxLength="60" value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} inputMode="numeric" placeholder="Nhập số tài khoản" /></label>
-          {/* BR-186 / BR-187: lưu ngân hàng nhận hoàn, tối đa 200 ký tự. */}
+          {/* BR-186, BR-187: lưu ngân hàng nhận hoàn, tối đa 200 ký tự. */}
           <label className="booking-form-field"><span>Ngân hàng *</span><BankNameInput maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Chọn hoặc nhập tên ngân hàng" /></label>
         </div>
         <div className="booking-cancel-next-step"><strong>Tạo yêu cầu hoàn {formatVnd(depositAmount)} và chuyển Kế toán xử lý.</strong><p>Lễ tân không đánh dấu giao dịch là đã hoàn.</p></div>
@@ -1155,7 +1019,7 @@ export default function BookingManagementPage() {
       <div><h1>Booking</h1></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
     </div>
-    {notice && <div className={`booking-live-notice${noticeKind === 'warning' ? ' is-warning' : ''}`} role={noticeKind === 'warning' ? 'alert' : 'status'}><span>{noticeKind === 'warning' ? '!' : '✓'}</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+    <ToastStack notice={notice} noticeVariant={noticeKind === 'warning' ? 'warning' : 'success'} onCloseNotice={() => setNotice('')} />
     {listError && <div className="booking-inline-error" role="alert">{listError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
     <section className="booking-filters" aria-label="Bộ lọc booking">
       <div className="booking-filter-date-group"><span className="booking-filter-label">Ngày nhận phòng</span><div className="booking-date-buttons">

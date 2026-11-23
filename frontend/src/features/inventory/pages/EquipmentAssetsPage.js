@@ -10,6 +10,7 @@ import MoneyInput from '../../../shared/components/MoneyInput';
 import apiClient from '../../../api/client';
 import { equipmentAssetApi } from '../services/equipmentAssetApi';
 import './equipment-assets.css';
+import './equipment-harmony.css';
 
 const blank = { code: '', name: '', categoryId: '', roomId: '', locationNote: '', serialNumber: '', purchaseDate: '', purchaseValue: '', warrantyExpiry: '', status: 'IN_USE' };
 const statuses = [ ['IN_USE', 'Đang sử dụng'], ['BROKEN', 'Bị hỏng'], ['REPAIRING', 'Đang sửa'], ['IN_TRANSIT', 'Đang chuyển'], ['RETIRED', 'Đã thanh lý'] ];
@@ -87,9 +88,10 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   // BR-202/BR-111: Kiểm tra trường bắt buộc ở form trước khi gửi; server vẫn xác thực cuối cùng.
   const save = async (event) => {
     event.preventDefault(); setError('');
-    if (!form.code.trim() || !form.name.trim() || !form.categoryId || (!form.roomId && !form.locationNote.trim())) {
-      setError('Vui lòng nhập mã, tên, nhóm và ít nhất một vị trí phòng/khu vực.'); return;
-    }
+    if (!form.code.trim()) { setError('Vui lòng bổ sung mã thiết bị.'); return; }
+    if (!form.name.trim()) { setError('Vui lòng bổ sung tên thiết bị.'); return; }
+    if (!form.categoryId) { setError('Vui lòng bổ sung nhóm thiết bị.'); return; }
+    if (!form.roomId && !form.locationNote.trim()) { setError('Vui lòng bổ sung vị trí thiết bị.'); return; }
     setBusy(true);
     try {
       const payload = { ...form, categoryId: form.categoryId, roomId: form.roomId || null,
@@ -178,7 +180,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
             {form.roomId && <label>Ghi chú vị trí<input maxLength="200" value={form.locationNote} onChange={(e) => setForm({ ...form, locationNote: e.target.value })} /></label>}
             <label>Số serial<input maxLength="200" value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} /></label>
             <label>Ngày mua<input type="date" value={form.purchaseDate} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} /></label>
-            <label>Giá trị mua<MoneyInput min="0" value={form.purchaseValue} onValueChange={(purchaseValue) => setForm({ ...form, purchaseValue })} /></label>
+            <label>Giá trị mua<MoneyInput  min="0"  value={form.purchaseValue} onValueChange={value => setForm({ ...form, purchaseValue: value })} /></label>
             <label>Hạn bảo hành<input type="date" min={form.purchaseDate || undefined} value={form.warrantyExpiry} onChange={(e) => setForm({ ...form, warrantyExpiry: e.target.value })} /></label>
             <label>Trạng thái<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} disabled={lockedInTransit}>
               {statuses.filter(([key]) => key !== 'IN_TRANSIT' || key === form.status).map(([key, label]) => <option key={key} value={key}>{label}</option>)}

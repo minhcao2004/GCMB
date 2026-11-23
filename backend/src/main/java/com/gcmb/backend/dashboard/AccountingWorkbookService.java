@@ -22,12 +22,12 @@ public class AccountingWorkbookService {
   private static final BigDecimal ZERO = BigDecimal.ZERO;
   private static final String NOTE = "Nguồn không có: TINGBOX, TK HKD, ẢNH SAO KÊ, NỘP KÉT MINI. CHI KÉT lấy từ payment_source=BRANCH_FUND (luồng cũ); CHI CK gồm các khoản còn lại và toàn bộ luồng chi mới (không có trường phương thức chi). Hoàn cọc chỉ tham khảo, không phải chi phí/lợi nhuận. CAPEX tách riêng, không trừ vào lợi nhuận.";
 
-  private final JdbcTemplate db;
-  private final MonthlyPerformanceService performance;
+  private final JdbcTemplate jdbcTemplate;
+  private final MonthlyPerformanceService monthlyPerformanceService;
 
-  public AccountingWorkbookService(JdbcTemplate db, MonthlyPerformanceService performance) {
-    this.db = db;
-    this.performance = performance;
+  public AccountingWorkbookService(JdbcTemplate jdbcTemplate, MonthlyPerformanceService monthlyPerformanceService) {
+    this.jdbcTemplate = jdbcTemplate;
+    this.monthlyPerformanceService = monthlyPerformanceService;
   }
 
   @Transactional(readOnly = true)
@@ -44,7 +44,7 @@ public class AccountingWorkbookService {
         expense = expense.add(day.opexCash).add(day.opexBank).add(day.salary);
       }
     }
-    @SuppressWarnings("unchecked") List<Map<String, Object>> ucRows = (List<Map<String, Object>>) performance.report(actor, selectedMonth.atDay(1), null).get("results");
+    @SuppressWarnings("unchecked") List<Map<String, Object>> ucRows = (List<Map<String, Object>>) monthlyPerformanceService.report(actor, selectedMonth.atDay(1), null).get("results");
     Set<UUID> ids = branches.stream().map(Branch::id).collect(java.util.stream.Collectors.toSet());
     for (Map<String, Object> row : ucRows) if (ids.contains(row.get("id"))) profit = profit.add((BigDecimal) row.get("profit"));
     String status = periodStatus(selectedMonth.atDay(1));
@@ -61,21 +61,21 @@ public class AccountingWorkbookService {
     YearMonth selectedMonth = validateMonth(month);
     List<UUID> scopeIds = parseIds(branchIds);
     List<Branch> branches = branches(branchIds);
-    Map<String, Object> report = performance.report(actor, selectedMonth.atDay(1), null);
+    Map<String, Object> report = monthlyPerformanceService.report(actor, selectedMonth.atDay(1), null);
     @SuppressWarnings("unchecked") List<Map<String, Object>> allRows = (List<Map<String, Object>>) report.get("results");
     Set<UUID> ids = scopeIds.isEmpty() ? null : new HashSet<>(scopeIds);
     List<Map<String, Object>> rows = new ArrayList<>();
     for (Map<String, Object> row : allRows) if (ids == null || ids.contains(row.get("id"))) rows.add(row);
-    Map<String, Object> total = performance.totals(rows);
+    Map<String, Object> total = monthlyPerformanceService.totals(rows);
     total.put("name", scopeIds.isEmpty() ? "Toàn chuỗi" : "Tổng phạm vi đã chọn");
     total.put("periodStatus", report.get("periodStatus"));
     rows.add(total);
     String scope = scopeIds.isEmpty() ? "Toàn chuỗi" : String.join(", ", branches.stream().map(Branch::name).toList());
-    List<Map<String, Object>> details = performance.accountingEntries(selectedMonth, scopeIds);
+    List<Map<String, Object>> details = monthlyPerformanceService.accountingEntries(selectedMonth, scopeIds);
     byte[] bytes = MonthlyPerformanceExport.xlsx(rows, selectedMonth.toString(), scope,
       String.valueOf(report.get("periodStatus")), details);
     String selected = branchIdsJson(branches);
-    db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_ACCOUNTING_MONTHLY_WORKBOOK','REPORT',?::jsonb)",
+    jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_ACCOUNTING_MONTHLY_WORKBOOK','REPORT',?::jsonb)",
       actor.id(), "{\"month\":\"" + selectedMonth + "\",\"branchIds\":" + selected + "}");
     return bytes;
   }
@@ -154,7 +154,7 @@ public class AccountingWorkbookService {
   private void expenseDaily(String sql, List<UUID> ids, List<Object> args, Dataset data, String ignored) {
     String full = sql + " AND " + (sql.contains("expense_payment") ? "e.branch_id" : "r.branch_id") + " IN (" + marks(ids.size()) + ") GROUP BY branch_id,day";
     args.addAll(ids);
-    for (Map<String, Object> row : db.queryForList(full, args.toArray())) {
+    for (Map<String, Object> row : jdbcTemplate.queryForList(full, args.toArray())) {
       Day day = data.day((UUID) row.get("branch_id"), localDate(row.get("day")));
       if (sql.contains("expense_payment")) {
         day.totalExpenseCash = decimal(row.get("cash_amount"));
@@ -171,7 +171,7 @@ public class AccountingWorkbookService {
   private void dataQuery(String sql, List<UUID> ids, List<Object> args, String branchColumn, String group, Dataset data, String kind) {
     String query = sql + " AND " + branchColumn + " IN (" + marks(ids.size()) + ")" + group;
     args.addAll(ids);
-    for (Map<String, Object> row : db.queryForList(query, args.toArray())) {
+    for (Map<String, Object> row : jdbcTemplate.queryForList(query, args.toArray())) {
       UUID branch = (UUID) row.get("branch_id");
       LocalDate date = localDate(row.get("day"));
       Day day = data.day(branch, date);
@@ -188,7 +188,7 @@ public class AccountingWorkbookService {
 
   private List<Map<String, Object>> expenseLines(YearMonth month, List<UUID> ids) {
     String placeholders = marks(ids.size());
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT x.branch_id,x.day,x.content,x.cost_type,x.amount,x.request_code
       FROM (
         SELECT e.branch_id,(p.paid_at AT TIME ZONE b.timezone)::date day,c.name content,e.class_snapshot cost_type,p.amount,e.code request_code
@@ -204,9 +204,9 @@ public class AccountingWorkbookService {
 
   private List<Branch> branches(String branchIds) {
     List<UUID> ids = parseIds(branchIds);
-    if (ids.isEmpty()) return db.query("SELECT id,code,name,timezone FROM gcmb.branch ORDER BY name,id", (rs,n) -> new Branch(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("timezone")));
+    if (ids.isEmpty()) return jdbcTemplate.query("SELECT id,code,name,timezone FROM gcmb.branch ORDER BY name,id", (rs,n) -> new Branch(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("timezone")));
     String marks = marks(ids.size());
-    List<Branch> branches = db.query("SELECT id,code,name,timezone FROM gcmb.branch WHERE id IN (" + marks + ") ORDER BY name,id",
+    List<Branch> branches = jdbcTemplate.query("SELECT id,code,name,timezone FROM gcmb.branch WHERE id IN (" + marks + ") ORDER BY name,id",
       (rs,n) -> new Branch(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("timezone")), ids.toArray());
     if (branches.size() != ids.size()) throw bad("Cơ sở được chọn không tồn tại.");
     return branches;
@@ -222,7 +222,7 @@ public class AccountingWorkbookService {
   }
 
   private String periodStatus(LocalDate month) {
-    List<String> rows = db.queryForList("SELECT status FROM gcmb.financial_period WHERE \"month\"=?", String.class, month);
+    List<String> rows = jdbcTemplate.queryForList("SELECT status FROM gcmb.financial_period WHERE \"month\"=?", String.class, month);
     return rows.isEmpty() ? "OPEN" : rows.get(0);
   }
 
@@ -230,7 +230,7 @@ public class AccountingWorkbookService {
     if (branches.isEmpty()) return 0;
     List<UUID> ids = branches.stream().map(Branch::id).toList();
     String marks = marks(ids.size());
-    Long count = db.queryForObject("""
+    Long count = jdbcTemplate.queryForObject("""
       SELECT count(*) FROM gcmb.bank_transaction t JOIN gcmb.financial_account a ON a.id=t.account_id
       WHERE t.provider='SEPAY' AND t.match_status='EXCEPTION' AND t.resolution_status='UNRESOLVED'
         AND (t.occurred_at AT TIME ZONE COALESCE((SELECT timezone FROM gcmb.branch WHERE id=a.branch_id),'Asia/Ho_Chi_Minh'))::date>=?

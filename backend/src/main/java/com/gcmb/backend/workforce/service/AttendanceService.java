@@ -23,16 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class AttendanceService {
 
-    private final AttendanceRepository repo;
+    private final AttendanceRepository attendanceRepository;
     private final ShiftRepository shiftRepository;
     private final ShiftService shiftService;
 
     public AttendanceService(
-        AttendanceRepository repo,
+        AttendanceRepository attendanceRepository,
         ShiftRepository shiftRepository,
         ShiftService shiftService
     ) {
-        this.repo = repo;
+        this.attendanceRepository = attendanceRepository;
         this.shiftRepository = shiftRepository;
         this.shiftService = shiftService;
     }
@@ -48,10 +48,10 @@ public class AttendanceService {
         result.put("today", LocalDate.now(zone).toString());
         result.put(
             "period",
-            periodView(repo.period(actor.branchId(), day.withDayOfMonth(1), false))
+            periodView(attendanceRepository.period(actor.branchId(), day.withDayOfMonth(1), false))
         );
-        result.put("rows", decorate(repo.rows(actor.branchId(), day, day.plusDays(1))));
-        result.put("issues", repo.issues(actor.branchId(), day, day.plusDays(1)));
+        result.put("rows", decorate(attendanceRepository.rows(actor.branchId(), day, day.plusDays(1))));
+        result.put("issues", attendanceRepository.issues(actor.branchId(), day, day.plusDays(1)));
         result.put("templates", shiftRepository.templates());
         return result;
     }
@@ -78,7 +78,7 @@ public class AttendanceService {
             "Bạn không có quyền xem đối với công cá nhân."
         );
         YearMonth month = month(value, branch);
-        var rows = decorate(repo.personalRows(employee, month.atDay(1), month.plusMonths(1).atDay(1)));
+        var rows = decorate(attendanceRepository.personalRows(employee, month.atDay(1), month.plusMonths(1).atDay(1)));
         var result = base(branch);
         result.put("month", month.toString());
         result.put("rows", rows);
@@ -100,7 +100,7 @@ public class AttendanceService {
 
     public Map<String, Object> record(Identity actor, UUID assignment, RecordCommand input) {
         var branch = shiftService.scope(actor, true, true); // BR-177 / MSG43, khóa chung với lịch ca.
-        var row = repo.row(actor.branchId(), assignment);
+        var row = attendanceRepository.row(actor.branchId(), assignment);
         if (row == null) throw new AuthFailure(
             404,
             "form",
@@ -117,7 +117,7 @@ public class AttendanceService {
         if (scheduledStart.isAfter(now)) {
             throw bad("form", "Chưa đến giờ bắt đầu ca, chưa thể chấm công.");
         }
-        var period = repo.ensurePeriod(actor.branchId(), date.withDayOfMonth(1));
+        var period = attendanceRepository.ensurePeriod(actor.branchId(), date.withDayOfMonth(1));
         requireOpen(period, date);
         if (
             input == null ||
@@ -156,7 +156,7 @@ public class AttendanceService {
             input.resolvedIssueIds() == null
                 ? Set.<UUID>of()
                 : new HashSet<>(input.resolvedIssueIds());
-        var openIssues = repo
+        var openIssues = attendanceRepository
             .issues(actor.branchId(), date, date.plusDays(1))
             .stream()
             .filter(i -> assignment.equals(i.get("assignmentId")) && "OPEN".equals(i.get("status")))
@@ -172,7 +172,7 @@ public class AttendanceService {
                   2000,
                   true
               );
-        UUID id = repo.save(
+        UUID id = attendanceRepository.save(
             assignment,
             (UUID) period.get("id"),
             input.status(),
@@ -183,9 +183,9 @@ public class AttendanceService {
             actor.id()
         );
         for (UUID issue : selected) {
-            if (!repo.resolve(issue, id, actor.id(), resolution)) throw stale();
+            if (!attendanceRepository.resolve(issue, id, actor.id(), resolution)) throw stale();
         }
-        repo.changed((UUID) period.get("id"));
+        attendanceRepository.changed((UUID) period.get("id"));
         var after = new LinkedHashMap<String, Object>();
         after.put("assignmentId", assignment);
         after.put("status", input.status());
@@ -195,7 +195,7 @@ public class AttendanceService {
         after.put("note", note);
         after.put("resolvedIssueIds", selected);
         after.put("resolution", resolution);
-        repo.audit(actor.id(), actor.branchId(), id, "RECORD_DAILY_ATTENDANCE", row, after);
+        attendanceRepository.audit(actor.id(), actor.branchId(), id, "RECORD_DAILY_ATTENDANCE", row, after);
         return daily(actor, date);
     }
 
@@ -204,7 +204,7 @@ public class AttendanceService {
     public Map<String, Object> close(Identity actor, String value, CloseCommand input) {
         var branch = shiftService.scope(actor, true, true);
         YearMonth month = month(value, branch);
-        var existing = repo.period(actor.branchId(), month.atDay(1), true);
+        var existing = attendanceRepository.period(actor.branchId(), month.atDay(1), true);
         requireOpen(existing, month.atDay(1));
         var current = summary(actor.branchId(), branch, month);
         if (input == null || !input.confirmedCorrect()) throw bad(
@@ -235,18 +235,31 @@ public class AttendanceService {
                 409, "form", employee.get("fullName") + ": " + employee.get("closeBlockReason")
             );
         }
-        var period = repo.ensurePeriod(actor.branchId(), month.atDay(1));
+        var period = attendanceRepository.ensurePeriod(actor.branchId(), month.atDay(1));
         var rows = (List<Map<String, Object>>) current.get("rows");
+        LocalDate today = LocalDate.now(ZoneId.of((String) branch.get("timezone")));
         for (UUID employee : ids) {
-            repo.closeEmployee((UUID) period.get("id"), employee, actor.id(),
-                rows.stream().filter(r -> employee.equals(r.get("employeeId"))).toList());
+            // HuyDV / UC-89, thay đổi BR-62/63: hủy ca phía sau trong tháng trước khi khóa công.
+            for (var row : rows) {
+                if (employee.equals(row.get("employeeId")) &&
+                    LocalDate.parse(row.get("workDate").toString()).isAfter(today) &&
+                    row.get("attendanceId") == null) {
+                    shiftRepository.cancel((UUID) row.get("assignmentId"), "Hủy do nhân viên đã chốt công sớm trong tháng.");
+                    shiftRepository.audit(actor.id(), actor.branchId(), (UUID) row.get("shiftId"),
+                        "CANCEL_SHIFT_AFTER_ATTENDANCE_CLOSING", Map.of(
+                            "assignmentId", row.get("assignmentId"), "employeeId", employee));
+                }
+            }
+            attendanceRepository.closeEmployee((UUID) period.get("id"), employee, actor.id(),
+                rows.stream().filter(r -> employee.equals(r.get("employeeId")) &&
+                    (!LocalDate.parse(r.get("workDate").toString()).isAfter(today) || r.get("attendanceId") != null)).toList());
         }
-        repo.changed((UUID) period.get("id"));
+        attendanceRepository.changed((UUID) period.get("id"));
         if (Boolean.TRUE.equals(current.get("monthEnded")) && employees.stream().allMatch(e ->
             Boolean.TRUE.equals(e.get("closed")) || ids.contains(e.get("employeeId")))) {
-            repo.close((UUID) period.get("id"), actor.id());
+            attendanceRepository.close((UUID) period.get("id"), actor.id());
         }
-        repo.audit(actor.id(), actor.branchId(), (UUID) period.get("id"),
+        attendanceRepository.audit(actor.id(), actor.branchId(), (UUID) period.get("id"),
             "CLOSE_EMPLOYEE_MONTHLY_ATTENDANCE", existing,
             Map.of("month", month.toString(), "employeeIds", ids, "confirmedCorrect", true));
         return summary(actor.branchId(), branch, month);
@@ -257,13 +270,15 @@ public class AttendanceService {
         Map<String, Object> branch,
         YearMonth month
     ) {
-        var period = repo.period(branchId, month.atDay(1), false);
-        var raw = repo.rows(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
+        var period = attendanceRepository.period(branchId, month.atDay(1), false);
+        var raw = attendanceRepository.rows(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
         var rows = decorate(raw);
-        var issues = repo.issues(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
+        var issues = attendanceRepository.issues(branchId, month.atDay(1), month.plusMonths(1).atDay(1));
+        LocalDate today = LocalDate.now(ZoneId.of((String) branch.get("timezone")));
         long missing = rows
             .stream()
-            .filter(r -> r.get("attendanceId") == null)
+            .filter(r -> r.get("attendanceId") == null &&
+                !LocalDate.parse(r.get("workDate").toString()).isAfter(today))
             .count();
         long invalid = rows
             .stream()
@@ -300,7 +315,9 @@ public class AttendanceService {
             });
             increment(employee, "shiftCount", 1);
             increment(employee, "openIssues", number(row, "openIssues"));
-            if (row.get("attendanceId") == null) increment(employee, "missing", 1);
+            if (row.get("attendanceId") == null) {
+                if (!LocalDate.parse(row.get("workDate").toString()).isAfter(today)) increment(employee, "missing", 1);
+            }
             else if (!Boolean.TRUE.equals(row.get("valid"))) increment(employee, "invalid", 1);
             else {
                 increment(employee, "workedMinutes", number(row, "workedMinutes"));
@@ -312,21 +329,24 @@ public class AttendanceService {
                 );
             }
         }
-        var closures = repo.employeeClosures(branchId, month.atDay(1));
+        var closures = attendanceRepository.employeeClosures(branchId, month.atDay(1));
+        Instant now = Instant.now();
         for (var employee : employees.values()) {
             var closure = closures.stream()
                 .filter(c -> employee.get("employeeId").equals(c.get("employeeId")))
                 .findFirst().orElse(null);
             boolean closed = (period != null && "CLOSED".equals(period.get("status"))) || closure != null;
-            long unfinished = rows.stream()
-                .filter(r -> employee.get("employeeId").equals(r.get("employeeId"))
-                    && time(r, "endsAt").isAfter(Instant.now()))
+            var due = rows.stream().filter(r -> employee.get("employeeId").equals(r.get("employeeId")) &&
+                !LocalDate.parse(r.get("workDate").toString()).isAfter(today)).toList();
+            long unfinished = due.stream()
+                .filter(r -> time(r, "endsAt").isAfter(now))
                 .count();
             String reason = "";
             if (closed) reason = "Công tháng đã được chốt.";
             else if (unfinished > 0) {
-                reason = "Còn ca chưa kết thúc hoặc lịch phân công phía sau; cần bố trí người thay trước khi chốt cả tháng.";
-            } else if (number(employee, "missing") > 0) reason = "Còn ca chưa chấm công.";
+                reason = "Nhân viên cần làm hết các ca được phân công trong hôm nay trước khi chốt công.";
+            } else if (due.isEmpty()) reason = "Chưa có ca đã hoàn thành để chốt công.";
+            else if (due.stream().anyMatch(r -> r.get("attendanceId") == null)) reason = "Còn ca chưa chấm công.";
             else if (number(employee, "invalid") > 0) reason = "Còn bản ghi công chưa đúng.";
             else if (number(employee, "openIssues") > 0) reason = "Còn phản ánh chưa xử lý.";
             else if (!"ACTIVE".equals(branch.get("status"))) reason = "Cơ sở đang tạm ngừng.";

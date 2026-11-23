@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ToastStack } from '../../../../shared/components/Feedback';
 import { authApi, apiErrors } from '../../../auth/services/authApi';
 import { passwordError } from '../../../auth/services/validation';
 
@@ -40,7 +41,7 @@ export default function ChangePasswordForm({ busy, onBusyChange, onCancel }) {
   return <form className="account-create-form" onSubmit={submit}>
     <div className="account-form-body">
       <h3 className="profile-password-title">Đổi mật khẩu</h3>
-      {notice && <p className="account-success-message" role="status">{notice}</p>}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       <p className="profile-password-intro" id="password-guidance">Nhập mật khẩu mới khác mật khẩu hiện tại và xác nhận lại.</p>
       {errors.form && <p className="account-error" role="alert">{errors.form}</p>}
       <fieldset className="profile-fields" disabled={busy}>

@@ -23,7 +23,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AuditRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String FROM = """
             FROM gcmb.audit_event a
@@ -33,6 +33,8 @@ public class AuditRepository {
             LEFT JOIN gcmb.user_account target ON target.id=a.entity_id AND a.entity_type='USER_ACCOUNT'
             LEFT JOIN gcmb.employee target_employee ON target_employee.user_id=target.id
             LEFT JOIN gcmb.booking booking ON booking.id=a.entity_id AND a.entity_type='BOOKING'
+            LEFT JOIN gcmb.employee payroll_employee ON payroll_employee.id=a.entity_id AND a.entity_type='FINANCE'
+                AND a.action IN ('SET_BRANCH_HOURLY_PAY','SUBMIT_BRANCH_PAYROLL')
             """;
     private static final String SELECT = """
             SELECT a.id,a.created_at,a.action,a.entity_type,a.entity_id,a.reason,
@@ -41,12 +43,24 @@ public class AuditRepository {
                 COALESCE(NULLIF(a.after_data->>'contact_name',''),NULLIF(a.before_data->>'contact_name',''),
                     NULLIF(booking.contact_name,''),NULLIF(a.after_data->>'fullName',''),NULLIF(a.before_data->>'fullName',''),
                     NULLIF(a.after_data->>'name',''),NULLIF(a.before_data->>'name',''),target_employee.full_name,
-                    a.after_data->>'username',a.before_data->>'username',target.username,'Không còn thông tin tên') AS entity_name,
+                    a.after_data->>'username',a.before_data->>'username',target.username,
+                    CASE WHEN payroll_employee.id IS NOT NULL THEN concat_ws(' · ',payroll_employee.code,payroll_employee.full_name) END,
+                    NULLIF(a.after_data->>'code',''),NULLIF(a.before_data->>'code',''),
+                    CASE WHEN a.action IN ('CLOSE_EMPLOYEE_MONTHLY_ATTENDANCE','CLOSE_MONTHLY_ATTENDANCE')
+                        AND a.after_data->>'month' ~ '^[0-9]{4}-[0-9]{2}$'
+                        THEN 'Bảng công tháng ' || substring(a.after_data->>'month',6,2) || '/' || substring(a.after_data->>'month',1,4) END,
+                    CASE WHEN a.action IN ('SHIFT_CASH_DISPATCHED','SHIFT_CASH_RECEIVED','SHIFT_CASH_RESOLVED')
+                        AND a.after_data->>'shift_number' IS NOT NULL
+                        THEN 'Bàn giao tiền mặt Ca ' || (a.after_data->>'shift_number')
+                            || COALESCE(' · ' || (a.after_data->>'business_date'),'') END,
+                    CASE a.entity_type WHEN 'FINANCE' THEN 'Hồ sơ tài chính'
+                        WHEN 'ATTENDANCE' THEN 'Bản ghi chấm công' WHEN 'SCHEDULED_SHIFT' THEN 'Ca làm việc'
+                        WHEN 'REPORT' THEN 'Báo cáo' ELSE 'Không có thông tin tên đối tượng' END) AS entity_name,
                 COALESCE(b.name,'Toàn chuỗi') AS branch_name
             """;
 
-    public AuditRepository(JdbcTemplate db) {
-        this.db = db;
+    public AuditRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     private static AuditEntry entry(ResultSet rs, int row) throws SQLException {
@@ -76,7 +90,7 @@ public class AuditRepository {
         StringBuilder where = new StringBuilder(
             """
                 WHERE strpos(lower(concat_ws(' ',employee.full_name,actor.username,
-                    target.username,target_employee.full_name,booking.contact_name,CAST(a.entity_id AS text),
+                    target.username,target_employee.full_name,booking.contact_name,payroll_employee.code,payroll_employee.full_name,CAST(a.entity_id AS text),
                     a.after_data->>'fullName',a.before_data->>'fullName',a.after_data->>'contact_name',a.before_data->>'contact_name',
                     a.after_data->>'username',a.after_data->>'code',a.after_data->>'name',a.before_data->>'code',a.before_data->>'name')),lower(?))>0
                 """
@@ -100,14 +114,14 @@ public class AuditRepository {
             where.append(" AND a.created_at<?");
             args.add(Timestamp.from(to.plusDays(1).atStartOfDay(ZONE).toInstant()));
         }
-        long total = db.queryForObject(
+        long total = jdbcTemplate.queryForObject(
             "SELECT count(*) " + FROM + where,
             Long.class,
             args.toArray()
         );
         args.add(size);
         args.add((long) page * size);
-        List<AuditEntry> items = db.query(
+        List<AuditEntry> items = jdbcTemplate.query(
             SELECT + FROM + where + " ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?",
             AuditRepository::entry,
             args.toArray()
@@ -116,7 +130,7 @@ public class AuditRepository {
     }
 
     public List<String> actions() {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             "SELECT DISTINCT action FROM gcmb.audit_event ORDER BY action",
             String.class
         );
@@ -142,7 +156,7 @@ public class AuditRepository {
                 a.after_data->>'email' AS after_email,
                 a.after_data->>'phone' AS after_phone
                 """;
-        List<AuditDetail> result = db.query(
+        List<AuditDetail> result = jdbcTemplate.query(
             SELECT + snapshots + FROM + " WHERE a.id=?",
             (rs, row) ->
                 new AuditDetail(

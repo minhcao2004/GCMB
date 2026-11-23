@@ -24,11 +24,11 @@ import com.gcmb.backend.auth.repository.AuthMapper;
 @Repository
 public class AuthRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
     // JDBC truy vấn trực tiếp các bảng xác thực trong schema gcmb.
-    public AuthRepository(JdbcTemplate db) {
-        this.db = db;
+    public AuthRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     // Đổi Instant sang tham số timestamp của JDBC.
@@ -65,13 +65,13 @@ public class AuthRepository {
     WHERE lower(u.%s) = lower(?)
     FOR NO KEY UPDATE OF u
     """.formatted(column);
-        List<Account> result = db.query(sql, AuthMapper::account, value);
+        List<Account> result = jdbcTemplate.query(sql, AuthMapper::account, value);
         return result.isEmpty() ? null : result.get(0);
     }
 
     // Lưu thời điểm đăng nhập thành công.
     public void recordLogin(UUID userId, Instant now) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.user_account SET failed_login_count=0, locked_until=NULL, last_login_at=? WHERE id=?",
             ts(now),
             userId
@@ -80,7 +80,7 @@ public class AuthRepository {
 
     // Lưu hash của token phiên, không lưu token gốc.
     public void createSession(UUID userId, String tokenHash) {
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.auth_token(user_id, token_hash, kind, expires_at) VALUES (?, ?, 'SESSION', 'infinity')",
             userId,
             tokenHash
@@ -89,7 +89,7 @@ public class AuthRepository {
 
     // Vô hiệu các mã khôi phục chưa dùng trước khi phát mã mới.
     public void revokePendingResets(UUID userId, Instant now) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.auth_token SET revoked_at=? WHERE user_id=? AND kind='PASSWORD_RESET' AND used_at IS NULL AND revoked_at IS NULL",
             ts(now),
             userId
@@ -98,7 +98,7 @@ public class AuthRepository {
 
     // BR-126: mã reset có hiệu lực đúng 10 phút; token phiên là chính sách riêng.
     public void createReset(UUID userId, String tokenHash, String codeHash, Instant now) {
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.auth_token(user_id, token_hash, kind, code_hash, expires_at, created_at) VALUES (?, ?, 'PASSWORD_RESET', ?, ?, ?)",
             userId,
             tokenHash,
@@ -111,7 +111,7 @@ public class AuthRepository {
     // BR-126: áp dụng cả mã cũ từng lưu expires_at=infinity, không cần sửa dữ liệu lịch sử.
     public boolean resetExpired(UUID id) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT LEAST(expires_at,created_at+interval '10 minutes')<=clock_timestamp() FROM gcmb.auth_token WHERE id=? AND kind='PASSWORD_RESET'",
                 Boolean.class,
                 id
@@ -121,7 +121,7 @@ public class AuthRepository {
 
     // Khóa hàng mã khôi phục để tránh hai yêu cầu đổi mật khẩu cùng thành công.
     public Reset findReset(UUID userId, String tokenHash) {
-        List<Reset> resets = db.query(
+        List<Reset> resets = jdbcTemplate.query(
             "SELECT * FROM gcmb.auth_token WHERE user_id=? AND token_hash=? AND kind='PASSWORD_RESET' FOR UPDATE",
             AuthMapper::reset,
             userId,
@@ -132,13 +132,13 @@ public class AuthRepository {
 
     // Lưu hash mật khẩu mới và thời điểm đổi.
     public void changePassword(UUID userId, String passwordHash, Instant now) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.user_account SET password_hash=?, password_changed_at=?, failed_login_count=0, locked_until=NULL WHERE id=?",
             passwordHash,
             ts(now),
             userId
         );
-        db.update(
+        jdbcTemplate.update(
             """
             INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
             SELECT u.id,u.branch_id,'CHANGE_PASSWORD','USER_ACCOUNT',u.id,
@@ -151,12 +151,12 @@ public class AuthRepository {
 
     // Đánh dấu mã khôi phục đã sử dụng.
     public void consumeReset(UUID resetId, Instant now) {
-        db.update("UPDATE gcmb.auth_token SET used_at=? WHERE id=?", ts(now), resetId);
+        jdbcTemplate.update("UPDATE gcmb.auth_token SET used_at=? WHERE id=?", ts(now), resetId);
     }
 
     // Thu hồi mọi phiên sau khi đặt lại mật khẩu.
     public void revokeTokens(UUID userId, Instant now) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.auth_token SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
             ts(now),
             userId
@@ -165,7 +165,7 @@ public class AuthRepository {
 
     // Đọc danh tính qua hash token nếu tài khoản và phiên còn hiệu lực.
     public Identity findSession(String tokenHash) {
-        List<Identity> users = db.query(
+        List<Identity> users = jdbcTemplate.query(
             """
             SELECT u.id, u.username, r.code, CASE WHEN r.code='BRANCH_MANAGER' THEN bma.branch_id ELSE u.branch_id END AS branch_id, b.name AS branch_name,b.status AS branch_status FROM gcmb.auth_token t
             JOIN gcmb.user_account u ON u.id=t.user_id JOIN gcmb.role r ON r.id=u.role_id
@@ -186,7 +186,7 @@ public class AuthRepository {
     }
 
     public List<java.util.Map<String, Object>> managedBranches(UUID userId) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT b.id,b.name,b.status FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id
             WHERE a.user_id=? AND b.status IN ('ACTIVE','SUSPENDED') ORDER BY b.name,b.id
@@ -196,7 +196,7 @@ public class AuthRepository {
     }
 
     public String managedBranchName(UUID userId, UUID branchId) {
-        var names = db.queryForList(
+        var names = jdbcTemplate.queryForList(
             """
             SELECT b.name FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id
             WHERE a.user_id=? AND a.branch_id=? AND b.status IN ('ACTIVE','SUSPENDED')
@@ -210,7 +210,7 @@ public class AuthRepository {
 
     public boolean selectBranch(UUID userId, String tokenHash, UUID branchId) {
         return (
-            db.update(
+            jdbcTemplate.update(
                 """
             UPDATE gcmb.auth_token t SET selected_branch_id=? WHERE t.user_id=? AND t.token_hash=?
                 AND t.kind='SESSION' AND t.revoked_at IS NULL AND t.expires_at>CURRENT_TIMESTAMP
@@ -227,7 +227,7 @@ public class AuthRepository {
 
     // Thu hồi một phiên khi đăng xuất.
     public void revokeSession(String tokenHash) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=? AND kind='SESSION'",
             tokenHash
         );

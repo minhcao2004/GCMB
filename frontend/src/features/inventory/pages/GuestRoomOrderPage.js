@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { Link, useParams } from 'react-router-dom';
 import { apiAssetUrl } from '../../../api/client';
 import { formatVnd } from '../../booking/data/bookingData';
@@ -162,7 +163,7 @@ export default function GuestRoomOrderPage() {
         {room && <div className="mr-room-tag"><span>Mã phòng</span><strong>{room.roomCode}</strong></div>}
       </section>
       {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Tải lại thực đơn</button></div>}
-      {message && <div className="food-alert food-alert--success" role="status">{message}</div>}
+    <ToastStack notice={message} onCloseNotice={() => setMessage('')} />
       {loading ? <div className="food-loading" role="status">Đang tải thực đơn phòng…</div> : room && <>
         {items.length === 0 ? <div className="food-empty"><h2>Chưa có món đang bán</h2><p>Vui lòng gọi lễ tân nếu bạn cần hỗ trợ.</p></div> : <>
           <nav className="food-categories" aria-label="Nhóm món">

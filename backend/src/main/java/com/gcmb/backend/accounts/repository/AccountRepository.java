@@ -18,10 +18,21 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AccountRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
-    public AccountRepository(JdbcTemplate db) {
-        this.db = db;
+    public AccountRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    // HuyDV / UC-04/06: chỉ một tài khoản QLCC chưa thu hồi; không giới hạn kế toán.
+    public boolean headOfficeAvailable(String role, UUID except) {
+        if (!"HEAD_OFFICE_MANAGER".equals(role)) return true;
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+            SELECT NOT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
+              WHERE r.code='HEAD_OFFICE_MANAGER' AND u.status<>'REVOKED'
+                AND (CAST(? AS uuid) IS NULL OR u.id<>?))
+            """, Boolean.class, except, except));
     }
 
     private static final String JOINS = """
@@ -73,13 +84,13 @@ public class AccountRepository {
             args.add(branch);
         }
         long total = Objects.requireNonNull(
-            db.queryForObject("SELECT count(*) " + JOINS + where, Long.class, args.toArray()),
+            jdbcTemplate.queryForObject("SELECT count(*) " + JOINS + where, Long.class, args.toArray()),
             "Account count query returned null"
         );
         args.add(size);
         args.add((long) page * size);
         return new AccountPage(
-            db.query(
+            jdbcTemplate.query(
                 SELECT + where + " ORDER BY u.created_at DESC,u.id LIMIT ? OFFSET ?",
                 AccountRepository::row,
                 args.toArray()
@@ -91,20 +102,20 @@ public class AccountRepository {
     }
 
     public AccountView find(UUID id) {
-        return db.queryForObject(SELECT + " WHERE u.id=?", AccountRepository::row, id);
+        return jdbcTemplate.queryForObject(SELECT + " WHERE u.id=?", AccountRepository::row, id);
     }
 
     public Options options() {
         return new Options(
-            db.query(
+            jdbcTemplate.query(
                 EMPLOYEE_OPTIONS +
                     " WHERE e.status='ACTIVE' AND e.user_id IS NULL ORDER BY e.full_name,e.id",
                 AccountRepository::employeeOption
             ),
-            db.query("SELECT code,name FROM gcmb.role ORDER BY name", (rs, n) ->
+            jdbcTemplate.query("SELECT code,name FROM gcmb.role ORDER BY name", (rs, n) ->
                 new Option(rs.getString(1), rs.getString(2))
             ),
-            db.query(
+            jdbcTemplate.query(
                 "SELECT id,name FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name",
                 (rs, n) -> new Option(rs.getString(1), rs.getString(2))
             )
@@ -113,8 +124,8 @@ public class AccountRepository {
 
     // UC-04/05/07, BR-132, BR-177: xác minh cơ sở từ phân công server, không tin bộ lọc client.
     public boolean manages(UUID actor, UUID branch, boolean writing) {
-        if (writing) db.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        return !db
+        if (writing) jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return !jdbcTemplate
             .queryForList(
                 """
             SELECT u.id FROM gcmb.user_account u
@@ -134,7 +145,7 @@ public class AccountRepository {
 
     public boolean employeeInBranch(UUID employee, UUID branch) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
             SELECT EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=? AND a.branch_id=?
                 AND a.valid_from<=CURRENT_TIMESTAMP AND (a.valid_to IS NULL OR a.valid_to>CURRENT_TIMESTAMP))
@@ -148,14 +159,14 @@ public class AccountRepository {
 
     public Options branchOptions(UUID branch) {
         return new Options(
-            db.query(
+            jdbcTemplate.query(
                 EMPLOYEE_OPTIONS +
                     " WHERE e.status='ACTIVE' AND e.user_id IS NULL AND e.position='RECEPTIONIST' AND b.id=? ORDER BY e.full_name,e.id",
                 AccountRepository::employeeOption,
                 branch
             ),
             List.of(new Option("RECEPTIONIST", "Lễ tân")),
-            db.query(
+            jdbcTemplate.query(
                 "SELECT id,name FROM gcmb.branch WHERE id=?",
                 (rs, n) -> new Option(rs.getString(1), rs.getString(2)),
                 branch
@@ -166,7 +177,7 @@ public class AccountRepository {
     // BR-131, UC-07: không mở lại tài khoản của nhân viên đã ngừng hoạt động.
     public boolean canReactivate(UUID id) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
             SELECT EXISTS(SELECT 1 FROM gcmb.employee WHERE user_id=? AND status='ACTIVE')
             """,
@@ -177,8 +188,8 @@ public class AccountRepository {
     }
 
     public boolean lockAvailableEmployee(UUID id) {
-        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        return !db
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return !jdbcTemplate
             .query(
                 "SELECT id FROM gcmb.employee WHERE id=? AND status='ACTIVE' AND user_id IS NULL FOR UPDATE",
                 (rs, n) -> rs.getObject("id", UUID.class),
@@ -211,7 +222,7 @@ public class AccountRepository {
     }
 
     public EmployeeOption employeeProfile(UUID id) {
-        return db.queryForObject(
+        return jdbcTemplate.queryForObject(
             EMPLOYEE_OPTIONS + " WHERE e.id=?",
             AccountRepository::employeeOption,
             id
@@ -219,7 +230,7 @@ public class AccountRepository {
     }
 
     public UUID roleId(String code) {
-        var ids = db.query(
+        var ids = jdbcTemplate.query(
             "SELECT id FROM gcmb.role WHERE code=?",
             (rs, n) -> rs.getObject("id", UUID.class),
             code
@@ -228,7 +239,7 @@ public class AccountRepository {
     }
 
     public boolean activeBranch(UUID branch) {
-        return !db
+        return !jdbcTemplate
             .query(
                 "SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",
                 (rs, n) -> rs.getObject("id", UUID.class),
@@ -238,7 +249,7 @@ public class AccountRepository {
     }
 
     public String branchName(UUID branch) {
-        var names = db.queryForList("SELECT name FROM gcmb.branch WHERE id=?", String.class, branch);
+        var names = jdbcTemplate.queryForList("SELECT name FROM gcmb.branch WHERE id=?", String.class, branch);
         return names.isEmpty() ? "đã chọn" : names.get(0);
     }
 
@@ -248,7 +259,7 @@ public class AccountRepository {
         }
         return (
             Objects.requireNonNull(
-                db.queryForObject(
+                jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM gcmb.user_account WHERE lower(" + column + ")=lower(?)",
                     Integer.class,
                     value
@@ -261,7 +272,7 @@ public class AccountRepository {
     // UC-77/79, mở rộng BR-134 theo yêu cầu: email được giữ cho cả hồ sơ và tài khoản liên kết.
     public boolean emailReserved(String email, UUID employee, UUID user) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
             SELECT EXISTS(SELECT 1 FROM gcmb.employee e
               WHERE lower(btrim(e.contact_email))=lower(?) AND e.id IS DISTINCT FROM CAST(? AS uuid)
@@ -284,7 +295,7 @@ public class AccountRepository {
     // SĐT nhân viên nằm tại employee, không so với SĐT khách booking hoặc SĐT cơ sở.
     public boolean staffPhoneTaken(String phone, UUID employee, UUID user) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
             SELECT EXISTS(SELECT 1 FROM gcmb.employee e WHERE btrim(e.phone)=?
               AND e.id IS DISTINCT FROM CAST(? AS uuid)
@@ -307,7 +318,7 @@ public class AccountRepository {
         UUID actor
     ) {
         UUID id = UUID.randomUUID();
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.user_account(id,username,email,password_hash,role_id,branch_id,status,failed_login_count) VALUES (?,?,?,?,?,?,'ACTIVE',0)",
             id,
             username,
@@ -316,8 +327,8 @@ public class AccountRepository {
             role,
             request.branchId()
         );
-        db.update("UPDATE gcmb.employee SET user_id=? WHERE id=?", id, request.employeeId());
-        db.update(
+        jdbcTemplate.update("UPDATE gcmb.employee SET user_id=? WHERE id=?", id, request.employeeId());
+        jdbcTemplate.update(
             """
                 INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
                 SELECT ?,u.branch_id,'CREATE_USER_ACCOUNT','USER_ACCOUNT',u.id,

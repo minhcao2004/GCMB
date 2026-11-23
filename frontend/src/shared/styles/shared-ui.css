@@ -516,7 +516,7 @@ textarea.gcmb-ui-control {
 .gcmb-ui-badge--info { border-color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); color: var(--gcmb-color-ink); }
 .gcmb-ui-badge--success { border-color: var(--gcmb-color-success); background: var(--gcmb-color-success-soft); color: var(--gcmb-color-ink); }
 .gcmb-ui-badge--warning { border-color: var(--gcmb-color-warning); background: var(--gcmb-color-warning-soft); color: var(--gcmb-color-ink); }
-.gcmb-ui-badge--danger { border-color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); color: var(--gcmb-color-ink); }
+.gcmb-ui-badge--danger { border-color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); color: var(--gcmb-color-danger); }
 
 .gcmb-ui-toast {
   position: fixed;
@@ -532,14 +532,26 @@ textarea.gcmb-ui-control {
   border: 1px solid var(--gcmb-color-line);
   border-radius: var(--gcmb-radius-panel);
   background: var(--gcmb-color-panel);
-  color: var(--gcmb-color-text);
-  box-shadow: var(--gcmb-shadow-md);
+  color: var(--gcmb-color-ink);
+  box-shadow: 0 12px 32px rgb(26 26 46 / 22%), 0 2px 8px rgb(26 26 46 / 12%);
 }
 
-.gcmb-ui-toast--success { border-color: var(--gcmb-color-success); }
-.gcmb-ui-toast--warning { border-color: var(--gcmb-color-warning); }
-.gcmb-ui-toast--danger { border-color: var(--gcmb-color-danger); }
+.gcmb-ui-toast--success { border-color: #168b5b; background: #f3fbf7; color: #0c6945; }
+.gcmb-ui-toast--warning { border-color: #a56400; background: #fff8eb; color: #845000; }
+.gcmb-ui-toast--danger {
+  border-color: #b12642;
+  color: #a21d38;
+  background: #fff3f5;
+}
+.gcmb-ui-toast--danger :is(.gcmb-ui-toast__title, .gcmb-ui-toast__message) {
+  color: var(--gcmb-color-danger);
+}
 .gcmb-ui-toast--info { border-color: var(--gcmb-color-info); }
+.gcmb-ui-toast-stack { position: fixed; top: 88px; right: 16px; z-index: 12000; display: grid; gap: 10px; width: min(400px, calc(100vw - 32px)); max-height: calc(100dvh - 104px); overflow-y: auto; }
+.gcmb-ui-toast-stack .gcmb-ui-toast { position: static; box-sizing: border-box; width: 100%; padding: 14px 16px; border-radius: 10px; }
+.gcmb-ui-toast__icon { flex: 0 0 24px; width: 24px; height: 24px; }
+.gcmb-ui-toast__close { color: var(--gcmb-color-ink); }
+.gcmb-ui-toast__close:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 .gcmb-ui-toast__content,
 .gcmb-ui-empty-state {
@@ -559,6 +571,8 @@ textarea.gcmb-ui-control {
   color: var(--gcmb-color-text);
   font-size: var(--gcmb-font-size-sm);
 }
+.gcmb-ui-toast__message { color: var(--gcmb-color-ink); font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.gcmb-ui-toast--danger .gcmb-ui-toast__message { color: #9f1e39; }
 
 .gcmb-ui-empty-state {
   justify-items: center;

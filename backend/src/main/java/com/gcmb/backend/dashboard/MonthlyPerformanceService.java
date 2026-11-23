@@ -16,11 +16,11 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MonthlyPerformanceService {
   static final int MAX_REPORT_BRANCH_IDS = 50;
-  private static final List<String> MONEY_METRICS = List.of("revenue", "billRevenue", "roomRevenue", "fnbRevenue", "overtimeRevenue", "otherRevenue", "expenses", "operatingExpense", "salary", "investment", "profit", "netCashFlow", "forfeitedDeposits", "heldDeposits");
-  private static final List<String> COUNT_METRICS = List.of("billCount", "bookingCount", "completedBookings", "cancelledBookings", "expenseCount");
-  private final JdbcTemplate db;
+  private static final List<String> MONEY_METRICS = List.of("revenue", "billRevenue", "roomRevenue", "fnbRevenue", "overtimeRevenue", "otherRevenue", "expenses", "operatingExpense", "salary", "investment", "profit", "netCashFlow", "forfeitedDeposits");
+  private static final List<String> COUNT_METRICS = List.of("billCount", "bookingCount", "completedBookings", "cancelledNoShowBookings", "expenseCount");
+  private final JdbcTemplate jdbcTemplate;
 
-  public MonthlyPerformanceService(JdbcTemplate db) { this.db = db; }
+  public MonthlyPerformanceService(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
   @Transactional(readOnly = true)
   public Map<String, Object> report(Identity actor, LocalDate month, UUID branchId) {
@@ -29,10 +29,6 @@ public class MonthlyPerformanceService {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem báo cáo của tháng chưa diễn ra.");
     var current = rows(month, branchId);
     var priorRows = rows(month.minusMonths(1), branchId);
-    Map<UUID, BigDecimal> currentDeposits = heldDeposits(month.plusMonths(1).minusDays(1));
-    Map<UUID, BigDecimal> priorDeposits = heldDeposits(month.minusDays(1));
-    current.forEach(row -> row.put("heldDeposits", currentDeposits.getOrDefault(row.get("id"), BigDecimal.ZERO)));
-    priorRows.forEach(row -> row.put("heldDeposits", priorDeposits.getOrDefault(row.get("id"), BigDecimal.ZERO)));
     Map<UUID, Map<String, Object>> priorByBranch = new HashMap<>();
     for (var row : priorRows) priorByBranch.put((UUID) row.get("id"), row);
     for (var row : current) {
@@ -50,81 +46,18 @@ public class MonthlyPerformanceService {
       "expenseGroups", expenseGroups);
   }
 
+  /** Read-only assistant history uses the same accounting definitions, including inactive branches. */
   @Transactional(readOnly = true)
-  public Map<String, Object> chainRange(Identity actor, LocalDate from, LocalDate to, UUID branchId) {
-    // BR-177: quản lý còn được phân công có thể xem lịch sử cơ sở tạm ngừng.
-    if (actor == null || (!"HEAD_OFFICE_MANAGER".equals(actor.role()) && (!"BRANCH_MANAGER".equals(actor.role())
-      || !Objects.equals(actor.branchId(), branchId) || branchId == null
-      || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), branchId)))))
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
-    // UC-121: quản lý cấp cao được xem lịch sử của cả cơ sở đã tạm ngừng; chỉ từ chối ID không tồn tại.
-    if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cơ sở đang chọn không tồn tại.");
-    if (from.isAfter(to)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc."); // BR-163 / MSG106.
-    long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
-    if (days > 366) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo tối đa là 366 ngày.");
-    if (to.isAfter(LocalDate.now(FinancialPeriodService.ZONE)))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem báo cáo đến ngày trong tương lai.");
-    List<UUID> branchIds = branchId == null ? List.of() : List.of(branchId);
-    LocalDate previousTo = from.minusDays(1);
-    Map<String, Object> current = readOverview(from, to, branchIds, "day", true);
-    Map<String, Object> previous = readOverview(previousTo.minusDays(days - 1), previousTo, branchIds, "day", true);
-    @SuppressWarnings("unchecked") List<Map<String, Object>> rows = (List<Map<String, Object>>) current.get("branches");
-    @SuppressWarnings("unchecked") List<Map<String, Object>> previousRows = (List<Map<String, Object>>) previous.get("branches");
-    Map<UUID, Map<String, Object>> usage = new HashMap<>();
-    for (Map<String, Object> item : chainUsage(from, to, branchId)) usage.put((UUID) item.get("id"), item);
-    BigDecimal occupied = BigDecimal.ZERO, sellable = BigDecimal.ZERO;
-    long bookings = 0;
-    for (Map<String, Object> row : rows) {
-      Map<String, Object> item = usage.getOrDefault(row.get("id"), Map.of());
-      BigDecimal usedHours = decimal(item.get("occupiedRoomHours"));
-      BigDecimal availableHours = decimal(item.get("sellableRoomHours"));
-      long count = item.get("bookingCount") == null ? 0 : ((Number) item.get("bookingCount")).longValue();
-      row.put("bookingCount", count);
-      row.put("occupiedRoomHours", usedHours);
-      row.put("sellableRoomHours", availableHours);
-      row.put("occupancyRate", availableHours.signum() > 0 ? usedHours.multiply(BigDecimal.valueOf(100)).divide(availableHours, 2, RoundingMode.HALF_UP) : null);
-      bookings += count; occupied = occupied.add(usedHours); sellable = sellable.add(availableHours);
-    }
-    Map<String, Object> totals = totalsForOverview(rows);
-    totals.put("bookingCount", bookings);
-    totals.put("occupiedRoomHours", occupied);
-    totals.put("sellableRoomHours", sellable);
-    totals.put("occupancyRate", sellable.signum() > 0 ? occupied.multiply(BigDecimal.valueOf(100)).divide(sellable, 2, RoundingMode.HALF_UP) : null);
-    Map<String, Object> previousTotals = totalsForOverview(previousRows);
-    return Map.of("from", from.toString(), "to", to.toString(), "results", rows, "totals", totals,
-      "previousTotals", previousTotals, "changes", overviewChanges(totals, previousTotals));
-  }
-
-  private List<Map<String, Object>> chainUsage(LocalDate from, LocalDate to, UUID branchId) {
-    LocalDate end = to.plusDays(1);
-    long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
-    return db.queryForList("""
-      WITH selected AS (SELECT id,timezone FROM gcmb.branch WHERE (CAST(? AS uuid) IS NULL OR id=?)),
-      bookings AS (
-        SELECT b.branch_id,count(*) FILTER (WHERE b.status<>'CANCELLED') booking_count
-        FROM gcmb.booking b JOIN selected br ON br.id=b.branch_id
-        WHERE (b.planned_start AT TIME ZONE br.timezone)::date>=?
-          AND (b.planned_start AT TIME ZONE br.timezone)::date<? GROUP BY b.branch_id
-      ), occupied AS (
-        SELECT br.id branch_id,COALESCE(sum(greatest(0,extract(epoch FROM
-          (least(COALESCE(a.actual_end,a.ends_at),((d.day::date+time '20:00') AT TIME ZONE br.timezone))-
-           greatest(a.starts_at,((d.day::date+time '08:00') AT TIME ZONE br.timezone))))/3600)),0) hours
-        FROM selected br CROSS JOIN generate_series(?::date,(?::date-1),interval '1 day') d(day)
-        LEFT JOIN gcmb.room_allocation a ON a.branch_id=br.id AND a.state IN ('OCCUPIED','FINISHED')
-          AND a.starts_at<((d.day::date+time '20:00') AT TIME ZONE br.timezone)
-          AND COALESCE(a.actual_end,a.ends_at)>((d.day::date+time '08:00') AT TIME ZONE br.timezone)
-          AND EXISTS (SELECT 1 FROM gcmb.room r WHERE r.id=a.room_id AND r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE'))
-        GROUP BY br.id
-      ), capacity AS (
-        SELECT branch_id,count(*) FILTER (WHERE operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE')) rooms
-        FROM gcmb.room GROUP BY branch_id
-      )
-      SELECT br.id,COALESCE(b.booking_count,0) "bookingCount",COALESCE(o.hours,0) "occupiedRoomHours",
-        COALESCE(c.rooms,0)*?::numeric*12 "sellableRoomHours"
-      FROM selected br LEFT JOIN bookings b ON b.branch_id=br.id
-      LEFT JOIN occupied o ON o.branch_id=br.id LEFT JOIN capacity c ON c.branch_id=br.id
-      """, branchId, branchId, from, end, from, end, days);
+  public Map<String, Object> assistantReport(Identity actor, LocalDate month, UUID branchId) {
+    if (actor == null || !"HEAD_OFFICE_MANAGER".equals(actor.role()))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ quản lý cấp cao được tra cứu lịch sử kinh doanh.");
+    if (month == null || month.getDayOfMonth() != 1 || month.getYear() < 2000 || YearMonth.from(month).isAfter(YearMonth.now(FinancialPeriodService.ZONE)))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tháng tra cứu không hợp lệ.");
+    if (branchId != null && !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy cơ sở cần tra cứu.");
+    var current = rows(month, branchId);
+    return Map.of("month", YearMonth.from(month).toString(), "results", current, "totals", totals(current),
+        "periodStatus", current.stream().anyMatch(row -> "CLOSED".equals(row.get("periodStatus"))) ? "CLOSED" : "OPEN");
   }
 
   @Transactional(readOnly = true)
@@ -132,8 +65,7 @@ public class MonthlyPerformanceService {
                                       String compare, String granularity) {
     if (actor == null || !List.of("ACCOUNTANT", "HEAD_OFFICE_MANAGER").contains(actor.role()))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với báo cáo tài chính.");
-    if (from == null || to == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cần chọn đủ ngày bắt đầu và ngày kết thúc.");
-    if (from.isAfter(to)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc."); // BR-163 / MSG106.
+    if (from == null || to == null || from.isAfter(to)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo không hợp lệ.");
     if (java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1 > 366)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày báo cáo tối đa là 366 ngày.");
     if (to.isAfter(LocalDate.now(FinancialPeriodService.ZONE)))
@@ -167,10 +99,7 @@ public class MonthlyPerformanceService {
 
     Map<String, Object> currentTotals = totalsForOverview(currentBranches);
     Map<String, Object> previousTotals = totalsForOverview(previousBranches);
-    List<Map<String, Object>> branchOptions = db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
-    long monthCount = java.time.temporal.ChronoUnit.MONTHS.between(from.withDayOfMonth(1), to.withDayOfMonth(1)) + 1;
-    Long closedMonths = db.queryForObject("SELECT count(*) FROM gcmb.financial_period WHERE \"month\">=? AND \"month\"<=? AND status='CLOSED'",
-      Long.class, from.withDayOfMonth(1), to.withDayOfMonth(1));
+    List<Map<String, Object>> branchOptions = jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
     return Map.ofEntries(
       Map.entry("from", from.toString()), Map.entry("to", to.toString()),
       Map.entry("comparison", comparison), Map.entry("comparisonFrom", comparisonFrom.toString()),
@@ -181,7 +110,6 @@ public class MonthlyPerformanceService {
       Map.entry("series", mergeOverviewSeries(currentSeries, previousSeries, currentCategorySeries, previousCategorySeries, bucket)),
       Map.entry("totals", currentTotals), Map.entry("comparisonTotals", previousTotals),
       Map.entry("changes", overviewChanges(currentTotals, previousTotals)),
-      Map.entry("periodStatus", closedMonths != null && closedMonths == monthCount ? "CLOSED" : "OPEN"),
       Map.entry("hasData", hasOverviewData(currentTotals))
     );
   }
@@ -191,33 +119,16 @@ public class MonthlyPerformanceService {
     if (branchIds.size() > MAX_REPORT_BRANCH_IDS)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Báo cáo chỉ hỗ trợ tối đa 50 cơ sở cùng lúc.");
     if (!branchIds.isEmpty()) {
-      Set<UUID> existingBranchIds = new HashSet<>(db.queryForList("SELECT id FROM gcmb.branch", UUID.class));
+      Set<UUID> existingBranchIds = new HashSet<>(jdbcTemplate.queryForList("SELECT id FROM gcmb.branch", UUID.class));
       if (!existingBranchIds.containsAll(branchIds))
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Một hoặc nhiều cơ sở không tồn tại hoặc bạn không có quyền xem báo cáo.");
     }
     return branchIds;
   }
 
-  // BR-24/108: số dư cọc tại cuối kỳ là khoản còn giữ, tách khỏi doanh thu hóa đơn.
-  private Map<UUID, BigDecimal> heldDeposits(LocalDate through) {
-    Map<UUID, BigDecimal> result = new HashMap<>();
-    db.queryForList("""
-      SELECT bk.branch_id,COALESCE(sum(CASE WHEN de.kind='RECEIVE' THEN de.amount ELSE -de.amount END),0) amount
-      FROM gcmb.deposit_entry de JOIN gcmb.deposit d ON d.id=de.deposit_id
-      JOIN gcmb.booking bk ON bk.id=d.booking_id JOIN gcmb.branch b ON b.id=bk.branch_id
-      WHERE (de.created_at AT TIME ZONE b.timezone)::date<=?
-      GROUP BY bk.branch_id
-      """,through).forEach(row -> result.put((UUID)row.get("branch_id"),(BigDecimal)row.get("amount")));
-    return result;
-  }
-
   private Map<String, Object> readOverview(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity) {
-    return readOverview(from, to, branchIds, granularity, false);
-  }
-
-  private Map<String, Object> readOverview(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity, boolean paidByDay) {
     List<Object> branchArgs = new ArrayList<>();
-    String ctes = overviewCtes(from, to, branchIds, branchArgs, paidByDay);
+    String ctes = overviewCtes(from, to, branchIds, branchArgs);
     String branchSql = ctes + """
       , bills AS (SELECT branch_id,sum(amount) bill_revenue FROM bill_daily GROUP BY branch_id)
       , forfeitures AS (SELECT branch_id,sum(amount) forfeited FROM forfeiture_daily GROUP BY branch_id)
@@ -234,14 +145,12 @@ public class MonthlyPerformanceService {
       LEFT JOIN expenses e ON e.branch_id=br.id LEFT JOIN payroll p ON p.branch_id=br.id
       ORDER BY br.name,br.id
       """;
-    List<Map<String, Object>> branchRows = db.queryForList(branchSql, branchArgs.toArray());
-    Map<UUID, BigDecimal> deposits = heldDeposits(to);
-    branchRows.forEach(row -> row.put("heldDeposits", deposits.getOrDefault(row.get("id"), BigDecimal.ZERO)));
+    List<Map<String, Object>> branchRows = jdbcTemplate.queryForList(branchSql, branchArgs.toArray());
     branchRows.forEach(MonthlyPerformanceService::decorateOverviewBranch);
 
     List<Object> categoryArgs = new ArrayList<>();
-    String categoryCtes = overviewCtes(from, to, branchIds, categoryArgs, paidByDay);
-    List<Map<String, Object>> categories = db.queryForList(categoryCtes + """
+    String categoryCtes = overviewCtes(from, to, branchIds, categoryArgs);
+    List<Map<String, Object>> categories = jdbcTemplate.queryForList(categoryCtes + """
       , items AS (
         SELECT category_id::text "categoryKey",category_name "categoryName",cost_type "costType",amount
         FROM paid_expenses WHERE cost_type='OPEX'
@@ -252,9 +161,9 @@ public class MonthlyPerformanceService {
       """, categoryArgs.toArray());
 
     List<Object> seriesArgs = new ArrayList<>();
-    String seriesCtes = overviewCtes(from, to, branchIds, seriesArgs, paidByDay);
+    String seriesCtes = overviewCtes(from, to, branchIds, seriesArgs);
     seriesArgs.add(from); seriesArgs.add(to); seriesArgs.add(granularity);
-    List<Map<String, Object>> series = db.queryForList(seriesCtes + """
+    List<Map<String, Object>> series = jdbcTemplate.queryForList(seriesCtes + """
       , calendar AS (SELECT generate_series(?::date,?::date,interval '1 day')::date report_date)
       , expenses_daily AS (SELECT branch_id,report_date,
           sum(amount) FILTER (WHERE cost_type='OPEX') opex,
@@ -272,16 +181,16 @@ public class MonthlyPerformanceService {
       )
       SELECT date_trunc(?,report_date::timestamp)::date bucket,
         sum(bill_revenue) "billRevenue",sum(forfeited) "forfeitedDeposits",
-        sum(bill_revenue) revenue,sum(opex) "operatingExpense",sum(salary) salary,
+        sum(bill_revenue+forfeited) revenue,sum(opex) "operatingExpense",sum(salary) salary,
         sum(opex+salary) expenses,sum(capex) investment,
-        sum(bill_revenue-opex-salary) profit
+        sum(bill_revenue+forfeited-opex-salary) profit
       FROM daily GROUP BY bucket ORDER BY bucket
       """, seriesArgs.toArray());
 
     List<Object> categorySeriesArgs = new ArrayList<>();
-    String categorySeriesCtes = overviewCtes(from, to, branchIds, categorySeriesArgs, paidByDay);
+    String categorySeriesCtes = overviewCtes(from, to, branchIds, categorySeriesArgs);
     categorySeriesArgs.add(granularity); categorySeriesArgs.add(granularity);
-    List<Map<String, Object>> categorySeries = db.queryForList(categorySeriesCtes + """
+    List<Map<String, Object>> categorySeries = jdbcTemplate.queryForList(categorySeriesCtes + """
       , items AS (
         SELECT date_trunc(?,report_date::timestamp)::date bucket,category_id::text "categoryKey",category_name "categoryName",sum(amount) amount
         FROM paid_expenses WHERE cost_type='OPEX' GROUP BY bucket,category_id,category_name
@@ -293,7 +202,7 @@ public class MonthlyPerformanceService {
     return Map.of("branches", branchRows, "categories", categories, "series", decorateOverviewSeries(series), "categorySeries", categorySeries);
   }
 
-  private String overviewCtes(LocalDate from, LocalDate to, List<UUID> branchIds, List<Object> args, boolean paidByDay) {
+  private String overviewCtes(LocalDate from, LocalDate to, List<UUID> branchIds, List<Object> args) {
     String branchFilter = "";
     if (!branchIds.isEmpty()) {
       branchFilter = " WHERE id IN (" + String.join(",", Collections.nCopies(branchIds.size(), "?")) + ")";
@@ -301,22 +210,9 @@ public class MonthlyPerformanceService {
     }
     LocalDate end = to.plusDays(1);
     for (int i = 0; i < 5; i++) { args.add(from); args.add(end); }
-    String financeRows = paidByDay ? """
-        SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date report_date,r.category_type cost_type,
-          r.category_id::text category_id,c.name category_name,r.amount
-        FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id
-        JOIN selected_branches br ON br.id=r.branch_id
-        WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE br.timezone)::date>=?
-          AND (r.paid_at AT TIME ZONE br.timezone)::date<?
-      """ : """
-        SELECT v.branch_id,v.period_month,v.category_type,v.category_id::text,c.name,v.amount
-        FROM gcmb.v_expense_recognition v JOIN gcmb.finance_expense_category c ON c.id=v.category_id
-        JOIN selected_branches br ON br.id=v.branch_id
-        WHERE v.period_month>=? AND v.period_month<?
-      """;
     return """
       WITH selected_branches AS (SELECT id,code,name,status,timezone FROM gcmb.branch%s),
-      -- BR-102/108: doanh thu hóa đơn hoàn tất và cọc bị tịch thu tách riêng; cọc còn giữ không vào doanh thu.
+      -- BR-102/108/211: completed bill net amounts and forfeited deposits form operating income; held deposits are excluded.
       bill_daily AS (
         SELECT b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date report_date,sum(b.net_amount) amount
         FROM gcmb.bill b JOIN selected_branches br ON br.id=b.branch_id
@@ -329,7 +225,7 @@ public class MonthlyPerformanceService {
         WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE br.timezone)::date>=?
           AND (de.created_at AT TIME ZONE br.timezone)::date<? GROUP BY bk.branch_id,report_date
       ), paid_expenses AS (
-        -- BR-103/107: chain date ranges use paid expenses; CAPEX remains separate from OPEX.
+        -- BR-103/107: use allocated recognition for business performance; CAPEX remains separate from OPEX.
         SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date report_date,e.class_snapshot cost_type,
           e.category_id::text category_id,c.name category_name,p.amount
         FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
@@ -337,7 +233,10 @@ public class MonthlyPerformanceService {
         WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE br.timezone)::date>=?
           AND (p.paid_at AT TIME ZONE br.timezone)::date<?
         UNION ALL
-        %s
+        SELECT v.branch_id,v.period_month,v.category_type,v.category_id::text,c.name,v.amount
+        FROM gcmb.v_expense_recognition v JOIN gcmb.finance_expense_category c ON c.id=v.category_id
+        JOIN selected_branches br ON br.id=v.branch_id
+        WHERE v.period_month>=? AND v.period_month<?
       ), salary_daily AS (
         SELECT fe.branch_id,(ft.occurred_at AT TIME ZONE br.timezone)::date report_date,sum(-fe.amount_signed) amount
         FROM gcmb.financial_transaction ft JOIN gcmb.financial_entry fe ON fe.transaction_id=ft.id
@@ -346,15 +245,15 @@ public class MonthlyPerformanceService {
           AND (ft.occurred_at AT TIME ZONE br.timezone)::date>=?
           AND (ft.occurred_at AT TIME ZONE br.timezone)::date<? GROUP BY fe.branch_id,report_date
       )
-      """.formatted(branchFilter, financeRows);
+      """.formatted(branchFilter);
   }
 
   private static void decorateOverviewBranch(Map<String, Object> row) {
     BigDecimal bill = decimal(row.get("billRevenue"));
-    // BR-102/108/211: thu nhập vận hành chỉ gồm doanh thu hóa đơn; cọc tịch thu trình bày riêng.
-    BigDecimal income = bill;
+    BigDecimal forfeited = decimal(row.get("forfeitedDeposits"));
+    BigDecimal income = bill.add(forfeited);
     BigDecimal expense = decimal(row.get("operatingExpense")).add(decimal(row.get("salary")));
-    // BR-104/105/107: báo cáo hiệu quả dùng thu nhập vận hành và chi phí đã thanh toán; CAPEX trình bày riêng.
+    // BR-104/105/107/211: profit uses operating income less paid operating costs; CAPEX stays outside profit.
     BigDecimal profit = income.subtract(expense);
     row.put("revenue", income); row.put("expenses", expense); row.put("profit", profit);
     row.put("margin", income.signum() > 0 ? profit.multiply(BigDecimal.valueOf(100)).divide(income, 2, RoundingMode.HALF_UP) : null);
@@ -363,8 +262,9 @@ public class MonthlyPerformanceService {
   private static List<Map<String, Object>> decorateOverviewSeries(List<Map<String, Object>> rows) {
     for (Map<String, Object> row : rows) {
       BigDecimal bill = decimal(row.get("billRevenue"));
+      BigDecimal forfeited = decimal(row.get("forfeitedDeposits"));
       BigDecimal expense = decimal(row.get("expenses"));
-      BigDecimal income = bill;
+      BigDecimal income = bill.add(forfeited);
       row.put("revenue", income); row.put("profit", income.subtract(expense));
     }
     return rows;
@@ -372,7 +272,7 @@ public class MonthlyPerformanceService {
 
   private static Map<String, Object> totalsForOverview(List<Map<String, Object>> rows) {
     Map<String, BigDecimal> sums = new LinkedHashMap<>();
-    for (String key : List.of("billRevenue","forfeitedDeposits","heldDeposits","revenue","operatingExpense","salary","expenses","investment","profit")) sums.put(key, BigDecimal.ZERO);
+    for (String key : List.of("billRevenue","forfeitedDeposits","revenue","operatingExpense","salary","expenses","investment","profit")) sums.put(key, BigDecimal.ZERO);
     for (Map<String, Object> row : rows) for (String key : sums.keySet()) sums.put(key, sums.get(key).add(decimal(row.get(key))));
     BigDecimal income = sums.get("revenue");
     Map<String, Object> totals = new LinkedHashMap<>(sums);
@@ -484,7 +384,7 @@ public class MonthlyPerformanceService {
       @SuppressWarnings("unchecked") var total=(Map<String,Object>)data.get("totals");
       var summary=new LinkedHashMap<String,Object>(total); summary.put("name","Toàn chuỗi"); summary.put("periodStatus",data.get("periodStatus")); rows.add(summary);
     }
-    db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,?,?,'REPORT',?::jsonb)",
+    jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,?,?,'REPORT',?::jsonb)",
       actor.id(),branchId,"EXPORT_MONTHLY_PERFORMANCE",String.format(Locale.ROOT,"{\"month\":\"%s\",\"format\":\"%s\"}",YearMonth.from(month),format));
     if (!"xlsx".equals(format)) return MonthlyPerformanceExport.csv(rows);
     List<Map<String, Object>> details = "ACCOUNTANT".equals(actor.role())
@@ -499,7 +399,7 @@ public class MonthlyPerformanceService {
     String branchFilter = branchIds == null || branchIds.isEmpty() ? "" : " AND e.branch_id IN (" + String.join(",", Collections.nCopies(branchIds.size(), "?")) + ")";
     var args = new ArrayList<Object>(List.of(month.atDay(1), month.plusMonths(1).atDay(1)));
     if (branchIds != null) args.addAll(branchIds);
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT t.id transaction_id,e.id entry_id,t.payment_id,t.refund_id,t.expense_payment_id,
         t.salary_payment_id,t.salary_advance_id,t.fund_transfer_id,t.adjusts_transaction_id,
         COALESCE(t.payment_id,t.refund_id,t.expense_payment_id,t.salary_payment_id,
@@ -545,7 +445,7 @@ public class MonthlyPerformanceService {
   }
 
   public List<Map<String,Object>> dailyRevenue(LocalDate start, LocalDate end, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS report_date,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb,
@@ -562,19 +462,19 @@ public class MonthlyPerformanceService {
           AND (de.created_at AT TIME ZONE br.timezone)::date<? AND (?::uuid IS NULL OR bk.branch_id=?)
         GROUP BY bk.branch_id,report_date)
       SELECT bills.report_date AS date,sum(room) "roomRevenue",sum(fnb) "fnbRevenue",sum(overtime) "overtimeRevenue",
-        sum(net_amount-room-fnb-overtime) "otherRevenue",sum(net_amount) "billRevenue",
+        sum(net_amount-room-fnb-overtime) "otherRevenue",sum(net_amount) "billRevenue",count(*) "billCount",
         COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) "forfeitedDeposits",
-        sum(net_amount) revenue,count(*) "billCount"
+        sum(net_amount)+COALESCE((SELECT sum(f.amount) FROM forfeitures f WHERE f.report_date=bills.report_date),0) revenue
       FROM bills GROUP BY bills.report_date
       UNION ALL
-      SELECT f.report_date,0,0,0,0,0,sum(f.amount),0,0 FROM forfeitures f
+      SELECT f.report_date,0,0,0,0,0,0,sum(f.amount),sum(f.amount) FROM forfeitures f
       WHERE NOT EXISTS (SELECT 1 FROM bills WHERE bills.report_date=f.report_date) GROUP BY f.report_date
       ORDER BY date
       """,start,end,branchId,branchId,start,end,branchId,branchId);
   }
 
   private List<Map<String, Object>> rows(LocalDate start, UUID selected) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH bill_lines AS (
         SELECT b.id,b.branch_id,b.net_amount,
           COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room_revenue,
@@ -605,7 +505,7 @@ public class MonthlyPerformanceService {
       ), bookings AS (
         SELECT b.branch_id,count(*) FILTER (WHERE b.status<>'CANCELLED') booking_count,
           count(*) FILTER (WHERE b.status<>'CANCELLED' AND EXISTS (SELECT 1 FROM gcmb.bill x WHERE x.booking_id=b.id AND x.status='SETTLED')) completed,
-          count(*) FILTER (WHERE b.status = 'CANCELLED') cancelled_bookings
+          count(*) FILTER (WHERE b.status IN ('CANCELLED','NO_SHOW')) cancelled_no_show
         FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id
         WHERE (b.planned_start AT TIME ZONE br.timezone)::date>=? AND (b.planned_start AT TIME ZONE br.timezone)::date<?
         GROUP BY b.branch_id
@@ -656,19 +556,18 @@ public class MonthlyPerformanceService {
         WHERE de.kind='FORFEIT' AND (de.created_at AT TIME ZONE b.timezone)::date>=? AND (de.created_at AT TIME ZONE b.timezone)::date<?
         GROUP BY bk.branch_id
       )
-      -- BR-24/102/108/211: bill.net_amount giữ nguyên giá trị dịch vụ khi cọc được áp dụng; cọc tịch thu không cộng vào thu nhập vận hành.
-      SELECT b.id,b.code,b.name,b.status,b.timezone,COALESCE(rv.bill_revenue,0) revenue,
+      SELECT b.id,b.code,b.name,b.status,b.timezone,COALESCE(rv.bill_revenue,0)+COALESCE(f.amount,0) revenue,
         COALESCE(rv.bill_revenue,0) "billRevenue",COALESCE(rv.bill_count,0) "billCount",
         COALESCE(rv.room_revenue,0) "roomRevenue",COALESCE(rv.fnb_revenue,0) "fnbRevenue",
         COALESCE(rv.overtime_revenue,0) "overtimeRevenue",COALESCE(rv.other_revenue,0) "otherRevenue",
         COALESCE(c.opex,0)+COALESCE(s.amount,0) expenses,COALESCE(c.opex,0) "operatingExpense",COALESCE(s.amount,0) salary,
         COALESCE(c.capex,0) investment,COALESCE(c.payments,0)+COALESCE(s.payments,0) "expenseCount",
         COALESCE(f.amount,0) "forfeitedDeposits",COALESCE(cf.net,0) "netCashFlow",
-        COALESCE(rv.bill_revenue,0)-COALESCE(c.opex,0)-COALESCE(s.amount,0) profit,
-        CASE WHEN COALESCE(rv.bill_revenue,0)>0 THEN
-          (COALESCE(rv.bill_revenue,0)-COALESCE(c.opex,0)-COALESCE(s.amount,0))*100/COALESCE(rv.bill_revenue,0) END margin,
+        COALESCE(rv.bill_revenue,0)+COALESCE(f.amount,0)-COALESCE(c.opex,0)-COALESCE(s.amount,0) profit,
+        CASE WHEN COALESCE(rv.bill_revenue,0)+COALESCE(f.amount,0)>0 THEN
+          (COALESCE(rv.bill_revenue,0)+COALESCE(f.amount,0)-COALESCE(c.opex,0)-COALESCE(s.amount,0))*100/(COALESCE(rv.bill_revenue,0)+COALESCE(f.amount,0)) END margin,
         COALESCE(bk.booking_count,0) "bookingCount",COALESCE(bk.completed,0) "completedBookings",
-        COALESCE(bk.cancelled_bookings,0) "cancelledBookings",
+        COALESCE(bk.cancelled_no_show,0) "cancelledNoShowBookings",
         CASE WHEN COALESCE(rc.rooms,0)>0 THEN COALESCE(o.occupied_hours,0)/(rc.rooms*((?-?)::numeric)*12)*100 END "occupancyRate",
         COALESCE(o.occupied_hours,0) "occupiedRoomHours",COALESCE(rc.rooms,0)*((?-?)::numeric)*12 "sellableRoomHours",
         COALESCE(fp.status,'OPEN') "periodStatus"
@@ -694,7 +593,7 @@ public class MonthlyPerformanceService {
   }
 
   private List<Map<String,Object>> revenueGroups(LocalDate start, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH lines AS (SELECT b.id,b.branch_id,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb,
@@ -719,7 +618,7 @@ public class MonthlyPerformanceService {
   }
 
   private List<Map<String,Object>> expenseGroups(LocalDate start, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT category,sum(amount) amount,count(*) count FROM (
         SELECT e.branch_id,c.name category,p.amount FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
         JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
@@ -765,10 +664,9 @@ public class MonthlyPerformanceService {
   private void requireScope(Identity actor, UUID branchId) {
     if (actor == null || !List.of("ACCOUNTANT","HEAD_OFFICE_MANAGER","BRANCH_MANAGER").contains(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền xem báo cáo hiệu quả kinh doanh.");
     if ("BRANCH_MANAGER".equals(actor.role()) && (actor.branchId()==null || !actor.branchId().equals(branchId)
-      || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)",Boolean.class,actor.id(),actor.branchId()))))
+      || !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)",Boolean.class,actor.id(),actor.branchId()))))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền xem đối với cơ sở này.");
-    // BR-177: cơ sở tạm ngừng còn được đọc lịch sử khi quản lý vẫn được phân công.
-    if (branchId!=null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND (status='ACTIVE' OR (status='SUSPENDED' AND ?='BRANCH_MANAGER')))",Boolean.class,branchId,actor.role()))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cơ sở đang chọn không hoạt động hoặc không tồn tại.");
+    if (branchId!=null && !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')",Boolean.class,branchId))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cơ sở đang chọn không hoạt động hoặc không tồn tại.");
   }
 
   private static String cap(String key) { return Character.toUpperCase(key.charAt(0))+key.substring(1); }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -323,7 +324,7 @@ export default function AccountantRefundPage() {
           <p className="accounting-refund-scope">Phạm vi cơ sở: {queue?.branchName || (loading ? 'Đang tải…' : 'Chưa tải được')}</p>
         </div>
       </header>
-      {notice && <p className="booking-live-notice" role="status"><span aria-hidden="true">✓</span>{notice}</p>}
+    <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {loadError && <p className="booking-inline-error accounting-refund-load-error" role="alert">{loadError}<button type="button" onClick={() => setRetryQueue((value) => value + 1)}>Tải lại</button></p>}
       <section className="accounting-refund-summary" aria-label="Tổng hợp yêu cầu hoàn cọc">
         <div className="accounting-refund-summary-heading"><h2>Tổng quan</h2><p>Số liệu theo toàn bộ yêu cầu được tải về; API hiện không lọc theo thời gian.</p></div>

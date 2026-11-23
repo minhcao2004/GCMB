@@ -23,79 +23,79 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/head-office/branches")
 public class BranchManagerAssignmentController {
 
-    private final BranchAdministrationService service;
-    private final MutationAudit audit;
+    private final BranchAdministrationService branchAdministrationService;
+    private final MutationAudit mutationAudit;
 
     public BranchManagerAssignmentController(
-        BranchAdministrationService service,
-        MutationAudit audit
+        BranchAdministrationService branchAdministrationService,
+        MutationAudit mutationAudit
     ) {
-        this.service = service;
-        this.audit = audit;
+        this.branchAdministrationService = branchAdministrationService;
+        this.mutationAudit = mutationAudit;
     }
 
     @GetMapping
     public List<Map<String, Object>> branches() {
-        return service.list();
+        return branchAdministrationService.list();
     }
 
     @GetMapping("/{id}")
     public Map<String, Object> detail(@PathVariable UUID id) {
-        return service.get(id);
+        return branchAdministrationService.get(id);
     }
 
     @PostMapping
     public Map<String, Object> create(@RequestBody BranchCommand body) {
-        return audit.record(
+        return mutationAudit.record(
             "CREATE_BRANCH",
             "BRANCH",
             null,
-            () -> service.create(body),
+            () -> branchAdministrationService.create(body),
             result -> (UUID) result.get("branchId")
         );
     }
 
     @PutMapping("/{id}")
     public Map<String, Object> update(@PathVariable UUID id, @RequestBody BranchCommand body) {
-        return audit.record(
+        return mutationAudit.record(
             "UPDATE_BRANCH",
             "BRANCH",
             id,
-            () -> service.update(id, body),
+            () -> branchAdministrationService.update(id, body),
             result -> id
         );
     }
 
     @GetMapping("/{id}/blockers")
     public List<Map<String, Object>> blockers(@PathVariable UUID id) {
-        return service.blockers(id);
+        return branchAdministrationService.blockers(id);
     }
 
     @PostMapping("/{id}/deactivate")
     public Map<String, Object> deactivate(@PathVariable UUID id, @RequestBody StatusCommand body) {
-        return audit.record(
+        return mutationAudit.record(
             "DEACTIVATE_BRANCH",
             "BRANCH",
             id,
-            () -> service.deactivate(id, body),
+            () -> branchAdministrationService.deactivate(id, body),
             result -> id
         );
     }
 
     @PostMapping("/{id}/reactivate")
     public Map<String, Object> reactivate(@PathVariable UUID id) {
-        return audit.record(
+        return mutationAudit.record(
             "REACTIVATE_BRANCH",
             "BRANCH",
             id,
-            () -> service.reactivate(id),
+            () -> branchAdministrationService.reactivate(id),
             result -> id
         );
     }
 
     @GetMapping("/managers")
     public List<Map<String, Object>> managers() {
-        return service.managers();
+        return branchAdministrationService.managers();
     }
 
     @PutMapping("/{branchId}/manager")
@@ -104,16 +104,16 @@ public class BranchManagerAssignmentController {
         @RequestBody BranchManagerAssignmentCommand body,
         @AuthenticationPrincipal Identity who
     ) {
-        return service.assign(branchId, body == null ? null : body.userId(), who);
+        return branchAdministrationService.assign(branchId, body == null ? null : body.userId(), who);
     }
 
     @GetMapping("/{id}/staff")
     public List<Map<String, Object>> staff(@PathVariable UUID id) {
-        return service.staff(id);
+        return branchAdministrationService.staff(id);
     }
 
     @GetMapping("/{id}/history")
     public List<Map<String, Object>> history(@PathVariable UUID id) {
-        return service.history(id);
+        return branchAdministrationService.history(id);
     }
 }

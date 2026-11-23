@@ -23,56 +23,56 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/accounting/finance/recurring-expenses")
 public class RecurringExpenseController {
-    private final RecurringExpenseService recurring;
-    private final MutationAudit audit;
+    private final RecurringExpenseService recurringExpenseService;
+    private final MutationAudit mutationAudit;
 
-    public RecurringExpenseController(RecurringExpenseService recurring,MutationAudit audit) {
-        this.recurring=recurring;
-        this.audit=audit;
+    public RecurringExpenseController(RecurringExpenseService recurringExpenseService,MutationAudit mutationAudit) {
+        this.recurringExpenseService=recurringExpenseService;
+        this.mutationAudit=mutationAudit;
     }
 
     @GetMapping
     public Map<String,Object> list(@AuthenticationPrincipal Identity actor,
             @RequestParam(required=false) UUID branchId,@RequestParam(required=false) String dueMonth,
             @RequestParam(required=false) String status) {
-        return recurring.list(actor,branchId,dueMonth,status);
+        return recurringExpenseService.list(actor,branchId,dueMonth,status);
     }
 
     @GetMapping("/reminder-count")
     public Map<String,Integer> reminderCount(@AuthenticationPrincipal Identity actor) {
-        return Map.of("count",recurring.reminderCount(actor));
+        return Map.of("count",recurringExpenseService.reminderCount(actor));
     }
 
     @PostMapping
     public Map<String,Object> create(@AuthenticationPrincipal Identity actor,@RequestBody Command body) {
-        return audit.record("CREATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",null,
-            ()->recurring.save(actor,null,body),result->(UUID)result.get("id"));
+        return mutationAudit.record("CREATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",null,
+            ()->recurringExpenseService.save(actor,null,body),result->(UUID)result.get("id"));
     }
 
     @PutMapping("/{id}")
     public Map<String,Object> update(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,@RequestBody Command body) {
-        return audit.record("UPDATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",id,
-            ()->recurring.save(actor,id,body),result->(UUID)result.get("id"));
+        return mutationAudit.record("UPDATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",id,
+            ()->recurringExpenseService.save(actor,id,body),result->(UUID)result.get("id"));
     }
 
     @PostMapping("/{id}/terminate")
     public Map<String,Object> terminate(@AuthenticationPrincipal Identity actor,@PathVariable UUID id) {
-        return audit.record("TERMINATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",id,
-            ()->recurring.terminate(actor,id),result->(UUID)result.get("id"));
+        return mutationAudit.record("TERMINATE_FINANCE_RECURRING_EXPENSE","FINANCE_RECURRING_EXPENSE",id,
+            ()->recurringExpenseService.terminate(actor,id),result->(UUID)result.get("id"));
     }
 
     @PostMapping("/periods/{id}/skip")
     public Map<String,Object> skipPeriod(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,@RequestBody SkipCommand body) {
-        return audit.record("SKIP_FINANCE_RECURRING_EXPENSE_PERIOD","FINANCE_RECURRING_EXPENSE_PERIOD",id,
-            ()->recurring.skipPeriod(actor,id,body==null?null:body.reason()),result->(UUID)result.get("id"));
+        return mutationAudit.record("SKIP_FINANCE_RECURRING_EXPENSE_PERIOD","FINANCE_RECURRING_EXPENSE_PERIOD",id,
+            ()->recurringExpenseService.skipPeriod(actor,id,body==null?null:body.reason()),result->(UUID)result.get("id"));
     }
 
     @PostMapping(value="/periods/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> payPeriod(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,
             @RequestPart("command") PayCommand body,@RequestPart("proof") MultipartFile proof,
             @RequestPart(value="invoice",required=false) MultipartFile invoice) {
-        return audit.record("PAY_FINANCE_RECURRING_EXPENSE_PERIOD","FINANCE_RECURRING_EXPENSE_PERIOD",id,
-            ()->recurring.payPeriod(actor,id,body.amount(),body.reason(),proof,invoice),result->(UUID)result.get("id"));
+        return mutationAudit.record("PAY_FINANCE_RECURRING_EXPENSE_PERIOD","FINANCE_RECURRING_EXPENSE_PERIOD",id,
+            ()->recurringExpenseService.payPeriod(actor,id,body.amount(),body.reason(),proof,invoice),result->(UUID)result.get("id"));
     }
 
     public record SkipCommand(String reason) {}

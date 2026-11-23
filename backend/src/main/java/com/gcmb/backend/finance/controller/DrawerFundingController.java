@@ -13,35 +13,35 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 public class DrawerFundingController {
-  private final DrawerFundingService service;
-  public DrawerFundingController(DrawerFundingService service) { this.service=service; }
+  private final DrawerFundingService drawerFundingService;
+  public DrawerFundingController(DrawerFundingService drawerFundingService) { this.drawerFundingService=drawerFundingService; }
 
   @GetMapping({"/api/v1/branch-management/cash-closing/funding","/api/v1/accounting/cash-closing/funding"})
   public Map<String,Object> overview(@AuthenticationPrincipal Identity actor,@RequestParam(required=false) UUID branchId) {
-    return service.overview(actor,branchId);
+    return drawerFundingService.overview(actor,branchId);
   }
   @PostMapping("/api/v1/branch-management/cash-closing/funding")
   public Map<String,Object> request(@AuthenticationPrincipal Identity actor,@RequestBody Request input) {
-    return service.request(actor,input);
+    return drawerFundingService.request(actor,input);
   }
   @PostMapping(value="/api/v1/accounting/cash-closing/funding/{id}/pay",consumes=MediaType.APPLICATION_JSON_VALUE)
   public Map<String,Object> pay(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,@RequestBody Payment input) {
-    return service.pay(actor,id,input);
+    return drawerFundingService.pay(actor,id,input);
   }
   @PostMapping(value="/api/v1/accounting/cash-closing/funding/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
   public Map<String,Object> payWithEvidence(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,
       @RequestPart Payment command,@RequestPart(required=false) MultipartFile proof) {
-    return service.pay(actor,id,command,proof);
+    return drawerFundingService.pay(actor,id,command,proof);
   }
   @PostMapping({"/api/v1/branch-management/cash-closing/funding/{id}/recipient",
       "/api/v1/accounting/cash-closing/funding/{id}/recipient"})
   public Map<String,Object> completeRecipient(@AuthenticationPrincipal Identity actor,@PathVariable UUID id) {
-    return service.completeRecipient(actor,id);
+    return drawerFundingService.completeRecipient(actor,id);
   }
   @GetMapping({"/api/v1/branch-management/cash-closing/funding/{id}/evidence",
       "/api/v1/accounting/cash-closing/funding/{id}/evidence"})
   public ResponseEntity<byte[]> evidence(@AuthenticationPrincipal Identity actor,@PathVariable UUID id) {
-    var file=service.evidence(actor,id);
+    var file=drawerFundingService.evidence(actor,id);
     return ResponseEntity.ok().cacheControl(CacheControl.noStore())
       .header("X-Content-Type-Options","nosniff")
       .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment()
@@ -51,6 +51,6 @@ public class DrawerFundingController {
   }
   @PostMapping("/api/v1/accounting/cash-closing/funding/{id}/reject")
   public Map<String,Object> reject(@AuthenticationPrincipal Identity actor,@PathVariable UUID id,@RequestBody Payment input) {
-    return service.reject(actor,id,input);
+    return drawerFundingService.reject(actor,id,input);
   }
 }

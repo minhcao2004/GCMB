@@ -15,21 +15,21 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class ShiftRepository {
 
-    private final JdbcTemplate db;
-    private final ObjectMapper json;
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public ShiftRepository(JdbcTemplate db, ObjectMapper json) {
-        this.db = db;
-        this.json = json;
+    public ShiftRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public void serialize() {
-        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
     }
 
     public boolean actor(UUID user, String role, UUID branch) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=? AND u.status='ACTIVE' AND r.code=? AND (r.code='BRANCH_MANAGER' OR u.branch_id=?))",
                 Boolean.class,
                 user,
@@ -40,7 +40,7 @@ public class ShiftRepository {
     }
 
     public Map<String, Object> branch(UUID id, boolean lock) {
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT id,name,status,timezone FROM gcmb.branch WHERE id=?" +
                 (lock ? " FOR SHARE" : ""),
             id
@@ -49,13 +49,13 @@ public class ShiftRepository {
     }
 
     public List<Map<String, Object>> templates() {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             "SELECT id,code,start_minute AS \"startMinute\",end_minute AS \"endMinute\" FROM gcmb.shift_template ORDER BY start_minute"
         );
     }
 
     public List<Map<String, Object>> shifts(UUID branch, LocalDate week) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT s.id,s.template_id AS "templateId",s.work_date::text AS date,s.capacity,s.status,s.version,
               s.starts_at AS "startsAt",s.ends_at AS "endsAt",
@@ -71,7 +71,7 @@ public class ShiftRepository {
 
     public Set<LocalDate> closedMonths(UUID branch, LocalDate week) {
         return new HashSet<>(
-            db.queryForList(
+            jdbcTemplate.queryForList(
                 "SELECT month FROM gcmb.attendance_period WHERE branch_id=? AND status='CLOSED' AND month>=? AND month<=?",
                 LocalDate.class,
                 branch,
@@ -83,7 +83,7 @@ public class ShiftRepository {
 
     public boolean hasAttendance(UUID shift) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment a JOIN gcmb.attendance t ON t.assignment_id=a.id WHERE a.shift_id=?)",
                 Boolean.class,
                 shift
@@ -92,7 +92,7 @@ public class ShiftRepository {
     }
 
     public List<Map<String, Object>> assignments(UUID branch, LocalDate week, UUID employee) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT a.id,a.shift_id AS "shiftId",e.id AS "employeeId",e.code,e.full_name AS "fullName",e.status AS "employeeStatus",a.source
             FROM gcmb.shift_assignment a JOIN gcmb.employee e ON e.id=a.employee_id JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
@@ -108,7 +108,7 @@ public class ShiftRepository {
     }
 
     public List<Map<String, Object>> history(UUID branch, LocalDate week) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT a.id,a.shift_id AS "shiftId",e.full_name AS "fullName",e.code,a.reason,a.cancelled_at AS "cancelledAt"
             FROM gcmb.shift_assignment a JOIN gcmb.employee e ON e.id=a.employee_id JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
@@ -122,7 +122,7 @@ public class ShiftRepository {
     }
 
     public Map<String, Object> shift(UUID id, UUID branch) {
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT * FROM gcmb.scheduled_shift WHERE id=? AND branch_id=? FOR UPDATE",
             id,
             branch
@@ -131,7 +131,7 @@ public class ShiftRepository {
     }
 
     public Map<String, Object> slot(UUID branch, UUID template, LocalDate date) {
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT * FROM gcmb.scheduled_shift WHERE branch_id=? AND template_id=? AND work_date=? FOR UPDATE",
             branch,
             template,
@@ -141,7 +141,7 @@ public class ShiftRepository {
     }
 
     public long registered(UUID shift) {
-        return db.queryForObject(
+        return jdbcTemplate.queryForObject(
             "SELECT count(*) FROM gcmb.shift_assignment WHERE shift_id=? AND status='CONFIRMED'",
             Long.class,
             shift
@@ -149,12 +149,12 @@ public class ShiftRepository {
     }
 
     public boolean employeeClosed(UUID branch,UUID employee,LocalDate date) {
-        return Boolean.TRUE.equals(db.queryForObject("SELECT gcmb.employee_month_closed(?,?,?)",
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT gcmb.employee_month_closed(?,?,?)",
             Boolean.class,branch,employee,date));
     }
 
     public List<Map<String,Object>> employeeClosings(UUID branch,LocalDate week) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT c.employee_id AS "employeeId",p.month::text AS month
             FROM gcmb.employee_attendance_closing c JOIN gcmb.attendance_period p ON p.id=c.period_id
             WHERE p.branch_id=? AND p.month BETWEEN ? AND ?
@@ -162,7 +162,7 @@ public class ShiftRepository {
     }
 
     public UUID linkedEmployee(UUID user) {
-        var ids = db.queryForList(
+        var ids = jdbcTemplate.queryForList(
             "SELECT id FROM gcmb.employee WHERE user_id=? AND status='ACTIVE'",
             UUID.class,
             user
@@ -173,7 +173,7 @@ public class ShiftRepository {
     public boolean belongs(UUID employee, UUID branch, Instant at, Instant end) {
         // UC-83/86: ca lễ tân chỉ nhận hồ sơ có vị trí RECEPTIONIST, kể cả khi gửi trực tiếp API.
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
                 SELECT EXISTS(SELECT 1 FROM gcmb.employee e WHERE e.id=? AND e.status='ACTIVE' AND e.position='RECEPTIONIST'
                   AND EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=e.id AND a.branch_id=?
@@ -193,7 +193,7 @@ public class ShiftRepository {
 
     public List<Map<String, Object>> employees(UUID branch) {
         // UC-86 / BR-58: nguồn người làm thay là hồ sơ lễ tân đang hoạt động tại cơ sở.
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT e.id,e.code,e.full_name AS "fullName" FROM gcmb.employee e WHERE e.status='ACTIVE' AND e.position='RECEPTIONIST'
               AND EXISTS(SELECT 1 FROM gcmb.employee_assignment a WHERE a.employee_id=e.id AND a.branch_id=?
@@ -205,7 +205,7 @@ public class ShiftRepository {
 
     // HuyDV / UC-83/86: tính theo ngày của ca, trên toàn bộ các cơ sở của nhân viên.
     public boolean withinDailyLimit(UUID employee, UUID shift) {
-        return Boolean.TRUE.equals(db.queryForObject("""
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
             SELECT (SELECT count(*) FROM gcmb.shift_assignment a
                     JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
                     WHERE a.employee_id=? AND a.status='CONFIRMED' AND s.status<>'CANCELLED'
@@ -225,7 +225,7 @@ public class ShiftRepository {
 
     public boolean overlap(UUID employee, UUID shift, Instant start, Instant end) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
                 SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment a JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
                   WHERE a.employee_id=? AND a.status='CONFIRMED' AND (s.id=? OR (s.starts_at<? AND s.ends_at>?)))
@@ -241,7 +241,7 @@ public class ShiftRepository {
 
     public boolean already(UUID employee, UUID shift) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment WHERE employee_id=? AND shift_id=? AND status='CONFIRMED')",
                 Boolean.class,
                 employee,
@@ -251,7 +251,7 @@ public class ShiftRepository {
     }
 
     public boolean closedPeriod(UUID branch, LocalDate date) {
-        return !db
+        return !jdbcTemplate
             .queryForList(
                 "SELECT id FROM gcmb.attendance_period WHERE branch_id=? AND month=? AND status='CLOSED' FOR SHARE",
                 UUID.class,
@@ -262,7 +262,7 @@ public class ShiftRepository {
     }
 
     public Map<String, Object> assignment(UUID id, UUID branch) {
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT a.* FROM gcmb.shift_assignment a JOIN gcmb.scheduled_shift s ON s.id=a.shift_id WHERE a.id=? AND s.branch_id=? FOR UPDATE OF a",
             id,
             branch
@@ -272,7 +272,7 @@ public class ShiftRepository {
 
     public boolean attended(UUID assignment) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.attendance WHERE assignment_id=?)",
                 Boolean.class,
                 assignment
@@ -292,7 +292,7 @@ public class ShiftRepository {
         Map<String, Object> old
     ) {
         if (old == null) {
-            return db.queryForObject(
+            return jdbcTemplate.queryForObject(
                 "INSERT INTO gcmb.scheduled_shift(branch_id,template_id,work_date,starts_at,ends_at,capacity,status,created_by) VALUES (?,?,?,?,?,?,?,?) RETURNING id",
                 UUID.class,
                 branch,
@@ -306,7 +306,7 @@ public class ShiftRepository {
             );
         }
         UUID id = (UUID) old.get("id");
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.scheduled_shift SET capacity=?,status=?,version=version+1 WHERE id=?",
             capacity,
             status,
@@ -316,7 +316,7 @@ public class ShiftRepository {
     }
 
     public UUID assign(UUID shift, UUID employee, UUID actor, String source, String reason) {
-        UUID id = db.queryForObject(
+        UUID id = jdbcTemplate.queryForObject(
             "INSERT INTO gcmb.shift_assignment(shift_id,employee_id,assigned_by,source,status,reason) VALUES (?,?,?,?,'CONFIRMED',?) RETURNING id",
             UUID.class,
             shift,
@@ -325,12 +325,12 @@ public class ShiftRepository {
             source,
             reason
         );
-        db.update("UPDATE gcmb.scheduled_shift SET version=version+1 WHERE id=?", shift);
+        jdbcTemplate.update("UPDATE gcmb.scheduled_shift SET version=version+1 WHERE id=?", shift);
         return id;
     }
 
     public void cancel(UUID assignment, String reason) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.shift_assignment SET status='CANCELLED',cancelled_at=CURRENT_TIMESTAMP,reason=? WHERE id=?",
             reason,
             assignment
@@ -344,13 +344,13 @@ public class ShiftRepository {
         String action,
         Map<String, Object> data
     ) {
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data) VALUES (?,?,?,'SCHEDULED_SHIFT',?,CAST(? AS jsonb))",
             actor,
             branch,
             action,
             shift,
-            json.writeValueAsString(data)
+            objectMapper.writeValueAsString(data)
         );
     }
 }

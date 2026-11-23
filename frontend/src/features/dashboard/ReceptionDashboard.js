@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { bookingApi } from '../booking/services/bookingApi';
 
 const statusNames = { occupied: 'Đang sử dụng', reserved: 'Đã đặt', vacant: 'Trống', maintenance: 'Bảo trì', inactive: 'Ngừng hoạt động' };
-const bookingNames = { CONFIRMED: 'Đã đặt', IN_HOUSE: 'Đang sử dụng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', DRAFT: 'Nháp' };
+const bookingNames = { CONFIRMED: 'Đã đặt', IN_HOUSE: 'Đang sử dụng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', NO_SHOW: 'No-show', DRAFT: 'Nháp' };
 const localDate = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

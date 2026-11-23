@@ -20,10 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AuditService {
 
-    private final AuditRepository repository;
+    private final AuditRepository auditRepository;
 
-    public AuditService(AuditRepository repository) {
-        this.repository = repository;
+    public AuditService(AuditRepository auditRepository) {
+        this.auditRepository = auditRepository;
     }
 
     public AuditPage list(
@@ -49,15 +49,15 @@ public class AuditService {
         if (to != null && to.getYear() > 9999) {
             throw new AuthFailure(400, "form", "Ngày kết thúc không hợp lệ");
         }
-        return repository.list(q.trim(), action, branchId, from, to, page, size);
+        return auditRepository.list(q.trim(), action, branchId, from, to, page, size);
     }
 
     public List<String> actions() {
-        return repository.actions();
+        return auditRepository.actions();
     }
 
     public AuditDetail detail(UUID id) {
-        AuditDetail detail = repository.detail(id);
+        AuditDetail detail = auditRepository.detail(id);
         if (detail == null) {
             throw new AuthFailure(404, "form", "Không tìm thấy nhật ký");
         }

@@ -8,6 +8,7 @@
  */
 
 import { passwordError } from '../../../auth/services/validation';
+import { ToastStack } from '../../../../shared/components/Feedback';
 import { useEffect, useRef, useState } from 'react';
 import { accountApi } from '../services/accountApi';
 import { apiErrors } from '../../../auth/services/authApi';
@@ -96,11 +97,7 @@ export default function AccountsPage({
           Tạo tài khoản
         </button>
       </div>
-      {notice && (
-        <p className="account-success-message" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       <div className="accounts-filters">
         <div className="account-search">
           <span aria-hidden="true">⌕</span>
@@ -153,7 +150,7 @@ export default function AccountsPage({
       </div>
       <div className="accounts-card" aria-busy={loading}>
         {error ? (
-          <div className="accounts-empty" role="alert">
+          <div className="accounts-empty account-error" role="alert">
             {error}
             <button onClick={() => setRevision((n) => n + 1)}>Thử lại</button>
           </div>

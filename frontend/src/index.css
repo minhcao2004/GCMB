@@ -11,3 +11,10 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.gcmb-money-input-preview {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8em;
+  color: #64748b;
+}

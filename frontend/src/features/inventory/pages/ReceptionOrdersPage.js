@@ -1,3 +1,4 @@
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -236,8 +237,7 @@ export default function ReceptionOrdersPage() {
     <div className="food-orders-staff">
       <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
       {soundError && <div className="food-sound-note" role="status">{soundError}</div>}
-      {error && <div className="food-alert" role="alert">{error}</div>}
-      {notice && <div className="food-alert food-alert--success" role="status">{notice}</div>}
+    <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       {incomingOrderAlert && <div className="food-alert food-alert--incoming" role="alert" aria-live="assertive"><div><strong>Khách vừa gửi {incomingOrderAlert.count} yêu cầu món mới.</strong><span>{incomingOrderAlert.roomCodes.length > 0 ? `Phòng ${incomingOrderAlert.roomCodes.slice(0, 3).join(', ')}${incomingOrderAlert.roomCodes.length > 3 ? ` và ${incomingOrderAlert.roomCodes.length - 3} phòng khác` : ''}.` : 'Vui lòng kiểm tra danh sách chờ xác nhận.'}</span></div><button type="button" onClick={() => { setIncomingOrderAlert(null); setStatus('PENDING'); document.getElementById('food-staff-order-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem yêu cầu</button></div>}
 
       <section className="food-staff-add">
@@ -249,7 +249,7 @@ export default function ReceptionOrdersPage() {
             <label>Chọn món<select value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)}>{menu.filter((item) => item.available).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatVnd(item.salePrice)}</option>)}</select></label>
             <button type="button" className="food-secondary" disabled={!menuItemId} onClick={draftAddItem}>Thêm món</button>
           </div>
-          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<MoneyInput aria-label={`Giá ${item.name}`} min="0" value={draftPrices[item.id] ?? item.salePrice ?? 0} onValueChange={(price) => setDraftPrices((current) => ({ ...current, [item.id]: price }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
+          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<MoneyInput aria-label={`Giá ${item.name}`}  min="0"  value={draftPrices[item.id] ?? item.salePrice ?? 0} onValueChange={value => setDraftPrices((current) => ({ ...current, [item.id]: value }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
           <footer className="food-add-footer"><span>Tạm tính <strong>{formatVnd(draftTotal)}</strong></span><button className="food-primary" disabled={busy || draftLines.length === 0}>{busy ? 'Đang lưu…' : 'Ghi nhận order'}</button></footer>
         </form>}
       </section>

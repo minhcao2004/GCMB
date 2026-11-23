@@ -16,17 +16,17 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AccountProfileRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
     private final AccountRepository accountRepository;
 
-    public AccountProfileRepository(JdbcTemplate db, AccountRepository accountRepository) {
-        this.db = db;
+    public AccountProfileRepository(JdbcTemplate jdbcTemplate, AccountRepository accountRepository) {
+        this.jdbcTemplate = jdbcTemplate;
         this.accountRepository = accountRepository;
     }
 
     public Profile find(UUID id) {
         var account = accountRepository.find(id);
-        var employees = db.query(
+        var employees = jdbcTemplate.query(
             "SELECT full_name,phone,bank_name,bank_account,bank_holder FROM gcmb.employee WHERE user_id=?",
             (rs, row) ->
                 new Profile(account, rs.getString("full_name"), rs.getString("phone"), true,
@@ -38,8 +38,8 @@ public class AccountProfileRepository {
 
     public String lockActiveAccount(UUID id) {
         // Cùng khóa với tạo/sửa hồ sơ và cấp tài khoản để không nhận trùng email/SĐT đồng thời.
-        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        var hashes = db.queryForList(
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        var hashes = jdbcTemplate.queryForList(
             """
                 SELECT password_hash FROM gcmb.user_account
                 WHERE id=? AND status='ACTIVE' FOR UPDATE
@@ -47,29 +47,29 @@ public class AccountProfileRepository {
             String.class,
             id
         );
-        db.queryForList("SELECT id FROM gcmb.employee WHERE user_id=? FOR UPDATE", UUID.class, id);
+        jdbcTemplate.queryForList("SELECT id FROM gcmb.employee WHERE user_id=? FOR UPDATE", UUID.class, id);
         return hashes.isEmpty() ? null : hashes.get(0);
     }
 
     public void lockPayroll() {
         // Cùng khóa với ghi nhận trả lương; luôn lấy trước khóa hồ sơ/tài khoản.
-        AccountantFund.lock(db);
+        AccountantFund.lock(jdbcTemplate);
     }
 
     // HuyDV / UC-97, BR-77: cập nhật đúng hồ sơ của phiên, chỉ đồng bộ bảng lương chưa trả.
     public void updateBank(UUID actor, String bankName, String bankAccount, String bankHolder) {
-        UUID employee = db.queryForObject("""
+        UUID employee = jdbcTemplate.queryForObject("""
             UPDATE gcmb.employee SET bank_name=?,bank_account=?,bank_holder=?,version=version+1
             WHERE user_id=? RETURNING id
             """, UUID.class, bankName, bankAccount, bankHolder, actor);
-        var periods = db.queryForList("""
+        var periods = jdbcTemplate.queryForList("""
             UPDATE gcmb.payroll_entry e SET bank_name_snapshot=?,bank_account_snapshot=?,bank_holder_snapshot=?
             WHERE employee_id=? AND NOT EXISTS(
               SELECT 1 FROM gcmb.salary_payment p WHERE p.payroll_entry_id=e.id AND p.status='PAID')
             RETURNING period_id
             """, UUID.class, bankName, bankAccount, bankHolder, employee);
         for (UUID period : periods) {
-            db.update("UPDATE gcmb.payroll_period SET version=version+1 WHERE id=?", period);
+            jdbcTemplate.update("UPDATE gcmb.payroll_period SET version=version+1 WHERE id=?", period);
         }
     }
 
@@ -82,8 +82,8 @@ public class AccountProfileRepository {
     }
 
     public void update(UUID id, String fullName, String phone, String email, boolean emailChanged) {
-        db.update("UPDATE gcmb.user_account SET email=? WHERE id=?", email, id);
-        db.update(
+        jdbcTemplate.update("UPDATE gcmb.user_account SET email=? WHERE id=?", email, id);
+        jdbcTemplate.update(
             "UPDATE gcmb.employee SET full_name=?,phone=?,version=version+1 WHERE user_id=?",
             fullName,
             phone,
@@ -91,7 +91,7 @@ public class AccountProfileRepository {
         );
         if (emailChanged) {
             // Mã khôi phục gửi đến email cũ không được tiếp tục sử dụng.
-            db.update(
+            jdbcTemplate.update(
                 """
                     UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP
                     WHERE user_id=? AND kind='PASSWORD_RESET' AND revoked_at IS NULL
@@ -103,7 +103,7 @@ public class AccountProfileRepository {
 
     public void audit(Profile before, Profile after) {
         // Chỉ ghi thông tin được sửa; không lưu mật khẩu xác nhận trong lịch sử.
-        db.update(
+        jdbcTemplate.update(
             """
                 INSERT INTO gcmb.audit_event(
                     actor_id,branch_id,action,entity_type,entity_id,before_data,after_data

@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class PersonalWorkRecordsController {
-    private final AttendanceService service;
+    private final AttendanceService attendanceService;
 
-    public PersonalWorkRecordsController(AttendanceService service) {
-        this.service = service;
+    public PersonalWorkRecordsController(AttendanceService attendanceService) {
+        this.attendanceService = attendanceService;
     }
 
     @GetMapping("/api/v1/reception/work-records")
@@ -26,6 +26,6 @@ public class PersonalWorkRecordsController {
         @AuthenticationPrincipal Identity actor,
         @RequestParam(required = false) String month
     ) {
-        return service.personal(actor, month);
+        return attendanceService.personal(actor, month);
     }
 }

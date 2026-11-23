@@ -1,3 +1,4 @@
+import { ToastStack } from '../../../shared/components/Feedback';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -309,8 +310,7 @@ export default function RoomCatalogPage() {
         <option value="all">Trạng thái: Tất cả</option>
       </select>
     </div>
-    {error && <div className="catalog-message error" role="alert">{error}</div>}
-    {notice && <div className="catalog-toast" role="status">{notice}</div>}
+      <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
     <section className="room-catalog-table-card">
       {loading ? <div className="catalog-loading">Đang tải dữ liệu…</div> : tab === 'Hạng phòng' ? <div className="catalog-table-scroll">
         <table className="catalog-table">
@@ -559,9 +559,9 @@ Hạng phòng
               <label>
 Giá áp dụng / giờ
 {/* BR-168: đơn giá giờ là số nguyên VND. */}
-<MoneyInput required min="0" value={form.hourlyPrice} onValueChange={hourlyPrice => setForm({
+<MoneyInput required min="0"  value={form.hourlyPrice} onValueChange={value => setForm({
                   ...form,
-                  hourlyPrice
+                  hourlyPrice: value
                 })} />
               </label>
               <label>
@@ -672,9 +672,9 @@ Thời lượng (phút)
               <label>
 Giá combo
 {/* BR-168: giá combo là số nguyên VND. */}
-<MoneyInput required min="0" value={form.price} onValueChange={price => setForm({
+<MoneyInput required min="0"  value={form.price} onValueChange={value => setForm({
                   ...form,
-                  price
+                  price: value
                 })} />
               </label>
               <label>

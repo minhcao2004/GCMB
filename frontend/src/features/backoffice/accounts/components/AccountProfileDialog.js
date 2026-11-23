@@ -6,6 +6,7 @@
  * Description: Xem, sửa và hủy chỉnh sửa thông tin của chính người đang đăng nhập.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../../shared/components/Feedback';
 import BankNameInput from '../../../../shared/components/BankNameInput';
 import { apiErrors } from '../../../auth/services/authApi';
 import { accountProfileApi } from '../services/accountProfileApi';
@@ -185,11 +186,7 @@ export default function AccountProfileDialog({ onClose }) {
                 {message}
               </p>
             ))}
-            {notice && (
-              <p className="account-success-message" role="status">
-                {notice}
-              </p>
-            )}
+            <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
             {!profile ? (
               Object.keys(errors).length ? (
                 <button type="button" onClick={() => setRetry((value) => value + 1)}>

@@ -39,18 +39,18 @@ public class FoodOrderService {
     private static final Pattern MR_CODE = Pattern.compile("MR-[A-F0-9]{32}");
     private final FoodOrderRepository foodOrderRepository;
     private final MenuItemRepository menuItemRepository;
-    private final AuthCrypto crypto;
+    private final AuthCrypto authCrypto;
 
-    public FoodOrderService(FoodOrderRepository foodOrderRepository, MenuItemRepository menuItemRepository, AuthCrypto crypto) {
+    public FoodOrderService(FoodOrderRepository foodOrderRepository, MenuItemRepository menuItemRepository, AuthCrypto authCrypto) {
         this.foodOrderRepository = foodOrderRepository;
         this.menuItemRepository = menuItemRepository;
-        this.crypto = crypto;
+        this.authCrypto = authCrypto;
     }
 
     @Transactional
     public GuestSession openRoomSession(String mrCode) {
         ActiveRoom active = activeRoom(mrCode);
-        String token = crypto.token();
+        String token = authCrypto.token();
         foodOrderRepository.createSession(active.bookingId(), active.allocationId(), AuthCrypto.hash(token));
         RoomContext context = new RoomContext(active.roomCode(), active.roomName(),
             active.branchName(), Instant.now().plus(Duration.ofHours(12)));
@@ -135,6 +135,14 @@ public class FoodOrderService {
     public void createComboGiftOrder(Identity actor, UUID bookingId, UUID allocationId,
                                      List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> drinks,
                                      List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> food) {
+        createComboGiftOrder(actor, bookingId, allocationId, drinks, food, "COMBO-GIFT-" + bookingId);
+    }
+
+    @Transactional
+    public void createComboGiftOrder(Identity actor, UUID bookingId, UUID allocationId,
+                                     List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> drinks,
+                                     List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> food,
+                                     String idempotencyKey) {
         UUID branchId = branch(actor);
         List<com.gcmb.backend.booking.dto.BookingDtos.ComboGiftItem> choices = new java.util.ArrayList<>();
         if (drinks != null) choices.addAll(drinks);
@@ -167,7 +175,7 @@ public class FoodOrderService {
                 throw bad("Chỉ chọn món thuộc danh mục đồ ăn cho suất đồ ăn combo.");
         }
         UUID orderId = foodOrderRepository.createOrder(branchId,bookingId,allocationId,"STAFF",actor.id(),null,
-            "ACCEPTED",actor.id(),null,"COMBO-GIFT-"+bookingId);
+            "ACCEPTED",actor.id(),null,idempotencyKey);
         if (orderId == null) throw conflict("Order quà combo đã được tạo trước đó; hãy tải lại booking.");
         for (var entry : quantities.entrySet()) {
             SellableItem item = sellable.get(entry.getKey());
@@ -181,9 +189,8 @@ public class FoodOrderService {
     @Transactional
     public void deductComboGiftStock(Identity actor, UUID bookingId) {
         UUID branchId = branch(actor);
-        UUID orderId = foodOrderRepository.comboGiftOrderId(branchId,bookingId);
-        if (orderId == null) return;
-        deductAutomaticStock(orderId,branchId,actor.id(),"Xuất kho đồ ăn, đồ uống combo khi thanh toán bill booking");
+        for (UUID orderId : foodOrderRepository.comboGiftOrderIds(branchId,bookingId))
+            deductAutomaticStock(orderId,branchId,actor.id(),"Xuất kho đồ ăn, đồ uống combo khi thanh toán bill booking");
     }
 
     @Transactional
@@ -201,7 +208,7 @@ public class FoodOrderService {
     @Transactional
     // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: tính phí đơn booking và phân công lễ tân ca hiện tại.
     public OrderView addItems(Identity actor, StaffOrderRequest request) {
-        UUID branchId = branch(actor);
+        UUID branchId = branch(actor, "thêm món", "booking");
         if (request == null || request.bookingId() == null) throw bad("Vui lòng chọn booking đang sử dụng.");
         if (request.assignedEmployeeId() == null) throw bad("Vui lòng chọn lễ tân đang làm ca để phụ trách đơn.");
         if (request.items() == null || request.items().isEmpty()) throw bad("Chọn ít nhất một món.");
@@ -466,8 +473,12 @@ public class FoodOrderService {
     }
 
     private UUID branch(Identity actor) {
+        return branch(actor, "truy cập", "đơn món");
+    }
+
+    private UUID branch(Identity actor, String action, String entity) {
         if (actor == null || !"RECEPTIONIST".equals(actor.role()) || actor.branchId() == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được phân công tại cơ sở đang làm việc.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền " + action + " đối với " + entity + ".");
         }
         return actor.branchId();
     }

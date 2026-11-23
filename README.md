@@ -110,6 +110,7 @@ GCMB/
 │   ├── src/test/
 │   ├── scripts/
 │   ├── .mvn/wrapper/
+│   ├── Dockerfile
 │   ├── pom.xml
 │   ├── mvnw
 │   └── mvnw.cmd
@@ -143,7 +144,15 @@ GCMB/
 │   │   ├── index.js
 │   │   └── index.css
 │   ├── package.json
+│   ├── Dockerfile
 │   └── package-lock.json
+├── deploy/
+│   ├── Caddyfile
+│   └── vps.env.example
+├── docs/
+├── compose.yaml
+├── .env.example
+├── package.json
 └── README.md
 ```
 
@@ -158,7 +167,7 @@ GCMB/
 | `booking` | Reservations, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items with selectable categories, stock receipts with item expiry dates and line costs used for reimbursement totals, supplier and expiry details in movement history, adjustments, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Head-office chain overview with URL-backed day/week/month/quarter/year or custom date ranges, historical period navigation capped at today, branch scope including suspended branches' history, scoped KPIs and charts, branch ranking, current chain-wide pending approvals, and operational alerts; its expense-detail link preserves the selected period and branch on return, mapping a multi-branch detail selection to the chain-wide overview; head-office operating expenses use payment dates, while the shared accountant/head-office financial overview recognizes finance requests by allocation month and older expenses/payroll by payment date, with matching basis on expense-detail links; shared financial reports support separate chart grouping, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; completed-bill revenue, held-deposit balance at period end, and forfeited deposits are shown separately; branch performance summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and operational alerts linked to reports and branch or equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries; receptionist room and booking status charts; read-only business assistant; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
 | `finance` (frontend) | Accountant fund and expense workflows, cash or bank selection for payment requests, reimbursements, and one-time direct expenses with actual payment method shown in history, branch-manager selection of stock receipts for automatically totaled reimbursement requests, single-line expense-category selection with derived rules, responsive eight-column category list without horizontal scrolling, accountant category presets and collapsible settings, recurring expense templates and monthly payment cycles with transfer proof only and in-app reminders, allocation schedules, daily cash-closing status by branch and submission notifications, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
 | `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with requested and confirmed cash or bank payment methods, receipt-linked reimbursements with server-calculated totals and duplicate-claim protection, recurring templates and idempotent payment periods requiring transfer proof without a separate invoice upload, daily in-app reminders, allocated recognition, approvals, daily cash-closing status and accountant notifications on successful submission, cash reconciliation, financial transactions, and period closing. |
 

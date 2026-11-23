@@ -13,13 +13,14 @@ import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AppShell from '../../../shared/components/AppShell';
-import { useLayoutEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
+import BusinessAssistant from '../../dashboard/BusinessAssistant';
 
 import StaffPage from '../../workforce/pages/StaffPage';
 
@@ -28,11 +29,6 @@ import FinancePage from '../../finance/pages/FinancePage';
 
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
-const groups = [
-  { id: 'finance', title: 'Tài chính & báo cáo', short: 'TC', items: ['Phê duyệt chi', 'Báo cáo kinh doanh', 'Báo cáo chi phí'] },
-  { id: 'operations', title: 'Vận hành', short: 'VH', items: ['Cơ sở', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị'] },
-  { id: 'administration', title: 'Quản trị', short: 'QT', items: ['Tài khoản & phân quyền', 'Nhật ký hệ thống'] },
-];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
@@ -57,46 +53,53 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   const activeTab = location.pathname === catalogPath
     ? 'Phòng & bảng giá'
     : tabs.includes(requestedTab) && requestedTab !== 'Phòng & bảng giá' ? requestedTab : 'Tổng quan';
-  const activeGroup = groups.find((group) => group.items.includes(activeTab))?.id;
-  const [openGroups, setOpenGroups] = useState(() => activeGroup ? { [activeGroup]: true } : {});
-  useLayoutEffect(() => {
-    setOpenGroups(activeGroup ? { [activeGroup]: true } : {});
-  }, [activeTab, activeGroup]);
   const selectTab = (tab) => {
-    if (tab === 'Tổng quan') setOpenGroups({});
     const params = new URLSearchParams(location.search);
     if (tab === 'Tổng quan' || tab === 'Phòng & bảng giá') params.delete('screen');
     else params.set('screen', tab);
-    if (tab === 'Phê duyệt chi') params.set('tab', 'expense_requests');
-    else if (params.get('tab') === 'expense_requests') params.delete('tab');
     const targetPath = tab === 'Phòng & bảng giá' ? catalogPath : dashboardPath;
     const search = params.toString();
     navigate({ pathname: targetPath, search: search ? `?${search}` : '' });
   };
-  const renderItem = (tab) => <button key={tab} type="button" className="head-office-nav__item" aria-label={tab} title={tab}
-    aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[tabs.indexOf(tab)]} /></svg>
-    <span>{tab}</span>
-  </button>;
+  const openPendingApprovals = () => {
+    const params = new URLSearchParams(location.search);
+    params.set('screen', 'Phê duyệt chi');
+    params.set('tab', 'expense_requests');
+    params.delete('section');
+    navigate({ pathname: dashboardPath, search: `?${params.toString()}` });
+  };
+  const openAlertDestination = (alert) => {
+    const params = new URLSearchParams();
+    if (alert.id?.startsWith('finance-')) {
+      params.set('screen', alert.id.includes('profit') ? 'Báo cáo chi phí' : 'Báo cáo kinh doanh');
+      if (alert.from && alert.to) { params.set('from', alert.from); params.set('to', alert.to); }
+      if (alert.from) params.set('month', alert.from.slice(0, 7));
+      if (alert.branchId) params.set('branchId', alert.branchId);
+    } else if (alert.kind === 'Sự cố thiết bị') {
+      params.set('screen', 'Thiết bị'); params.set('equipmentTab', 'incidents');
+      if (alert.id) params.set('incidentId', alert.id);
+      if (alert.branchId) params.set('equipmentBranchId', alert.branchId);
+    } else {
+      params.set('screen', 'Cơ sở');
+      if (alert.branchId) params.set('branchId', alert.branchId);
+      params.set('alertKind', alert.kind || 'Cảnh báo vận hành');
+      params.set('alertDetail', alert.detail || '');
+    }
+    navigate({ pathname: dashboardPath, search: `?${params.toString()}` });
+  };
   return <AppShell
     audience="head-office-manager"
-    className="head-office-shell"
     sidebarLabel="Quản lý cấp cao"
     brand={<div className="manager-brand"><BrandWordmark /></div>}
     roleLabel="QUẢN LÝ CẤP CAO"
-    navigation={<nav className="manager-navigation head-office-nav" aria-label="Chức năng quản lý cấp cao">
-        {renderItem('Tổng quan')}
-        {groups.map((group) => <div className="head-office-nav__group" key={group.id} data-active={activeGroup === group.id || undefined}>
-          <button type="button" className="head-office-nav__toggle" aria-label={group.title} title={group.title}
-            aria-expanded={Boolean(openGroups[group.id])} aria-controls={`head-office-nav-${group.id}`}
-            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}>
-            <span className="head-office-nav__title">{group.title}</span><span className="head-office-nav__short" aria-hidden="true">{group.short}</span>
-            <svg className="head-office-nav__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-          </button>
-          <div id={`head-office-nav-${group.id}`} className="head-office-nav__items" hidden={!openGroups[group.id]}>
-            {group.items.map(renderItem)}
-          </div>
-        </div>)}
+    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
+        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
+          <span>{tab}</span>
+        </NavLink> : <button key={tab} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
+          <span>{tab}</span>
+        </button>)}
       </nav>}
     footer={<div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>}
     renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
@@ -104,13 +107,13 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     )}
   >
     {activeTab === 'Tổng quan' ? (
-        <ExecutiveDashboard user={user} />
+        <ExecutiveDashboard user={user} onNavigate={openPendingApprovals} onAlertNavigate={openAlertDestination} />
       ) : activeTab === 'Báo cáo kinh doanh' ? (
         <AccountantFinancePage reportsOnly />
       ) : activeTab === 'Báo cáo chi phí' ? (
         <ExpenseBreakdownReportPage initialUser={user} />
       ) : activeTab === 'Cơ sở' ? (
-        <BranchManagementPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
+        <BranchManagementPage initialBranchId={new URLSearchParams(location.search).get('branchId')} initialAlert={{ kind: new URLSearchParams(location.search).get('alertKind'), detail: new URLSearchParams(location.search).get('alertDetail') }} onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Phòng & bảng giá' ? (
         <section className="manager-content manager-content-catalog">
           <RoomCatalogPage />
@@ -129,9 +132,10 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
-        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice /></section>
+        <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice initialSection={new URLSearchParams(location.search).get('equipmentTab')} initialIncidentId={new URLSearchParams(location.search).get('incidentId')} initialBranchId={new URLSearchParams(location.search).get('equipmentBranchId')} /></section>
       ) : activeTab === 'Phê duyệt chi' ? (
         <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
+    <BusinessAssistant key={user.id} user={user} />
   </AppShell>;
 }

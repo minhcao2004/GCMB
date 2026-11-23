@@ -24,10 +24,10 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class BookingPricingService {
-    private final BookingRepository repository;
+    private final BookingRepository bookingRepository;
 
     // Rule giá và combo luôn đọc từ cấu hình database thay vì giá do client gửi.
-    public BookingPricingService(BookingRepository repository) { this.repository = repository; }
+    public BookingPricingService(BookingRepository bookingRepository) { this.bookingRepository = bookingRepository; }
 
     // BR-13: báo giá dùng cấu hình hiện hành và lưu snapshot để booking giữ nguyên giá đã chốt.
     public BookingDtos.PriceQuote quote(UUID roomTypeId, UUID branchId, ZoneId timezone,
@@ -46,8 +46,9 @@ public class BookingPricingService {
     }
 
     public static BigDecimal depositFor(BigDecimal amount) {
-        // BR-137, BR-178: tiền cọc bằng 30% giá booking, làm tròn lên đến đồng.
-        return amount.multiply(new BigDecimal("0.30")).setScale(0, RoundingMode.CEILING);
+        // HuyDV: cọc 30%, làm tròn lên bội số 1.000đ để không thu tiền lẻ.
+        return amount.multiply(new BigDecimal("0.30")).divide(BigDecimal.valueOf(1000), 0, RoundingMode.CEILING)
+            .multiply(BigDecimal.valueOf(1000));
     }
 
     // Chọn đơn giá giờ lẻ tại thời điểm bắt đầu đồng hồ theo chi nhánh và hạng phòng.
@@ -55,7 +56,7 @@ public class BookingPricingService {
         ZonedDateTime local = at.atZone(timezone);
         LocalDate date = local.toLocalDate();
         int minute = local.getHour() * 60 + local.getMinute();
-        return repository.pricingRules(roomTypeId, branchId, date, date).stream()
+        return bookingRepository.pricingRules(roomTypeId, branchId, date, date).stream()
             .filter(rule -> applies(rule, date, minute))
             .max(Comparator.comparing((PricingRule rule) -> rule.branchId() != null)
                 .thenComparingInt(PricingRule::priority)
@@ -66,7 +67,7 @@ public class BookingPricingService {
     // BR-13: lưu giá và điều khoản combo hiện hành vào snapshot của booking.
     private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, UUID branchId, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
-        ComboRow combo = repository.combo(comboId, branchId);
+        ComboRow combo = bookingRepository.combo(comboId, branchId);
         if (combo == null) throw new BookingFailure(400, "comboId", "Vui lòng bổ sung combo phù hợp.");
         if (!roomTypeId.equals(combo.roomTypeId()))
             throw new BookingFailure(400, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
@@ -106,7 +107,7 @@ public class BookingPricingService {
     private BookingDtos.PriceQuote hourlyQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end, boolean actual) {
         LocalDate firstDate = start.atZone(timezone).toLocalDate();
         LocalDate lastDate = end.minusNanos(1).atZone(timezone).toLocalDate();
-        List<PricingRule> rules = repository.pricingRules(roomTypeId, branchId, firstDate, lastDate);
+        List<PricingRule> rules = bookingRepository.pricingRules(roomTypeId, branchId, firstDate, lastDate);
         if (rules.isEmpty()) throw new BookingFailure(409, "plannedStart", "Không có phòng hoặc mức giá phù hợp với lựa chọn hiện tại. Vui lòng thay đổi thời gian, hạng phòng hoặc hình thức thuê.");
 
         List<Segment> segments = new ArrayList<>();

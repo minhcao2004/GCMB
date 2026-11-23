@@ -15,15 +15,15 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class TaxInvoiceController {
 
-    private final TaxInvoiceService service;
+    private final TaxInvoiceService taxInvoiceService;
 
-    public TaxInvoiceController(TaxInvoiceService service) {
-        this.service = service;
+    public TaxInvoiceController(TaxInvoiceService taxInvoiceService) {
+        this.taxInvoiceService = taxInvoiceService;
     }
 
     @GetMapping({ "/api/v1/reception/tax-invoices", "/api/v1/accounting/tax-invoices" })
     public List<Map<String, Object>> list(@AuthenticationPrincipal Identity actor) {
-        return service.list(actor);
+        return taxInvoiceService.list(actor);
     }
 
     @GetMapping({ "/api/v1/reception/tax-invoices/{id}", "/api/v1/accounting/tax-invoices/{id}" })
@@ -31,7 +31,7 @@ public class TaxInvoiceController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.detail(actor, id);
+        return taxInvoiceService.detail(actor, id);
     }
 
     @PostMapping("/api/v1/reception/tax-invoices/{id}")
@@ -40,7 +40,7 @@ public class TaxInvoiceController {
         @PathVariable UUID id,
         @RequestBody TaxInvoiceService.Request input
     ) {
-        return service.create(actor, id, input);
+        return taxInvoiceService.create(actor, id, input);
     }
 
     @PutMapping("/api/v1/accounting/tax-invoices/{id}")
@@ -49,16 +49,16 @@ public class TaxInvoiceController {
         @PathVariable UUID id,
         @RequestBody TaxInvoiceService.Progress input
     ) {
-        return service.progress(actor, id, input);
+        return taxInvoiceService.progress(actor, id, input);
     }
 
     @GetMapping("/api/v1/accounting/tax-invoices/unread")
     public Map<String, Object> unread(@AuthenticationPrincipal Identity actor) {
-        return service.unread(actor);
+        return taxInvoiceService.unread(actor);
     }
 
     @PostMapping("/api/v1/accounting/tax-invoices/{id}/read")
     public void read(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
-        service.read(actor, id);
+        taxInvoiceService.read(actor, id);
     }
 }

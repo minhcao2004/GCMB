@@ -32,16 +32,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookingController {
     private final BookingService bookingService;
     private final DepositManagementService depositManagementService;
-    private final com.gcmb.backend.booking.service.CheckoutService checkout;
+    private final com.gcmb.backend.booking.service.CheckoutService checkoutService;
 
     // Service chịu trách nhiệm quy tắc nghiệp vụ và phạm vi chi nhánh.
-    private final MutationAudit audit;
-    public BookingController(BookingService bookingService, DepositManagementService depositManagementService, MutationAudit audit,
-            com.gcmb.backend.booking.service.CheckoutService checkout) {
+    private final MutationAudit mutationAudit;
+    public BookingController(BookingService bookingService, DepositManagementService depositManagementService, MutationAudit mutationAudit,
+            com.gcmb.backend.booking.service.CheckoutService checkoutService) {
         this.bookingService = bookingService;
         this.depositManagementService = depositManagementService;
-        this.audit = audit;
-        this.checkout = checkout;
+        this.mutationAudit = mutationAudit;
+        this.checkoutService = checkoutService;
     }
     @GetMapping("/deposits")
     // GET: danh sách tiền cọc, tổng hợp và bộ lọc trong phạm vi chi nhánh lễ tân.
@@ -86,7 +86,7 @@ public class BookingController {
     // POST: tạo yêu cầu chờ kế toán xử lý; lễ tân không ghi nhận đã hoàn tiền.
     public DepositDtos.RefundRequestResult createDepositRefundRequest(@AuthenticationPrincipal Identity identity,
             @RequestBody DepositDtos.CreateRefundRequest request) {
-        return audit.record("REQUEST_DEPOSIT_REFUND", "BOOKING", request == null ? null : request.bookingId(),
+        return mutationAudit.record("REQUEST_DEPOSIT_REFUND", "BOOKING", request == null ? null : request.bookingId(),
             () -> depositManagementService.createRefundRequest(identity, request), null);
     }
 
@@ -164,7 +164,7 @@ public class BookingController {
     // POST: ghi đổi phòng và trả booking đã cập nhật.
     public BookingDtos.RoomChangeResult changeRoom(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID bookingId, @RequestBody BookingDtos.RoomChangeRequest request) {
-        return audit.record("BOOKING_ROOM_CHANGED","BOOKING",bookingId,()->bookingService.changeRoom(identity, bookingId, request),null);
+        return mutationAudit.record("BOOKING_ROOM_CHANGED","BOOKING",bookingId,()->bookingService.changeRoom(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/extension-quote")
@@ -178,26 +178,26 @@ public class BookingController {
     // POST: xác nhận gia hạn và khoản phí mới.
     public BookingDtos.ExtensionResult extendStay(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID bookingId, @RequestBody BookingDtos.ExtendStayRequest request) {
-        return audit.record("BOOKING_EXTENDED","BOOKING",bookingId,()->bookingService.extendStay(identity, bookingId, request),null);
+        return mutationAudit.record("BOOKING_EXTENDED","BOOKING",bookingId,()->bookingService.extendStay(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/hourly-meter/start")
     // POST: bắt đầu phiên tính giờ lẻ trên máy chủ.
     public BookingDtos.BookingDetail startHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return audit.record("HOURLY_METER_STARTED","BOOKING",bookingId,()->bookingService.startHourlyMeter(identity, bookingId),null);
+        return mutationAudit.record("HOURLY_METER_STARTED","BOOKING",bookingId,()->bookingService.startHourlyMeter(identity, bookingId),null);
     }
 
     @PostMapping("/bookings/{bookingId}/hourly-meter/stop")
     // POST: chốt phiên giờ lẻ theo thời gian thực dùng.
     public BookingDtos.BookingDetail stopHourlyMeter(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId) {
-        return audit.record("HOURLY_METER_STOPPED","BOOKING",bookingId,()->bookingService.stopHourlyMeter(identity, bookingId),null);
+        return mutationAudit.record("HOURLY_METER_STOPPED","BOOKING",bookingId,()->bookingService.stopHourlyMeter(identity, bookingId),null);
     }
 
     @PostMapping("/bookings/{bookingId}/check-in")
     // POST: ghi nhận khách vào phòng.
     public BookingDtos.BookingDetail checkIn(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody(required = false) BookingDtos.CheckInRequest request) {
-        return audit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookingService.checkIn(identity, bookingId, request),null);
+        return mutationAudit.record("BOOKING_CHECKED_IN","BOOKING",bookingId,()->bookingService.checkIn(identity, bookingId, request),null);
     }
 
     @GetMapping("/bookings/{bookingId}/combo-gift-requirements")
@@ -209,7 +209,7 @@ public class BookingController {
     @PostMapping("/bookings/walk-in")
     public BookingDtos.BookingDetail openWalkIn(@AuthenticationPrincipal Identity identity,
             @RequestBody BookingDtos.WalkInRequest request) {
-        return audit.record("WALK_IN_CHECKED_IN", "BOOKING", null,
+        return mutationAudit.record("WALK_IN_CHECKED_IN", "BOOKING", null,
             () -> bookingService.openWalkIn(identity, request), result -> result.booking().id());
     }
 
@@ -218,11 +218,11 @@ public class BookingController {
     // POST: tạo booking và các khoản thu đã xác nhận.
     public BookingDtos.BookingDetail create(@AuthenticationPrincipal Identity identity,
             @RequestBody BookingDtos.CreateBookingRequest request) {
-        return audit.record("BOOKING_CREATED","BOOKING",null,()-> {
+        return mutationAudit.record("BOOKING_CREATED","BOOKING",null,()-> {
             var created = bookingService.create(identity, request);
             if (request.depositAmount() != null && request.depositAmount().signum() > 0 &&
                     "BANK_TRANSFER".equalsIgnoreCase(request.paymentMethod())) {
-                checkout.confirmDeposit(identity, created.booking().id(),
+                checkoutService.confirmDeposit(identity, created.booking().id(),
                     request.paymentReference(), request.depositAmount());
                 return bookingService.detail(identity, created.booking().id());
             }
@@ -234,14 +234,14 @@ public class BookingController {
     // PATCH: sửa booking chưa bắt đầu.
     public BookingDtos.BookingDetail update(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody BookingDtos.UpdateBookingRequest request) {
-        return audit.record("BOOKING_UPDATED","BOOKING",bookingId,()->bookingService.update(identity, bookingId, request),null);
+        return mutationAudit.record("BOOKING_UPDATED","BOOKING",bookingId,()->bookingService.update(identity, bookingId, request),null);
     }
 
     @PostMapping("/bookings/{bookingId}/cancel")
     // POST: hủy booking và xử lý số dư cọc.
     public BookingDtos.CancellationResult cancel(@AuthenticationPrincipal Identity identity, @PathVariable UUID bookingId,
             @RequestBody(required = false) BookingDtos.CancelBookingRequest request) {
-        return audit.record("BOOKING_CANCELLED","BOOKING",bookingId,()->bookingService.cancel(identity, bookingId, request),null);
+        return mutationAudit.record("BOOKING_CANCELLED","BOOKING",bookingId,()->bookingService.cancel(identity, bookingId, request),null);
     }
 
 }

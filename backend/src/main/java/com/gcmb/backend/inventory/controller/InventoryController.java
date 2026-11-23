@@ -36,46 +36,46 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/branch-management/inventory")
 public class InventoryController {
-    private final InventoryService service;
-    private final MutationAudit audit;
+    private final InventoryService inventoryService;
+    private final MutationAudit mutationAudit;
 
-    public InventoryController(InventoryService service, MutationAudit audit) {
-        this.service = service;
-        this.audit = audit;
+    public InventoryController(InventoryService inventoryService, MutationAudit mutationAudit) {
+        this.inventoryService = inventoryService;
+        this.mutationAudit = mutationAudit;
     }
 
     @GetMapping("/items")
     public List<InventoryItemView> items(@AuthenticationPrincipal Identity actor) {
-        return service.list(actor);
+        return inventoryService.list(actor);
     }
 
     @GetMapping("/metadata")
     public InventoryMetadata metadata(@AuthenticationPrincipal Identity actor) {
-        return service.metadata(actor);
+        return inventoryService.metadata(actor);
     }
 
     @GetMapping("/items/{id}")
     public InventoryItemView item(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
-        return service.item(actor, id);
+        return inventoryService.item(actor, id);
     }
 
     @PostMapping("/items")
     public InventoryItemView create(@AuthenticationPrincipal Identity actor, @RequestBody InventoryItemCommand body) {
-        return audit.record("CREATE_INVENTORY_ITEM", "INVENTORY_ITEM", null,
-            () -> service.create(actor, body), InventoryItemView::id);
+        return mutationAudit.record("CREATE_INVENTORY_ITEM", "INVENTORY_ITEM", null,
+            () -> inventoryService.create(actor, body), InventoryItemView::id);
     }
 
     @PutMapping("/items/{id}")
     public InventoryItemView update(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
             @RequestBody InventoryItemCommand body) {
-        return audit.record("UPDATE_INVENTORY_ITEM", "INVENTORY_ITEM", id,
-            () -> service.update(actor, id, body), InventoryItemView::id);
+        return mutationAudit.record("UPDATE_INVENTORY_ITEM", "INVENTORY_ITEM", id,
+            () -> inventoryService.update(actor, id, body), InventoryItemView::id);
     }
 
     @DeleteMapping("/items/{id}")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
-        audit.record("DELETE_INVENTORY_ITEM", "INVENTORY_ITEM", id, () -> {
-            service.delete(actor, id);
+        mutationAudit.record("DELETE_INVENTORY_ITEM", "INVENTORY_ITEM", id, () -> {
+            inventoryService.delete(actor, id);
             return null;
         }, null);
         return ResponseEntity.noContent().build();
@@ -86,27 +86,27 @@ public class InventoryController {
             @PathVariable UUID itemId, @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to, @RequestParam(required = false) String kind,
             @RequestParam(required = false) String q) {
-        return service.history(actor, itemId, from, to, kind, q);
+        return inventoryService.history(actor, itemId, from, to, kind, q);
     }
 
     @PostMapping(value = "/receipts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public StockReceiptResult receive(@AuthenticationPrincipal Identity actor,
             @RequestPart("command") StockReceiptCommand command,
             @RequestPart(value = "evidence", required = false) MultipartFile evidence) {
-        return service.receive(actor, command, evidence);
+        return inventoryService.receive(actor, command, evidence);
     }
 
     @PostMapping(value = "/adjustments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public StockMovementView adjust(@AuthenticationPrincipal Identity actor,
             @RequestPart("command") StockAdjustmentCommand command,
             @RequestPart(value = "evidence", required = false) MultipartFile evidence) {
-        return service.adjust(actor, command, evidence);
+        return inventoryService.adjust(actor, command, evidence);
     }
 
     @GetMapping("/items/{itemId}/movements/{movementId}/evidence")
     public ResponseEntity<byte[]> evidence(@AuthenticationPrincipal Identity actor,
             @PathVariable UUID itemId, @PathVariable UUID movementId) {
-        EvidenceContent content = service.evidence(actor, itemId, movementId);
+        EvidenceContent content = inventoryService.evidence(actor, itemId, movementId);
         return ResponseEntity.ok().cacheControl(CacheControl.noCache())
             .contentType(MediaType.parseMediaType(content.mimeType()))
             .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()

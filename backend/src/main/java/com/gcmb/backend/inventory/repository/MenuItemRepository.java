@@ -36,23 +36,23 @@ public class MenuItemRepository {
         LEFT JOIN gcmb.unit u ON u.id=i.unit_id
         """;
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
-    public MenuItemRepository(JdbcTemplate db) { this.db = db; }
+    public MenuItemRepository(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
     public List<MenuItemView> list(UUID branchId) {
-        return db.query(SELECT + " WHERE m.branch_id=? AND m.deleted_at IS NULL ORDER BY lower(m.name),m.code",
+        return jdbcTemplate.query(SELECT + " WHERE m.branch_id=? AND m.deleted_at IS NULL ORDER BY lower(m.name),m.code",
             this::map, branchId);
     }
 
     public MenuItemView get(UUID branchId, UUID id) {
-        List<MenuItemView> rows = db.query(SELECT + " WHERE m.branch_id=? AND m.id=? AND m.deleted_at IS NULL",
+        List<MenuItemView> rows = jdbcTemplate.query(SELECT + " WHERE m.branch_id=? AND m.id=? AND m.deleted_at IS NULL",
             this::map, branchId, id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public List<String> categories(UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT DISTINCT ON (lower(category)) category FROM gcmb.menu_item
             WHERE branch_id=? AND deleted_at IS NULL
             ORDER BY lower(category), (category <> lower(category)) DESC, category
@@ -60,7 +60,7 @@ public class MenuItemRepository {
     }
 
     public List<InventoryOption> inventoryOptions(UUID branchId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT i.id,i.sku,i.name,i.category,u.name AS unit_name,i.active
             FROM gcmb.inventory_item i JOIN gcmb.unit u ON u.id=i.unit_id
             WHERE i.branch_id=? ORDER BY i.active DESC,lower(i.name),i.sku
@@ -69,23 +69,27 @@ public class MenuItemRepository {
     }
 
     public boolean activeInventory(UUID branchId, UUID inventoryItemId) {
-        Boolean active = db.queryForObject("""
+        Boolean active = jdbcTemplate.queryForObject("""
             SELECT EXISTS(SELECT 1 FROM gcmb.inventory_item WHERE id=? AND branch_id=? AND active=true)
             """, Boolean.class, inventoryItemId, branchId);
         return Boolean.TRUE.equals(active);
     }
 
     public boolean activeBranch(UUID branchId) {
-        Boolean active = db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')",
+        Boolean active = jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')",
             Boolean.class, branchId);
         return Boolean.TRUE.equals(active);
+    }
+
+    public String branchName(UUID branchId) {
+        return jdbcTemplate.queryForObject("SELECT name FROM gcmb.branch WHERE id=?", String.class, branchId);
     }
 
     public MenuItemView create(UUID branchId, MenuItemCommand command, StoredImage image) {
         String prefix = "SERVICE".equals(command.kind()) ? "DV-" : "FB-";
         String code = nextCode(branchId, prefix);
         UUID id = UUID.randomUUID();
-        db.update("""
+        jdbcTemplate.update("""
             INSERT INTO gcmb.menu_item(id,branch_id,code,name,category,kind,inventory_item_id,sale_price,active,
                 description,image_object_key,image_original_name,image_mime_type)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -97,7 +101,7 @@ public class MenuItemRepository {
 
     public MenuItemView update(UUID branchId, UUID id, MenuItemCommand command, StoredImage image, boolean removeImage) {
         boolean replaceImage = removeImage || image != null;
-        int changed = db.update("""
+        int changed = jdbcTemplate.update("""
             UPDATE gcmb.menu_item SET name=?,category=?,kind=?,inventory_item_id=?,sale_price=?,active=?,description=?,
                 image_object_key=CASE WHEN ? THEN ? ELSE image_object_key END,
                 image_original_name=CASE WHEN ? THEN ? ELSE image_original_name END,
@@ -111,7 +115,7 @@ public class MenuItemRepository {
     }
 
     public ImageAsset image(UUID branchId, UUID id, boolean activeOnly) {
-        List<ImageAsset> rows = db.query("""
+        List<ImageAsset> rows = jdbcTemplate.query("""
             SELECT image_object_key,image_original_name,image_mime_type FROM gcmb.menu_item
             WHERE branch_id=? AND id=? AND deleted_at IS NULL AND image_object_key IS NOT NULL
                 AND (?=false OR active=true)
@@ -123,7 +127,7 @@ public class MenuItemRepository {
     public List<PublicMenuItemView> publicList(UUID branchId, String search, String category) {
         String term = search == null ? "" : search.trim();
         String categoryFilter = category == null ? "" : category.trim();
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT m.id,m.name,m.category,m.kind,m.sale_price,m.description,
                 CASE WHEN m.image_object_key IS NULL THEN NULL
                     ELSE '/public/branches/' || m.branch_id || '/menu-items/' || m.id || '/image' END AS image_url,
@@ -146,7 +150,7 @@ public class MenuItemRepository {
     }
 
     public ImageAsset publicImage(UUID branchId, UUID id) {
-        List<ImageAsset> rows = db.query("""
+        List<ImageAsset> rows = jdbcTemplate.query("""
             SELECT m.image_object_key,m.image_original_name,m.image_mime_type
             FROM gcmb.menu_item m JOIN gcmb.branch b ON b.id=m.branch_id AND b.status='ACTIVE'
             WHERE m.branch_id=? AND m.id=? AND m.active=true AND m.deleted_at IS NULL
@@ -157,7 +161,7 @@ public class MenuItemRepository {
     }
 
     public MenuItemView changeStatus(UUID branchId, UUID id, boolean active) {
-        int changed = db.update("""
+        int changed = jdbcTemplate.update("""
             UPDATE gcmb.menu_item SET active=?
             WHERE id=? AND branch_id=? AND deleted_at IS NULL
             """, active, id, branchId);
@@ -165,7 +169,7 @@ public class MenuItemRepository {
     }
 
     public boolean softDelete(UUID branchId, UUID id, UUID actorId) {
-        return db.update("""
+        return jdbcTemplate.update("""
             UPDATE gcmb.menu_item
             SET active=false,deleted_at=CURRENT_TIMESTAMP,deleted_by=?
             WHERE id=? AND branch_id=? AND deleted_at IS NULL
@@ -173,8 +177,8 @@ public class MenuItemRepository {
     }
 
     private String nextCode(UUID branchId, String prefix) {
-        db.query("SELECT pg_advisory_xact_lock(hashtext(?),hashtext(?))", rs -> {}, branchId.toString(), prefix);
-        Long next = db.queryForObject("""
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?),hashtext(?))", rs -> {}, branchId.toString(), prefix);
+        Long next = jdbcTemplate.queryForObject("""
             SELECT COALESCE(MAX(substring(code from '([0-9]+)$')::bigint),0)+1
             FROM gcmb.menu_item WHERE branch_id=? AND code ~ ?
             """, Long.class, branchId, "^" + prefix + "[0-9]+$");

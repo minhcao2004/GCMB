@@ -8,6 +8,11 @@ import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.finance.service.AccountantFund;
+import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.math.*;
 import java.sql.Timestamp;
 import java.time.*;
@@ -21,9 +26,12 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class PayrollService {
 
-  private final JdbcTemplate db;
-  private final FinanceAccess access;
-  private final ObjectMapper json;
+  @Autowired
+  private EquipmentAssetFileStorageService evidenceStorage;
+
+  private final JdbcTemplate jdbcTemplate;
+  private final FinanceAccess financeAccess;
+  private final ObjectMapper objectMapper;
   private final FinancialPeriodService financialPeriodService;
   private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -31,8 +39,8 @@ public class PayrollService {
                                  String reason, BigDecimal reviewedTotal, String reviewedRevision) {}
 
   public List<Map<String, Object>> branchEmployees(Identity actor) {
-    UUID branch = access.branch(actor, false);
-    return db.queryForList("""
+    UUID branch = financeAccess.branch(actor, false);
+    return jdbcTemplate.queryForList("""
       SELECT e.id,e.code,e.full_name AS name,e.bank_name,e.bank_account,e.bank_holder FROM gcmb.employee e
       LEFT JOIN gcmb.user_account u ON u.id=e.user_id
       LEFT JOIN gcmb.role r ON r.id=u.role_id
@@ -47,8 +55,8 @@ public class PayrollService {
   }
 
   public void branchHourly(Identity actor, Hourly input) {
-    access.lock();
-    UUID branch = access.branch(actor, true);
+    financeAccess.lock();
+    UUID branch = financeAccess.branch(actor, true);
     if (input == null || input.employeeId() == null || input.effectiveFrom() == null) {
       throw bad("Vui lòng chọn nhân viên của cơ sở và ngày hiệu lực.");
     }
@@ -59,7 +67,7 @@ public class PayrollService {
     }
     BigDecimal rate = money(input.amount(), "Đơn giá giờ", true);
     // BR-67: không sửa ngược đơn giá đã dùng trong phần lương QLCS đã gửi.
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(SELECT 1 FROM gcmb.branch_payroll_submission s
         JOIN gcmb.payroll_period p ON p.id=s.period_id
         WHERE s.branch_id=? AND s.employee_id=? AND p.month+interval '1 month'>?)
@@ -69,18 +77,18 @@ public class PayrollService {
       branch, input.employeeId(), input.effectiveFrom()))) {
       throw conflict("Đơn giá này ảnh hưởng tháng lương đã gửi. Vui lòng chọn ngày hiệu lực sau tháng đã chốt.");
     }
-    db.update("""
+    jdbcTemplate.update("""
       INSERT INTO gcmb.branch_employee_pay_rate VALUES (?,?,?,?)
       ON CONFLICT (branch_id,employee_id,effective_from) DO UPDATE SET hourly_rate=excluded.hourly_rate
       """, branch, input.employeeId(), input.effectiveFrom(), rate);
-    access.audit(actor, branch, input.employeeId(), "SET_BRANCH_HOURLY_PAY", null, input);
+    financeAccess.audit(actor, branch, input.employeeId(), "SET_BRANCH_HOURLY_PAY", null, input);
   }
 
   // HuyDV | UC-91/95, BR-67: nghỉ/chuyển cơ sở không làm mất quyền quyết toán công cũ.
   private boolean missingHistoricalRate(UUID branch, UUID employee, LocalDate effective) {
     LocalDate month = effective.withDayOfMonth(1);
     if (!month.isBefore(LocalDate.now(ZONE).withDayOfMonth(1))) return false;
-    return Boolean.TRUE.equals(db.queryForObject("""
+    return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(SELECT 1 FROM gcmb.attendance a
         JOIN gcmb.shift_assignment x ON x.id=a.assignment_id
         JOIN gcmb.scheduled_shift s ON s.id=x.shift_id
@@ -94,9 +102,9 @@ public class PayrollService {
 
   // HuyDV | UC-92, BR-67: công cũ vẫn được quyết toán khi nhân viên nghỉ/chuyển cơ sở.
   public List<Map<String, Object>> settlementEmployees(Identity actor, String value) {
-    UUID branch = access.branch(actor, false);
+    UUID branch = financeAccess.branch(actor, false);
     LocalDate m = month(value);
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT e.id,e.code,e.full_name AS name,e.status,e.bank_name,e.bank_account,e.bank_holder
       FROM gcmb.employee e WHERE EXISTS (
         SELECT 1 FROM gcmb.shift_assignment x JOIN gcmb.scheduled_shift s ON s.id=x.shift_id
@@ -108,9 +116,9 @@ public class PayrollService {
 
   // HuyDV | UC-92: lịch sử theo cơ sở, bao gồm bảng lương đã gửi trước V42.
   public List<Map<String, Object>> branchHistory(Identity actor, String value) {
-    UUID branch = access.branch(actor, false);
+    UUID branch = financeAccess.branch(actor, false);
     LocalDate m = month(value);
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT e.id AS employee_id,e.code,e.full_name AS name,s.wage,s.bonus,s.penalty,s.reason,
         s.minutes,s.submitted_at,(s.wage+s.bonus-s.penalty) AS branch_amount,p.net_amount AS final_net,
         p.id IS NOT NULL AS ready,
@@ -137,7 +145,7 @@ public class PayrollService {
   // HuyDV | UC-89/91/95, BR-63/64/67/77: xem công và tiền cùng màn hình; chỉ lương đã gửi dùng snapshot.
   @Transactional(readOnly = true)
   public List<Map<String, Object>> branchSummary(Identity actor, String value) {
-    UUID branch = access.branch(actor, false);
+    UUID branch = financeAccess.branch(actor, false);
     LocalDate m = month(value);
     var history = branchHistory(actor, value);
     var result = new ArrayList<Map<String, Object>>();
@@ -154,7 +162,7 @@ public class PayrollService {
       item.put("reason", saved == null ? "" : Objects.toString(saved.get("reason"), ""));
       try {
         if (saved != null) {
-          var calculations = db.queryForList("""
+          var calculations = jdbcTemplate.queryForList("""
             SELECT (s.source_snapshot->'calculation'->>'reward')::numeric AS reward,
               (s.source_snapshot->'calculation'->>'advance')::numeric AS advance,
               (s.source_snapshot->'calculation'->>'net')::numeric AS net,
@@ -174,7 +182,7 @@ public class PayrollService {
         } else {
           var rows = work(id, m, false).stream().filter(r -> branch.equals(r.get("branch_id"))).toList();
           var earnings = branchEarnings(id, rows, false);
-          boolean multiple = db.queryForObject("""
+          boolean multiple = jdbcTemplate.queryForObject("""
             SELECT count(DISTINCT s.branch_id)>1 FROM gcmb.shift_assignment x
             JOIN gcmb.scheduled_shift s ON s.id=x.shift_id WHERE x.employee_id=?
               AND s.work_date>=? AND s.work_date<? AND x.status='CONFIRMED' AND s.status<>'CANCELLED'
@@ -201,7 +209,7 @@ public class PayrollService {
 
   // HuyDV | UC-97: nguồn tài khoản nhận lương là thông tin cá nhân; chặn API QLCS cũ.
   public void branchBank(Identity actor, BankDetails input) {
-    access.branch(actor, true);
+    financeAccess.branch(actor, true);
     throw new AuthFailure(403, "form", "Nhân viên tự cập nhật tài khoản nhận lương trong Thông tin tài khoản.");
   }
 
@@ -227,7 +235,7 @@ public class PayrollService {
         throw conflict("Bản ghi công chưa hợp lệ. Vui lòng kiểm tra trước khi tính lương.");
       }
       LocalDate day = ((java.sql.Date) row.get("work_date")).toLocalDate();
-      var rate = db.queryForList("""
+      var rate = jdbcTemplate.queryForList("""
         SELECT hourly_rate FROM gcmb.branch_employee_pay_rate
         WHERE branch_id=? AND employee_id=? AND effective_from<=?
         ORDER BY effective_from DESC LIMIT 1
@@ -251,8 +259,8 @@ public class PayrollService {
   }
 
   public Map<String, Object> branchSettlement(Identity actor, String value, BranchSettlement input, boolean send) {
-    if (send) access.lock();
-    UUID branch = access.branch(actor, send);
+    if (send) financeAccess.lock();
+    UUID branch = financeAccess.branch(actor, send);
     LocalDate m = month(value);
     if (send) financialPeriodService.requireOpen(m, "chốt dữ liệu payroll tại cơ sở");
     if (m.isAfter(LocalDate.now(ZONE).withDayOfMonth(1))) throw bad("Không thể chốt lương cho tháng tương lai.");
@@ -282,7 +290,7 @@ public class PayrollService {
         .filter(row -> row.get("exception_note") instanceof String note && !note.isBlank())
         .map(row -> Map.of("date", row.get("work_date").toString(),
             "status", row.get("status"), "note", row.get("exception_note"))).toList());
-    String revision = UUID.nameUUIDFromBytes(json.writeValueAsBytes(List.of(rows, result))).toString();
+    String revision = UUID.nameUUIDFromBytes(objectMapper.writeValueAsBytes(List.of(rows, result))).toString();
     result.put("revision", revision);
     if (!send) return result;
     if (input.reviewedTotal() == null || net.compareTo(input.reviewedTotal()) != 0
@@ -290,19 +298,19 @@ public class PayrollService {
       throw conflict("Số liệu đã thay đổi. Vui lòng xem trước lại trước khi chốt lương.");
     }
     if (!"DRAFT".equals(period.get("status"))) throw conflict("Bảng lương tháng đã khóa.");
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(SELECT 1 FROM gcmb.payroll_entry WHERE period_id=? AND employee_id=?
         AND submitted_branch_id IS NOT NULL)
       """, Boolean.class, period.get("id"), input.employeeId()))) {
       throw conflict("Bảng lương tháng đã được tổng hợp và gửi kế toán, không thể chốt lại.");
     }
     // UC-95: chỉ được sửa phần đã gửi khi còn chờ cơ sở khác; luôn giữ audit trước/sau.
-    var before = db.queryForList("""
+    var before = jdbcTemplate.queryForList("""
       SELECT period_id,employee_id,branch_id,minutes,wage,bonus,penalty,reason,
         submitted_by,submitted_at,source_snapshot::text AS source_snapshot
       FROM gcmb.branch_payroll_submission WHERE period_id=? AND employee_id=? AND branch_id=?
       """, period.get("id"), input.employeeId(), branch);
-    db.update("""
+    jdbcTemplate.update("""
       INSERT INTO gcmb.branch_payroll_submission
         (period_id,employee_id,branch_id,minutes,wage,bonus,penalty,reason,source_snapshot,submitted_by)
       VALUES (?,?,?,?,?,?,?,?,CAST(? AS jsonb),?)
@@ -310,8 +318,8 @@ public class PayrollService {
         wage=excluded.wage,bonus=excluded.bonus,penalty=excluded.penalty,reason=excluded.reason,
         source_snapshot=excluded.source_snapshot,submitted_by=excluded.submitted_by,submitted_at=CURRENT_TIMESTAMP
       """, period.get("id"), input.employeeId(), branch, minutes, wage, bonus, penalty, reason,
-      json.writeValueAsString(Map.of("attendance", rows, "calculation", result)), actor.id());
-    var parts = db.queryForList("""
+      objectMapper.writeValueAsString(Map.of("attendance", rows, "calculation", result)), actor.id());
+    var parts = jdbcTemplate.queryForList("""
       SELECT period_id,employee_id,branch_id,minutes,wage,bonus,penalty,reason,
         submitted_by,submitted_at,source_snapshot::text AS source_snapshot
       FROM gcmb.branch_payroll_submission WHERE period_id=? AND employee_id=? ORDER BY branch_id
@@ -319,7 +327,7 @@ public class PayrollService {
     boolean complete = branches.stream().allMatch(b -> parts.stream().anyMatch(p -> b.equals(p.get("branch_id"))));
     if (complete) finalizeBranchPayroll(period, input.employeeId(), branch, parts);
     increment(period);
-    access.audit(actor, branch, input.employeeId(), "SUBMIT_BRANCH_PAYROLL", before, result);
+    financeAccess.audit(actor, branch, input.employeeId(), "SUBMIT_BRANCH_PAYROLL", before, result);
     result.put("message", complete ? "Đã chốt lương và gửi kế toán."
         : "Đã lưu phần lương cơ sở. Chờ các cơ sở còn lại chốt để tổng hợp lương tháng.");
     return result;
@@ -341,7 +349,7 @@ public class PayrollService {
     BigDecimal deduction = penalty.add(advances(employee, (UUID) period.get("id")));
     BigDecimal net = gross.subtract(deduction);
     if (net.signum() < 0) throw conflict("Tổng tiền phạt và tạm ứng vượt lương tháng. Cần điều chỉnh phần phạt trước khi chốt.");
-    UUID entry = db.queryForObject("""
+    UUID entry = jdbcTemplate.queryForObject("""
       INSERT INTO gcmb.payroll_entry(period_id,employee_id,gross_amount,deduction_amount,net_amount,
         submitted_branch_id,bank_name_snapshot,bank_account_snapshot,bank_holder_snapshot)
       SELECT ?,id,?,?,?,?,bank_name,bank_account,bank_holder FROM gcmb.employee WHERE id=?
@@ -351,11 +359,11 @@ public class PayrollService {
         bank_account_snapshot=excluded.bank_account_snapshot,bank_holder_snapshot=excluded.bank_holder_snapshot
       RETURNING id
       """, UUID.class, period.get("id"), gross, deduction, net, branch, employee);
-    db.update("DELETE FROM gcmb.payroll_component WHERE payroll_entry_id=?", entry);
-    db.update("DELETE FROM gcmb.advance_application WHERE payroll_entry_id=?", entry);
+    jdbcTemplate.update("DELETE FROM gcmb.payroll_component WHERE payroll_entry_id=?", entry);
+    jdbcTemplate.update("DELETE FROM gcmb.advance_application WHERE payroll_entry_id=?", entry);
     for (var part : parts) {
       UUID source = (UUID) part.get("branch_id");
-      var snapshot = json.readTree((String) part.get("source_snapshot"));
+      var snapshot = objectMapper.readTree((String) part.get("source_snapshot"));
       component(entry, source, "BASE", (BigDecimal) part.get("wage"), "Lương theo ca", snapshot);
       if (((BigDecimal) part.get("bonus")).signum() > 0)
         component(entry, source, "ADDITION", (BigDecimal) part.get("bonus"), (String) part.get("reason"), snapshot);
@@ -363,16 +371,16 @@ public class PayrollService {
         component(entry, source, "DEDUCTION", (BigDecimal) part.get("penalty"), (String) part.get("reason"), snapshot);
     }
     if (reward.signum() > 0) component(entry, branch, "ADDITION", reward, "Thưởng trên 100 giờ (toàn tháng)", Map.of("minutes", minutes));
-    db.update("""
+    jdbcTemplate.update("""
       INSERT INTO gcmb.advance_application(advance_id,payroll_entry_id,amount)
       SELECT id,?,amount FROM gcmb.salary_advance WHERE employee_id=? AND period_id=? AND status='PAID'
       """, entry, employee, period.get("id"));
   }
 
-  public PayrollService(JdbcTemplate db, FinanceAccess access, ObjectMapper json, FinancialPeriodService financialPeriodService) {
-    this.db = db;
-    this.access = access;
-    this.json = json;
+  public PayrollService(JdbcTemplate jdbcTemplate, FinanceAccess financeAccess, ObjectMapper objectMapper, FinancialPeriodService financialPeriodService) {
+    this.jdbcTemplate = jdbcTemplate;
+    this.financeAccess = financeAccess;
+    this.objectMapper = objectMapper;
     this.financialPeriodService = financialPeriodService;
   }
 
@@ -441,12 +449,12 @@ public class PayrollService {
   private Map<String, Object> period(LocalDate month, boolean create) {
     if (create) {
       financialPeriodService.requireOpen(month, "tạo hoặc cập nhật bảng lương");
-      db.update(
+      jdbcTemplate.update(
         "INSERT INTO gcmb.payroll_period(month,status) VALUES (?,'DRAFT') ON CONFLICT(month) DO NOTHING",
         month
       );
     }
-    var rows = db.queryForList("SELECT * FROM gcmb.payroll_period WHERE month=?", month);
+    var rows = jdbcTemplate.queryForList("SELECT * FROM gcmb.payroll_period WHERE month=?", month);
     return rows.isEmpty() ? null : rows.get(0);
   }
 
@@ -462,27 +470,27 @@ public class PayrollService {
   }
 
   public Map<String, Object> options(Identity actor) {
-    access.accountant(actor);
+    financeAccess.accountant(actor);
     return Map.of(
       "employees",
-      db.queryForList("SELECT id,code,full_name AS name,status FROM gcmb.employee ORDER BY code"),
+      jdbcTemplate.queryForList("SELECT id,code,full_name AS name,status FROM gcmb.employee ORDER BY code"),
       "branches",
-      db.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name"),
+      jdbcTemplate.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name"),
       "funds",
-      db.queryForList(
+      jdbcTemplate.queryForList(
         "SELECT id,name,CAST(? AS numeric) AS balance FROM gcmb.financial_account WHERE kind='CENTRAL_FUND' AND active ORDER BY code",
-        AccountantFund.balance(db)
+        AccountantFund.balance(jdbcTemplate)
       ),
       "settings",
-      db.queryForList("SELECT * FROM gcmb.payroll_setting ORDER BY effective_from DESC"),
+      jdbcTemplate.queryForList("SELECT * FROM gcmb.payroll_setting ORDER BY effective_from DESC"),
       "rates",
-      db.queryForList(
+      jdbcTemplate.queryForList(
         "SELECT r.*,e.code,e.full_name FROM gcmb.employee_pay_rate r JOIN gcmb.employee e ON e.id=r.employee_id ORDER BY r.valid_from DESC"
       ),
       "calendar",
-      db.queryForList("SELECT * FROM gcmb.payroll_calendar ORDER BY work_date"),
+      jdbcTemplate.queryForList("SELECT * FROM gcmb.payroll_calendar ORDER BY work_date"),
       "calendarYears",
-      db.queryForList("SELECT year FROM gcmb.payroll_calendar_year ORDER BY year", Integer.class)
+      jdbcTemplate.queryForList("SELECT year FROM gcmb.payroll_calendar_year ORDER BY year", Integer.class)
     );
   }
 
@@ -499,7 +507,7 @@ public class PayrollService {
   }
 
   public Map<String, Object> view(Identity actor, String value) {
-    access.accountant(actor);
+    financeAccess.accountant(actor);
     LocalDate m = month(value);
     var p = period(m, false);
     if (p == null) return Map.of(
@@ -516,7 +524,7 @@ public class PayrollService {
       "advances",
       List.of()
     );
-    var rows = db.queryForList(
+    var rows = jdbcTemplate.queryForList(
       """
       SELECT e.*,n.code,n.full_name AS name,
         COALESCE((SELECT string_agg(b2.name, ', ' ORDER BY b2.name)
@@ -533,20 +541,22 @@ public class PayrollService {
     for (var row : rows) {
       row.put(
         "components",
-        db.queryForList(
+        jdbcTemplate.queryForList(
           "SELECT c.kind,c.amount,c.reason,c.branch_id,b.name AS branch_name,c.calculation_snapshot::text AS detail FROM gcmb.payroll_component c JOIN gcmb.branch b ON b.id=c.branch_id WHERE c.payroll_entry_id=? ORDER BY c.created_at,c.id",
           row.get("id")
         )
       );
       row.put(
         "payments",
-        db.queryForList(
-          "SELECT status,amount,paid_at,external_reference,failure_reason FROM gcmb.salary_payment WHERE payroll_entry_id=? ORDER BY created_at",
+        jdbcTemplate.queryForList(
+          "SELECT p.id,p.status,p.amount,p.paid_at,p.external_reference,p.failure_reason,e.original_name AS evidence_name "
+            + "FROM gcmb.salary_payment p LEFT JOIN gcmb.salary_payment_evidence e ON e.payment_id=p.id "
+            + "WHERE p.payroll_entry_id=? ORDER BY p.created_at",
           row.get("id")
         )
       );
     }
-    p.put("pendingBranches", db.queryForList("""
+    p.put("pendingBranches", jdbcTemplate.queryForList("""
       SELECT e.code,e.full_name AS name,s.branch_id,b.name AS branch_name,s.submitted_at
       FROM gcmb.branch_payroll_submission s JOIN gcmb.employee e ON e.id=s.employee_id
       JOIN gcmb.branch b ON b.id=s.branch_id WHERE s.period_id=? AND NOT EXISTS(
@@ -565,7 +575,7 @@ public class PayrollService {
     );
     p.put(
       "advances",
-      db.queryForList(
+      jdbcTemplate.queryForList(
         "SELECT a.*,e.code,e.full_name AS name FROM gcmb.salary_advance a JOIN gcmb.employee e ON e.id=a.employee_id WHERE a.period_id=? ORDER BY a.created_at DESC",
         p.get("id")
       )
@@ -574,7 +584,7 @@ public class PayrollService {
   }
 
   private List<Map<String, Object>> work(UUID employee, LocalDate m, boolean closed) {
-    var rows = db.queryForList(
+    var rows = jdbcTemplate.queryForList(
       """
       SELECT a.*,s.starts_at,s.ends_at,s.branch_id,b.timezone,
         CASE WHEN gcmb.employee_month_closed(s.branch_id,x.employee_id,s.work_date) THEN 'CLOSED' ELSE p.status END AS period_status,s.work_date
@@ -589,7 +599,7 @@ public class PayrollService {
       m.plusMonths(1)
     );
     if (closed) {
-      Boolean missing = db.queryForObject(
+      Boolean missing = jdbcTemplate.queryForObject(
         """
         SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment x JOIN gcmb.scheduled_shift s ON s.id=x.shift_id
           LEFT JOIN gcmb.attendance a ON a.assignment_id=x.id LEFT JOIN gcmb.attendance_period p ON p.id=a.period_id
@@ -652,14 +662,14 @@ public class PayrollService {
   }
 
   private PayrollCalculator.Policy policy(UUID employee, LocalDate date) {
-    var hourly = db.queryForList(
+    var hourly = jdbcTemplate.queryForList(
       "SELECT hourly_rate FROM gcmb.employee_pay_rate WHERE employee_id=? AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)",
       BigDecimal.class,
       employee,
       date,
       date
     );
-    var settings = db.queryForList(
+    var settings = jdbcTemplate.queryForList(
       "SELECT * FROM gcmb.payroll_setting WHERE effective_from<=? ORDER BY effective_from DESC LIMIT 1",
       date
     );
@@ -670,7 +680,7 @@ public class PayrollService {
     ); // MSG107.
     if (
       !Boolean.TRUE.equals(
-        db.queryForObject(
+        jdbcTemplate.queryForObject(
           "SELECT EXISTS(SELECT 1 FROM gcmb.payroll_calendar_year WHERE year=?)",
           Boolean.class,
           date.getYear()
@@ -681,7 +691,7 @@ public class PayrollService {
         date.getYear() +
         ". Vui lòng kiểm tra lịch trước khi tính lương."
     ); // BR-225.
-    var days = db.queryForList(
+    var days = jdbcTemplate.queryForList(
       "SELECT day_kind FROM gcmb.payroll_calendar WHERE work_date=?",
       String.class,
       date
@@ -710,13 +720,13 @@ public class PayrollService {
     LocalDate m,
     Adjustment adjustment
   ) {
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(SELECT 1 FROM gcmb.branch_payroll_submission WHERE period_id=? AND employee_id=?)
       """, Boolean.class, p.get("id"), employee))) {
       throw conflict("QLCS đã gửi phần lương của nhân viên. Không thể tính lại bằng luồng kế toán cũ.");
     }
     var amounts = earned(employee, m, true);
-    var old = db.queryForList(
+    var old = jdbcTemplate.queryForList(
       "SELECT * FROM gcmb.payroll_entry WHERE period_id=? AND employee_id=?",
       p.get("id"),
       employee
@@ -733,7 +743,7 @@ public class PayrollService {
       deduction = money(adjustment.deduction(), "Khấu trừ đã duyệt", false);
       reason = text(adjustment.reason(), "Lý do điều chỉnh đã duyệt", true);
     } else if (!old.isEmpty()) {
-      for (var c : db.queryForList(
+      for (var c : jdbcTemplate.queryForList(
         "SELECT kind,amount,reason FROM gcmb.payroll_component WHERE payroll_entry_id=? AND kind IN ('ADDITION','DEDUCTION')",
         id
       )) {
@@ -749,11 +759,11 @@ public class PayrollService {
     if (net.signum() < 0) throw conflict(
       "Tổng khấu trừ và ứng lương vượt lương đã kiếm được. Cần kiểm tra trước khi ghi nhận."
     );
-    var e = db.queryForMap(
+    var e = jdbcTemplate.queryForMap(
       "SELECT bank_name,bank_account,bank_holder FROM gcmb.employee WHERE id=?",
       employee
     );
-    db.update(
+    jdbcTemplate.update(
       """
       INSERT INTO gcmb.payroll_entry(id,period_id,employee_id,gross_amount,deduction_amount,net_amount,bank_name_snapshot,bank_account_snapshot,bank_holder_snapshot)
       VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(period_id,employee_id) DO UPDATE SET gross_amount=excluded.gross_amount,deduction_amount=excluded.deduction_amount,net_amount=excluded.net_amount,
@@ -769,7 +779,7 @@ public class PayrollService {
       e.get("bank_account"),
       e.get("bank_holder")
     );
-    db.update("DELETE FROM gcmb.payroll_component WHERE payroll_entry_id=?", id);
+    jdbcTemplate.update("DELETE FROM gcmb.payroll_component WHERE payroll_entry_id=?", id);
     var work = work(employee, m, true);
     UUID branch = (UUID) work.get(0).get("branch_id");
     // BR-67/210: keep each attendance/branch/date/rate; distribute rounding so the component total is rounded once.
@@ -796,7 +806,7 @@ public class PayrollService {
         String kind = Set.of("REST", "HOLIDAY").contains(segment.kind())
           ? "OVERTIME"
           : segment.kind();
-        UUID payRate = db.queryForObject(
+        UUID payRate = jdbcTemplate.queryForObject(
           "SELECT id FROM gcmb.employee_pay_rate WHERE employee_id=? AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)",
           UUID.class,
           employee,
@@ -813,7 +823,7 @@ public class PayrollService {
           "rounding",
           "HALF_UP_COMPONENT_TOTAL"
         );
-        db.update(
+        jdbcTemplate.update(
           "INSERT INTO gcmb.payroll_component(payroll_entry_id,branch_id,attendance_id,pay_rate_id,kind,minutes,hourly_rate_snapshot,multiplier,amount,calculation_snapshot,reason) VALUES (?,?,?,?,?,?,?,?,?,CAST(? AS jsonb),?)",
           id,
           row.get("branch_id"),
@@ -824,7 +834,7 @@ public class PayrollService {
           segment.hourly(),
           segment.multiplier(),
           amount,
-          json.writeValueAsString(snapshot),
+          objectMapper.writeValueAsString(snapshot),
           segment.kind()
         );
       }
@@ -845,8 +855,8 @@ public class PayrollService {
       reason,
       Map.of("approvedBy", actor.id())
     );
-    db.update("DELETE FROM gcmb.advance_application WHERE payroll_entry_id=?", id);
-    db.update(
+    jdbcTemplate.update("DELETE FROM gcmb.advance_application WHERE payroll_entry_id=?", id);
+    jdbcTemplate.update(
       "INSERT INTO gcmb.advance_application(advance_id,payroll_entry_id,amount) SELECT id,?,amount FROM gcmb.salary_advance WHERE employee_id=? AND period_id=? AND status='PAID'",
       id,
       employee,
@@ -862,19 +872,19 @@ public class PayrollService {
     String reason,
     Object snapshot
   ) {
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.payroll_component(payroll_entry_id,branch_id,kind,minutes,hourly_rate_snapshot,multiplier,amount,calculation_snapshot,reason) VALUES (?,?,?,0,0,1,?,CAST(? AS jsonb),?)",
       id,
       branch,
       kind,
       amount,
-      json.writeValueAsString(snapshot),
+      objectMapper.writeValueAsString(snapshot),
       reason
     );
   }
 
   private BigDecimal advances(UUID employee, UUID period) {
-    return db.queryForObject(
+    return jdbcTemplate.queryForObject(
       "SELECT COALESCE(sum(amount),0) FROM gcmb.salary_advance WHERE employee_id=? AND period_id=? AND status='PAID'",
       BigDecimal.class,
       employee,
@@ -883,7 +893,7 @@ public class PayrollService {
   }
 
   private void increment(Map<String, Object> p) {
-    db.update("UPDATE gcmb.payroll_period SET version=version+1 WHERE id=?", p.get("id"));
+    jdbcTemplate.update("UPDATE gcmb.payroll_period SET version=version+1 WHERE id=?", p.get("id"));
   }
 
   public Map<String, Object> adjust(Identity actor, String value, Adjustment input) {
@@ -896,19 +906,19 @@ public class PayrollService {
 
   // HuyDV | UC-91/94/95 theo phân công đã chốt: kế toán chỉ tiếp nhận và ghi nhận chi trả.
   private com.gcmb.backend.auth.exception.AuthFailure legacyPayrollDenied(Identity actor) {
-    access.accountant(actor);
+    financeAccess.accountant(actor);
     return new com.gcmb.backend.auth.exception.AuthFailure(403, "form",
         "QLCS đặt đơn giá và chốt lương tại cơ sở. Kế toán chỉ tiếp nhận bảng lương đã gửi, xuất và ghi nhận thanh toán.");
   }
 
   public Map<String, Object> available(Identity actor, String value, UUID employee) {
-    access.accountant(actor);
+    financeAccess.accountant(actor);
     var p = period(month(value), false);
     var accrued = branchEarnings(employee, work(employee, month(value), false), true);
     BigDecimal earned = (BigDecimal) accrued.get("wage");
     if ((long) accrued.get("minutes") > 6000) earned = earned.add(BigDecimal.valueOf(100000));
     if (p != null) {
-      BigDecimal adjustment = db.queryForObject(
+      BigDecimal adjustment = jdbcTemplate.queryForObject(
         "SELECT COALESCE(sum(CASE WHEN c.kind='DEDUCTION' THEN -c.amount ELSE c.amount END),0) FROM gcmb.payroll_component c JOIN gcmb.payroll_entry e ON e.id=c.payroll_entry_id WHERE e.period_id=? AND e.employee_id=? AND c.kind IN ('ADDITION','DEDUCTION') AND c.reason NOT LIKE 'Thưởng trên 100 giờ%'",
         BigDecimal.class,
         p.get("id"),
@@ -928,20 +938,20 @@ public class PayrollService {
   }
 
   public Map<String, Object> advance(Identity actor, String value, Pay input) {
-    access.accountant(actor);
-    access.lock();
+    financeAccess.accountant(actor);
+    financeAccess.lock();
     LocalDate m = month(value);
     financialPeriodService.requireOpen(m, "ghi nhận ứng lương cho kỳ này");
     var p = period(m, true);
     validatePay(input);
-    var repeated = db.queryForList(
+    var repeated = jdbcTemplate.queryForList(
       "SELECT id FROM gcmb.salary_advance WHERE idempotency_key=?",
       input.requestId()
     );
     if (!repeated.isEmpty()) throw conflict(
       "Yêu cầu ứng lương này đã được ghi nhận. Vui lòng tải lại lịch sử."
     );
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(SELECT 1 FROM gcmb.payroll_entry
       WHERE period_id=? AND employee_id=? AND submitted_branch_id IS NOT NULL)
       OR EXISTS(SELECT 1 FROM gcmb.branch_payroll_submission WHERE period_id=? AND employee_id=?)
@@ -949,7 +959,7 @@ public class PayrollService {
       throw conflict("QLCS đã chốt lương, không thể ứng thêm cho kỳ này.");
     }
     if (
-      !db
+      !jdbcTemplate
         .queryForList(
           "SELECT s.id FROM gcmb.salary_payment s JOIN gcmb.payroll_entry e ON e.id=s.payroll_entry_id WHERE e.period_id=? AND e.employee_id=? AND s.status='PAID'",
           p.get("id"),
@@ -970,14 +980,14 @@ public class PayrollService {
       "message",
       "Khoản ứng chưa thành công, chưa ghi giảm quỹ."
     );
-    var assignments = db.queryForList(
+    var assignments = jdbcTemplate.queryForList(
       "SELECT branch_id FROM gcmb.employee_assignment WHERE employee_id=? AND valid_from<=CURRENT_TIMESTAMP AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP) ORDER BY valid_from DESC LIMIT 1",
       UUID.class,
       input.employeeId()
     );
     if (assignments.isEmpty()) throw bad("Nhân viên chưa có cơ sở phân công.");
     UUID id = UUID.randomUUID();
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.salary_advance(id,employee_id,period_id,branch_id,amount,status,paid_at,processed_by,external_reference,idempotency_key) VALUES (?,?,?,?,?,'PAID',CURRENT_TIMESTAMP,?,?,?)",
       id,
       input.employeeId(),
@@ -990,7 +1000,7 @@ public class PayrollService {
     );
     post(actor, input.accountId(), id, true, amount, assignments.get(0));
     // BR-74/75/76: an advance after approval changes settlement only, not earned salary.
-    var entries = db.queryForList(
+    var entries = jdbcTemplate.queryForList(
       "SELECT id,net_amount FROM gcmb.payroll_entry WHERE period_id=? AND employee_id=?",
       p.get("id"),
       input.employeeId()
@@ -1000,13 +1010,13 @@ public class PayrollService {
       if (((BigDecimal) entry.get("net_amount")).compareTo(amount) < 0) throw conflict(
         "Khoản ứng vượt số tiền còn phải trả của bảng lương."
       );
-      db.update(
+      jdbcTemplate.update(
         "UPDATE gcmb.payroll_entry SET deduction_amount=deduction_amount+?,net_amount=net_amount-? WHERE id=?",
         amount,
         amount,
         entry.get("id")
       );
-      db.update(
+      jdbcTemplate.update(
         "INSERT INTO gcmb.advance_application(advance_id,payroll_entry_id,amount) VALUES (?,?,?)",
         id,
         entry.get("id"),
@@ -1014,11 +1024,15 @@ public class PayrollService {
       );
     }
     increment(p);
-    access.audit(actor, assignments.get(0), id, "PAY_SALARY_ADVANCE", null, input);
+    financeAccess.audit(actor, assignments.get(0), id, "PAY_SALARY_ADVANCE", null, input);
     return view(actor, value);
   }
 
   private void validatePay(Pay p) {
+    validatePay(p, false);
+  }
+
+  private void validatePay(Pay p, boolean hasEvidence) {
     if (
       p == null ||
       p.employeeId() == null ||
@@ -1028,14 +1042,48 @@ public class PayrollService {
       p.result() == null ||
       !Set.of("PAID", "FAILED", "PENDING").contains(p.result())
     ) throw bad("Thông tin kết quả thanh toán không hợp lệ.");
-    if (text(p.reference(), "Mã tham chiếu", "PAID".equals(p.result())).length() > 200) throw bad(
+    if (text(p.reference(), "Mã tham chiếu", "PAID".equals(p.result()) && !hasEvidence).length() > 200) throw bad(
       "Mã tham chiếu chỉ được chứa tối đa 200 ký tự."
     );
   }
 
+  // HuyDV: file mới chỉ tồn tại khi toàn bộ lượt ghi nhận lương commit thành công.
+  private void savePaymentEvidence(UUID paymentId, MultipartFile proof) {
+    if (proof == null) return;
+    var stored = evidenceStorage.store(proof, "luong");
+    try {
+      TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+        @Override public void afterCompletion(int status) {
+          if (status != STATUS_COMMITTED) evidenceStorage.deleteQuietly(stored.objectKey());
+        }
+      });
+      jdbcTemplate.update("""
+        INSERT INTO gcmb.salary_payment_evidence(payment_id,object_key,original_name,mime_type,byte_size,sha256)
+        VALUES (?,?,?,?,?,?)
+        """, paymentId, stored.objectKey(), stored.originalName(), stored.mimeType(), stored.byteSize(), stored.sha256());
+    } catch (RuntimeException failure) {
+      evidenceStorage.deleteQuietly(stored.objectKey());
+      throw failure;
+    }
+  }
+
+  public Map<String, Object> paymentEvidence(Identity actor, UUID paymentId) {
+    financeAccess.accountant(actor);
+    var rows = jdbcTemplate.queryForList("SELECT * FROM gcmb.salary_payment_evidence WHERE payment_id=?", paymentId);
+    if (rows.isEmpty()) throw new AuthFailure(404, "form", "Không tìm thấy bằng chứng trả lương.");
+    var file = rows.get(0);
+    try { file.put("bytes", evidenceStorage.read((String) file.get("object_key"))); }
+    catch (java.io.IOException failure) { throw new AuthFailure(404, "form", "Không đọc được bằng chứng trả lương."); }
+    return file;
+  }
+
   public Map<String, Object> pay(Identity actor, String value, Payments input) {
-    access.accountant(actor);
-    access.lock();
+    return pay(actor, value, input, Map.of());
+  }
+
+  public Map<String, Object> pay(Identity actor, String value, Payments input, Map<String, MultipartFile> proofs) {
+    financeAccess.accountant(actor);
+    financeAccess.lock();
     var p = period(month(value), false);
     if (p == null) throw conflict("Chưa có bảng lương.");
     if (input.version() != ((Number) p.get("version")).longValue()) throw conflict(
@@ -1046,8 +1094,8 @@ public class PayrollService {
     ) throw bad("Vui lòng chọn nhân viên để ghi nhận thanh toán.");
     var outcomes = new ArrayList<Map<String, Object>>();
     for (var payment : input.payments()) {
-      validatePay(payment);
-      var entries = db.queryForList(
+      validatePay(payment, payment != null && proofs.containsKey("proof_" + payment.employeeId()));
+      var entries = jdbcTemplate.queryForList(
         "SELECT * FROM gcmb.payroll_entry WHERE period_id=? AND employee_id=?",
         p.get("id"),
         payment.employeeId()
@@ -1058,7 +1106,7 @@ public class PayrollService {
         throw conflict("Bảng lương nhân viên chưa được chốt.");
       }
       if (
-        !db
+        !jdbcTemplate
           .queryForList(
             "SELECT id FROM gcmb.salary_payment WHERE idempotency_key=?",
             payment.requestId()
@@ -1076,14 +1124,14 @@ public class PayrollService {
         continue;
       }
       if (
-        !db
+        !jdbcTemplate
           .queryForList(
             "SELECT id FROM gcmb.salary_payment WHERE payroll_entry_id=? AND status='PAID'",
             entry.get("id")
           )
           .isEmpty()
       ) {
-        String name = db.queryForObject(
+        String name = jdbcTemplate.queryForObject(
           "SELECT full_name FROM gcmb.employee WHERE id=?",
           String.class,
           payment.employeeId()
@@ -1112,7 +1160,7 @@ public class PayrollService {
       // Unconfirmed attempts stay FAILED in storage so another confirmed attempt can be recorded.
       String status = "PAID".equals(payment.result()) ? "PAID" : "FAILED";
       UUID id = UUID.randomUUID();
-      db.update(
+      jdbcTemplate.update(
         "INSERT INTO gcmb.salary_payment(id,payroll_entry_id,amount,status,paid_at,external_reference,failure_reason,processed_by,idempotency_key) VALUES (?,?,?,?,?,?,?,?,?)",
         id,
         entry.get("id"),
@@ -1125,8 +1173,9 @@ public class PayrollService {
         payment.requestId()
       );
       if ("PAID".equals(status)) post(actor, payment.accountId(), id, false, amount, null);
-      access.audit(actor, null, id, "RECORD_SALARY_PAYMENT", null, payment);
-      String name = db.queryForObject(
+      savePaymentEvidence(id, proofs.get("proof_" + payment.employeeId()));
+      financeAccess.audit(actor, null, id, "RECORD_SALARY_PAYMENT", null, payment);
+      String name = jdbcTemplate.queryForObject(
         "SELECT full_name FROM gcmb.employee WHERE id=?",
         String.class,
         payment.employeeId()
@@ -1160,12 +1209,12 @@ public class PayrollService {
     BigDecimal amount,
     UUID branch
   ) {
-    var accounts = db.queryForList(
+    var accounts = jdbcTemplate.queryForList(
       "SELECT id,name FROM gcmb.financial_account WHERE id=? AND active AND kind='CENTRAL_FUND' FOR UPDATE",
       account
     );
     if (accounts.isEmpty()) throw bad("Vui lòng chọn quỹ kế toán đang hoạt động.");
-    BigDecimal balance = AccountantFund.balance(db);
+    BigDecimal balance = AccountantFund.balance(jdbcTemplate);
     if (balance.compareTo(amount) < 0) throw conflict(
       "Quỹ " +
         accounts.get(0).get("name") +
@@ -1177,18 +1226,18 @@ public class PayrollService {
     ); // MSG93.
     LocalDate today = LocalDate.now(ZONE);
     financialPeriodService.requireOpen(today, "ghi nhận chi trả payroll");
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING",
       today.withDayOfMonth(1)
     );
-    var period = db.queryForMap(
+    var period = jdbcTemplate.queryForMap(
       "SELECT id,status FROM gcmb.financial_period WHERE month=? FOR SHARE",
       today.withDayOfMonth(1)
     );
     if (!"OPEN".equals(period.get("status"))) throw conflict("Kỳ tài chính hiện tại đã đóng.");
     UUID transaction = UUID.randomUUID();
     String column = advance ? "salary_advance_id" : "salary_payment_id";
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind," +
         column +
         ",reason,created_by,idempotency_key) VALUES (?,?,?,CURRENT_TIMESTAMP,?,?,?,?,?)",
@@ -1201,7 +1250,7 @@ public class PayrollService {
       actor.id(),
       "PAYROLL-" + id
     );
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
       transaction,
       account,

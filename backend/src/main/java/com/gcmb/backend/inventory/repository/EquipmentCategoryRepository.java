@@ -16,9 +16,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class EquipmentCategoryRepository {
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
     // BR-111: Repository chỉ nhận truy vấn JDBC, quy tắc bắt buộc được xác thực ở service.
-    public EquipmentCategoryRepository(JdbcTemplate db) { this.db = db; }
+    public EquipmentCategoryRepository(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
     // BR-111: Trả về cả số thiết bị đang tham chiếu để người dùng biết tác động khi xóa.
     private View map(ResultSet r, int row) throws SQLException {
@@ -31,38 +31,38 @@ public class EquipmentCategoryRepository {
 
     // UC-61: Danh mục dùng chung toàn chuỗi, hỗ trợ tìm kiếm và lọc trạng thái.
     public List<View> list(UUID branchId, String search, Boolean active) {
-        return db.query(SELECT + "WHERE (c.branch_id IS NULL OR c.branch_id=?) AND (CAST(? AS boolean) IS NULL OR c.active=?) AND (?='' OR c.code ILIKE '%'||?||'%' OR c.name ILIKE '%'||?||'%') ORDER BY c.code",
+        return jdbcTemplate.query(SELECT + "WHERE (c.branch_id IS NULL OR c.branch_id=?) AND (CAST(? AS boolean) IS NULL OR c.active=?) AND (?='' OR c.code ILIKE '%'||?||'%' OR c.name ILIKE '%'||?||'%') ORDER BY c.code",
             this::map, branchId, active, active, search, search, search);
     }
 
     // UC-60: Tạo danh mục toàn chuỗi; unique index chặn mã trùng giữa các nhóm toàn chuỗi.
     public View create(UUID branchId, Command command) {
-        UUID id = db.queryForObject("INSERT INTO gcmb.asset_category(branch_id,code,name,description,active) VALUES(NULL,?,?,?,true) RETURNING id",
+        UUID id = jdbcTemplate.queryForObject("INSERT INTO gcmb.asset_category(branch_id,code,name,description,active) VALUES(NULL,?,?,?,true) RETURNING id",
             UUID.class, command.code().trim(), command.name().trim(), command.description().trim());
         return get(null, id);
     }
 
     // UC-61/62/63: Lấy danh mục toàn chuỗi để quản lý cấp cao cập nhật.
     public View get(UUID branchId, UUID id) {
-        List<View> rows = db.query(SELECT + "WHERE (c.branch_id IS NULL OR c.branch_id=?) AND c.id=?", this::map, branchId, id);
+        List<View> rows = jdbcTemplate.query(SELECT + "WHERE (c.branch_id IS NULL OR c.branch_id=?) AND c.id=?", this::map, branchId, id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     // UC-62: Cập nhật tên/mã trong cùng cơ sở; tài sản đang tham chiếu không bị cập nhật.
     public View update(UUID branchId, UUID id, Command command) {
-        int changed = db.update("UPDATE gcmb.asset_category SET code=?,name=?,description=? WHERE branch_id IS NULL AND id=?",
+        int changed = jdbcTemplate.update("UPDATE gcmb.asset_category SET code=?,name=?,description=? WHERE branch_id IS NULL AND id=?",
             command.code().trim(), command.name().trim(), command.description().trim(), id);
         return changed == 0 ? null : get(branchId, id);
     }
 
     // UC-63: Chỉ đổi cờ hoạt động, giữ nguyên nhóm và toàn bộ asset liên quan.
     public View setActive(UUID branchId, UUID id, boolean active) {
-        int changed = db.update("UPDATE gcmb.asset_category SET active=? WHERE branch_id IS NULL AND id=?", active, id);
+        int changed = jdbcTemplate.update("UPDATE gcmb.asset_category SET active=? WHERE branch_id IS NULL AND id=?", active, id);
         return changed == 0 ? null : get(branchId, id);
     }
 
     // BR-118/BR-191: Từ chối xóa nếu có asset tham chiếu; không xóa hoặc đổi dữ liệu lịch sử.
     public boolean deleteUnused(UUID branchId, UUID id) {
-        return db.update("DELETE FROM gcmb.asset_category c WHERE c.branch_id IS NULL AND c.id=? AND NOT EXISTS (SELECT 1 FROM gcmb.asset a WHERE a.category_id=c.id)", id) > 0;
+        return jdbcTemplate.update("DELETE FROM gcmb.asset_category c WHERE c.branch_id IS NULL AND c.id=? AND NOT EXISTS (SELECT 1 FROM gcmb.asset a WHERE a.category_id=c.id)", id) > 0;
     }
 }

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { staffApi, positions, staffStatuses, dateLabel, timeLabel } from '../services/staffApi';
 import StaffDialog from '../components/StaffDialog';
@@ -96,10 +97,11 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
     }
   }
   const accountLink =
-    employee?.userId && onAccounts && employee.accountRole !== 'ACCOUNTANT' && (!branchScope || employee.accountRole === 'RECEPTIONIST');
+    employee?.userId && onAccounts && (!branchScope || employee.accountRole === 'RECEPTIONIST');
+  const protectedStaff = !!branchScope && [employee?.position, employee?.accountRole]
+    .some((role) => ['ACCOUNTANT', 'HEAD_OFFICE_MANAGER'].includes(role));
   const canChangeStatus =
-    !readOnly &&
-    employee?.accountRole !== 'ACCOUNTANT' &&
+    !readOnly && !protectedStaff &&
     employee?.userId !== user.id &&
     (!branchScope ||
       !employee?.userId ||
@@ -112,11 +114,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
   }
   return (
     <section className="staff-page" aria-labelledby="staff-page-title">
-      {notice && (
-        <p className="staff-banner success" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {error && (
         <div className="staff-banner error" role="alert">
           {error}{' '}
@@ -154,7 +152,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
             {employee.accountRole !== 'ACCOUNTANT' && <button
               type="button"
               className="staff-primary"
-              disabled={readOnly || detailLoading}
+              disabled={readOnly || detailLoading || protectedStaff}
               onClick={() => setDialog('edit')}
             >
               Sửa hồ sơ

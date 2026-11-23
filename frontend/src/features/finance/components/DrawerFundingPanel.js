@@ -1,5 +1,6 @@
 /** Author: HuyDV. QLCS requests 500k..1m cash; accountant records the actual payment. */
 import { useEffect, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd } from '../services/financeApi';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -127,8 +128,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   const validAmount = /^\d+$/.test(amount) && Number(amount) >= 500000 && Number(amount) <= 1000000;
   return <section className="finance-card">
     <h2>{accounting ? 'Cấp tiền két cơ sở' : 'Yêu cầu cấp tiền két'}</h2>
-    {error && <p className="finance-error" role="alert">{error}</p>}
-    {notice && <p className="finance-success" role="status">{notice}</p>}
+    <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
     {loading ? <p role="status">Đang tải yêu cầu cấp két…</p> : data && <>
       {accounting ? <div className="finance-toolbar">
         <p>Quỹ kế toán còn: <strong>{vnd(data.fundBalance)}</strong></p>

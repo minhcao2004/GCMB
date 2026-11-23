@@ -13,14 +13,14 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class FinanceAccess {
 
-  private final JdbcTemplate db;
+  private final JdbcTemplate jdbcTemplate;
   private final AccountRepository accountRepository;
-  private final ObjectMapper json;
+  private final ObjectMapper objectMapper;
 
-  public FinanceAccess(JdbcTemplate db, AccountRepository accountRepository, ObjectMapper json) {
-    this.db = db;
+  public FinanceAccess(JdbcTemplate jdbcTemplate, AccountRepository accountRepository, ObjectMapper objectMapper) {
+    this.jdbcTemplate = jdbcTemplate;
     this.accountRepository = accountRepository;
-    this.json = json;
+    this.objectMapper = objectMapper;
   }
 
   public void accountant(Identity actor) {
@@ -32,7 +32,7 @@ public class FinanceAccess {
       actor == null ||
       !role.equals(actor.role()) ||
       !Boolean.TRUE.equals(
-        db.queryForObject(
+        jdbcTemplate.queryForObject(
           "SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=? AND u.status='ACTIVE' AND r.code=?)",
           Boolean.class,
           actor.id(),
@@ -48,7 +48,7 @@ public class FinanceAccess {
       actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
     ) throw new AuthFailure(403, "form", "Bạn không có quyền xem đối với cơ sở này.");
     // HuyDV / BR-177: chỉ thao tác ghi cần giữ khóa cơ sở; FOR SHARE bị cấm trong transaction chỉ đọc.
-    var branch = db.queryForMap(
+    var branch = jdbcTemplate.queryForMap(
       "SELECT name,status FROM gcmb.branch WHERE id=?" + (write ? " FOR SHARE" : ""),
       actor.branchId()
     );
@@ -63,7 +63,7 @@ public class FinanceAccess {
   }
 
   public void lock() {
-    AccountantFund.lock(db);
+    AccountantFund.lock(jdbcTemplate);
   }
 
   public void audit(
@@ -74,14 +74,14 @@ public class FinanceAccess {
     Object before,
     Object after
   ) {
-    db.update(
+    jdbcTemplate.update(
       "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data) VALUES (?,?,?,'FINANCE',?,CAST(? AS jsonb),CAST(? AS jsonb))",
       actor.id(),
       branch,
       action,
       id,
-      json.writeValueAsString(before),
-      json.writeValueAsString(after)
+      objectMapper.writeValueAsString(before),
+      objectMapper.writeValueAsString(after)
     );
   }
 

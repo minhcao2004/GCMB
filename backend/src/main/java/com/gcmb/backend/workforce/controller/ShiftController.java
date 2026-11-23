@@ -16,10 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class ShiftController {
 
-    private final ShiftService service;
+    private final ShiftService shiftService;
 
-    public ShiftController(ShiftService service) {
-        this.service = service;
+    public ShiftController(ShiftService shiftService) {
+        this.shiftService = shiftService;
     }
 
     @GetMapping({ "/api/v1/branch-management/shifts", "/api/v1/reception/shifts" })
@@ -27,7 +27,7 @@ public class ShiftController {
         @AuthenticationPrincipal Identity actor,
         @RequestParam(required = false) LocalDate week
     ) {
-        return service.weekly(actor, week);
+        return shiftService.weekly(actor, week);
     }
 
     @PutMapping("/api/v1/branch-management/shifts/availability")
@@ -35,7 +35,7 @@ public class ShiftController {
         @AuthenticationPrincipal Identity actor,
         @RequestBody Availability input
     ) {
-        return service.publish(actor, input);
+        return shiftService.publish(actor, input);
     }
 
     @PostMapping("/api/v1/reception/shifts/{id}/register")
@@ -43,7 +43,7 @@ public class ShiftController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.register(actor, id);
+        return shiftService.register(actor, id);
     }
 
     public record EmptyAssignment(UUID employeeId) {}
@@ -54,7 +54,7 @@ public class ShiftController {
         @PathVariable UUID id,
         @RequestBody EmptyAssignment input
     ) {
-        return service.assignEmpty(actor, id, input.employeeId());
+        return shiftService.assignEmpty(actor, id, input.employeeId());
     }
 
     @PostMapping("/api/v1/branch-management/shifts/assignments/{id}/replacement")
@@ -63,6 +63,6 @@ public class ShiftController {
         @PathVariable UUID id,
         @RequestBody Replacement input
     ) {
-        return service.replace(actor, id, input);
+        return shiftService.replace(actor, id, input);
     }
 }

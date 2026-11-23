@@ -5,6 +5,7 @@
  * Description: UC-127/BR-125 đã thống nhất lại: lễ tân gửi yêu cầu, kế toán cập nhật tiến độ xử lý bên ngoài.
  */
 import CheckoutReceipt from '../components/CheckoutReceipt';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authApi, apiErrors } from '../../auth/services/authApi';
@@ -255,11 +256,7 @@ export default function TaxInvoicePage({ accounting = false }) {
             </button>
           </div>
         )}
-        {notice && (
-          <p role="status" className="staff-banner success">
-            {notice}
-          </p>
-        )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
         {loading ? (
           <p role="status">Đang tải…</p>
         ) : !bookingId ? (
