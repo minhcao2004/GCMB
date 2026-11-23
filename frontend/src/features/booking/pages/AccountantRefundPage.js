@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
+import { Pagination, usePagination } from '../../../shared/components/Pagination';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from './BookingManagementPage';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -84,10 +85,6 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
     event.preventDefault();
     onSubmit(externalReference.trim(), image);
   }}>
-    <div className="deposit-accounting-note">
-      <strong>Chỉ ghi nhận sau khi đã chuyển khoản thành công.</strong>
-      <p>Việc ghi nhận lưu bút toán đúng số tiền yêu cầu vào sổ cọc và khóa yêu cầu khỏi xử lý lại.</p>
-    </div>
     <label className="deposit-form-field">
       <span>Mã giao dịch chuyển khoản <small>(không bắt buộc)</small></span>
       <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} autoComplete="off" />
@@ -121,7 +118,7 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
     <label className="accounting-refund-confirm">
       <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required
         aria-describedby="accounting-refund-confirm-copy" />
-      <span id="accounting-refund-confirm-copy">Tôi xác nhận đã chuyển khoản thành công {formatVnd(item.amount)} đến {item.beneficiaryName || 'chủ tài khoản'} tại {item.bankName || 'ngân hàng'}, số tài khoản {item.bankAccount || '—'}.</span>
+      <span id="accounting-refund-confirm-copy">Xác nhận chuyển khoản thành công</span>
     </label>
     {error && <p className="booking-inline-error" role="alert">{error}</p>}
     <button className="booking-button booking-button-primary" type="submit" disabled={busy || !confirmed}>
@@ -273,6 +270,7 @@ export default function AccountantRefundPage() {
     const searchText = `${item.bookingCode} ${item.branchName || ''} ${item.customerName} ${item.phone || ''} ${item.bankName} ${item.bankAccount}`.toLocaleLowerCase('vi');
     return matchesFilter && searchText.includes(search.trim().toLocaleLowerCase('vi'));
   }), [items, filter, search]);
+  const refundPagination = usePagination(visibleItems, 5, `${filter}:${search}`);
   const selected = items.find((item) => item.id === selectedId) || null;
   const emptyQueueMessage = items.length === 0 ? 'Chưa có yêu cầu hoàn cọc nào.'
     : filter === 'open' ? 'Không có yêu cầu đang chờ xử lý.' : 'Không tìm thấy yêu cầu phù hợp.';
@@ -320,14 +318,13 @@ export default function AccountantRefundPage() {
       <header className="deposit-page-heading">
         <div>
           <h1>Hoàn tiền cọc</h1>
-          <p>Chọn yêu cầu, đối chiếu người nhận, xác nhận đã chuyển khoản rồi ghi nhận.</p>
           <p className="accounting-refund-scope">Phạm vi cơ sở: {queue?.branchName || (loading ? 'Đang tải…' : 'Chưa tải được')}</p>
         </div>
       </header>
     <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {loadError && <p className="booking-inline-error accounting-refund-load-error" role="alert">{loadError}<button type="button" onClick={() => setRetryQueue((value) => value + 1)}>Tải lại</button></p>}
       <section className="accounting-refund-summary" aria-label="Tổng hợp yêu cầu hoàn cọc">
-        <div className="accounting-refund-summary-heading"><h2>Tổng quan</h2><p>Số liệu theo toàn bộ yêu cầu được tải về; API hiện không lọc theo thời gian.</p></div>
+        <div className="accounting-refund-summary-heading"><h2>Tổng quan</h2></div>
         <div className="accounting-refund-summary-metrics" aria-live="polite" aria-busy={loading}>
           <p className="accounting-refund-metric accounting-refund-metric--pending">
             <span>Yêu cầu chờ xử lý</span><strong>{loading ? '—' : pendingItems.length}</strong>
@@ -363,7 +360,7 @@ export default function AccountantRefundPage() {
                 {!loading && !loadError && visibleItems.length === 0 && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message" colSpan="4">
                   {emptyQueueMessage}
                 </td></tr>}
-                {!loading && visibleItems.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
+                {!loading && refundPagination.items.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
                   onClick={() => selectRequest(item.id)} tabIndex={0} aria-selected={item.id === selectedId}
                   onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectRequest(item.id); } }}>
                   <td><strong>{item.bookingCode}</strong><small><b>Cơ sở</b> · {item.branchName || '—'}</small><small><b>Gửi lúc</b> · {dateTimeText(item.requestedAt)}</small></td>
@@ -378,7 +375,7 @@ export default function AccountantRefundPage() {
             {loading && <p className="accounting-refund-mobile-state" role="status">Đang tải yêu cầu hoàn cọc…</p>}
             {!loading && loadError && <p className="accounting-refund-mobile-state accounting-refund-mobile-state--error" role="alert">Danh sách chưa tải được.</p>}
             {!loading && !loadError && visibleItems.length === 0 && <p className="accounting-refund-mobile-state">{emptyQueueMessage}</p>}
-            {!loading && visibleItems.map((item) => <button key={item.id} type="button"
+            {!loading && refundPagination.items.map((item) => <button key={item.id} type="button"
               className={`accounting-refund-mobile-card${item.id === selectedId ? ' is-selected' : ''}`}
               aria-pressed={item.id === selectedId} onClick={() => selectRequest(item.id)}>
               <span className="accounting-refund-mobile-card-heading"><strong>{item.bookingCode}</strong>
@@ -390,6 +387,8 @@ export default function AccountantRefundPage() {
             </button>)}
           </div>
           <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>
+          <Pagination {...refundPagination} onPageChange={refundPagination.setPage} disabled={loading}
+            label="Phân trang hoàn tiền cọc" />
         </section>
         <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)}
           onBackToQueue={() => setMobileView('queue')} />

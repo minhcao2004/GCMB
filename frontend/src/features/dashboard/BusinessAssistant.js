@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../shared/components/Pagination';
 /** HuyDV: trợ lý QLCC, lưu lịch sử riêng theo tài khoản trên trình duyệt. */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -194,7 +195,7 @@ export default function BusinessAssistant({ user }) {
       {showHistory ? <div className="business-assistant-history">
         <h3>Lịch sử trò chuyện</h3>
         {!threads.length && <p>Chưa có cuộc trò chuyện nào.</p>}
-        {threads.map((thread) => <div key={thread.id} className="business-assistant-history-row">
+        {<PaginatedList pageSize={10}>{threads.map((thread) => <div key={thread.id} className="business-assistant-history-row">
           <button type="button" aria-current={threadId === thread.id ? 'true' : undefined} onClick={() => {
             setThreadId(thread.id); setMessages(thread.messages || emptyMessages); setDraft(''); setError(''); setShowHistory(false);
           }}><span>{thread.messages.find((m) => m.role === 'user')?.content.slice(0, 90) || 'Cuộc trò chuyện'}</span>
@@ -202,7 +203,7 @@ export default function BusinessAssistant({ user }) {
           <button type="button" aria-label={`Xóa cuộc trò chuyện ${thread.messages[0]?.content.slice(0, 40)}`} onClick={() => {
             saveThreads(threads.filter((t) => t.id !== thread.id)); if (thread.id === threadId) { setThreadId(null); setMessages([]); setDraft(''); setError(''); }
           }}>Xóa</button>
-        </div>)}
+        </div>)}</PaginatedList>}
         {storageError && <p className="business-assistant-error" role="alert">{storageError}</p>}
       </div> : <>
       <div className="business-assistant-conversation" ref={conversation}>

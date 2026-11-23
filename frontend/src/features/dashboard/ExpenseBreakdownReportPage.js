@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../shared/components/Pagination';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
@@ -178,7 +179,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const allocationBasis = basis !== 'CASH';
   const content = <section className="performance-dashboard accountant-finance expense-breakdown-report" aria-labelledby="expense-report-title" aria-busy={loading}>
     <header className="finance-heading expense-report-heading">
-      <div><h1 id="expense-report-title">Báo cáo chi phí</h1><p>{allocationBasis?'Chi phí được ghi nhận theo lịch phân bổ; tổng lịch bằng đúng số tiền đã chi.':'Dòng tiền chi được nhóm theo ngày thanh toán thực tế.'}</p></div>
+      <div><h1 id="expense-report-title">Báo cáo chi phí</h1></div>
       <div className="finance-filters expense-report-filters">
         {hasDateRange ? <>
           <label className="finance-month">Từ ngày<input type="date" required value={from} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
@@ -200,7 +201,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     </dl>
 
     {!loading && !error && currentData && rows.length === 0 && <p className="expense-report-empty" role="status">{noResults}</p>}
-    {rows.length > 0 && <div className="expense-report-table-scroll"><table className="expense-report-table">
+    {rows.length > 0 && <div className="expense-report-table-scroll"><PaginatedTable pageSize={5} className="expense-report-table">
       <caption>{allocationBasis?'Chi phí theo tháng ghi nhận':'Dòng tiền chi'} {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
       <thead><tr><th scope="col">Nhóm chi</th><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">{allocationBasis?'Số dòng ghi nhận':'Số khoản thanh toán'}</th><th scope="col">{allocationBasis?'Tổng ghi nhận':'Tổng đã chi'}</th><th scope="col">Chi tiết</th></tr></thead>
       <tbody>{rows.map((row) => {
@@ -218,17 +219,17 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
               {detailsLoading && <p role="status">Đang tải chi tiết…</p>}
               {detailsError && <p role="alert">{detailsError}</p>}
               {!detailsLoading && !detailsError && details.length === 0 && <p>{noResults}</p>}
-              {details.length > 0 && <div className="expense-report-detail-scroll"><table><thead><tr><th>{allocationBasis?'Tháng ghi nhận':'Ngày thanh toán'}</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th>Chứng từ</th></tr></thead>
+              {details.length > 0 && <div className="expense-report-detail-scroll"><PaginatedTable pageSize={5}><thead><tr><th>{allocationBasis?'Tháng ghi nhận':'Ngày thanh toán'}</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th>Chứng từ</th></tr></thead>
                 <tbody>{details.map((item) => <tr key={`${item.sourceType}:${item.expenseId}:${item.recognitionDate}`}>
                   <td>{allocationBasis?recognitionMonth(item.recognitionDate):dateTime(item.paidAt)}</td><td>{item.expenseCode}</td><td>{item.kind === 'REIMBURSEMENT' ? 'Hoàn ứng' : item.origin==='ACCOUNTANT_DIRECT'?'Chi trực tiếp':'Thanh toán'}</td>
                   <td>{item.description || '—'}{item.paymentReference && <small className="expense-report-reference">Mã tham chiếu: {item.paymentReference}</small>}</td><td className="expense-report-number">{money(item.amount)}</td>
                   <td>{item.attachments?.length ? <div className="expense-report-evidence">{item.attachments.map((file) => <button key={file.id} type="button" disabled={evidenceBusy} onClick={() => viewEvidence(file)}>{evidenceBusy ? 'Đang mở…' : `Xem ${file.kind === 'INVOICE' ? 'hóa đơn' : 'chứng từ thanh toán'} · ${file.name}`}</button>)}</div> : '—'}</td>
-                </tr>)}</tbody></table></div>}
+                </tr>)}</tbody></PaginatedTable></div>}
             </div>
           </td></tr>}
         </Fragment>;
       })}</tbody>
-    </table></div>}
+    </PaginatedTable></div>}
     <p className="expense-report-footer"><Link to={user.role === 'HEAD_OFFICE_MANAGER' ? headOfficeMonthlyPath : '/ke-toan/bao-cao'}>Quay lại báo cáo hiệu quả tháng</Link><button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Tải lại</button></p>
     {preview && <div className="expense-report-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><section className="expense-report-preview" role="dialog" aria-modal="true" aria-labelledby="expense-preview-title"><header><h2 id="expense-preview-title">{preview.name}</h2><button type="button" autoFocus onClick={() => setPreview(null)}>Đóng</button></header>{preview.type?.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <iframe src={preview.url} title={preview.name} /> }<a href={preview.url} download={preview.name}>Tải chứng từ</a></section></div>}
   </section>;

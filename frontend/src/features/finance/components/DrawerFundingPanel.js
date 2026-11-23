@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /** Author: HuyDV. QLCS requests 500k..1m cash; accountant records the actual payment. */
 import { useEffect, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
@@ -183,7 +184,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
         </div>
       </form>}
       <h3>Lịch sử yêu cầu cấp két</h3>
-      <div className="finance-table-wrap"><table>
+      <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
         <thead><tr><th>Yêu cầu / cơ sở</th><th>Số tiền</th><th>Người nhận / ngân hàng</th><th>Nội dung</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead>
         <tbody>{rows.map((row) => <tr key={row.id}>
           <td>{row.code}<small>{row.branchName} · {new Date(row.requested_at).toLocaleString('vi-VN')}</small></td>
@@ -203,7 +204,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
             {accounting && row.status === 'REQUESTED' && <button disabled={busy} onClick={() => openPayment(row)}>Thanh toán cấp két</button>}
           </td>
         </tr>)}</tbody>
-      </table>{!rows.length && <p>Chưa có yêu cầu cấp tiền két.</p>}</div>
+      </PaginatedTable>{!rows.length && <p>Chưa có yêu cầu cấp tiền két.</p>}</div>
     </>}
   </section>;
 }

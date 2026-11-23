@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Author: HuyDV
  * Created: 03/11/2026
@@ -137,7 +138,7 @@ export default function PersonalWorkRecordsPage({ user }) {
               </span>
             </div>
             <div className="attendance-table-scroll">
-              <table className="attendance-table">
+              <PaginatedTable pageSize={10} className="attendance-table">
                 <caption className="shift-sr-only">Công cá nhân tháng {month}</caption>
                 <thead>
                   <tr>
@@ -176,7 +177,7 @@ export default function PersonalWorkRecordsPage({ user }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
             {!rows.length && (
               <p className="attendance-empty" role="status">

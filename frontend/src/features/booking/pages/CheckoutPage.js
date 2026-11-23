@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  * Author: HuyDV
@@ -286,7 +287,6 @@ export default function CheckoutPage() {
         {data?.bookingId && (
           <section className="co-card">
             <h2>Yêu cầu hóa đơn thuế</h2>
-            <p>Nếu khách yêu cầu hóa đơn, ghi nhận thông tin và gửi kế toán xử lý bên ngoài.</p>
             <button
               type="button"
               onClick={() => navigate(`/le-tan/hoa-don-thue?booking=${data.bookingId}`)}
@@ -303,7 +303,7 @@ export default function CheckoutPage() {
         {!bookingId && !billId ? (
           <div className="co-card co-list">
             <h2>Bill của cơ sở</h2>
-            <table>
+            <PaginatedTable pageSize={10}>
               <thead>
                 <tr>
                   <th>Hóa đơn</th>
@@ -326,7 +326,7 @@ export default function CheckoutPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
             {!rows.length && <p>Chưa có bill.</p>}
           </div>
         ) : !data ? (
@@ -529,10 +529,7 @@ export default function CheckoutPage() {
                   />
                 </dl>
               )}
-              <p className="co-note">
-                Giữ đơn giá đã xác nhận. Lập bill chốt sử dụng đến thời điểm báo giá hiển thị, có
-                hiệu lực 5 phút. Bấm Cập nhật tiền phòng nếu khách vẫn tiếp tục sử dụng.
-              </p>
+
               <button
                 className="co-primary"
                 disabled={

@@ -77,14 +77,14 @@ public final class AuthValidation {
         );
     }
 
-    // BR-119; MSG04. Số điện thoại tùy chọn chỉ có chữ số và một dấu + ở đầu.
+    // BR-119; MSG04: sau khi trim, chỉ nhận 7–15 chữ số, bắt đầu bằng 0.
     public static String phone(String value) {
         if (value == null || value.isBlank()) return null;
-        String phone = required(value, "phone", "Số điện thoại", 30, true);
-        if (!phone.matches("\\+?[0-9]+")) throw new AuthFailure(
+        String phone = required(value, "phone", "Số điện thoại", 15, true);
+        if (!phone.matches("0[0-9]{6,14}")) throw new AuthFailure(
             400,
             "phone",
-            "Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu."
+            "Số điện thoại phải có từ 7 đến 15 chữ số, bắt đầu bằng 0; không được chứa dấu + hoặc ký tự định dạng."
         );
         return phone;
     }

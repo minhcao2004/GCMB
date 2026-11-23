@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -105,7 +106,7 @@ function PeriodControls({ idPrefix, period, onPeriodChange, month, onMonthChange
 }
 
 function DataTable({ headings, rows, labels }) {
-  return <div className="bm-table-wrap"><table className="bm-table"><thead><tr>{headings.map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index} data-label={labels[index]}>{cell}</td>)}</tr>) : <tr><td colSpan={headings.length}>Chưa có dữ liệu cho kỳ báo cáo này.</td></tr>}</tbody></table></div>;
+  return <div className="bm-table-wrap"><PaginatedTable pageSize={10} className="bm-table"><thead><tr>{headings.map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index} data-label={labels[index]}>{cell}</td>)}</tr>) : <tr><td colSpan={headings.length}>Chưa có dữ liệu cho kỳ báo cáo này.</td></tr>}</tbody></PaginatedTable></div>;
 }
 
 export default function BranchOverviewDashboard({ user }) {
@@ -257,7 +258,7 @@ export default function BranchOverviewDashboard({ user }) {
     <div className="bm-grid bm-grid-tables">
       <Panel title="Hiệu suất theo hạng phòng" note="Số liệu các lượt sử dụng kết thúc trong kỳ"><DataTable headings={['Hạng phòng', 'Số lượt', 'Doanh thu', 'Thời gian dùng TB']} labels={['Hạng phòng', 'Số lượt', 'Doanh thu', 'Thời gian dùng TB']} rows={dataView.roomTypes} /></Panel>
       <Panel title="Tồn kho cần chú ý" note="Mặt hàng đang dưới định mức tối thiểu" className="bm-inventory-panel" trailing={<span className="bm-panel-count">{inventory.length} mặt hàng</span>}>
-        {inventory.length ? <ul className="bm-attention-list">{inventory.map((item) => {
+        {inventory.length ? <PaginatedList as="ul" pageSize={5} className="bm-attention-list">{inventory.map((item) => {
           const quantity = Number(item.quantity) || 0;
           const minimum = Number(item.minimum) || 0;
           const level = minimum ? Math.max(0, Math.min(100, quantity / minimum * 100)) : 0;
@@ -266,21 +267,21 @@ export default function BranchOverviewDashboard({ user }) {
             <div className="bm-attention-content"><strong>{item.name}</strong><span>Còn {quantity} {item.unit} · Định mức {minimum} {item.unit}</span><div className="bm-stock-track" role="meter" aria-label={`Tồn kho ${item.name}`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={level}><i style={{ width: `${level}%` }} /></div></div>
             <span className="bm-attention-badge">Cần nhập</span>
           </li>;
-        })}</ul> : <p className="bm-panel-empty">Không có mặt hàng nào dưới định mức.</p>}
+        })}</PaginatedList> : <p className="bm-panel-empty">Không có mặt hàng nào dưới định mức.</p>}
       </Panel>
       <Panel title="Sự cố thiết bị" note="Các sự cố đang cần theo dõi" className="bm-incidents-panel" trailing={<span className={`bm-panel-count${incidents.length ? ' is-attention' : ''}`}>{incidents.length} đang mở</span>}>
-        {incidents.length ? <ul className="bm-incident-list">{incidents.slice(0, 6).map((incident) => <li key={incident.id}>
+        {incidents.length ? <PaginatedList as="ul" pageSize={5} className="bm-incident-list">{incidents.map((incident) => <li key={incident.id}>
           <span className={`bm-incident-mark is-${incidentTone(incident.status)}`} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4m0 4h.01M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3l-7.6-13.1a2 2 0 0 0-3.4 0Z"/></svg></span>
           <div className="bm-incident-copy"><strong>{incident.assetCode || incident.id} · {incident.assetName}</strong><span>{incident.location || 'Chưa có vị trí'} · {localDate(incident.createdAt).split('-').reverse().join('/')}</span></div>
           <span className={`bm-incident-status is-${incidentTone(incident.status)}`}>{incidentStatus(incident.status)}</span>
-        </li>)}</ul> : <p className="bm-panel-empty is-success">Không có sự cố nào đang mở.</p>}
+        </li>)}</PaginatedList> : <p className="bm-panel-empty is-success">Không có sự cố nào đang mở.</p>}
       </Panel>
       <Panel title="Ca làm hôm nay & ngày mai" note="Lịch ca đã xác nhận và tình trạng chấm công" className="bm-shifts-panel" trailing={<span className="bm-panel-count">{shiftRows.length} ca</span>}>
-        {shiftRows.length ? <ul className="bm-shift-list">{shiftRows.map((shift, index) => <li key={`${shift.date}-${shift.shift}-${shift.employee}-${index}`}>
+        {shiftRows.length ? <PaginatedList as="ul" pageSize={5} className="bm-shift-list">{shiftRows.map((shift, index) => <li key={`${shift.date}-${shift.shift}-${shift.employee}-${index}`}>
           <div className="bm-shift-time"><span>{shift.dayLabel}</span><strong>{localTime(shift.startsAt)}<i aria-hidden="true">→</i>{localTime(shift.endsAt)}</strong><small>{shift.dateLabel}</small></div>
           <div className="bm-shift-person"><strong>{shift.employee}</strong><span>{shiftNames[shift.shift] || shift.shiftLabel}</span></div>
           <span className={`bm-attendance-status is-${attendanceTone(shift.attendance)}`}>{shift.attendance}</span>
-        </li>)}</ul> : <p className="bm-panel-empty">Chưa có ca làm được xác nhận trong hai ngày tới.</p>}
+        </li>)}</PaginatedList> : <p className="bm-panel-empty">Chưa có ca làm được xác nhận trong hai ngày tới.</p>}
       </Panel>
     </div>
     <p className="bm-disclaimer">Biểu đồ và bảng hiển thị dữ liệu từ API; các mục chưa được API cung cấp được để trống rõ ràng.</p>

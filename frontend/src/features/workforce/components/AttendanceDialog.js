@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /**
  * Author: HuyDV
  * Created: 27/10/2026
@@ -199,7 +200,7 @@ export default function AttendanceDialog({
           )}
           {employee ? (
             <div className="attendance-table-scroll">
-              <table className="attendance-table">
+              <PaginatedTable pageSize={10} className="attendance-table">
                 <thead>
                   <tr>
                     <th>Ngày / ca</th>
@@ -244,7 +245,7 @@ export default function AttendanceDialog({
                       </tr>
                     ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           ) : closing ? (
             <>
@@ -340,7 +341,7 @@ export default function AttendanceDialog({
                   />
                 </label>
                 {issues.length > 0 && (
-                  <section className="attendance-issues">
+                  <PaginatedList as="section" pageSize={5} className="attendance-issues">
                     <h3>Phản ánh chấm công</h3>
                     {issues.map((issue) => (
                       <div key={issue.id}>
@@ -378,7 +379,7 @@ export default function AttendanceDialog({
                         />
                       </label>
                     )}
-                  </section>
+                  </PaginatedList>
                 )}
               </fieldset>
               {review && (

@@ -1,3 +1,4 @@
+import { Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -511,7 +512,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const savedCheckInTime = recordedCheckIn
     ? displayPart(recordedCheckIn, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone)
     : 'Chưa có dữ liệu';
-  const charge = Number(booking?.expectedAmount || 0);
   const depositReceived = Number(detailMatchesBooking
     ? detail.deposit?.receivedAmount ?? booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0
     : booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0);
@@ -555,7 +555,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
           {!roomLoading && !roomError && !availableRooms.length && <p className="booking-checkin-time-note">Chưa có phòng phù hợp để nhận khách. Vui lòng kiểm tra lịch phòng hoặc sắp xếp lại booking.</p>}
         </section>}
-        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
+        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
@@ -568,7 +568,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         </div></div>
         <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
         <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
-        <section className="booking-checkin-receipt"><strong>Tóm tắt</strong><div><span>{detail?.charges?.[0]?.description || 'Dịch vụ phòng'}</span><b>{formatVnd(charge)}</b></div><p>Tiền cọc đang giữ {formatVnd(depositBalance)} sẽ được đối chiếu khi checkout.</p></section>
         {booking.status === 'CANCELLED' && <p className="booking-checkin-time-note">Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.</p>}
         {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && booking.status !== 'CANCELLED' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
         {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note">Đã quá giờ kết thúc booking, không thể check-in.</p>}
@@ -795,10 +794,9 @@ export default function BookingManagementPage() {
     setListLoading(true);
     const params = { search: search.trim() || undefined, page: 0, size: 100 };
     if (isLocalDateInput(selectedDate)) { params.dateFrom = selectedDate; params.dateTo = selectedDate; }
-    bookingApi.list(params)
-      .then((result) => {
+    bookingApi.listAll(params)
+      .then((items) => {
         if (!active) return;
-        const items = result.items || [];
         const pendingId = pendingSelectionRef.current;
         const pendingFound = pendingId && items.some((item) => item.id === pendingId);
         if (pendingId) pendingSelectionRef.current = '';
@@ -850,7 +848,7 @@ export default function BookingManagementPage() {
     if (roomTier !== 'all' && !(item.roomTypeName || item.roomName || '').toLocaleLowerCase('vi-VN').includes(roomTier.toLocaleLowerCase('vi-VN'))) return false;
     return true;
   }), [rows, activeFilter, roomTier]);
-  const bookingPageSize = 4;
+  const bookingPageSize = 5;
   const bookingPageCount = Math.max(1, Math.ceil(visibleRows.length / bookingPageSize));
   const currentBookingPage = Math.min(bookingPage, bookingPageCount - 1);
   const pageRows = visibleRows.slice(currentBookingPage * bookingPageSize, (currentBookingPage + 1) * bookingPageSize);
@@ -1053,11 +1051,7 @@ export default function BookingManagementPage() {
         {listLoading && <div className="booking-table-message" role="status">Đang tải booking…</div>}
         {!listLoading && !visibleRows.length && <EmptyState className="booking-table-message" description="Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc." />}
         </div>
-        {bookingPageCount > 1 && <nav className="booking-pagination" aria-label="Trang danh sách booking">
-          <button type="button" disabled={currentBookingPage === 0} onClick={() => setBookingPage(currentBookingPage - 1)}>Trang trước</button>
-          <span>Trang {currentBookingPage + 1}/{bookingPageCount} · {visibleRows.length} booking</span>
-          <button type="button" disabled={currentBookingPage + 1 >= bookingPageCount} onClick={() => setBookingPage(currentBookingPage + 1)}>Trang sau</button>
-        </nav>}
+        {bookingPageCount > 1 && <Pagination page={currentBookingPage} pageSize={bookingPageSize} total={visibleRows.length} onPageChange={setBookingPage} label="Phân trang booking" />}
       </section>
       {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
         <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}

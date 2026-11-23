@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../shared/components/Pagination';
 import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import { financeApi } from '../finance/services/financeApi';
@@ -155,9 +156,9 @@ function OperationalAlertBubble({ warnings, onAlertNavigate }) {
     </button>
     {expanded && <div id="executive-alert-details" className="executive-alert-card" role={alert.level === 'critical' ? 'alert' : 'status'} aria-live={alert.level === 'critical' ? 'assertive' : 'polite'} aria-atomic="true" key={alert.id}>
       <span className="executive-alert-tail" aria-hidden="true" />
-      <div className="executive-alert-list" aria-label="Danh sách cảnh báo">{warnings.map((item, itemIndex) => <button type="button" key={item.id} className={itemIndex === index ? 'is-active' : ''} onClick={() => { setActiveIndex(itemIndex); onAlertNavigate?.(item); }} aria-label={`Mở cảnh báo ${item.kind} tại ${item.branch}`}>
+      <PaginatedList as="div" pageSize={5} className="executive-alert-list" aria-label="Danh sách cảnh báo">{warnings.map((item, itemIndex) => <button type="button" key={item.id} className={itemIndex === index ? 'is-active' : ''} onClick={() => { setActiveIndex(itemIndex); onAlertNavigate?.(item); }} aria-label={`Mở cảnh báo ${item.kind} tại ${item.branch}`}>
         <i className={item.level === 'critical' ? 'is-critical' : ''} aria-hidden="true" /><span><strong>{item.kind}</strong><small>{item.branch}</small><em>{item.detail}</em></span><b aria-hidden="true">→</b>
-      </button>)}</div>
+      </button>)}</PaginatedList>
       <div className="executive-alert-message"><strong>{alert.branch}</strong><p>{alert.detail}</p></div>
       <footer className="executive-alert-footer"><span>{index + 1} / {warnings.length}</span><span>Chọn cảnh báo để mở</span></footer>
     </div>}
@@ -165,7 +166,7 @@ function OperationalAlertBubble({ warnings, onAlertNavigate }) {
 }
 
 function RankingTable({ rows, emptyMessage }) {
-  return <div className="executive-table-scroll"><table className="executive-ranking-table">
+  return <div className="executive-table-scroll"><PaginatedTable pageSize={5} className="executive-ranking-table">
     <thead><tr><th>Cơ sở</th><th>Thu nhập vận hành</th><th>Lượt đặt không hủy</th><th>Lấp đầy</th><th>Chi phí</th><th>Trạng thái</th></tr></thead>
     <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id}>
       <td><span className="executive-branch-name"><span className="executive-rank">{String(index + 1).padStart(2, '0')}</span><span>{row.name}<small>{row.code}</small></span></span></td>
@@ -174,7 +175,7 @@ function RankingTable({ rows, emptyMessage }) {
       <td className="executive-number">{money(row.cost)}</td>
       <td><span className={`executive-status${row.status === 'ACTIVE' ? '' : ' is-paused'}`}><i />{row.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm ngừng'}</span></td>
     </tr>) : <tr><td className="executive-empty-cell" colSpan="6">{emptyMessage}</td></tr>}</tbody>
-  </table></div>;
+  </PaginatedTable></div>;
 }
 
 export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
@@ -384,10 +385,10 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
 
       <article className="executive-panel executive-panel-occupancy">
         <PanelHeading title="Tỷ lệ lấp đầy" description="Số giờ phòng có khách · khung 08:00–20:00" trailing={<span className="executive-panel-kicker">BÌNH QUÂN {occupancyAverage == null ? '—' : percent(occupancyAverage)}</span>} />
-        {rankedOccupancy.length ? <div className="executive-occupancy-list" aria-label="Tỷ lệ lấp đầy từng cơ sở">{rankedOccupancy.map((branch, index) => <div className="executive-occupancy-row" key={branch.id}>
+        {rankedOccupancy.length ? <PaginatedList as="div" pageSize={10} className="executive-occupancy-list" aria-label="Tỷ lệ lấp đầy từng cơ sở">{rankedOccupancy.map((branch, index) => <div className="executive-occupancy-row" key={branch.id}>
           <span className="executive-occupancy-rank">{String(index + 1).padStart(2, '0')}</span><span className="executive-occupancy-name" title={branch.name}>{branch.name}<small>{branch.code}</small></span>
           <span className="executive-occupancy-track" aria-hidden="true"><i className={branch.occupancy < occupancyAverage ? 'is-below-average' : ''} style={{ width: `${Math.max(0, Math.min(100, branch.occupancy * 100))}%` }} /></span><strong>{percent(branch.occupancy)}</strong>
-        </div>)}</div> : <p className="executive-empty">{data ? 'Chưa có dữ liệu lấp đầy trong kỳ.' : noReportMessage}</p>}
+        </div>)}</PaginatedList> : <p className="executive-empty">{data ? 'Chưa có dữ liệu lấp đầy trong kỳ.' : noReportMessage}</p>}
       </article>
     </div>
 
@@ -399,10 +400,10 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
     <div className="executive-bottom-grid">
       <article className="executive-panel executive-approvals">
         <PanelHeading title="Việc cần làm" description="Các đề nghị cần quản lý cấp cao xem xét và xử lý." trailing={<span className="executive-pending-count">{safeData.approvals.length} chờ duyệt</span>} />
-        {safeData.approvals.length ? <div className="executive-approval-list">{safeData.approvals.map((item) => <article className="executive-approval-row" key={item.id}>
+        {safeData.approvals.length ? <PaginatedList as="div" pageSize={5} className="executive-approval-list">{safeData.approvals.map((item) => <article className="executive-approval-row" key={item.id}>
           <div><strong>{item.category}</strong><span>{item.branch} · Mã đề nghị {item.id}</span></div><b>{money(item.amount)}</b>
           <button type="button" onClick={onNavigate} aria-label={`Mở phê duyệt đề nghị ${item.id}`}>Xem đề nghị <span aria-hidden="true">→</span></button>
-        </article>)}</div> : <p className="executive-empty">{loading ? 'Đang tải danh sách đề nghị…' : !data ? 'Chưa có dữ liệu báo cáo.' : data.approvalsAvailable ? 'Không có đề nghị vượt ngưỡng cần duyệt trong kỳ.' : 'Không tải được danh sách đề nghị chi.'}</p>}
+        </article>)}</PaginatedList> : <p className="executive-empty">{loading ? 'Đang tải danh sách đề nghị…' : !data ? 'Chưa có dữ liệu báo cáo.' : data.approvalsAvailable ? 'Không có đề nghị vượt ngưỡng cần duyệt trong kỳ.' : 'Không tải được danh sách đề nghị chi.'}</p>}
       </article>
 
     </div>

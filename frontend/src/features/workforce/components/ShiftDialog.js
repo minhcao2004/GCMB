@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 /**
  * Author: HuyDV
  * Created: 27/10/2026
@@ -187,12 +188,12 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                   {shift.status === 'OPEN' ? 'Đang mở đăng ký' : 'Đóng đăng ký mới'}
                 </div>
                 <h3>Nhân viên được phân công</h3>
-                {participants.length ? <ul className="shift-people">
+                {participants.length ? <PaginatedList as="ul" pageSize={10} className="shift-people">
                   {participants.map((a) => <li key={a.id}>
                     <div><strong>{a.fullName}</strong><small>{a.code} · {a.source === 'MANAGER' ? 'Quản lý phân công' : 'Tự đăng ký'}{a.employeeStatus !== 'ACTIVE' ? ' · Hồ sơ đã ngừng' : ''}</small></div>
                     {canReplace && <button type="button" onClick={() => dialog.onReplace(a)}>Làm thay</button>}
                   </li>)}
-                </ul> : <p>Chưa có nhân viên đăng ký ca này.</p>}
+                </PaginatedList> : <p>Chưa có nhân viên đăng ký ca này.</p>}
                 {canReplace && shift.status !== 'CANCELLED' && participants.length < Math.min(3, shift.capacity) && (
                   <div className="shift-empty-assignment">
                     <label>Phân công thêm nhân viên (còn {Math.min(3, shift.capacity) - participants.length} chỗ)
@@ -207,7 +208,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                 {data.history.some((h) => h.shiftId === shift.id) && (
                   <>
                     <h3>Lịch sử thay người</h3>
-                    <ul>
+                    <PaginatedList as="ul" pageSize={5}>
                       {data.history
                         .filter((h) => h.shiftId === shift.id)
                         .map((h) => (
@@ -216,7 +217,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                             {new Date(h.cancelledAt).toLocaleString('vi-VN')}
                           </li>
                         ))}
-                    </ul>
+                    </PaginatedList>
                   </>
                 )}
               </>

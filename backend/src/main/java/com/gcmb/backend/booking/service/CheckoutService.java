@@ -780,28 +780,32 @@ public class CheckoutService {
             objectMapper.writeValueAsString(payload)
         );
         if (inserted == 0) return;
-        if (requests.isEmpty()) return;
+        if (requests.isEmpty()) {
+            jdbcTemplate.update("UPDATE gcmb.bank_transaction SET match_status='EXCEPTION',exception_reason='REFERENCE_NOT_FOUND' WHERE id=?",
+                transaction);
+            return;
+        }
         var request = jdbcTemplate.queryForMap(
             "SELECT * FROM gcmb.payment_request WHERE id=? FOR UPDATE",
             requests.get(0).get("id")
         );
-        boolean matches =
-            "in".equals(payload.transferType()) &&
-            "PENDING".equals(request.get("status")) &&
-            account.equals(request.get("account_id")) &&
-            payload.transferAmount().compareTo((BigDecimal) request.get("expected_amount")) == 0 &&
-            !occurred.isBefore(
-                ((Timestamp) request.get("created_at")).toInstant().minusSeconds(2)
-            ) &&
-            !occurred.isAfter(((Timestamp) request.get("expires_at")).toInstant());
+        String mismatchReason = null;
+        if (!"in".equals(payload.transferType())) mismatchReason = "DIRECTION_MISMATCH";
+        else if (!"PENDING".equals(request.get("status"))) mismatchReason = "REQUEST_NOT_PENDING";
+        else if (!account.equals(request.get("account_id"))) mismatchReason = "ACCOUNT_MISMATCH";
+        else if (payload.transferAmount().compareTo((BigDecimal) request.get("expected_amount")) != 0)
+            mismatchReason = "AMOUNT_MISMATCH";
+        else if (occurred.isBefore(((Timestamp) request.get("created_at")).toInstant().minusSeconds(2)))
+            mismatchReason = "PAYMENT_BEFORE_REQUEST";
+        else if (occurred.isAfter(((Timestamp) request.get("expires_at")).toInstant()))
+            mismatchReason = "PAYMENT_EXPIRED";
         boolean deposit = "DEPOSIT".equals(request.get("purpose"));
-        if (deposit) {
-            matches = false; // HuyDV: cọc chuyển khoản phải do lễ tân xác nhận.
-        }
-        if (!matches) {
+        // Cọc chuyển khoản vẫn phải do lễ tân xác nhận.
+        if (mismatchReason == null && deposit) mismatchReason = "DEPOSIT_MANUAL_CONFIRMATION_REQUIRED";
+        if (mismatchReason != null) {
             jdbcTemplate.update(
-                "UPDATE gcmb.bank_transaction SET match_status='EXCEPTION' WHERE id=?",
-                transaction
+                "UPDATE gcmb.bank_transaction SET match_status='EXCEPTION',exception_reason=? WHERE id=?",
+                mismatchReason, transaction
             );
             return;
         }

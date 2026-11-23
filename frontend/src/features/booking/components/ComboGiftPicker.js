@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PaginatedList } from '../../../shared/components/Pagination';
 
 export default function ComboGiftPicker({ drinkSelections, setDrinkSelections, foodSelections, setFoodSelections, giftMenu, disabled = false }) {
   const [giftPicker, setGiftPicker] = useState(null);
@@ -95,7 +96,7 @@ export default function ComboGiftPicker({ drinkSelections, setDrinkSelections, f
             {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
           </div>
         </div>
-        <div className="booking-gift-picker-list" aria-live="polite">
+        <PaginatedList pageSize={10} resetKey={`${giftSearch}:${giftCategoryFilter}:${giftStockFilter}`} className="booking-gift-picker-list" aria-live="polite">
           {filteredPickerItems.length ? filteredPickerItems.map((item) => {
             const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
             const selected = (giftPicker.prefix === 'drink' ? drinkSelections : foodSelections)[giftPicker.index] === item.id;
@@ -104,7 +105,7 @@ export default function ComboGiftPicker({ drinkSelections, setDrinkSelections, f
               <span className={`booking-gift-picker-stock${item.stockTracked ? '' : ' is-untracked'}`}>{item.stockTracked ? selectable ? `Tồn ${item.stockQuantity} ${item.unitName}` : 'Hết tồn' : 'Không theo dõi tồn'}</span>
             </button>;
           }) : <p className="booking-gift-picker-empty">Không tìm thấy món phù hợp với bộ lọc.</p>}
-        </div>
+        </PaginatedList>
         <footer className="booking-gift-picker-footer"><span>{filteredPickerItems.length} món</span><button type="button" onClick={closeGiftPicker}>Đóng</button></footer>
       </section>
     </div>}

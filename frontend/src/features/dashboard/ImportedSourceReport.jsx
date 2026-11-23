@@ -1,3 +1,4 @@
+import { Pagination } from '../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './imported-source-report.css';
@@ -118,7 +119,7 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const pageSize = 10;
 
   useEffect(() => { setPage(1); }, [month, range.from, range.to, branchId]);
   useEffect(() => {
@@ -175,13 +176,12 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
       <div className="isr-card-heading"><div><h3>Chi tiết giao dịch</h3></div><span>{filteredRows.length.toLocaleString('vi-VN')} dòng</span></div>
       <div className="isr-table-tools">
         <label className="isr-search-filter">Tìm kiếm<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Mã giao dịch, cơ sở…" /></label>
-        <label className="isr-page-size-filter">Số dòng<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="10">10 dòng</option><option value="25">25 dòng</option><option value="50">50 dòng</option></select></label>
       </div>
       <div className="isr-table-scroll"><table><caption>{reportNames[reportType]} · {dateLabel(range.from)} – {dateLabel(range.to)}</caption><thead><tr><th scope="col">Ngày</th><th scope="col">Mã giao dịch</th><th scope="col">Cơ sở</th><th scope="col">Danh mục</th><th scope="col">Phương thức</th><th scope="col" className="isr-number">{amountLabel}</th><th scope="col">Nguồn</th></tr></thead><tbody>
         {visibleRows.map((row) => <tr key={row.id}><td>{dateLabel(row.businessDate)}</td><td>{row.invoiceNumber || row.sourceKey || `${row.sourceSheet || 'LEDGER'}-${row.id}`}</td><td>{row.branchName}</td><td>{row.recordType === 'KIOT_INVOICE' ? 'Hóa đơn doanh thu' : row.recordType === 'BOOKING' ? 'Booking' : 'Chi phí vận hành'}</td><td>{row.recordType === 'KIOT_INVOICE' ? (row.paymentMethod || 'Theo hóa đơn') : row.recordType === 'BOOKING' ? paymentMethod(row) : (row.paymentMethod || '—')}</td><td className="isr-number">{money(reportType === 'revenue' || reportType === 'branch' ? row.amount : row.paidAmount)}</td><td><span className={`isr-origin${row.sourceSystem === 'SYNTHETIC_DEMO' ? ' is-synthetic' : row.sourceSystem === 'LEDGER' ? ' is-ledger' : row.sourceSystem === 'OPERATIONAL' ? ' is-operational' : ''}`}>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Mô phỏng' : row.sourceSystem === 'LEDGER' ? 'Sổ kế toán' : row.sourceSystem === 'OPERATIONAL' ? 'Hóa đơn vận hành' : 'File gốc'}</span></td></tr>)}
         {!loading && visibleRows.length === 0 && <tr><td colSpan="7" className="isr-no-rows">Không có dữ liệu trong bộ lọc này.</td></tr>}
       </tbody></table></div>
-      <div className="isr-pager"><span>Trang {safePage} / {pageCount}</span><div><button type="button" disabled={safePage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Trước</button><button type="button" disabled={safePage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Tiếp</button></div></div>
+      <Pagination page={safePage - 1} pageSize={pageSize} total={filteredRows.length} onPageChange={(page) => setPage(page + 1)} label="Phân trang sổ kế toán" />
     </article>
   </section>;
 }

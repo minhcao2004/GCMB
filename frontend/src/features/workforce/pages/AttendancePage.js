@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Author: HuyDV
  * Created: 27/10/2026
@@ -248,7 +249,7 @@ export default function AttendancePage({
             )}
             <div className="attendance-table-scroll">
               {monthly ? (
-                <table className="attendance-table monthly-payroll-table">
+                <PaginatedTable pageSize={5} className="attendance-table monthly-payroll-table">
                   <thead>
                     <tr>
                       <th>Chọn</th>
@@ -338,9 +339,9 @@ export default function AttendancePage({
                       );
                     })}
                   </tbody>
-                </table>
+                </PaginatedTable>
               ) : (
-                <table className="attendance-table">
+                <PaginatedTable pageSize={10} className="attendance-table">
                   <thead>
                     <tr>
                       <th>Nhân viên</th>
@@ -383,7 +384,7 @@ export default function AttendancePage({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               )}
               {!(monthly ? employees.length : rows.length) && (
                 <p className="attendance-empty" role="status">

@@ -226,7 +226,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   .inv-heading-actions .inv-button { min-height: 42px; padding-inline: 10px; font-size: 12px; }
   .inv-form-layout { grid-template-columns: minmax(0, 1fr); }
   .inv-filter-panel { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  .inv-history-filters, .inv-item-filters { grid-template-columns: minmax(0, 1fr); }
+  .inv-history-filters, .inv-unified-filters { grid-template-columns: minmax(0, 1fr); }
   .inv-table { min-width: 700px; }
   .inv-form-grid { gap: 17px; }
   .inv-panel, .inv-summary { padding: 17px; }
@@ -291,7 +291,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   border-radius: 14px;
   padding: 18px 20px 15px;
 }
-.inv-item-filters { grid-template-columns: minmax(280px, 1.5fr) minmax(210px, .85fr); }
+.inv-unified-filters { grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(150px, .8fr)); }
 .inv-history-filters { grid-template-columns: minmax(230px, 1.3fr) repeat(3, minmax(160px, .85fr)); }
 .inv-filter-panel > small { color: var(--inv-muted); font-size: 12px; }
 .inv-filter-panel .inv-search input,
@@ -310,6 +310,9 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
 .inv-table-card { border: 1px solid var(--inv-line); border-radius: 14px; }
 .inv-table { min-width: 740px; }
 .inv-items-table { min-width: 900px; }
+.inv-unified-table { min-width: 1100px; }
+.inv-unified-table td:first-child { min-width: 210px; }
+.inv-unified-table .inv-row-actions .inv-text-button { margin-right: 10px; }
 .inv-history-table { min-width: 1020px; }
 .inv-table th { height: 46px; padding: 0 18px; color: #5a6678; background: #f7f9fc; font-size: 11px; }
 .inv-table td { padding: 13px 18px; color: #465267; font-size: 13px; }
@@ -386,7 +389,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   .inv-summary-actions { margin-top: 12px; }
   .inv-filter-panel,
   .inv-history-filters,
-  .inv-item-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inv-unified-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inv-search { grid-column: 1 / -1; }
 }
 
@@ -405,7 +408,7 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
   .inv-heading-actions .inv-button:nth-child(3) { grid-column: 1 / -1; }
   .inv-filter-panel,
   .inv-history-filters,
-  .inv-item-filters { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px; }
+  .inv-unified-filters { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px; }
   .inv-search { grid-column: auto; }
   .inv-form-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .inv-panel, .inv-summary { padding: 16px; }

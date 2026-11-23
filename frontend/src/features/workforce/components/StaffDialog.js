@@ -93,6 +93,7 @@ export default function StaffDialog({
     };
   }, []);
   function change(key, value) {
+    if (key === 'identityNumber') value = value.replace(/[^0-9]/g, '').slice(0, 12);
     setForm((old) => ({ ...old, [key]: value }));
     setErrors((old) => ({ ...old, [key]: '', form: '' }));
   }
@@ -426,7 +427,7 @@ export default function StaffDialog({
                     )}
                     {field(
                       'identityNumber',
-                      <input {...attrs('identityNumber')} autoComplete="off" />
+                      <input {...attrs('identityNumber')} type="text" inputMode="numeric" pattern="[0-9]{12}" maxLength={12} autoComplete="off" />
                     )}
                     {mode === 'edit' &&
                       field(
