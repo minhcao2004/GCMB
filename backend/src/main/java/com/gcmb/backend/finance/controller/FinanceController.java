@@ -100,7 +100,7 @@ public class FinanceController {
     @PostMapping("/branch-management/finance/requests")
     public Map<String,Object> createRequest(@AuthenticationPrincipal Identity who,@RequestBody ExpenseRequest body) {
         return financeService.createRequest(who,body.kind(),body.categoryId(),body.amount(),body.expenseOn(),body.description(),
-            body.beneficiaryName(),body.bankAccount(),body.bankName(),body.paymentMethod(),body.receiptIds());
+            body.beneficiaryName(),body.receiptIds());
     }
     @PostMapping(value="/branch-management/finance/requests/{id}/attachments",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> requestAttachment(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
@@ -124,7 +124,7 @@ public class FinanceController {
     public record Review(boolean approve,String note) {}
     public record FundTransfer(BigDecimal amount,LocalDate sentOn,String reference) {}
     public record ExpenseRequest(String kind,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
-            String description,String beneficiaryName,String bankAccount,String bankName,String paymentMethod,List<UUID> receiptIds) {}
+            String description,String beneficiaryName,List<UUID> receiptIds) {}
     public record DirectExpenseRequest(UUID idempotencyKey,UUID branchId,UUID categoryId,BigDecimal amount,LocalDate expenseOn,
             String beneficiaryName,String bankAccount,String bankName,String paymentMethod,String description,String reference,
             Integer allocationMonths,LocalDate allocationStart) {}

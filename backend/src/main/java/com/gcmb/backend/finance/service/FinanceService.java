@@ -203,8 +203,7 @@ public class FinanceService {
 
     @Transactional
     public Map<String,Object> createRequest(Identity who, String kind, UUID categoryId, BigDecimal amount,
-            LocalDate expenseOn, String description, String beneficiaryName, String bankAccount, String bankName,
-            String paymentMethod, List<UUID> receiptIds) {
+            LocalDate expenseOn, String description, String beneficiaryName, List<UUID> receiptIds) {
         UUID branch=branch(who);
         if(!"PAYMENT".equals(kind)&&!"REIMBURSEMENT".equals(kind)) bad("Loại đề nghị không hợp lệ.");
         if("REIMBURSEMENT".equals(kind)&&!"BRANCH_MANAGER".equals(who.role())) forbidden("Chỉ quản lý cơ sở được tạo đề nghị hoàn ứng.");
@@ -255,20 +254,17 @@ public class FinanceService {
         if(expenseOn==null) bad("Vui lòng nhập ngày chi.");
         financialPeriodService.requireOpen(expenseOn, "tạo đề nghị chi hoặc hoàn ứng");
         if(clean(description,1000).isBlank()) bad("Vui lòng nhập nội dung chi.");
-        paymentMethod=paymentMethod(paymentMethod); // BR-90: đề nghị ghi rõ nguồn tiền kế toán dự kiến dùng.
         if(clean(beneficiaryName,160).isBlank()) bad("Vui lòng nhập người nhận tiền.");
-        if("BANK".equals(paymentMethod)&&(clean(bankAccount,80).isBlank()||clean(bankName,120).isBlank()))
-            bad("Vui lòng nhập số tài khoản và ngân hàng khi nhận qua tài khoản.");
         // BR-91, BR-93: đề nghị thanh toán trên 3.000.000đ cần Quản lý cấp cao duyệt; hoàn ứng do Kế toán duyệt.
         String status="PAYMENT".equals(kind)&&amount.compareTo(HEAD_OFFICE_APPROVAL_LIMIT)>0
             ?"WAITING_HEAD_OFFICE":"WAITING_ACCOUNTANT";
         UUID id=UUID.randomUUID();
         jdbcTemplate.update("""
             INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
-              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,payment_method,requested_by,status)
-            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?,?)
+              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status)
+            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
             """,id,code("EXP"),kind,branch,categoryId,categoryType,recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),
-            "BANK".equals(paymentMethod)?clean(bankAccount,80):"","BANK".equals(paymentMethod)?clean(bankName,120):"",paymentMethod,who.id(),status);
+            "","",who.id(),status);
         // BR-92, BR-94: requester lấy từ phiên đăng nhập; liên kết phiếu nhập giữ nguyên chứng cứ khoản chi và chặn dùng lại.
         for(var linked:linkedReceipts.entrySet())
             jdbcTemplate.update("INSERT INTO gcmb.finance_request_stock_receipt(request_id,receipt_id,amount) VALUES(?,?,?)",
