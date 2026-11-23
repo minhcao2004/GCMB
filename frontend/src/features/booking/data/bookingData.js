@@ -12,7 +12,6 @@ export const bookingStatuses = {
   pending: 'Chờ check-in',
   checkedIn: 'Đã check-in',
   cancelled: 'Đã hủy',
-  noShow: 'No-show',
 };
 
 export const tierLabels = { queen: 'Queen', king: 'King' };
@@ -142,7 +141,7 @@ export function createDemoBookings() {
     bookingAt({ id: 'BK-26002', offsetMinutes: 210, durationMinutes: 180, roomId: 'P.301', customerName: 'Trần Hoàng Nam', phone: '0903 456 789', guestCount: 5, status: 'pending', depositAmount: 0, source: 'Đặt trước' }),
     bookingAt({ id: 'BK-26003', offsetMinutes: -45, durationMinutes: 150, roomId: 'P.502', customerName: 'Lê Thu Trang', phone: '0987 654 321', guestCount: 2, status: 'checkedIn', depositAmount: 120000, source: 'Khách đến trực tiếp' }),
     bookingAt({ id: 'BK-26004', offsetMinutes: 300, durationMinutes: 120, roomId: 'P.402', customerName: 'Phạm Gia Bảo', phone: '0866 521 881', guestCount: 3, status: 'cancelled', depositAmount: 100000, source: 'Đặt trước', depositOutcome: 'eligible_refund' }),
-    bookingAt({ id: 'BK-26005', offsetMinutes: -180, durationMinutes: 120, roomId: 'P.301', customerName: 'Vũ Khánh Linh', phone: '0325 186 385', guestCount: 4, status: 'noShow', depositAmount: 100000, source: 'Đặt trước', depositOutcome: 'forfeited' }),
+    bookingAt({ id: 'BK-26005', offsetMinutes: -180, durationMinutes: 120, roomId: 'P.301', customerName: 'Vũ Khánh Linh', phone: '0325 186 385', guestCount: 4, status: 'cancelled', depositAmount: 100000, source: 'Đặt trước', depositOutcome: 'forfeited' }),
     bookingAt({ id: 'BK-26006', offsetMinutes: 1500, durationMinutes: 240, roomId: 'P.502', customerName: 'Đỗ Hải Yến', phone: '0823 983 881', guestCount: 3, status: 'pending', depositAmount: 0, source: 'Đặt trước', pricingMode: 'combo', comboIndex: 1 }),
   ];
 }

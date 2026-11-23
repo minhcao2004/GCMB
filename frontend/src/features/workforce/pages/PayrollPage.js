@@ -1,11 +1,13 @@
 /** Author: HuyDV. UC-91..97 / BR-64..81/213/225/227: bảng lương kế toán. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/accounting/payroll';
+const pageSize = 6;
 const componentNames = {
   BASE: 'Tiền công theo ca',
   OVERTIME: 'Ngoài giờ ngày thường',
@@ -18,14 +20,17 @@ const componentNames = {
 const paymentStatusNames = { PAID: 'Đã thanh toán', FAILED: 'Không thành công', PENDING: 'Chờ xác nhận' };
 const requestId = () => window.crypto.randomUUID();
 export default function PayrollPage() {
-  const [month, setMonth] = useState(today().slice(0, 7));
+  const [searchParams] = useSearchParams();
+  const requestedMonth = searchParams.get('month') || '';
+  const requestedBranch = searchParams.get('branchId') || '';
+  const [month, setMonth] = useState(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : today().slice(0, 7));
   const [data, setData] = useState(null),
     [options, setOptions] = useState(null),
     [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState([]),
     [search, setSearch] = useState(''),
     [filter, setFilter] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState(requestedBranch);
   const [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false),
@@ -43,6 +48,26 @@ export default function PayrollPage() {
   });
   const [available, setAvailable] = useState(null);
   const [results, setResults] = useState({});
+  const [evidence, setEvidence] = useState({});
+  const [page, setPage] = useState(1);
+  const detailRef = useRef(null);
+  useEffect(() => {
+    setPage(1);
+  }, [month, search, filter, branchFilter]);
+  // HuyDV / UC-92: chi tiết riêng, giữ vị trí danh sách khi đóng cửa sổ.
+  useEffect(() => {
+    if (!detail || !detailRef.current) return;
+    const element = detailRef.current;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    element.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      element.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [detail]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -50,6 +75,7 @@ export default function PayrollPage() {
     setData(null);
     setDetail(null);
     setSelected([]);
+    setEvidence({});
     setReviewed(false);
     setDialog('');
     Promise.all([api.get(`${base}/${month}`), api.get(`${base}/options`)])
@@ -103,6 +129,19 @@ export default function PayrollPage() {
     setReviewed(false);
     setSelected((old) => (old.includes(id) ? old.filter((item) => item !== id) : [...old, id]));
   };
+  const submitPayments = () => {
+    const command = {
+      version: data.version,
+      payments: selected.map((employeeId) => ({ ...results[employeeId], employeeId, accountId: payment.accountId })),
+    };
+    let body = command;
+    if (selected.some((id) => evidence[id])) {
+      body = new FormData();
+      body.append('command', new Blob([JSON.stringify(command)], { type: 'application/json' }));
+      selected.forEach((id) => { if (evidence[id]) body.append(`proof_${id}`, evidence[id]); });
+    }
+    return mutate(`${base}/${month}/payments`, body, 'Đã ghi nhận kết quả thanh toán.');
+  };
   const moneyInput = (key, label, state, setter) => (
     <label>
       {label}
@@ -140,6 +179,10 @@ export default function PayrollPage() {
       (!filter || Boolean(r.paid) === (filter === 'paid')),
   );
   const totalDue = rows.filter((row) => !row.paid).reduce((sum, row) => sum + Number(row.net_amount), 0);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const firstRow = (currentPage - 1) * pageSize;
+  const pageRows = rows.slice(firstRow, firstRow + pageSize);
   const pendingBranches = (data?.pendingBranches || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
   const advances = (data?.advances || []).filter((row) => !branchFilter || row.branch_id === branchFilter);
   return (
@@ -164,21 +207,6 @@ export default function PayrollPage() {
             value={month}
             onChange={(e) => e.target.value && setMonth(e.target.value)}
           />
-        </label>
-        <label>
-          Cơ sở
-          <select value={branchFilter} disabled={busy} onChange={(event) => {
-            setBranchFilter(event.target.value);
-            setSelected([]);
-            setDialog('');
-            setDetail(null);
-            setReviewed(false);
-          }}>
-            <option value="">Tất cả cơ sở</option>
-            {(options?.branches || []).map((branch) => (
-              <option key={branch.id} value={branch.id}>{branch.name}</option>
-            ))}
-          </select>
         </label>
         <label>
           Tìm nhân viên
@@ -214,7 +242,22 @@ export default function PayrollPage() {
               </span>
               <strong className="finance-total">Còn phải trả: {vnd(totalDue)}</strong>
             </div>
-            <div className="finance-actions">
+            <div className="finance-actions payroll-list-actions">
+              <label className="finance-branch-filter">
+                Cơ sở
+                <select aria-label="Lọc lương theo cơ sở" value={branchFilter} disabled={busy} onChange={(event) => {
+                  setBranchFilter(event.target.value);
+                  setSelected([]);
+                  setDialog('');
+                  setDetail(null);
+                  setReviewed(false);
+                }}>
+                  <option value="">Tất cả cơ sở</option>
+                  {(options?.branches || []).map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </label>
               <button
                 disabled={busy}
                 onClick={() => {
@@ -244,6 +287,7 @@ export default function PayrollPage() {
                     (data.status === 'CONFIRMED' || r.submitted_branch_id)))}
                 onClick={() => {
                   setDialog('payments');
+                  setEvidence({});
                   setPayment((p) => ({ ...p, accountId: '' }));
                   setReviewed(false);
                   setResults(
@@ -345,18 +389,7 @@ export default function PayrollPage() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      mutate(
-                        `${base}/${month}/payments`,
-                        {
-                          version: data.version,
-                          payments: selected.map((employeeId) => ({
-                            ...results[employeeId],
-                            employeeId,
-                            accountId: payment.accountId,
-                          })),
-                        },
-                        'Đã ghi nhận kết quả thanh toán.',
-                      );
+                      submitPayments();
                     }}
                   >
                     <FundInput
@@ -375,8 +408,23 @@ export default function PayrollPage() {
                             <SalaryBankDetails entry={r} />
                             <ResultInputs
                               value={results[id]}
+                              hasEvidence={Boolean(evidence[id])}
                               onChange={(v) => setResults({ ...results, [id]: v })}
                             />
+                            <label>Ảnh / chứng từ trả lương (không bắt buộc)
+                              <input type="file" disabled={busy}
+                                aria-label={`Bằng chứng trả lương ${r.name}`}
+                                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0] || null;
+                                  const invalid = file && (file.size === 0 || file.size > 20000000 ||
+                                    !['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'].includes(file.type));
+                                  if (invalid) event.target.value = '';
+                                  setEvidence((old) => ({ ...old, [id]: invalid ? null : file }));
+                                  setError(invalid ? 'Chọn ảnh JPEG, PNG, WebP, HEIC, HEIF hoặc PDF, tối đa 20 MB.' : '');
+                                  setReviewed(false);
+                                }} />
+                            </label>
                           </div>
                         )
                       );
@@ -413,7 +461,7 @@ export default function PayrollPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {pageRows.map((r) => (
                     <tr key={r.id}>
                       <td>
                         <input
@@ -436,24 +484,37 @@ export default function PayrollPage() {
                       <td>{vnd(r.net_amount)}</td>
                       <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
                       <td>
-                        <button onClick={() => setDetail(r)}>Chi tiết</button>
+                        <button type="button" aria-haspopup="dialog" onClick={() => setDetail(r)}>Chi tiết</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {!!rows.length && <nav className="payroll-pagination" aria-label="Phân trang lương nhân viên">
+                <span>Hiển thị {firstRow + 1}–{Math.min(firstRow + pageSize, rows.length)} / {rows.length} nhân viên</span>
+                <div>
+                  <button type="button" disabled={busy || currentPage === 1}
+                    onClick={() => setPage(currentPage - 1)}>Trang trước</button>
+                  <span aria-live="polite">Trang {currentPage} / {pageCount}</span>
+                  <button type="button" disabled={busy || currentPage === pageCount}
+                    onClick={() => setPage(currentPage + 1)}>Trang sau</button>
+                </div>
+              </nav>}
               {!rows.length && (
                 <p>{readyRows.length ? emptyMessage : 'Chưa có bảng lương đã chốt trong tháng này.'}</p>
               )}
             </article>
             {detail && (
-              <article className="finance-card">
-                <div className="finance-actions">
-                  <h2>
-                    {detail.code} · {detail.name}
-                  </h2>
-                  <button onClick={() => setDetail(null)}>Đóng chi tiết</button>
-                </div>
+              <dialog ref={detailRef} className="payroll-detail-dialog"
+                aria-labelledby="payroll-detail-title" onCancel={(event) => {
+                  event.preventDefault(); setDetail(null);
+                }}>
+                <header>
+                  <div><h2 id="payroll-detail-title">Chi tiết lương</h2>
+                    <p>{detail.code} · {detail.name} · Tháng {month.split('-').reverse().join('/')}</p></div>
+                  <button type="button" aria-label="Đóng chi tiết" onClick={() => setDetail(null)}>×</button>
+                </header>
+                <div className="payroll-detail-body">
                 {detail.components.map((c, i) => (
                   <div className="finance-line" key={i}>
                     <span>
@@ -470,13 +531,21 @@ export default function PayrollPage() {
                 </div>
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
                 <SalaryBankDetails entry={detail} />
+                {error && <p className="finance-error" role="alert">{error}</p>}
                 {detail.payments.map((p, i) => (
                   <p key={i}>
                     {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
                     {p.external_reference}
+                    {p.evidence_name && <button type="button" className="finance-link"
+                      onClick={async () => {
+                        try { await api.download(`${base}/payments/${p.id}/evidence`, p.evidence_name); }
+                        catch { setError('Không tải được bằng chứng trả lương. Vui lòng thử lại.'); }
+                      }}>Tải bằng chứng: {p.evidence_name}</button>}
                   </p>
                 ))}
-              </article>
+                </div>
+                <footer><button type="button" onClick={() => setDetail(null)}>Đóng</button></footer>
+              </dialog>
             )}
             {!!pendingBranches.length && <details className="finance-card" open>
               <summary>Chờ các cơ sở chốt đủ ({pendingBranches.length} phần lương đã gửi)</summary>
@@ -551,7 +620,7 @@ function FundInput({ options, value, onChange }) {
     </label>
   );
 }
-function ResultInputs({ value, onChange }) {
+function ResultInputs({ value, onChange, hasEvidence = false }) {
   return (
     <div className="finance-grid">
       <label>
@@ -566,9 +635,9 @@ function ResultInputs({ value, onChange }) {
         </select>
       </label>
       <label>
-        Mã chứng từ / tham chiếu {value.result === 'PAID' ? '*' : '(không bắt buộc)'}
+        Mã chứng từ / tham chiếu {value.result === 'PAID' && !hasEvidence ? '*' : '(không bắt buộc)'}
         <input
-          required={value.result === 'PAID'}
+          required={value.result === 'PAID' && !hasEvidence}
           maxLength={200}
           value={value.reference}
           onChange={(e) => onChange({ ...value, reference: e.target.value })}

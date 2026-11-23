@@ -1,0 +1,77 @@
+name: gcmb
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-gcmb}
+      POSTGRES_USER: ${DB_USERNAME:-gcmb}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50"]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 768m
+    logging: *logging
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-gcmb}
+      DB_USERNAME: ${DB_USERNAME:-gcmb}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN in .env}
+      AUTH_SECURE_COOKIE: ${AUTH_SECURE_COOKIE:-true}
+      GCMB_ATTACHMENT_STORAGE_DIR: /app/data/attachments
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
+    volumes:
+      - attachments:/app/data/attachments
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/api/v1/auth/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 120s
+      retries: 5
+    mem_limit: 1536m
+    logging: *logging
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env}
+    ports:
+      - "${WEB_BIND_IP:-127.0.0.1}:80:80"
+      - "${WEB_BIND_IP:-127.0.0.1}:443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    mem_limit: 256m
+    logging: *logging
+
+volumes:
+  postgres_data:
+  attachments:
+  caddy_data:
+  caddy_config:

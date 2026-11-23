@@ -64,7 +64,7 @@ The current scope excludes a customer booking portal, hardware barcode-scanner i
 | Communication | REST API with JSON |
 | External integrations | SePay, email service |
 | Version control | Git and GitHub |
-| Testing | Manual testing; Java manual runner and individual API requests such as Postman |
+| Testing | JUnit and API testing tools such as Postman |
 | Deployment target | Docker on VPS/Cloud |
 
 Dependency versions are defined in `backend/pom.xml`, `frontend/package.json`, and the frontend lockfile. Use the versions committed by the team.
@@ -85,7 +85,8 @@ The backend is deployed as one application. Its ten peer feature packages are `a
 ## Project Structure
 
 
-The tree below reflects the current repository structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
+The tree below reflects the current repositcd D:\DO_AN_2026\GCMB\frontend
+npm.cmd startory structure. Dashboard reporting, financial transaction adjustments, financial-period closing, cash closing, payroll, funds, expenses, approvals, and reimbursements are active capabilities.
 
 ```text
 GCMB/
@@ -108,7 +109,6 @@ GCMB/
 │   │   ├── application-prod.yml
 │   │   └── db/migration/
 │   ├── src/test/
-│   ├── scripts/
 │   ├── .mvn/wrapper/
 │   ├── pom.xml
 │   ├── mvnw
@@ -155,12 +155,12 @@ GCMB/
 | `shared` (frontend) | Shared admin `AppShell` for the head-office manager, branch manager, receptionist, and accountant with per-audience collapsed-sidebar persistence; presentational UI primitives for buttons, form controls, overlays, data tables, feedback, and page composition, styled with centralized design tokens and without business logic. |
 | `branch` | Branches, manager assignments, rooms, room operating status, and branch-manager dashboard navigation restored from the URL. The dashboard renders one selected feature at a time and keeps scrolling inside the content area without a visible vertical scrollbar. |
 | `pricing` | Room types, room prices, pricing rules, and combo packages. |
-| `booking` | Reservations, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
-| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts, adjustments, movement history, equipment assets, incidents, and transfers. |
+| `booking` | Reservations by room type with the physical room selected at check-in, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
+| `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts with supplier and item expiry dates, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Head-office chain overview with URL-backed day/week/month/quarter/year or custom date ranges, historical period navigation capped at today, branch scope including suspended branches' history, scoped KPIs and charts, branch ranking, current chain-wide pending approvals, and operational alerts; its expense-detail link preserves the selected period and branch on return, mapping a multi-branch detail selection to the chain-wide overview; head-office operating expenses use payment dates, while the shared accountant/head-office financial overview recognizes finance requests by allocation month and older expenses/payroll by payment date, with matching basis on expense-detail links; shared financial reports support separate chart grouping, prior-period or YoY comparison, category and branch drill-down, and CSV/XLSX export; completed-bill revenue, held-deposit balance at period end, and forfeited deposits are shown separately; branch performance summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
-| `finance` (frontend) | Accountant fund and expense workflows, configurable expense categories, one-time direct expenses, recurring expense templates and monthly payment cycles with in-app reminders, allocation schedules, daily cash-closing status by branch and submission notifications, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
-| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, reimbursements, daily cash-closing status and accountant notifications on successful submission, cash reconciliation, financial transactions, and period closing. |
+| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and draggable severity-colored operational alerts linked to related reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `finance` (frontend) | Accountant fund and expense workflows with cash or bank payment selection, receipt-linked reimbursements, configurable expense categories, one-time direct expenses, recurring expense templates and idempotent monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
+| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with recorded payment methods, receipt-linked reimbursements, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, cash reconciliation, financial transactions, and period closing. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 
@@ -279,9 +279,15 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 
 ## Configuration
 
+### VPS deployment
+
+The repository includes `compose.yaml`, backend/frontend Dockerfiles, and the `prod` profile for a single VPS. Follow [VPS Deployment](docs/VPS%20Deployment.md) for private first-time setup, HTTPS, persistent uploads, updates, and backups. Copy `deploy/vps.env.example` to the root `.env` on the VPS; do not use local development secrets or expose seeded accounts before changing their passwords.
+
+The demo deployed on 13/11/2026 is available at [GCMB demo](https://gcmb.103.78.1.178.sslip.io). See [deployment record](docs/VPS%20Deployment%202026-11-13.md) for the copied local data, checks, backup locations, and remaining integration setup. Local and VPS data are independent after the snapshot.
+
 | File | Purpose |
 | --- | --- |
-| `application.yml` | Common backend settings. |
+| `application.yaml` | Common backend settings. |
 | `application-dev.yml` | Local development settings. |
 | `application-prod.yml` | Production settings using environment-supplied secrets. |
 | `frontend/.env.local` | Local frontend configuration; exclude from Git. |
@@ -300,12 +306,6 @@ spring:
 ```
 
 Set the active profile through `SPRING_PROFILES_ACTIVE`. Backend `.env` files are not loaded automatically by Spring Boot; supply variables through the terminal, IDE run configuration, or deployment environment.
-
-The boolean setting `gcmb.finance.period-close.allow-early-close` reads `GCMB_ALLOW_EARLY_PERIOD_CLOSE`. Its fallback is `false`; `application-dev.yml` explicitly defaults it to `true` for demos. Set the environment variable to `true` to enable early closing or `false` to disable it. Outside the development profile, it defaults to `false`.
-
-Set the variable before starting the backend; restart the backend after changing it. PowerShell: set `$env:GCMB_ALLOW_EARLY_PERIOD_CLOSE = "true"` to enable or `"false"` to disable. On macOS/Linux, use `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=true` or `export GCMB_ALLOW_EARLY_PERIOD_CLOSE=false`.
-
-Do not enable early period closing in production. Keep it false and do not set the production environment variable to `true`.
 
 Keep database passwords and SePay, email, and cloud-storage credentials outside source control. Frontend `REACT_APP_*` variables are exposed in the browser bundle and must contain only public configuration.
 
@@ -357,16 +357,22 @@ V14 seed correction (24/10/2026): the six starter rooms per seeded branch are in
 
 ## Testing
 
-Run compilation/build checks from the corresponding project directory:
+Lịch ca lễ tân (08/11/2026): màn Ca làm việc có vùng cuộn dọc cho cả Lịch ca / đăng ký và Công cá nhân trên desktop; bảng lịch cuộn ngang khi màn hình hẹp. Lễ tân dùng chung bố cục, kích thước ô, màu bốn khung ca, thanh chọn tuần, nhãn trạng thái và chú giải với lịch ca quản lý cơ sở trong `ShiftSchedulePage.js`, không dùng bộ CSS riêng. Nội dung và thao tác vẫn theo vai trò: lễ tân đăng ký/xem ca cá nhân; quản lý mở ca, phân công và chấm công. Không thay API hoặc quyền truy cập. File ảnh hưởng: `ShiftSchedulePage.js`, `shifts.css`.
+
+Run commands from the corresponding project directory.
+
+Thông báo lịch ca (08/11/2026): mở chi tiết/phân công, mở chấm công, mở chỉnh lịch hoặc đổi tuần/cơ sở sẽ xóa thông báo thành công của thao tác trước. Đóng hộp thoại không hiển thị thành công và không gọi API phân công. Thông báo mới chỉ được đặt sau khi API lưu thành công. File ảnh hưởng: `ShiftSchedulePage.js`. Không thêm file test theo yêu cầu; bốn kiểm tra hồi quy đã chạy đạt trước khi xóa file test tạm.
 
 | Check | Windows PowerShell | macOS/Linux |
 | --- | --- | --- |
-| Backend test-source compilation only (`backend/`) | `.\mvnw.cmd -DskipTests test-compile` | `./mvnw -DskipTests test-compile` |
+| Backend tests (`backend/`) | `.\mvnw.cmd test` | `./mvnw test` |
+| Backend verification (`backend/`) | `.\mvnw.cmd verify` | `./mvnw verify` |
+| Frontend tests (`frontend/`) | `npm.cmd test -- --watchAll=false` | `npm test -- --watchAll=false` |
 | Frontend production build (`frontend/`) | `npm.cmd run build` | `npm run build` |
 
-Compilation/build success is not a manual test verdict. Database-dependent manual cases use a separate test database with reproducible fixtures. Keep stable case IDs/keys and synchronize case code, Report 5 and coverage. New or materially changed cases stay Pending/Not Run until the tester runs and evaluates them.
+These commands assume the standard Maven and Create React App scripts are present. Database-dependent tests must use a separate test database and the configuration defined by the test suite.
 
-Phạm vi hiện tại chỉ là manual UT: kiểm tra method/class thật với dependency stub khi cần, quan sát return value, exception và side effects để tester tự đối chiếu. Không thêm kịch bản hoặc worksheet test ở cấp khác khi chưa được yêu cầu. Không dùng dữ liệu khách hàng hoặc tài chính production.
+Prioritize tests for booking conflicts, role and branch access, bill/deposit calculations, stock movements, payroll calculations, and financial reconciliation. API/system tests and UAT should cover complete workflows and their failure cases. Do not use production customer or financial data for testing.
 
 ## Contributing
 
@@ -386,12 +392,22 @@ Review and test changes before merging. Keep `node_modules/`, `build/`, `target/
 
 ## Documentation
 
+Local database reset (13/11/2026): database `gcmb` trên máy phát triển đã được nạp lại seed V1–V58 theo xác nhận của người dùng, còn 18 cơ sở, 108 phòng và 6 tài khoản; mật khẩu hiện tại của sáu tài khoản được giữ nguyên. Xem [biên bản và vị trí bản sao lưu](docs/Local%20Database%20Reset%202026-11-13.md). Đây là thao tác local, không phải yêu cầu reset các môi trường khác.
+
+Dashboard preview data (22/11/2026): the local `gcmb` database has a clearly marked `PV-DASH` fixture for `qlcs.hoabang`, including linked room/F&B bills and payments, low stock, attendance, and one pending approval. It changes local financial reports and the local approval queue; never run it against production. See [the local database record](docs/Local%20Database%20Reset%202026-11-13.md#bộ-dữ-liệu-xem-trước-dashboard-quản-lý-cơ-sở-và-cấp-cao-22112026) and `backend/scripts/seed_branch_dashboard_preview.sql`.
+
+Real operating data (23/11/2026): the user-provided February–November 2026 dump is restored in a separate local PostgreSQL 18 cluster under ignored `backend/target/`, and `backend/.env` points the local app at it. The existing `localhost:5432/gcmb` database is untouched. See [restore counts and scope](docs/Local%20Database%20Reset%202026-11-13.md#bản-dump-vận-hành-10-tháng-23112026); the dump itself is not committed.
+
 The detailed project references are:
 
 - Report 1 — Project Introduction.
 - Report 2 — Project Management Plan.
 - GenZ Use Case List.
 - GenZ Cinema AS-IS / TO-BE workflows.
+
+- [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
+- [Finance Fund and Expense Workflow](docs/Finance%20Fund%20and%20Expense%20Workflow.md) — fund receipt confirmation, category maintenance, branch expense requests, approval thresholds, payment, reimbursement, and evidence access.
+
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.
 
@@ -440,6 +456,12 @@ Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_
 - API mới cho BRANCH_MANAGER: GET /api/v1/auth/branches trả [{id,name}], POST /api/v1/auth/branch với {branchId} trả Identity của cơ sở đã chọn. Có CSRF và kiểm tra phân công/cơ sở ACTIVE tại server; không thể chọn cơ sở ngoài quyền bằng cách sửa request. Lựa chọn được nhớ theo phiên đăng nhập. Nếu cơ sở bị thu hồi hoặc tạm ngừng, danh tính chọn lại một cơ sở còn hợp lệ; không còn cơ sở nào thì không tiếp tục sử dụng phiên quản lý.
 - API phòng quản lý gửi X-GCMB-Branch-Id theo màn hình đang mở. SessionFilter xác minh lại phân công trước khi đặt phạm vi Identity, giúp các tab đang xem cơ sở khác nhau không ghi nhầm dữ liệu khi phiên đổi lựa chọn. Khách API không gửi header dùng cơ sở đang chọn của phiên. Header không tự cấp thêm quyền.
 - File ảnh hưởng: branch/BranchAdministrationService, auth/{AuthRepository,AuthService,AuthController,SessionFilter,AuthSecurity}, accounts/{DTO,AccountRepository,AccountAccessService}; frontend BranchManagerDashboard, DashboardTopbar, RoleHomePage, AccountAccessDialog, BranchManagementPage, BranchRoomsPage và các API/styles liên quan. Không thêm file test.
+
+### Bộ lọc tổng quan quản lý cơ sở (23/11/2026)
+
+- Trang Tổng quan có phạm vi báo cáo theo tháng (Tháng 1–12 và năm), năm hoặc khoảng ngày; doanh thu, giao dịch, F&B, hiệu suất hạng phòng và khung giờ cao điểm bám theo phạm vi này.
+- Biểu đồ xu hướng doanh thu có bộ lọc riêng theo tháng, năm hoặc khoảng ngày. Biểu đồ vùng có tooltip theo ngày/tháng; khoảng ngày dài được gom theo tháng để dễ đọc. Khoảng ngày tùy chọn tối đa 366 ngày.
+- API `/api/v1/branch-management/dashboard` nhận `scopePeriod`, `scopeFrom`, `scopeTo` cho phạm vi tổng quan và `revenuePeriod`, `revenueDate`, `revenueFrom`, `revenueTo` riêng cho biểu đồ; hai bộ lọc không ghi đè nhau. File ảnh hưởng: `frontend/src/features/branch/components/BranchOverviewDashboard.js`, `frontend/src/features/branch/components/branch-dashboard.css`, `backend/src/main/java/com/gcmb/backend/dashboard/DashboardController.java`.
 
 ### Giới hạn hai quản lý và bố trí dropdown (25/10/2026)
 

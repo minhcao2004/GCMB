@@ -73,7 +73,7 @@ INSERT INTO gcmb.financial_account (id, code, name, kind, branch_id, active)
 VALUES ('34370000-0000-4000-8000-000000000050', 'DEMO-UC3437-BANK', 'Tài khoản ngân hàng demo UC34-37', 'BANK', NULL, TRUE)
 ON CONFLICT (id) DO NOTHING;
 
--- Seven confirmed bookings cover check-in, no-show, edit, refundable cancellation, two cutoff windows, and no-deposit cancellation.
+-- Seven confirmed bookings cover check-in, overdue check-in, edit, refundable cancellation, two cutoff windows, and no-deposit cancellation.
 INSERT INTO gcmb.booking (id, branch_id, code, contact_name, contact_phone, guest_count, channel, planned_start, planned_end,
                           status, refund_cutoff_minutes, created_by, note)
 VALUES
@@ -95,9 +95,9 @@ VALUES
   ('34370000-0000-4000-8000-000000000106', '34370000-0000-4000-8000-000000000001', 'DEMO-UC3437-FORFEIT-30M', 'Lê Khách Hủy Gần Giờ', '0900000106', 2, 'ZALO',
    date_trunc('minute', CURRENT_TIMESTAMP) + INTERVAL '30 minutes', date_trunc('minute', CURRENT_TIMESTAMP) + INTERVAL '150 minutes', 'CONFIRMED', 40,
    '34370000-0000-4000-8000-000000000003', 'Booking demo sẵn sàng thử hủy trong thời hạn không hoàn'),
-  ('34370000-0000-4000-8000-000000000107', '34370000-0000-4000-8000-000000000001', 'DEMO-UC3437-NOSHOW', 'Đỗ Khách No-show', '0900000107', 2, 'PHONE',
+  ('34370000-0000-4000-8000-000000000107', '34370000-0000-4000-8000-000000000001', 'DEMO-UC3437-LATE', 'Đỗ Khách Trễ Hẹn', '0900000107', 2, 'PHONE',
    date_trunc('minute', CURRENT_TIMESTAMP) - INTERVAL '5 minutes', date_trunc('minute', CURRENT_TIMESTAMP) + INTERVAL '115 minutes', 'CONFIRMED', 40,
-   '34370000-0000-4000-8000-000000000003', 'Booking demo để thử UC37 no-show; cọc sẽ bị tịch thu khi xác nhận')
+   '34370000-0000-4000-8000-000000000003', 'Booking demo quá giờ hẹn nhưng vẫn chờ check-in')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO gcmb.room_allocation (id, branch_id, booking_id, room_id, starts_at, ends_at, state, created_by)
@@ -160,7 +160,7 @@ VALUES
   ('34370000-0000-4000-8000-000000000154', '34370000-0000-4000-8000-000000000001', '34370000-0000-4000-8000-000000000106', '34370000-0000-4000-8000-000000000050',
    'DEPOSIT', 'DEMO-UC3437-FORFEIT-30M', 100000, CURRENT_TIMESTAMP + INTERVAL '1 day', 'PENDING'),
   ('34370000-0000-4000-8000-000000000155', '34370000-0000-4000-8000-000000000001', '34370000-0000-4000-8000-000000000107', '34370000-0000-4000-8000-000000000050',
-   'DEPOSIT', 'DEMO-UC3437-NOSHOW', 100000, CURRENT_TIMESTAMP + INTERVAL '1 day', 'PENDING')
+   'DEPOSIT', 'DEMO-UC3437-LATE', 100000, CURRENT_TIMESTAMP + INTERVAL '1 day', 'PENDING')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO gcmb.bank_transaction (id, account_id, provider, external_id, direction, amount, transfer_content, occurred_at, match_status, raw_payload)
@@ -173,8 +173,8 @@ VALUES
    'DEMO-UC3437-CHECKIN', CURRENT_TIMESTAMP - INTERVAL '2 minutes', 'UNMATCHED', '{"fixture":"UC34-37"}'),
   ('34370000-0000-4000-8000-000000000164', '34370000-0000-4000-8000-000000000050', 'SEPAY', 'DEMO-UC3437-FORFEIT-30M', 'IN', 100000,
    'DEMO-UC3437-FORFEIT-30M', CURRENT_TIMESTAMP - INTERVAL '2 minutes', 'UNMATCHED', '{"fixture":"UC34-37"}'),
-  ('34370000-0000-4000-8000-000000000165', '34370000-0000-4000-8000-000000000050', 'SEPAY', 'DEMO-UC3437-NOSHOW', 'IN', 100000,
-   'DEMO-UC3437-NOSHOW', CURRENT_TIMESTAMP - INTERVAL '2 minutes', 'UNMATCHED', '{"fixture":"UC34-37"}')
+  ('34370000-0000-4000-8000-000000000165', '34370000-0000-4000-8000-000000000050', 'SEPAY', 'DEMO-UC3437-LATE', 'IN', 100000,
+   'DEMO-UC3437-LATE', CURRENT_TIMESTAMP - INTERVAL '2 minutes', 'UNMATCHED', '{"fixture":"UC34-37"}')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO gcmb.payment (id, branch_id, booking_id, purpose, method, amount, request_id, bank_transaction_id,
@@ -194,7 +194,7 @@ VALUES
    CURRENT_TIMESTAMP - INTERVAL '1 minute', '34370000-0000-4000-8000-000000000003', 'DEMO-UC3437-FORFEIT-30M'),
   ('34370000-0000-4000-8000-000000000175', '34370000-0000-4000-8000-000000000001', '34370000-0000-4000-8000-000000000107',
    'DEPOSIT', 'BANK_TRANSFER', 100000, '34370000-0000-4000-8000-000000000155', '34370000-0000-4000-8000-000000000165',
-   CURRENT_TIMESTAMP - INTERVAL '1 minute', '34370000-0000-4000-8000-000000000003', 'DEMO-UC3437-NOSHOW')
+   CURRENT_TIMESTAMP - INTERVAL '1 minute', '34370000-0000-4000-8000-000000000003', 'DEMO-UC3437-LATE')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO gcmb.deposit_entry (id, deposit_id, kind, amount, payment_id, actor_id, reason, idempotency_key)
@@ -208,7 +208,7 @@ VALUES
   ('34370000-0000-4000-8000-000000000144', '34370000-0000-4000-8000-000000000136', 'RECEIVE', 100000,
    '34370000-0000-4000-8000-000000000174', '34370000-0000-4000-8000-000000000003', 'Cọc demo UC37 giữ cọc', 'DEMO-UC3437-FORFEIT-30M'),
   ('34370000-0000-4000-8000-000000000145', '34370000-0000-4000-8000-000000000137', 'RECEIVE', 100000,
-   '34370000-0000-4000-8000-000000000175', '34370000-0000-4000-8000-000000000003', 'Cọc demo UC37 no-show', 'DEMO-UC3437-NOSHOW')
+   '34370000-0000-4000-8000-000000000175', '34370000-0000-4000-8000-000000000003', 'Cọc demo booking quá giờ', 'DEMO-UC3437-LATE')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO gcmb.booking_event (id, booking_id, actor_id, event_type, details)

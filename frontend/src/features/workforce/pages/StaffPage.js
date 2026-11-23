@@ -96,10 +96,11 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
     }
   }
   const accountLink =
-    employee?.userId && onAccounts && employee.accountRole !== 'ACCOUNTANT' && (!branchScope || employee.accountRole === 'RECEPTIONIST');
+    employee?.userId && onAccounts && (!branchScope || employee.accountRole === 'RECEPTIONIST');
+  const protectedStaff = !!branchScope && [employee?.position, employee?.accountRole]
+    .some((role) => ['ACCOUNTANT', 'HEAD_OFFICE_MANAGER'].includes(role));
   const canChangeStatus =
-    !readOnly &&
-    employee?.accountRole !== 'ACCOUNTANT' &&
+    !readOnly && !protectedStaff &&
     employee?.userId !== user.id &&
     (!branchScope ||
       !employee?.userId ||
@@ -151,14 +152,14 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                 {employee.code} · {positions[employee.position]}
               </p>
             </div>
-            {employee.accountRole !== 'ACCOUNTANT' && <button
+            <button
               type="button"
               className="staff-primary"
-              disabled={readOnly || detailLoading}
+              disabled={readOnly || detailLoading || protectedStaff}
               onClick={() => setDialog('edit')}
             >
               Sửa hồ sơ
-            </button>}
+            </button>
           </header>
           <nav className="staff-tabs" aria-label="Chi tiết hồ sơ">
             <button
@@ -254,7 +255,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
               <section className="staff-card">
                 <h2>Phân công và trạng thái hồ sơ</h2>
                 <div className="staff-actions">
-                  {!branchScope && employee.accountRole !== 'ACCOUNTANT' && (
+                  {!branchScope && (
                     <button
                       type="button"
                       disabled={readOnly || employee.status !== 'ACTIVE'}
@@ -263,13 +264,13 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                       {employee.branchId ? 'Điều chuyển nhân viên' : 'Gán cơ sở làm việc'}
                     </button>
                   )}
-                  {employee.accountRole !== 'ACCOUNTANT' && <button
+                  <button
                     type="button"
                     disabled={!canChangeStatus}
                     onClick={() => setDialog('status')}
                   >
                     {employee.status === 'ACTIVE' ? 'Ngừng hồ sơ' : 'Kích hoạt lại hồ sơ'}
-                  </button>}
+                  </button>
                 </div>
                 <div className="staff-banner">
                   <strong>Lịch sử được lưu theo từng lần phân công</strong>

@@ -8,6 +8,7 @@ import { apiErrors } from '../../auth/services/authApi';
 import { dateLabel } from '../services/shiftApi';
 import {
   attendanceApi,
+  futureAttendanceMessage,
   hoursLabel,
   localInput,
   initialAttendanceTime,
@@ -59,6 +60,7 @@ export default function AttendanceDialog({
   };
   const closing = dialog.type === 'close';
   const employee = dialog.type === 'employee';
+  const futureShift = !closing && !employee && row && new Date(row.startsAt).getTime() > Date.now();
   const title = closing
     ? 'Xác nhận chốt bảng công'
     : employee
@@ -96,6 +98,10 @@ export default function AttendanceDialog({
   async function submit(event) {
     event.preventDefault();
     if (sending.current || locked || stale) return;
+    if (row && !closing && new Date(row.startsAt).getTime() > Date.now()) {
+      setErrors({ form: futureAttendanceMessage });
+      return;
+    }
     const found = {};
     if (closing) {
       if (!closingEmployees.length) found.employeeIds = 'Vui lòng chọn nhân viên cần chốt.';
@@ -176,6 +182,9 @@ export default function AttendanceDialog({
       </header>
       <form onSubmit={submit}>
         <div className="shift-dialog-body">
+          {futureShift && !Object.keys(errors).length && (
+            <p className="shift-message" role="status">{futureAttendanceMessage}</p>
+          )}
           {Object.keys(errors).length > 0 && (
             <div className="shift-message error" role="alert">
               {Object.values(errors).map((message, i) => (
@@ -259,6 +268,7 @@ export default function AttendanceDialog({
               </dl>
               <p className="attendance-alert">
                 Sau xác nhận, công cả tháng của các nhân viên được chọn bị khóa để tính lương.
+                Các ca đăng ký từ ngày mai trong tháng này sẽ bị hủy.
                 Những nhân viên khác vẫn được chấm công bình thường. Không có thao tác mở khóa.
               </p>
               <label className="attendance-check">

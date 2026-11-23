@@ -1,3 +1,4 @@
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import inventoryApi from '../services/inventoryApi';
 import { newReceiptLine, RECEIVING_UNITS, receiptAmount, receiptQuantity, receivingUnitName } from '../utils/receiptQuantity';
@@ -13,6 +14,7 @@ const makeLocalDateTime = () => {
 const dateTimeLabel = (value) => value ? new Intl.DateTimeFormat('vi-VN', {
   day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
 }).format(new Date(value)) : '—';
+const dateLabel = (value) => value ? value.split('-').reverse().join('/') : '—';
 const trackingLabel = (mode) => mode === 'AUTO_ON_SALE' ? 'Tự trừ khi bán' : 'Theo dõi thủ công';
 const stockLabel = (item) => {
   if (!item.active) return 'Ngừng sử dụng';
@@ -133,7 +135,7 @@ export default function InventoryPage({ user }) {
     return activeItems.filter((item) => {
       const matchesSearch = !term || `${item.sku} ${item.name} ${item.category} ${item.unitName}`
         .toLocaleLowerCase('vi-VN').includes(term);
-      const matchesCategory = category === 'all' || item.category === category;
+      const matchesCategory = category === 'all' || item.category.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN');
       const matchesStatus = stockStatus === 'all' || item.stockStatus === stockStatus;
       return matchesSearch && matchesCategory && matchesStatus;
     });
@@ -181,7 +183,9 @@ export default function InventoryPage({ user }) {
   const openItemForm = (mode, item = null) => {
     setItemMode(mode);
     setItemDraft(item ? {
-      sku: item.sku, name: item.name, category: item.category, unitId: item.unitId,
+      sku: item.sku, name: item.name,
+      category: metadata.categories.find((name) => name.toLocaleLowerCase('vi-VN') === item.category.toLocaleLowerCase('vi-VN')) || item.category,
+      unitId: item.unitId,
       trackingMode: item.trackingMode, minimumQuantity: String(item.minimumQuantity), active: item.active,
     } : {
       sku: '', name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '',
@@ -317,6 +321,12 @@ export default function InventoryPage({ user }) {
       setError(`Dòng ${invalidPriceLine + 1}: Đơn giá phải là số nguyên VND không âm, tối đa 18 chữ số.`);
       return;
     }
+    const receivedDate = receiptDraft.receivedAt.slice(0, 10);
+    const invalidExpiryLine = receiptDraft.items.findIndex((line) => !line.expiryDate || line.expiryDate < receivedDate);
+    if (invalidExpiryLine !== -1) {
+      setError(`Dòng ${invalidExpiryLine + 1}: ${receiptDraft.items[invalidExpiryLine].expiryDate ? 'Hạn sử dụng không được trước ngày nhận hàng.' : 'Vui lòng bổ sung hạn sử dụng.'}`);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -326,7 +336,7 @@ export default function InventoryPage({ user }) {
         supplierInvoice: receiptDraft.supplierInvoice,
         // BR-32: API nhận số lượng theo đơn vị tồn kho; không cộng số thùng/lốc trực tiếp vào kho.
         items: receiptDraft.items.map((line) => ({
-          inventoryItemId: line.inventoryItemId, quantity: receiptQuantity(line).value, unitCost: line.unitCost,
+          inventoryItemId: line.inventoryItemId, quantity: receiptQuantity(line).value, unitCost: line.unitCost, expiryDate: line.expiryDate,
         })),
       };
       const result = await inventoryApi.receive(command, evidence);
@@ -451,10 +461,12 @@ export default function InventoryPage({ user }) {
     </section>
     <section className="inv-table-card" aria-label="Các biến động tồn kho">
       {historyLoading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /></div> : movements.length ? <div className="inv-table-scroll"><table className="inv-table inv-history-table">
-        <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Biến động</th><th>Tồn sau</th><th>Người ghi</th></tr></thead>
+        <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Nhà cung cấp</th><th>Hạn sử dụng</th><th>Biến động</th><th>Tồn sau</th><th>Người ghi</th></tr></thead>
         <tbody>{movements.map((movement) => <tr key={movement.id}>
           <td className="inv-strong">{dateTimeLabel(movement.occurredAt)}</td>
           <td><strong>{movement.source}</strong>{movement.reason && <small className="inv-cell-note">{movement.reason}</small>}{movement.evidenceUrl && <button type="button" className="inv-text-button inv-evidence-link" onClick={() => openMovementEvidence(movement)}>Xem chứng từ · {movement.evidenceName}</button>}</td>
+          <td>{movement.supplierName || '—'}</td>
+          <td>{dateLabel(movement.expiryDate)}</td>
           <td className={Number(movement.quantityDelta) > 0 ? 'inv-positive' : 'inv-negative'}>{Number(movement.quantityDelta) > 0 ? '+' : ''}{formatQuantity(movement.quantityDelta)} {selectedItem?.unitName || ''}</td>
           <td>{formatQuantity(movement.quantityAfter)} {selectedItem?.unitName || ''}</td>
           <td>{movement.actor}</td>
@@ -511,8 +523,8 @@ export default function InventoryPage({ user }) {
         <div className="inv-form-grid">
           <label className="inv-field"><span>Mã mặt hàng</span><input readOnly value={itemMode === 'create' ? 'Tự cấp khi tạo' : itemDraft?.sku || ''} /><small>Mã được hệ thống tạo tự động và không cần nhập tay.</small></label>
           <label className="inv-field"><span>Tên mặt hàng *</span><input required maxLength="200" value={itemDraft?.name || ''} onChange={(event) => setItemDraft({ ...itemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
-          <label className="inv-field"><span>Nhóm hàng *</span><input required maxLength="100" list="inventory-categories" value={itemDraft?.category || ''} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })} placeholder="Đồ uống" />
-            <datalist id="inventory-categories">{metadata.categories.map((name) => <option key={name} value={name} />)}</datalist></label>
+          <label className="inv-field"><span>Nhóm hàng *</span><select required value={itemDraft?.category || ''} onChange={(event) => setItemDraft({ ...itemDraft, category: event.target.value })}>
+            <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
           <label className="inv-field"><span>Đơn vị tính *</span><select required value={itemDraft?.unitId || ''} disabled={itemMode === 'update' && items.find((item) => item.id === selectedId)?.hasMovements} onChange={(event) => setItemDraft({ ...itemDraft, unitId: event.target.value })}>
             <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>{itemMode === 'update' && items.find((item) => item.id === selectedId)?.hasMovements && <small>Đơn vị được giữ nguyên để bảo toàn cách đọc lịch sử kho.</small>}</label>
@@ -575,8 +587,8 @@ export default function InventoryPage({ user }) {
                     <strong>Tạo mặt hàng và tiếp tục nhập</strong>
                     <div className="inv-receipt-create-grid">
                       <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft?.name || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
-                      <label className="inv-field"><span>Nhóm hàng *</span><input maxLength="100" list={`receipt-categories-${line.id}`} value={receiptItemDraft?.category || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })} placeholder="Đồ uống" />
-                        <datalist id={`receipt-categories-${line.id}`}>{metadata.categories.map((name) => <option key={name} value={name} />)}</datalist></label>
+                      <label className="inv-field"><span>Nhóm hàng *</span><select value={receiptItemDraft?.category || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })}>
+                        <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
                       <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft?.unitId || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
                         <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                       </select></label>
@@ -598,7 +610,8 @@ export default function InventoryPage({ user }) {
                   <option value="CUSTOM">Khác…</option>
                 </select></label>
                 <label className="inv-field inv-line-quantity"><span>SL nhận *</span><input required disabled={!item || !line.receivingUnit || busy} type="text" inputMode={line.receivingUnit === 'BASE' ? 'decimal' : 'numeric'} autoComplete="off" maxLength="19" aria-describedby={`receipt-quantity-hint-${line.id}`} value={line.quantity} onChange={(event) => updateReceiptLine(line.id, 'quantity', event.target.value)} /><small id={`receipt-quantity-hint-${line.id}`}>{line.receivingUnit === 'BASE' ? 'Có thể nhập tối đa 3 chữ số thập phân.' : 'Nhập số nguyên theo đơn vị nhận đã chọn.'}</small></label>
-                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><input required disabled={!item || busy} type="text" inputMode="numeric" autoComplete="off" maxLength="18" value={line.unitCost} onChange={(event) => updateReceiptLine(line.id, 'unitCost', event.target.value.replace(/[^0-9]/g, ''))} /></label>
+                <label className="inv-field inv-line-cost"><span>Đơn giá / {item?.unitName || 'đơn vị gốc'} *</span><MoneyInput maxDigits={18} required disabled={!item || busy}   autoComplete="off"  value={line.unitCost} onValueChange={value => updateReceiptLine(line.id, 'unitCost', value.replace(/[^0-9]/g, ''))} /></label>
+                <label className="inv-field inv-line-expiry"><span>Hạn sử dụng *</span><input required disabled={!item || busy} type="date" min={receiptDraft?.receivedAt?.slice(0, 10)} value={line.expiryDate} onChange={(event) => updateReceiptLine(line.id, 'expiryDate', event.target.value)} /></label>
                 {line.receivingUnit === 'CUSTOM' && <label className="inv-field inv-line-custom-unit"><span>Tên đơn vị nhận *</span><input required disabled={busy} maxLength="30" value={line.customUnit} onChange={(event) => updateReceiptLine(line.id, 'customUnit', event.target.value)} placeholder="Ví dụ: Kiện, can…" /></label>}
                 {line.receivingUnit && line.receivingUnit !== 'BASE' && <label className="inv-field inv-line-conversion"><span>Quy cách *</span>
                   <span className="inv-pack-size"><span>1 {unitName || 'đơn vị nhận'} =</span><input required disabled={busy} aria-label={`Số ${item?.unitName || 'đơn vị gốc'} trong 1 ${unitName || 'đơn vị nhận'}`} type="text" inputMode="decimal" autoComplete="off" maxLength="19" value={line.unitsPerPack} onChange={(event) => updateReceiptLine(line.id, 'unitsPerPack', event.target.value)} /><span>{item?.unitName}</span></span>
@@ -620,7 +633,7 @@ export default function InventoryPage({ user }) {
       </form>
       <aside className="inv-summary inv-action-summary"><h2>Tóm tắt nhập kho</h2>
         <p>{receiptSummary.length} mặt hàng · Số lượng theo đơn vị tồn kho của từng mặt hàng</p>
-        <ul className="inv-summary-lines">{receiptSummary.map((line) => <li key={line.id}><span>{line.item.name}</span>
+        <ul className="inv-summary-lines">{receiptSummary.map((line) => <li key={line.id}><span>{line.item.name}</span><small>Hạn sử dụng: {dateLabel(line.expiryDate)}</small>
           {line.conversion.error ? <small>Chưa đủ số lượng hoặc quy cách hợp lệ</small> : <><span>{formatQuantity(line.quantity)} {line.item.unitName} × {formatVnd(line.unitCost)} / {line.item.unitName}</span>
             {line.receivingUnit && line.receivingUnit !== 'BASE' && <small>Nhận {formatQuantity(line.receivedQuantity)} {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} · 1 {receivingUnitName(line, line.item).toLocaleLowerCase('vi-VN')} = {formatQuantity(line.unitsPerPack)} {line.item.unitName}</small>}
             <strong>{formatVnd(line.amount)}</strong><small>Tồn sau: {formatQuantity(Number(line.item.quantity) + line.quantity)} {line.item.unitName}</small></>}
@@ -665,7 +678,7 @@ export default function InventoryPage({ user }) {
         <dl className="inv-adjust-summary" aria-live="polite"><div><dt>Hệ thống</dt><dd>{adjustLoading ? 'Đang tải…' : adjustItem ? formatQuantity(adjustItem.quantity) : '—'}</dd></div><div><dt>Thực tế</dt><dd>{validActualQuantity ? formatQuantity(adjustActual) : actualQuantityInput ? 'Không hợp lệ' : 'Chưa nhập'}</dd></div>
           <div><dt>Điều chỉnh</dt><dd className={adjustDelta === null ? undefined : adjustDelta >= 0 ? 'inv-positive' : 'inv-negative'}>{adjustDelta === null ? '—' : `${adjustDelta > 0 ? '+' : ''}${formatQuantity(adjustDelta)} ${adjustItem.unitName}`}</dd></div>
           <div><dt>Tồn mới</dt><dd>{adjustDelta === null ? '—' : `${formatQuantity(adjustActual)} ${adjustItem.unitName}`}</dd></div><div><dt>Lý do</dt><dd>{adjustDraft?.reason || 'Chưa nhập'}</dd></div></dl>
-        {actualQuantityError && <div id="inventory-actual-quantity-error" className="inv-alert inv-alert-warning" role="alert">{actualQuantityError}</div>}
+        {actualQuantityError && <div id="inventory-actual-quantity-error" className="inv-alert inv-alert-error" role="alert">{actualQuantityError}</div>}
         <div className="inv-summary-actions"><button type="submit" form="inventory-adjustment-form" className="inv-button inv-button-primary" disabled={!canSubmitAdjustment}>{busy ? 'Đang xác nhận…' : 'Xác nhận điều chỉnh'}</button>
           <button type="button" className="inv-button inv-button-quiet" disabled={busy} onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại danh sách</button></div>
       </aside>

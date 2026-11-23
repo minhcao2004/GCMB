@@ -1,8 +1,8 @@
-/** Author: HuyDV. UC-89/91/95, BR-63/64/67/75: chi tiết công và lương, xác nhận riêng trước khi khóa/gửi. */
+/** Author: HuyDV. UC-89/91/95, BR-63/64/67/75: xác nhận gửi lương ngay từ màn chi tiết. */
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi, vnd } from '../../finance/services/financeApi';
-import MoneyInput from '../../finance/components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { attendanceApi, dateTimeLabel, hoursLabel } from '../services/attendanceApi';
 
 const base = '/branch-management/payroll';
@@ -15,7 +15,6 @@ export default function MonthlyPayrollDialog({
   const sending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
   const adjustments = draft || {
     bonus: String(financial?.bonus ?? 0),
@@ -46,7 +45,6 @@ export default function MonthlyPayrollDialog({
 
   const change = (field, value) => {
     onDraft({ ...adjustments, [field]: value });
-    setPreview(null);
     setError('');
   };
 
@@ -59,7 +57,6 @@ export default function MonthlyPayrollDialog({
       const result = await attendanceApi.close(data.month, {
         revision: data.revision, confirmedCorrect: true, employeeIds: [employee.employeeId],
       }, scope);
-      setPreview(null);
       onAttendanceClosed(result);
     } catch (failure) {
       setError(Object.values(apiErrors(failure)).join(' '));
@@ -69,20 +66,20 @@ export default function MonthlyPayrollDialog({
     }
   }
 
-  async function calculate(send = false) {
-    if (sending.current || !editable || !employee.closed || (send && !preview)) return;
+  async function submitPayroll() {
+    if (sending.current || !editable || !employee.closed) return;
     sending.current = true;
     setBusy(true);
     setError('');
     try {
-      const result = await financeApi.post(`${base}/${data.month}/${send ? 'submit' : 'preview'}`, {
+      // HuyDV: lấy số liệu/revision mới trước khi gửi, giữ kiểm tra chống chốt dữ liệu đã thay đổi ở API.
+      const preview = await financeApi.post(`${base}/${data.month}/preview`, body, scope);
+      const result = await financeApi.post(`${base}/${data.month}/submit`, {
         ...body,
-        ...(send ? { reviewedTotal: preview.net, reviewedRevision: preview.revision } : {}),
+        reviewedTotal: preview.net, reviewedRevision: preview.revision,
       }, scope);
-      if (send) onSubmitted(result.message || 'Đã chốt lương và gửi kế toán.');
-      else setPreview(result);
+      onSubmitted(result.message || 'Đã chốt lương và gửi kế toán.');
     } catch (failure) {
-      setPreview(null);
       setError(Object.values(apiErrors(failure)).join(' '));
     } finally {
       sending.current = false;
@@ -90,7 +87,7 @@ export default function MonthlyPayrollDialog({
     }
   }
 
-  const total = preview || financial;
+  const total = financial;
   return (
     <dialog ref={ref} className="shift-dialog monthly-payroll-dialog"
       aria-labelledby="monthly-payroll-title"
@@ -102,7 +99,7 @@ export default function MonthlyPayrollDialog({
         </div>
         <button type="button" aria-label="Đóng" disabled={busy} onClick={onClose}>×</button>
       </header>
-      <form onSubmit={(event) => { event.preventDefault(); calculate(); }}>
+      <form onSubmit={(event) => { event.preventDefault(); submitPayroll(); }}>
         <div className="shift-dialog-body">
           {error && <p className="shift-message error" role="alert">{error}</p>}
           <dl className="attendance-facts">
@@ -135,7 +132,7 @@ export default function MonthlyPayrollDialog({
                 <label className="attendance-check">
                   <input type="checkbox" checked={confirmed} disabled={busy || readOnly}
                     onChange={(event) => setConfirmed(event.target.checked)} />
-                  Tôi đã kiểm tra và đồng ý khóa công cả tháng của nhân viên này.
+                  Tôi đồng ý khóa công cả tháng và hủy các ca đăng ký từ ngày mai trong tháng này.
                 </label>
                 <button type="button" disabled={busy || readOnly || !confirmed} onClick={closeAttendance}>
                   Chốt công cả tháng
@@ -158,7 +155,7 @@ export default function MonthlyPayrollDialog({
           </fieldset>
           {total?.wage != null ? (
             <section className="monthly-pay-breakdown" aria-label="Chi tiết tiền lương">
-              <h3>{financial?.ready ? 'Lương đã gửi kế toán' : preview ? 'Xác nhận số tiền gửi kế toán' : 'Lương tạm tính'}</h3>
+              <h3>{financial?.ready ? 'Lương đã gửi kế toán' : 'Xác nhận số tiền gửi kế toán'}</h3>
               <dl>
                 <div><dt>Tiền công (gồm phụ cấp ca đêm)</dt><dd>{vnd(total.wage)}</dd></div>
                 <div><dt>Thưởng trên 100 giờ</dt><dd>{vnd(total.reward)}</dd></div>
@@ -166,7 +163,7 @@ export default function MonthlyPayrollDialog({
                 <div><dt>Tiền phạt</dt><dd>−{vnd(adjustments.penalty)}</dd></div>
                 <div><dt>Tạm ứng đã trả</dt><dd>−{vnd(total.advance)}</dd></div>
                 <div className="monthly-pay-net"><dt>{total.multipleBranches ? 'Phần lương cơ sở' : 'Thực nhận'}</dt>
-                  <dd>{vnd(preview ? preview.net : Number(total.net) + Number(adjustments.bonus) - Number(financial?.bonus || 0) - Number(adjustments.penalty) + Number(financial?.penalty || 0))}</dd></div>
+                  <dd>{vnd(Number(total.net) + Number(adjustments.bonus) - Number(financial?.bonus || 0) - Number(adjustments.penalty) + Number(financial?.penalty || 0))}</dd></div>
                 {financial?.ready && financial.multipleBranches && financial.finalNet != null && (
                   <div className="monthly-pay-net"><dt>Thực nhận cả tháng (tất cả cơ sở)</dt><dd>{vnd(financial.finalNet)}</dd></div>
                 )}
@@ -174,21 +171,16 @@ export default function MonthlyPayrollDialog({
               {total.multipleBranches && <p className="attendance-help">Nhân viên làm ở nhiều cơ sở. Thưởng trên 100 giờ và tạm ứng được tính một lần khi tổng hợp đủ các cơ sở.</p>}
               {financial?.submitted && !financial.ready && <p className="attendance-help">Đã gửi phần lương cơ sở, đang chờ cơ sở khác chốt. Có thể cập nhật lại phần thưởng/phạt trước khi tổng hợp.</p>}
               {financial?.paid && <p>Đã thanh toán lương.</p>}
-              {preview && <p className="attendance-help">Kiểm tra số tiền trên trước khi xác nhận chốt và gửi kế toán.</p>}
             </section>
           ) : <p className="shift-message" role="status">{financial?.calculationError || 'Đang tải tiền công…'}</p>}
         </div>
         <footer className="shift-dialog-footer">
           <button type="button" disabled={busy} onClick={onClose}>Đóng</button>
-          {editable && employee.closed && (preview ? (
-            <button type="button" className="shift-primary" disabled={busy} onClick={() => calculate(true)}>
+          {editable && employee.closed && (
+            <button type="submit" className="shift-primary" disabled={busy}>
               {busy ? 'Đang gửi…' : 'Xác nhận chốt và gửi kế toán'}
             </button>
-          ) : (
-            <button type="submit" className="shift-primary" disabled={busy}>
-              {busy ? 'Đang tính…' : 'Xem trước và chốt lương'}
-            </button>
-          ))}
+          )}
         </footer>
       </form>
     </dialog>

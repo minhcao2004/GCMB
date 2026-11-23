@@ -26,16 +26,16 @@ public class AccountService {
 
     private final AccountRepository repository;
     private final AuthCrypto crypto;
-    private final BranchAdministrationService branches;
+    private final BranchAdministrationService branchAdministrationService;
 
     public AccountService(
         AccountRepository repository,
         AuthCrypto crypto,
-        BranchAdministrationService branches
+        BranchAdministrationService branchAdministrationService
     ) {
         this.repository = repository;
         this.crypto = crypto;
-        this.branches = branches;
+        this.branchAdministrationService = branchAdministrationService;
     }
 
     @Transactional(readOnly = true)
@@ -148,6 +148,9 @@ public class AccountService {
         if (input.employeeId() == null) {
             throw new AuthFailure(400, "employeeId", "Vui lòng bổ sung hồ sơ nhân viên.");
         }
+        if ("HEAD_OFFICE_MANAGER".equals(input.role()) && !repository.headOfficeAvailable(input.role(), null)) throw new AuthFailure(
+            409, "role", "Hệ thống đã có tài khoản Quản lý cấp cao. Không thể tạo thêm."
+        );
         if (!repository.lockAvailableEmployee(input.employeeId())) {
             throw new AuthFailure(
                 409,
@@ -193,7 +196,7 @@ public class AccountService {
                 role,
                 actor
             );
-            if ("BRANCH_MANAGER".equals(input.role())) branches.syncAccountManager(id, actor);
+            if ("BRANCH_MANAGER".equals(input.role())) branchAdministrationService.syncAccountManager(id, actor);
             return repository.find(id);
         } catch (DuplicateKeyException ex) {
             throw new AuthFailure(

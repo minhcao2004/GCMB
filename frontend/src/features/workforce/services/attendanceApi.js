@@ -6,6 +6,8 @@
 import api from '../../../api/client';
 
 const base = '/branch-management/attendance';
+// HuyDV / UC-87: thông báo bổ sung cho ca chưa bắt đầu; tài liệu chưa có mã MSG riêng.
+export const futureAttendanceMessage = 'Chưa đến giờ bắt đầu ca, chưa thể chấm công.';
 const config = (scope) => ({ headers: { 'X-GCMB-Branch-Id': scope } });
 
 async function write(path, body, scope) {

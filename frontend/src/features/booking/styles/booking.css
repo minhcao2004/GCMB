@@ -36,7 +36,8 @@
 
 .booking-app h2 { letter-spacing: normal; }
 
-.booking-app header { position: static; inset: auto; z-index: auto; padding: 0; }
+/* HuyDV: giữ khoảng đệm riêng của tiêu đề trang và hộp thoại trong app shell. */
+.booking-app header { position: static; inset: auto; z-index: auto; }
 .booking-app { padding: 0; background: var(--manager-canvas, #f5f7fa); }
 .booking-app.gcmb-ui-app-shell { height: 100dvh; min-height: 0; }
 .reception-dashboard { font-family: 'Be Vietnam Pro', Arial, sans-serif; }
@@ -95,7 +96,6 @@
 .booking-filter-chip.chip-all { color: var(--booking-ink); }
 .booking-filter-chip.chip-pending { color: #c12986; background: var(--booking-pink-soft); }
 .booking-filter-chip.chip-checkedIn { color: var(--booking-blue); background: var(--booking-blue-soft); }
-.booking-filter-chip.chip-noShow { color: var(--booking-yellow); background: var(--booking-yellow-soft); }
 .booking-filter-chip.is-active { box-shadow: inset 0 0 0 1px currentColor; }
 .booking-filter-chip.chip-all.is-active { background: #e9edf2; }
 .booking-filter-chip.chip-cancelled.is-active { color: #687382; background: #edf0f3; }
@@ -127,7 +127,7 @@
 .booking-status { min-height: 29px; display: inline-flex; align-items: center; border-radius: 8px; padding: 0 10px; color: #bd237c; background: var(--booking-pink-soft); font-size: 9px; font-weight: 700; white-space: nowrap; }
 .booking-status-checkedIn { color: var(--booking-blue); background: var(--booking-blue-soft); }
 .booking-status-cancelled,.booking-status-completed,.booking-status-draft { color: #717a88; background: #f0f2f4; }
-.booking-status-noShow,.booking-status-late { color: #ce8310; background: var(--booking-yellow-soft); }
+.booking-status-late { color: #ce8310; background: var(--booking-yellow-soft); }
 .booking-row-action { min-height: 32px; border: 1px solid #b9eaf0; border-radius: 8px; padding: 0 11px; color: #087f91; background: #effbfd; font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; }
 .booking-row-action:hover { border-color: #64d0df; background: #e2f8fb; }
 .booking-table-message { position: sticky; left: 0; padding: 35px 18px; color: #8a94a2; text-align: center; font-size: 12px; }
@@ -160,8 +160,6 @@
 .booking-detail-room-ready { display: flex; align-items: center; gap: 8px; margin: 12px 0 13px; color: #1d9c65; font-size: 10px; font-weight: 650; }
 .booking-detail-room-ready i,.booking-checkin-ready i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #2dbd7d; }
 .booking-detail-checkin { width: 100%; min-height: 43px; border-radius: 9px; font-size: 12px; }
-.booking-detail-no-show { width: 100%; min-height: 40px; margin-top: 8px; border-radius: 9px; font-size: 11px; }
-.booking-no-show-warning { margin: 0 0 14px; padding: 12px 14px; border-radius: 9px; color: #9d343d; background: #fff0f1; font-size: 11px; line-height: 1.55; }
 .booking-deposit-status { display: inline-flex; align-items: center; min-height: 24px; border-radius: 7px; padding: 3px 8px; color: #667286; background: #f0f3f7; font-size: 10px; font-weight: 700; }
 .booking-deposit-status.is-refund { color: #176b50; background: #e5f7ef; }
 .booking-deposit-status.is-danger { color: #a93c44; background: #fff0f1; }
@@ -182,6 +180,7 @@
 .booking-card-heading h2,.booking-summary-card h2 { margin: 0; color: var(--booking-ink); font-size: 17px; line-height: 1.35; }
 .booking-card-heading p,.booking-summary-card > p { margin: 5px 0 0; color: #8a94a2; font-size: 10px; }
 .booking-form-grid { display: grid; gap: 13px 16px; }
+.booking-source-field { margin-bottom: 13px; }
 .booking-customer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 7px; }
 .booking-schedule-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .booking-form-field { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: #596575; font-size: 10px; }
@@ -193,7 +192,7 @@
 .booking-form-field.is-invalid input:not(:focus),.booking-form-field.is-invalid select:not(:focus),.booking-form-field.is-invalid textarea:not(:focus) { border-color: #e6c1c6; background: #fffafa; }
 .booking-form-field.is-invalid .booking-money-input:not(:focus-within) { border-color: #e6c1c6; background: #fffafa; }
 .booking-field-error,.booking-field-hint { display: block; margin-top: 5px; font-size: 10px; line-height: 1.45; }
-.booking-field-error { color: #9f505b; }
+.booking-field-error { color: var(--gcmb-color-danger, #b12642); }
 .booking-field-hint { color: #7e8997; }
 .booking-form-field input:disabled,.booking-form-field select:disabled { color: #9aa3b0; background: #f1f3f5; }
 .booking-form-field input::placeholder,.booking-form-field textarea::placeholder { color: #8994a2; }
@@ -596,7 +595,6 @@
   .booking-app--fit .booking-detail-list > div { min-height: 0; }
   .booking-app--fit .booking-detail-room-ready { margin: 6px 0; }
   .booking-app--fit .booking-detail-checkin { min-height: 36px; }
-  .booking-app--fit .booking-detail-no-show,
   .booking-app--fit .booking-detail-room-link { min-height: 36px; margin-top: 0; }
   .booking-app--fit .booking-detail-actions { gap: 6px; margin-top: 0; }
   .booking-app--fit .booking-detail-actions button { min-height: 36px; padding: 6px 7px; }
@@ -715,7 +713,6 @@
 }
 .booking-app--reception .booking-filter-chip.chip-pending { color: var(--gcmb-color-ink); background: var(--gcmb-color-primary-soft); }
 .booking-app--reception .booking-filter-chip.chip-checkedIn { color: var(--gcmb-color-ink); background: var(--gcmb-color-info-soft); }
-.booking-app--reception .booking-filter-chip.chip-noShow { color: var(--gcmb-color-ink); background: var(--gcmb-color-warning-soft); }
 .booking-app--reception .booking-filter-chip.chip-paid { color: var(--gcmb-color-ink); background: var(--gcmb-color-success-soft); }
 .booking-app--reception .booking-filter-chip.chip-unpaid { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
 .booking-app--reception .booking-table-card,
@@ -749,7 +746,6 @@
 .booking-app--reception .booking-status-cancelled,
 .booking-app--reception .booking-status-completed,
 .booking-app--reception .booking-status-draft { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
-.booking-app--reception .booking-status-noShow,
 .booking-app--reception .booking-status-late { color: var(--gcmb-color-ink); background: var(--gcmb-color-warning-soft); }
 .booking-app--reception .booking-row-action,
 .booking-app--reception .booking-pagination button {

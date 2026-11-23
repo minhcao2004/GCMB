@@ -9,6 +9,8 @@ import java.util.*;
 import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -144,13 +146,30 @@ public class PayrollController {
     return service.advance(actor, month, input);
   }
 
-  @PostMapping("/accounting/payroll/{month}/payments")
+  @PostMapping(value="/accounting/payroll/{month}/payments", consumes=MediaType.APPLICATION_JSON_VALUE)
   public Map<String, Object> pay(
     @AuthenticationPrincipal Identity actor,
     @PathVariable String month,
     @RequestBody Payments input
   ) {
     return service.pay(actor, month, input);
+  }
+
+  @PostMapping(value="/accounting/payroll/{month}/payments", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+  public Map<String, Object> payWithEvidence(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month, @RequestPart Payments command, MultipartHttpServletRequest request) {
+    return service.pay(actor, month, command, request.getFileMap());
+  }
+
+  @GetMapping("/accounting/payroll/payments/{id}/evidence")
+  public ResponseEntity<byte[]> paymentEvidence(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
+    var file = service.paymentEvidence(actor, id);
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+      .header("X-Content-Type-Options", "nosniff")
+      .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+        .filename((String) file.get("original_name"), StandardCharsets.UTF_8).build().toString())
+      .contentType(MediaType.parseMediaType((String) file.get("mime_type")))
+      .body((byte[]) file.get("bytes"));
   }
 
   @GetMapping("/accounting/payroll/{month}/export")

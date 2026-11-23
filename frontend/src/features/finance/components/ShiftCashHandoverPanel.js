@@ -1,8 +1,8 @@
 /** Author: HuyDV. Bàn giao ca giữ nguyên tiền két; chênh lệch chuyển QLCS xử lý. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, today, vnd } from '../services/financeApi';
-import MoneyInput from './MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import '../styles/finance.css';
 import '../styles/cashHandover.css';
 
@@ -26,6 +26,28 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const dialogRef = useRef(null);
+
+  // HuyDV: giao/nhận tiền có cửa sổ riêng; đóng sẽ trả focus về nút đã mở.
+  useEffect(() => {
+    if (!selected || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [selected]);
+
+  const closeDialog = () => {
+    if (busy) return;
+    setSelected(null);
+    setError('');
+  };
 
   useEffect(() => {
     let active = true;
@@ -94,7 +116,7 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
         <button type="button" disabled={loading || busy} onClick={() => setRefresh((value) => value + 1)}>Tải lại</button>
       </div>
     </header>
-    {error && <p className="finance-error" role="alert">{error}</p>}
+    {error && !selected && <p className="finance-error" role="alert">{error}</p>}
     {notice && <p className="finance-success" role="status">{notice}</p>}
     {loading ? <p role="status">Đang tải bàn giao ca…</p> : data && <>
       {data.pending.length > 0 && <section className="finance-card cash-handover-pending">
@@ -147,9 +169,20 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
           </article>;
         })}
       </div>
-      {!manager && selected && <form className="finance-card cash-handover-form" onSubmit={save}>
-        <h3>{selected.dispatching ? `Ca ${selected.shift} bàn giao tiền cho ca ${selected.receiveShift}`
-          : `Ca ${selected.receiveShift} nhận tiền từ ca ${selected.shift}`} · {displayDate(date)}</h3>
+      {!manager && selected && <dialog ref={dialogRef} className="cash-handover-dialog"
+        aria-labelledby="cash-handover-dialog-title" onCancel={(event) => {
+          event.preventDefault(); closeDialog();
+        }}>
+        <header className="cash-handover-dialog-heading">
+          <div><h3 id="cash-handover-dialog-title">{selected.dispatching
+            ? `Ca ${selected.shift} bàn giao tiền cho ca ${selected.receiveShift}`
+            : `Ca ${selected.receiveShift} nhận tiền từ ca ${selected.shift}`}</h3>
+            <p>{displayDate(date)} · {selected.hours}</p></div>
+          <button type="button" aria-label="Đóng cửa sổ" disabled={busy} onClick={closeDialog}>×</button>
+        </header>
+        <form className="cash-handover-form" onSubmit={save}>
+        <div className="cash-handover-dialog-body">
+        {error && <p className="finance-error" role="alert">{error}</p>}
         <p>{selected.dispatching ? 'Tiền két theo hệ thống' : 'Số tiền ca trước giao'}: <strong>{vnd(selected.expected)}</strong></p>
         <label>Tiền mặt thực đếm (đ)<MoneyInput required value={actual} onValueChange={(value) => {
           setActual(value); setConfirmed(false);
@@ -160,10 +193,12 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
         <label className="cash-handover-check"><input type="checkbox" checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)} disabled={busy || readOnly} />
           Tôi đã kiểm đếm và xác nhận số tiền {selected.dispatching ? 'bàn giao cho ca sau' : 'nhận từ ca trước'}{different ? ', kèm lý do chênh lệch' : ''}.</label>
-        <div className="finance-actions"><button type="button" disabled={busy} onClick={() => setSelected(null)}>Hủy</button>
+        </div>
+        <footer className="finance-actions"><button type="button" disabled={busy} onClick={closeDialog}>Hủy</button>
           <button className="finance-primary" disabled={busy || readOnly || !confirmed || actual === '' || (different && !note.trim())}>
-            {busy ? 'Đang lưu…' : selected.dispatching ? 'Xác nhận giao tiền' : 'Xác nhận nhận tiền'}</button></div>
-      </form>}
+            {busy ? 'Đang lưu…' : selected.dispatching ? 'Xác nhận giao tiền' : 'Xác nhận nhận tiền'}</button></footer>
+        </form>
+      </dialog>}
     </>}
   </section>;
 }

@@ -30,3 +30,6 @@ Thumbs.db
 
 # Local CodeGraph index
 .codegraph/
+
+# Private VPS backups
+.backups/

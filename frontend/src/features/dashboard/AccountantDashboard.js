@@ -1,114 +1,94 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
-import RevenueExpenseOverview from './RevenueExpenseOverview';
 import './accountantDashboard.css';
 
 const monthNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
+const todayVn = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const availableYears = () => { const current = Number(monthNow().slice(0, 4)); return Array.from({ length: current - 2019 }, (_, index) => current - index); };
+const monthBounds = (month) => {
+  const start = `${month}-01`;
+  const lastDay = `${month}-${String(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()).padStart(2, '0')}`;
+  return { start, end: month === monthNow() && lastDay > todayVn() ? todayVn() : lastDay };
+};
+const ledgerDate = (row, basis) => {
+  const fallback = String(row.bookingDate || '').slice(0, 10);
+  if (basis !== 'cash' || !row.occurredAt) return fallback;
+  const occurredAt = new Date(row.occurredAt);
+  if (Number.isNaN(occurredAt.getTime())) return fallback;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(occurredAt);
+  return `${parts.find((part) => part.type === 'year')?.value}-${parts.find((part) => part.type === 'month')?.value}-${parts.find((part) => part.type === 'day')?.value}`;
+};
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const errorText = (error) => error.response?.data?.detail || error.response?.data?.message || 'Không tải được dữ liệu kế toán. Vui lòng thử lại.';
 const dateVi = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date); };
-const validCashDate = (value, today) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < '2000-01-01' || value > today) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-};
 const statusVi = (value) => ({
-  UNRESOLVED: 'Chưa xử lý', RESOLVED: 'Đã xử lý', REQUESTED: 'Đang chờ xử lý', APPROVED: 'Đã duyệt', PROCESSING: 'Đang xử lý',
-  WAITING_ACCOUNTANT: 'Chờ kế toán duyệt', APPROVED_TO_PAY: 'Chờ thanh toán', WAITING_CONFIRMATION: 'Chờ xác nhận', PAID: 'Đã thanh toán', REJECTED: 'Đã từ chối',
-  DRAFT: 'Bản nháp', CALCULATED: 'Đã tính', CONFIRMED: 'Đã xác nhận',
-  OPEN: 'Đang mở', CLOSED: 'Đã khóa', SUBMITTED: 'Chờ đối soát', RECONCILED: 'Đã đối soát', NEEDS_EXPLANATION: 'Cần giải trình', FAILED: 'Không thành công', EXCEPTION: 'Ngoại lệ', PENDING: 'Đang chờ xử lý',
+  UNRESOLVED: 'Chưa xử lý', RESOLVED: 'Đã xử lý', COMPLETED: 'Hoàn tất', REQUESTED: 'Đang chờ xử lý', APPROVED: 'Đã duyệt', PROCESSING: 'Đang xử lý',
+  WAITING_ACCOUNTANT: 'Chờ kế toán xử lý', WAITING_CONFIRMATION: 'Chờ xác nhận', PAID: 'Đã thanh toán', REJECTED: 'Đã từ chối',
+  OPEN: 'Đang mở', CLOSED: 'Đã khóa', RECONCILED: 'Đã đối soát', NEEDS_EXPLANATION: 'Cần giải trình', FAILED: 'Không thành công', EXCEPTION: 'Ngoại lệ', PENDING: 'Đang chờ xử lý', CONFIRMED: 'Đã xác nhận',
 })[value] || (value ? 'Chưa xác định' : '—');
 
-function DataTable({ title, description, columns, rows, renderRow, state, href, action, emptyMessage = 'Không có mục nào.', errorMessage = 'Không tải được dữ liệu.' }) {
-  return <section className="accountant-dash-panel accountant-table-panel">
-    <div className="accountant-panel-heading"><div><h2>{title}</h2><p>{description}</p>{href && <Link to={href}>{action}</Link>}</div><span>{state === 'ready' ? rows.length : '—'} mục</span></div>
-    {state === 'ready' && rows.length ? <div className="accountant-table-scroll" tabIndex={0} aria-label={title}><table><thead><tr>{columns.map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{rows.map(renderRow)}</tbody></table></div>
-      : <p className="accountant-dash-empty" role={state === 'error' ? 'alert' : 'status'}>{state === 'loading' ? 'Đang tải…' : state === 'error' ? errorMessage : emptyMessage}</p>}
-  </section>;
+function LiveProfitChart({ transactions, dateBasis, periodType }) {
+  const daily = new Map();
+  transactions.forEach((row) => {
+    const date = ledgerDate(row, dateBasis);
+    if (!date) return;
+    let bucket = date;
+    if (periodType === 'year') bucket = date.slice(0, 7);
+    else if (periodType === 'week' || periodType === 'quarter') {
+      const week = new Date(`${date}T12:00:00`);
+      week.setDate(week.getDate() - ((week.getDay() + 6) % 7));
+      bucket = `${week.getFullYear()}-${String(week.getMonth() + 1).padStart(2, '0')}-${String(week.getDate()).padStart(2, '0')}`;
+    } else if (periodType === 'day' && row.occurredAt) bucket = `${date} ${String(new Date(row.occurredAt).getHours()).padStart(2, '0')}:00`;
+    const item = daily.get(bucket) || { income: 0, expense: 0 };
+    const amount = Number(row.amount) || 0;
+    if (amount >= 0) item.income += amount;
+    else item.expense += Math.abs(amount);
+    daily.set(bucket, item);
+  });
+  const entries = [...daily.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return <p className="accountant-dash-empty">Không có giao dịch để vẽ biểu đồ trong kỳ này.</p>;
+  const max = Math.max(1, ...entries.flatMap(([, values]) => [values.income, values.expense]));
+  const width = 760; const height = 240; const left = 58; const right = 18; const top = 16; const bottom = 38;
+  const chartWidth = width - left - right; const chartHeight = height - top - bottom;
+  const x = (index) => left + (entries.length === 1 ? chartWidth / 2 : index * chartWidth / (entries.length - 1));
+  const y = (value) => top + chartHeight - (value / max) * chartHeight;
+  const pointsFor = (key) => entries.map(([, values], index) => `${x(index)},${y(values[key])}`).join(' ');
+  const axisLabel = (key) => key.length === 7 ? `${key.slice(5, 7)}/${key.slice(0, 4)}`
+    : key.includes(' ') ? `${key.slice(8, 10)}/${key.slice(5, 7)} ${key.slice(11, 16)}`
+      : `${key.slice(8, 10)}/${key.slice(5, 7)}`;
+  const tickEvery = Math.max(1, Math.ceil(entries.length / 7));
+  return <div className="accountant-live-chart-scroll"><svg viewBox={`0 0 ${width} ${height}`} className="accountant-live-chart-svg" role="img" aria-label="Biểu đồ tiền thu và tiền chi theo ngày">
+    {[0, 1, 2, 3, 4].map((tick) => { const value = max * (4 - tick) / 4; const lineY = top + chartHeight * tick / 4; return <g key={tick}><line x1={left} x2={width - right} y1={lineY} y2={lineY} /><text className="accountant-chart-axis-value" x={left - 8} y={lineY + 4}>{new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text></g>; })}
+    <polyline className="accountant-chart-income-line" points={pointsFor('income')} />
+    <polyline className="accountant-chart-expense-line" points={pointsFor('expense')} />
+    {entries.map(([day, values], index) => <g key={day}><circle className="accountant-chart-income-dot" cx={x(index)} cy={y(values.income)} r="3.5"><title>{day} · Thu {money(values.income)}</title></circle><circle className="accountant-chart-expense-dot" cx={x(index)} cy={y(values.expense)} r="3.5"><title>{day} · Chi {money(values.expense)}</title></circle>{(index % tickEvery === 0 || index === entries.length - 1) && <text className="accountant-chart-axis-day" x={x(index)} y={height - 10}>{axisLabel(day)}</text>}</g>)}
+  </svg></div>;
 }
 
 export default function AccountantDashboard() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedFrom = searchParams.get('from');
-  const selectedTo = searchParams.get('to');
-  const selectedBranches = searchParams.getAll('branchIds');
-  const selectedBranch = selectedBranches.length === 1 ? selectedBranches[0] : '';
-  const selectedMonth = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(selectedTo || '') ? selectedTo.slice(0, 7) : monthNow();
-  const scopeQuery = new URLSearchParams(searchParams);
-  const periodQuery = new URLSearchParams(scopeQuery);
-  periodQuery.set('tab', 'periods');
-  const transactionsQuery = new URLSearchParams(scopeQuery);
-  transactionsQuery.set('tab', 'transactions');
-  const monthLastDay = new Date(Date.UTC(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const currentDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const cashDate = searchParams.get('cashDate') ?? selectedTo ?? currentDay;
-  const cashDateValid = validCashDate(cashDate, currentDay);
-  const fullMonthRange = (!selectedFrom && !selectedTo) || (selectedFrom === `${selectedMonth}-01`
-    && selectedTo === (monthLastDay > currentDay ? currentDay : monthLastDay));
-  const singleMonthScope = fullMonthRange && selectedBranches.length <= 1;
   const [user, setUser] = useState(null);
-  const month = selectedMonth;
-  const branchId = selectedBranch;
+  const [month, setMonth] = useState(monthNow);
+  const periodType = 'month';
+  const [dateFrom, setDateFrom] = useState(() => monthBounds(monthNow()).start);
+  const [dateTo, setDateTo] = useState(() => monthBounds(monthNow()).end);
+  const [branchId, setBranchId] = useState('');
+  const dateBasis = 'cash';
   const [branches, setBranches] = useState([]);
   const [refunds, setRefunds] = useState([]);
-  const [requests, setRequests] = useState([]);
-  const [fundBalance, setFundBalance] = useState(null);
-  const [dailyStatuses, setDailyStatuses] = useState([]);
-  const [dailyStatusState, setDailyStatusState] = useState('loading');
-  const [dailyStatusForDate, setDailyStatusForDate] = useState('');
-  const [dailyRevision, setDailyRevision] = useState(0);
-  const [notifications, setNotifications] = useState([]);
-  const [notificationState, setNotificationState] = useState('loading');
-  const [notificationRevision, setNotificationRevision] = useState(0);
-  const [closings, setClosings] = useState([]);
-  const [payroll, setPayroll] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
-  const [sepayExceptions, setSepayExceptions] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [sourceTransactions, setSourceTransactions] = useState([]);
+  const [recentDay, setRecentDay] = useState('');
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentPageSize, setRecentPageSize] = useState(8);
   const [periods, setPeriods] = useState([]);
-  const [apiStatus, setApiStatus] = useState({});
-  const [revision, setRevision] = useState(0);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [exceptionFilter, setExceptionFilter] = useState('UNRESOLVED');
-  const [resolutionTarget, setResolutionTarget] = useState(null);
-  const [resolutionNote, setResolutionNote] = useState('');
-  const [resolutionBusy, setResolutionBusy] = useState(false);
-  const resolutionDialogRef = useRef(null);
-  const resolutionTriggerRef = useRef(null);
-  const exceptionFilterRef = useRef(null);
-
-  useEffect(() => {
-    if (!cashDateValid) { setDailyStatuses([]); setDailyStatusState('invalid'); setDailyStatusForDate(''); return undefined; }
-    let active = true;
-    setDailyStatusForDate(cashDate);
-    setDailyStatuses([]); setDailyStatusState('loading');
-    api.get('/accounting/cash-closing/statuses', { params: { date: cashDate } }).then(({ data }) => {
-      if (!active) return;
-      const ready = Array.isArray(data) && data.every((item) => item.branchId && item.branchName
-        && ['SUBMITTED', 'NEEDS_EXPLANATION', 'NOT_SUBMITTED'].includes(item.status));
-      setDailyStatuses(ready ? data : []);
-      setDailyStatusState(ready ? 'ready' : 'error');
-    }).catch(() => { if (active) setDailyStatusState('error'); });
-    return () => { active = false; };
-  }, [cashDate, cashDateValid, dailyRevision]);
-
-  useEffect(() => {
-    let active = true;
-    setNotifications([]); setNotificationState('loading');
-    api.get('/accounting/cash-closing/notifications').then(({ data }) => {
-      if (!active) return;
-      const ready = Array.isArray(data) && data.every((item) => item.id && item.closingId
-        && item.branchName && item.businessDate && item.sentAt && Number(item.reportVersion) > 0
-        && !Number.isNaN(new Date(item.sentAt).getTime()));
-      setNotifications(ready ? data : []);
-      setNotificationState(ready ? 'ready' : 'error');
-    }).catch(() => { if (active) setNotificationState('error'); });
-    return () => { active = false; };
-  }, [notificationRevision]);
 
   useEffect(() => {
     let active = true;
@@ -122,92 +102,73 @@ export default function AccountantDashboard() {
 
   useEffect(() => {
     let active = true;
-    setApiStatus((current) => ({ ...current, refund: 'loading', finance: 'loading' }));
-    setBranches([]); setRefunds([]); setRequests([]); setFundBalance(null);
-    api.get('/accounting/deposits/refund-requests').then(({ data }) => {
-      if (!active) return;
-      const ready = Array.isArray(data?.items);
-      setRefunds(ready ? data.items : []);
-      setApiStatus((current) => ({ ...current, refund: ready ? 'fulfilled' : 'rejected' }));
-    }).catch(() => { if (active) setApiStatus((current) => ({ ...current, refund: 'rejected' })); });
-    api.get('/accounting/finance').then(({ data }) => {
-      if (!active) return;
-      const ready = Array.isArray(data?.requests) && Array.isArray(data?.branches) && data.balance != null;
-      setBranches(ready ? data.branches : []);
-      setRequests(ready ? data.requests : []);
-      setFundBalance(ready ? data.balance : null);
-      setApiStatus((current) => ({ ...current, finance: ready ? 'fulfilled' : 'rejected' }));
-    }).catch(() => { if (active) setApiStatus((current) => ({ ...current, finance: 'rejected' })); });
-    return () => { active = false; };
-  }, [revision]);
-
-  useEffect(() => {
-    if (!singleMonthScope) {
-      setApiStatus((current) => ({ ...current, cash: 'idle', payroll: 'idle', periods: 'idle', details: 'idle' }));
-      return undefined;
-    }
-    let active = true;
-    setApiStatus((current) => ({ ...current, cash: 'loading', payroll: 'loading', periods: 'loading', details: 'loading' }));
-    const from = `${month}-01`;
-    const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+    setLoading(true); setError('');
+    const params = { month, ...(branchId ? { branchId } : {}) };
     Promise.allSettled([
-      api.get('/accounting/cash-closing', { params: { from, to: end, ...(branchId ? { branchId } : {}) } }),
-      api.get(`/accounting/payroll/${month}`),
+      api.get('/accounting/reports/monthly', { params }),
+      api.get('/accounting/deposits/refund-requests'),
       api.get('/accounting/financial-periods'),
-      api.get('/accounting/dashboard-details', { params: { month, ...(branchId ? { branchId } : {}) } }),
+      api.get('/accounting/dashboard-details', { params: { month, from: dateFrom, to: dateTo, ...(branchId ? { branchId } : {}) } }),
+      api.get('/accounting/transactions', { params }),
+      api.get('/accounting/reports/source-imports', { params: { from: monthBounds(month).start, to: monthBounds(month).end, ...(branchId ? { branchId } : {}) } }),
     ]).then((results) => {
       if (!active) return;
-      const [cash, payrollResult, periodResult, details] = results;
-      const available = {
-        cash: cash.status === 'fulfilled' && Array.isArray(cash.value.data),
-        payroll: payrollResult.status === 'fulfilled' && Array.isArray(payrollResult.value.data?.rows),
-        periods: periodResult.status === 'fulfilled' && Array.isArray(periodResult.value.data),
-        details: details.status === 'fulfilled' && Array.isArray(details.value.data?.paymentMethods)
-          && Array.isArray(details.value.data?.sepayExceptions),
-      };
-      setApiStatus((current) => ({ ...current, ...Object.fromEntries(Object.entries(available).map(([key, ready]) => [key, ready ? 'fulfilled' : 'rejected'])) }));
-      setClosings(available.cash ? cash.value.data : []);
-      setPayroll(available.payroll ? payrollResult.value.data : null);
-      setPeriods(available.periods ? periodResult.value.data : []);
-      setPaymentMethods(available.details ? details.value.data.paymentMethods : []);
-      setSepayExceptions(available.details ? details.value.data.sepayExceptions : []);
-    });
+      const [summary, refund, periodResult, details, transactions, imported] = results;
+      if (summary.status === 'fulfilled') {
+        const list = summary.value.data.results || [];
+        setBranches((current) => {
+          const combined = [...current, ...list.map((row) => ({ id: row.id, name: row.name }))];
+          if (imported.status === 'fulfilled') combined.push(...(imported.value.data.branchOptions || []).map((row) => ({ id: row.id, name: row.name })));
+          return [...new Map(combined.map((row) => [row.id, row])).values()];
+        });
+      } else { setError(errorText(summary.reason)); }
+      setRefunds(refund.status === 'fulfilled' ? refund.value.data.items || [] : []);
+      setPeriods(periodResult.status === 'fulfilled' ? periodResult.value.data || [] : []);
+      setPaymentMethods(details.status === 'fulfilled' ? details.value.data.paymentMethods || [] : []);
+      setRecentTransactions(transactions.status === 'fulfilled' ? transactions.value.data || [] : []);
+      const sourceRows = imported.status === 'fulfilled' ? imported.value.data.rows || [] : [];
+      const sourceBranchesWithInvoices = new Set(sourceRows.filter((row) => row.recordType === 'KIOT_INVOICE').map((row) => row.branchId));
+      setSourceTransactions(sourceRows.filter((row) => row.recordType === 'KIOT_INVOICE' || !sourceBranchesWithInvoices.has(row.branchId))
+        .map((row) => ({ id: `source-${row.id}`, bookingDate: row.businessDate, occurredAt: `${row.businessDate}T12:00:00`, branchId: row.branchId, branchName: row.branchName,
+          kind: 'PAYMENT', amount: Number(row.paidAmount || 0), method: row.paymentMethod || 'Theo dữ liệu nguồn',
+          reason: row.invoiceNumber || row.sourceKey || 'Booking nhập nguồn', status: row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : 'Dữ liệu nguồn', sourceSystem: row.sourceSystem })));
+      if (results.slice(1, 6).some((item) => item.status === 'rejected')) setError((current) => current || 'Một số bảng nghiệp vụ không tải được; số liệu bị thiếu được để trống.');
+    }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [month, branchId, singleMonthScope, revision]);
+  }, [month, branchId, dateFrom, dateTo]);
 
-  const monthLabel = `Tháng ${month.slice(5, 7)}/${month.slice(0, 4)}`;
-  const selectedBranchName = branches.find((item) => item.id === branchId)?.name;
-  // shortcut: API hoàn cọc chỉ có branchName; chặn tên trùng, dùng branchId khi API bổ sung.
-  const uniqueRefundBranch = !branchId || (selectedBranchName && branches.filter((item) => item.name === selectedBranchName).length === 1);
-  const branchLabel = selectedBranches.length > 1 ? `${selectedBranches.length} cơ sở đang chọn` : branchId ? selectedBranchName || 'cơ sở đang chọn' : 'toàn chuỗi';
-  const scopedDailyStatuses = selectedBranches.length ? dailyStatuses.filter((item) => selectedBranches.includes(item.branchId)) : dailyStatuses;
-  const dailyPanelState = !cashDateValid ? 'invalid' : dailyStatusForDate === cashDate ? dailyStatusState : 'loading';
-  const dailyGroups = [
-    { status: 'SUBMITTED', label: 'Đã gửi' },
-    { status: 'NEEDS_EXPLANATION', label: 'Cần bổ sung' },
-    { status: 'NOT_SUBMITTED', label: 'Chưa có bản gửi' },
-  ];
-  const dailyHistoryQuery = new URLSearchParams({ date: cashDate, from: cashDate, to: cashDate, status: '' });
-  const state = (key) => apiStatus[key] === 'fulfilled' ? 'ready' : apiStatus[key] === 'rejected' ? 'error' : 'loading';
-  const refundRows = refunds.filter((row) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(row.status));
-  // BR-17/93: giữ các yêu cầu hoàn cọc và hoàn ứng còn thao tác của kế toán trong hàng chờ.
-  const expenseRequests = requests.filter((row) => ['WAITING_ACCOUNTANT', 'APPROVED_TO_PAY'].includes(row.status));
-  const selectedRefunds = branchId ? refundRows.filter((row) => row.branchName === selectedBranchName) : refundRows;
-  const selectedRequests = selectedBranches.length ? expenseRequests.filter((row) => selectedBranches.includes(row.branch_id)) : expenseRequests;
-  const refundTableState = !uniqueRefundBranch && state('refund') === 'ready' ? 'error' : state('refund');
-  const payrollRows = payroll?.rows || [];
-  const payrollTotal = payrollRows.reduce((sum, row) => sum + Number(row.net_amount || 0), 0);
-  const payrollPaid = payrollRows.filter((row) => row.paid).reduce((sum, row) => sum + Number(row.net_amount || 0), 0);
+  const displayBranches = branches;
+  const activeRefunds = refunds;
+  const refundRows = activeRefunds.filter((row) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(row.status)
+    && String(row.requestedAt || '').slice(0, 10) >= dateFrom && String(row.requestedAt || '').slice(0, 10) <= dateTo);
+  const selectedRefunds = branchId ? refundRows.filter((row) => row.branchId === branchId || row.branchName === displayBranches.find((item) => item.id === branchId)?.name) : refundRows;
+  const refundAmount = selectedRefunds.reduce((sum, row) => sum + Number(row.amount || row.refundAmount || 0), 0);
   const currentPeriod = periods.find((row) => String(row.month).slice(0, 7) === month);
-  const exceptions = sepayExceptions;
-  const visibleExceptions = exceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter);
-  const paymentTotal = paymentMethods.reduce((sum, item) => sum + Number(item.value || 0), 0);
-  let paymentOffset = 0;
-  const methodParts = paymentMethods.map((item, index) => {
-    const start = paymentOffset;
-    paymentOffset += paymentTotal ? Number(item.value || 0) / paymentTotal * 100 : 0;
-    return `${['#168b87', '#6a3ee8', '#df9b28'][index % 3]} ${start}% ${paymentOffset}%`;
-  }).join(', ');
+  const branchLabel = branchId ? displayBranches.find((item) => item.id === branchId)?.name || 'Cơ sở đang chọn' : 'Toàn chuỗi';
+  const canonicalBranches = new Set(recentTransactions.filter((row) => row.kind === 'PAYMENT' && Number(row.amount) > 0).map((row) => row.branchId).filter(Boolean));
+  const activeTransactions = [...recentTransactions, ...sourceTransactions.filter((row) => !canonicalBranches.has(row.branchId))];
+  const filteredTransactions = activeTransactions.filter((row) => {
+    const date = ledgerDate(row, dateBasis);
+    return (!branchId || row.branchId === branchId)
+      && date >= dateFrom && date <= dateTo;
+  });
+  const chartTransactions = filteredTransactions;
+  const activePaymentMethods = paymentMethods.length ? paymentMethods : [...sourceTransactions.filter((row) => row.bookingDate >= dateFrom && row.bookingDate <= dateTo && (!branchId || row.branchId === branchId)).reduce((methods, row) => {
+    const label = row.method || 'Theo dữ liệu nguồn';
+    methods.set(label, (methods.get(label) || 0) + Math.max(0, Number(row.amount) || 0));
+    return methods;
+  }, new Map()).entries()].map(([label, value]) => ({ label, value }));
+  const paymentTotal = activePaymentMethods.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const cashIncome = filteredTransactions.reduce((sum, row) => sum + Math.max(0, Number(row.amount) || 0), 0);
+  const cashExpense = filteredTransactions.reduce((sum, row) => sum + Math.max(0, -(Number(row.amount) || 0)), 0);
+  const recentRows = filteredTransactions.filter((row) => !recentDay || ledgerDate(row, dateBasis) === recentDay);
+  const branchRevenueRows = displayBranches.map((branch) => ({
+    ...branch,
+    revenue: filteredTransactions.filter((row) => row.branchId === branch.id && Number(row.amount) > 0).reduce((sum, row) => sum + Number(row.amount), 0),
+  })).filter((row) => row.revenue > 0);
+  const branchRevenueMax = Math.max(1, ...branchRevenueRows.map((row) => row.revenue));
+  const recentPageCount = Math.max(1, Math.ceil(recentRows.length / recentPageSize));
+  const visibleRecentRows = recentRows.slice((recentPage - 1) * recentPageSize, recentPage * recentPageSize);
 
   async function logout() {
     setBusy(true);
@@ -216,121 +177,44 @@ export default function AccountantDashboard() {
     finally { setBusy(false); }
   }
 
-  async function resolveSePayException() {
-    if (!resolutionTarget || !resolutionNote.trim()) return;
-    setResolutionBusy(true); setError('');
-    try {
-      const { data: csrf } = await api.get('/auth/csrf');
-      const { data: resolved } = await api.post(`/accounting/sepay-exceptions/${resolutionTarget.id}/resolve`,
-        { resolutionNote }, { headers: { [csrf.headerName]: csrf.token } });
-      setSepayExceptions((current) => current.map((item) => item.id === resolved.id ? { ...item, ...resolved } : item));
-      setResolutionTarget(null); setResolutionNote('');
-    } catch (e) { setError(errorText(e)); }
-    finally { setResolutionBusy(false); }
-  }
-
-  useEffect(() => {
-    if (!resolutionTarget) return undefined;
-    const trigger = resolutionTriggerRef.current;
-    const fallback = exceptionFilterRef.current;
-    resolutionDialogRef.current?.querySelector('textarea')?.focus();
-    return () => (trigger?.isConnected ? trigger : fallback)?.focus();
-  }, [resolutionTarget]);
-
-  function handleResolutionKeys(event) {
-    if (event.key === 'Escape' && !resolutionBusy) { setResolutionTarget(null); return; }
-    if (event.key !== 'Tab') return;
-    const controls = [...event.currentTarget.querySelectorAll('textarea, button:not([disabled])')];
-    if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls[controls.length - 1]?.focus(); }
-    else if (!event.shiftKey && document.activeElement === controls[controls.length - 1]) { event.preventDefault(); controls[0]?.focus(); }
-  }
-
   return <AppShell user={user} branchName="toàn chuỗi" busy={busy} onLogout={logout} breadcrumb="Tổng quan kế toán" activeTab="overview" audience="accountant" hideSearch showCurrentMonth={false}>
     <main className="accountant-dash" aria-labelledby="accountant-dash-title">
-      <header className="accountant-dash-header"><h1 id="accountant-dash-title">Tổng quan tài chính</h1></header>
-      {user && <RevenueExpenseOverview role="ACCOUNTANT" />}
-      <section className="accountant-dash-panel accountant-daily-status" aria-labelledby="accountant-daily-status-title">
-        <div className="accountant-daily-heading">
-          <div><h2 id="accountant-daily-status-title">Trạng thái báo cáo chốt quỹ ngày</h2>
-            <p>Một ngày kinh doanh · {branchLabel}. Trạng thái bản gửi không làm thay đổi số thu chi tính từ giao dịch hệ thống.</p></div>
-          <label>Ngày kinh doanh<input type="date" min="2000-01-01" max={currentDay} value={cashDateValid ? cashDate : ''}
-            onChange={(event) => { const next = new URLSearchParams(searchParams); next.set('cashDate', event.target.value); setSearchParams(next); }} /></label>
-        </div>
-        {cashDateValid && <p className="accountant-daily-scope">Ngày đang xem: <strong>{cashDate.split('-').reverse().join('/')}</strong> · {dailyPanelState === 'ready' ? scopedDailyStatuses.length : '—'} cơ sở trong phạm vi.</p>}
-        {dailyPanelState === 'invalid' ? <p className="accountant-dash-empty" role="alert">Ngày trên URL không hợp lệ hoặc ở tương lai. Chọn một ngày từ 01/01/2000 đến hôm nay để xem trạng thái.</p>
-          : dailyPanelState === 'loading' ? <p className="accountant-dash-empty" role="status">Đang tải trạng thái báo cáo chốt quỹ ngày…</p>
-            : dailyPanelState === 'error' ? <p className="accountant-dash-empty" role="alert">Không tải được trạng thái báo cáo. <button type="button" onClick={() => setDailyRevision((value) => value + 1)}>Thử lại</button></p>
-              : <div className="accountant-daily-groups">{dailyGroups.map(({ status, label }) => {
-                const rows = scopedDailyStatuses.filter((item) => item.status === status);
-                return <div className="accountant-daily-group" key={status}><h3>{label} <span>{rows.length}</span></h3>
-                  {rows.length ? <ul>{rows.map((item) => <li key={item.branchId}><span>{item.branchName}</span>
-                    {item.closingId && <Link to={`/ke-toan/chot-quy?${new URLSearchParams({ reportId: item.closingId, branchId: item.branchId, date: cashDate, from: cashDate, to: cashDate })}`}>Mở bản ghi</Link>}</li>)}</ul>
-                    : <p>Không có cơ sở.</p>}</div>;
-              })}</div>}
-        {cashDateValid && <Link className="accountant-daily-all" to={`/ke-toan/chot-quy?${dailyHistoryQuery}`}>Xem tất cả · mở toàn chuỗi</Link>}
+      <header className="accountant-dash-header"><div><h1 id="accountant-dash-title">Tổng quan tài chính</h1><p>Thu chi · đối soát · hoàn cọc</p></div></header>
+      <div className="accountant-overview-filterbar">
+        <label>Kỳ báo cáo<select aria-label="Chọn kỳ báo cáo theo tháng" value={month.slice(5, 7)} onChange={(event) => { const nextMonth = `${month.slice(0, 4)}-${event.target.value}`; setMonth(nextMonth); const bounds = monthBounds(nextMonth); setDateFrom(bounds.start); setDateTo(bounds.end); setRecentDay(''); setRecentPage(1); }}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1).padStart(2, '0')}>Tháng {index + 1}</option>)}</select></label>
+        <label>Năm<select value={month.slice(0, 4)} onChange={(event) => { const nextMonth = `${event.target.value}-${month.slice(5, 7)}`; setMonth(nextMonth); const bounds = monthBounds(nextMonth); setDateFrom(bounds.start); setDateTo(bounds.end); setRecentDay(''); setRecentPage(1); }}>{availableYears().map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+        <label>Từ ngày<input type="date" min={`${month}-01`} max={`${month}-${monthBounds(month).end.slice(-2)}`} value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); if (event.target.value > dateTo) setDateTo(event.target.value); setRecentDay(''); setRecentPage(1); }} /></label>
+        <label>Đến ngày<input type="date" min={dateFrom} max={monthBounds(month).end} value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRecentDay(''); setRecentPage(1); }} /></label>
+        <label>Cơ sở<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setRecentPage(1); }}><option value="">Tất cả cơ sở</option>{displayBranches.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+        <span>{branchLabel}</span>
+      </div>
+      {error && <p className="accountant-dash-error" role="alert">{error}</p>}{loading && <p role="status">Đang tải số liệu…</p>}
+      <section className="accountant-kpis" aria-label="Chỉ số tài chính trong kỳ">{[
+        [dateBasis === 'cash' ? 'Tiền thực thu' : 'Khoản thu ghi nhận', cashIncome, dateBasis === 'cash' ? 'Theo ngày thanh toán' : 'Theo ngày ghi nhận nghiệp vụ'],
+        [dateBasis === 'cash' ? 'Tiền thực chi' : 'Chi phí ghi nhận', cashExpense, 'Trong khoảng thời gian được chọn'],
+        ['Chênh lệch thu − chi', cashIncome - cashExpense, 'Không đồng nghĩa với lợi nhuận'],
+        ['Hoàn cọc chờ xử lý', refundAmount, `${selectedRefunds.length} yêu cầu`],
+      ].map(([label, value, note]) => {
+        const profitKpi = label === 'Chênh lệch thu − chi';
+        const profitTone = !profitKpi ? '' : Number(value) > 0 ? 'is-profit' : Number(value) < 0 ? 'is-loss' : 'is-even';
+        return <article className={`accountant-kpi ${profitTone}`} key={label}><span>{label}</span><strong>{money(value)}</strong><small>{note}</small></article>;
+      })}</section>
+      <div className="accountant-dash-grid accountant-overview-primary">
+        <section className="accountant-dash-panel accountant-overview-chart"><div className="accountant-panel-heading"><div><h2>Xu hướng thu và chi</h2><p>{dateBasis === 'cash' ? 'Theo ngày thanh toán' : 'Theo ngày ghi nhận'} · {branchLabel}</p></div><span className="accountant-period-chip">{{ day: 'Theo giờ', week: 'Theo tuần', month: 'Theo ngày', quarter: 'Theo tuần', year: 'Theo tháng', custom: 'Theo ngày' }[periodType]}</span></div><div className="accountant-chart-key"><span><i className="is-income" />Tiền thu</span><span><i className="is-expense" />Tiền chi</span></div><LiveProfitChart transactions={chartTransactions} dateBasis={dateBasis} periodType={periodType} /></section>
+        <section className="accountant-dash-panel accountant-overview-tasks"><div className="accountant-panel-heading"><div><h2>Công việc cần xử lý</h2><p>Các hàng đợi cần kế toán theo dõi</p></div><span className="accountant-period-chip">Ưu tiên</span></div>
+          <Link to="/ke-toan/hoan-coc"><span><strong>Hoàn tiền cọc</strong><small>Yêu cầu đang chờ xử lý</small></span><b>{selectedRefunds.length}</b></Link>
+          <Link to="/ke-toan/chot-quy"><span><strong>Đối soát chốt quỹ</strong><small>Phiếu chưa đối soát trong kỳ</small></span><b>{currentPeriod?.unreconciledClosings ?? 0}</b></Link>
+        </section>
+      </div>
+      <div className="accountant-dash-grid accountant-overview-secondary">
+        <section className="accountant-dash-panel accountant-method-panel"><div className="accountant-panel-heading"><div><h2>Thu theo phương thức</h2></div><strong>{money(paymentTotal)}</strong></div>{activePaymentMethods.length ? <div className="accountant-method-ledger">{activePaymentMethods.map((item, index) => { const amount = Number(item.value) || 0; const share = paymentTotal ? amount / paymentTotal * 100 : 0; return <div className="accountant-method-ledger-row" key={item.label}><span className="accountant-method-index">{String(index + 1).padStart(2, '0')}</span><span className="accountant-method-name">{item.label}</span><span className="accountant-method-track"><i style={{ width: `${share}%` }} /></span><strong>{money(amount)}</strong><small>{share.toFixed(1)}%</small></div>; })}</div> : <p className="accountant-dash-empty">Không có giao dịch thu từ hóa đơn trong kỳ.</p>}</section>
+        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <div className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((a, b) => b.revenue - a.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</div> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
+      </div>
+      <section className="accountant-dash-panel accountant-table-panel accountant-recent-panel">
+        <div className="accountant-panel-heading"><div><h2>Giao dịch gần đây trong kỳ</h2><p>{recentRows.length} giao dịch · {dateFrom.slice(8, 10)}/{dateFrom.slice(5, 7)}/{dateFrom.slice(0, 4)}–{dateTo.slice(8, 10)}/{dateTo.slice(5, 7)}/{dateTo.slice(0, 4)} · {branchLabel}</p></div><div className="accountant-recent-controls"><label className="accountant-recent-date">Ngày giao dịch<input type="date" value={recentDay} min={dateFrom} max={dateTo} onChange={(event) => { setRecentDay(event.target.value); setRecentPage(1); }} /></label><label>Hiển thị<select value={recentPageSize} onChange={(event) => { setRecentPageSize(Number(event.target.value)); setRecentPage(1); }}><option value="8">8 dòng</option><option value="25">25 dòng</option><option value="50">50 dòng</option></select></label></div></div>
+        {visibleRecentRows.length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Thời gian', 'Cơ sở', 'Loại', 'Phương thức', 'Trạng thái', 'Số tiền'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{visibleRecentRows.map((row) => <tr key={row.id}><td title={row.id}>{String(row.id).slice(0, 11).toUpperCase()}</td><td>{dateVi(ledgerDate(row, dateBasis))}</td><td>{row.branchName || 'Toàn chuỗi'}</td><td>{({ PAYMENT: 'Thu thanh toán', REFUND: 'Hoàn cọc', EXPENSE: 'Chi phí', SALARY: 'Trả lương', ADVANCE: 'Ứng lương', TRANSFER: 'Chuyển quỹ', OPENING: 'Số dư đầu kỳ', ADJUSTMENT: 'Điều chỉnh' })[row.kind] || row.kind}</td><td>{row.method || '—'}</td><td>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : row.sourceSystem ? 'Dữ liệu nhập nguồn' : row.status ? statusVi(row.status) : 'Đã ghi sổ'}</td><td className={Number(row.amount) < 0 ? 'accountant-deviation' : 'accountant-matched'}>{money(row.amount)}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch trong ngày và kỳ đã chọn.</p>}
+        <div className="accountant-recent-pager"><span>Trang {Math.min(recentPage, recentPageCount)} / {recentPageCount}</span><div><button type="button" disabled={recentPage <= 1} onClick={() => setRecentPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={recentPage >= recentPageCount} onClick={() => setRecentPage((page) => Math.min(recentPageCount, page + 1))}>Tiếp</button></div></div>
       </section>
-      <section className="accountant-dash-panel accountant-notifications" aria-labelledby="accountant-notifications-title">
-        <div className="accountant-notifications-heading"><div><h2 id="accountant-notifications-title">Báo cáo cơ sở vừa gửi</h2>
-          <p>Các lần gửi gần đây · toàn chuỗi; không theo bộ lọc ngày hoặc cơ sở của tổng quan tài chính.</p></div>
-          <Link to="/ke-toan/chot-quy#cash-closing-notifications-title">Xem danh sách thông báo</Link></div>
-        {notificationState === 'loading' ? <p className="accountant-notifications-message" role="status">Đang tải thông báo…</p>
-          : notificationState === 'error' ? <p className="accountant-notifications-message" role="alert">Không tải được thông báo. <button type="button" onClick={() => setNotificationRevision((value) => value + 1)}>Thử lại</button></p>
-            : notifications.length === 0 ? <p className="accountant-notifications-message" role="status">Chưa có lần gửi báo cáo chốt quỹ ngày nào.</p>
-              : <ul className="accountant-notifications-list">{notifications.slice(0, 5).map((item) => <li key={item.id}>
-                <div><strong>{item.branchName}</strong><span>Ngày kinh doanh: {dateVi(item.businessDate)} · Gửi lúc: {new Date(item.sentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · Lần gửi {item.reportVersion}</span></div>
-                <Link to={`/ke-toan/chot-quy?${new URLSearchParams({ reportId: item.closingId, from: item.businessDate, to: item.businessDate, date: item.businessDate })}`}
-                  aria-label={`Xem báo cáo hiện tại và lịch sử phiên bản của ${item.branchName}, ngày kinh doanh ${dateVi(item.businessDate)}`}>Xem báo cáo hiện tại và lịch sử phiên bản</Link>
-              </li>)}</ul>}
-      </section>
-      {(error || Object.values(apiStatus).includes('rejected')) && <div className="accountant-dash-error" role="alert"><span>{error || 'Một số bảng nghiệp vụ không tải được; xem trạng thái tại từng bảng.'}</span><button type="button" onClick={() => { setError(''); setRevision((value) => value + 1); }}>Thử lại</button></div>}
-      <section className="accountant-work-section" aria-labelledby="accountant-work-title">
-        <h2 className="accountant-work-heading" id="accountant-work-title">Việc cần xử lý</h2>
-        <p className="accountant-work-intro">Trạng thái hiện tại, không theo khoảng ngày báo cáo. Đề nghị chi chưa thanh toán chưa phải chi phí vận hành đã ghi nhận.</p>
-        <section className="accountant-period-status"><div><strong>Số dư quỹ kế toán hiện tại · toàn chuỗi: {state('finance') === 'ready' ? money(fundBalance) : '—'}</strong>
-          <span>{state('finance') === 'loading' ? 'Đang tải số dư quỹ…' : state('finance') === 'error' ? 'Không tải được số dư quỹ.' : 'Số dư hiện tại, không theo kỳ hoặc cơ sở đang lọc.'}</span></div>
-          <Link to="/ke-toan/chi-phi?section=payments">Xem quỹ</Link></section>
-        <div className="accountant-dash-grid">
-          <DataTable title="Hoàn cọc hiện đang chờ xử lý" description={selectedBranches.length > 1 ? 'hiện tại · toàn chuỗi · không theo bộ lọc cơ sở' : `Hiện tại · ${branchLabel} · không theo khoảng ngày báo cáo.`} state={refundTableState} href="/ke-toan/hoan-coc" action="Mở hoàn cọc"
-            errorMessage={!uniqueRefundBranch && state('refund') === 'ready' ? 'Không xác định duy nhất cơ sở để lọc yêu cầu hoàn cọc.' : 'Không tải được yêu cầu hoàn cọc.'}
-            columns={['Mã đặt phòng', 'Cơ sở', 'Ngày yêu cầu', 'Trạng thái', 'Số tiền']} rows={selectedRefunds}
-            renderRow={(row) => <tr key={row.id}><td>{row.bookingCode || row.id}</td><td>{row.branchName || '—'}</td><td>{dateVi(row.requestedAt)}</td><td>{statusVi(row.status)}</td><td>{money(row.amount)}</td></tr>} />
-          <DataTable title="Đề nghị chi cần kế toán xử lý" description={`Hiện tại · ${branchLabel} · không theo khoảng ngày; chưa phải chi phí đã ghi nhận.`} state={state('finance')} href="/ke-toan/chi-phi?section=plus&tab=requests" action="Mở đề nghị chi"
-            columns={['Mã đề nghị', 'Cơ sở', 'Khoản mục', 'Trạng thái', 'Số tiền']} rows={selectedRequests}
-            renderRow={(row) => <tr key={row.id}><td>{row.code || row.id}</td><td>{row.branch_name || '—'}</td><td>{row.category_name || '—'}{row.description && <small>{row.description}</small>}</td><td>{statusVi(row.status)}</td><td>{money(row.amount)}</td></tr>} />
-        </div>
-      </section>
-      {singleMonthScope ? <section className="accountant-month-section" aria-labelledby="accountant-month-title">
-        <div className="accountant-month-heading">
-          <h2 id="accountant-month-title">Thông tin nghiệp vụ tháng</h2>
-          <p>{monthLabel} · {branchLabel}. Các bảng dưới đây dùng dữ liệu tháng; kỳ tài chính và quỹ lương áp dụng cho toàn chuỗi.</p>
-        </div>
-        <section className="accountant-period-status"><div><strong>Kỳ tài chính {monthLabel} · toàn chuỗi: {state('periods') === 'ready' ? statusVi(currentPeriod?.status) : '—'}</strong>
-          <span>{state('periods') === 'loading' ? 'Đang tải điều kiện chốt kỳ…' : state('periods') === 'error' ? 'Không tải được điều kiện chốt kỳ.' : currentPeriod ? `${currentPeriod.unreconciledClosings} phiếu chốt quỹ chưa đối soát` : 'Chưa có thông tin đối soát cho kỳ này.'}</span></div>
-          <Link to={`/ke-toan/bao-cao?${periodQuery}`}>Xem điều kiện chốt kỳ</Link></section>
-        <div className="accountant-dash-grid">
-          <DataTable title="Đối soát tiền mặt" description={`${monthLabel} · ${branchLabel} · số trên phiếu chốt quỹ, không phải chi phí.`} state={state('cash')} href="/ke-toan/chot-quy" action="Mở đối soát chốt quỹ"
-            columns={['Cơ sở', 'Ngày', 'Trạng thái', 'Tiền hệ thống', 'Tiền thực tế', 'Chênh lệch']} rows={closings}
-            renderRow={(row) => <tr key={row.id}><td>{row.branchName || '—'}</td><td>{dateVi(row.business_date)}</td><td>{statusVi(row.status)}</td><td>{money(row.expected_closing)}</td><td>{money(row.actual_closing)}</td><td className={Number(row.variance || 0) ? 'accountant-deviation' : 'accountant-matched'}>{money(row.variance)}</td></tr>} />
-          <section className="accountant-dash-panel accountant-table-panel">
-            <div className="accountant-panel-heading"><div><h2>Giao dịch SePay ngoại lệ</h2><p>Phát sinh {monthLabel.toLowerCase()} · {branchLabel} · trạng thái xử lý hiện tại.</p></div><span>{state('details') === 'ready' ? visibleExceptions.length : '—'} mục</span></div>
-            <label className="accountant-exception-filter">Trạng thái xử lý<select ref={exceptionFilterRef} value={exceptionFilter} onChange={(event) => setExceptionFilter(event.target.value)}><option value="UNRESOLVED">Chưa xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="ALL">Tất cả</option></select></label>
-            {state('details') === 'ready' && visibleExceptions.length ? <div className="accountant-table-scroll" tabIndex={0} aria-label="Giao dịch SePay ngoại lệ"><table><thead><tr>{['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Lý do ngoại lệ', 'Nội dung chuyển khoản', 'Người xử lý', 'Thời điểm xử lý', 'Ghi chú xử lý', 'Thao tác'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{visibleExceptions.map((row) => <tr key={row.id}><td>{row.externalId || '—'}</td><td>{row.branchName || '—'}</td><td>{dateVi(row.occurredAt)}</td><td>{money(row.amount)}</td><td>{statusVi(row.resolutionStatus)}</td><td>{row.exceptionReason || '—'}</td><td>{row.reason || '—'}</td><td>{row.resolvedBy || '—'}</td><td>{row.resolvedAt ? new Date(row.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—'}</td><td>{row.resolutionNote || '—'}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? <button type="button" onClick={(event) => { resolutionTriggerRef.current = event.currentTarget; setResolutionTarget(row); setResolutionNote(''); }}>Đánh dấu đã xử lý</button> : 'Đã xử lý'}</td></tr>)}</tbody></table></div>
-              : <p className="accountant-dash-empty" role="status">{state('details') === 'loading' ? 'Đang tải…' : state('details') === 'error' ? 'Không tải được giao dịch SePay.' : 'Không có giao dịch ngoại lệ theo bộ lọc.'}</p>}
-          </section>
-        </div>
-        <div className="accountant-dash-grid">
-          <section className="accountant-dash-panel accountant-payroll"><div className="accountant-panel-heading"><div><h2>Quỹ lương kỳ</h2><p>{monthLabel} · toàn chuỗi; số đã chi theo thanh toán thực tế, không cộng vào chi phí lần nữa tại đây.</p></div><span>{state('payroll') === 'ready' ? statusVi(payroll?.status) : '—'}</span></div>
-            {state('payroll') === 'ready' ? <><strong className="accountant-payroll-total">{money(payrollTotal)}</strong><div className="accountant-payroll-progress"><div><span>Đã chi</span><strong>{money(payrollPaid)}</strong></div><div className="accountant-expense-track"><i style={{ width: `${payrollTotal ? payrollPaid / payrollTotal * 100 : 0}%` }} /></div><div><span>{payrollTotal ? `${Math.round(payrollPaid / payrollTotal * 100)}% đã chi` : 'Chưa có khoản lương phải chi'}</span><strong>{money(payrollTotal - payrollPaid)} chưa chi</strong></div></div></> : <p className="accountant-dash-empty" role="status">{state('payroll') === 'loading' ? 'Đang tải quỹ lương…' : 'Không tải được quỹ lương.'}</p>}
-          </section>
-          <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Giá trị hóa đơn có thanh toán theo phương thức</h2><p>{monthLabel} · {branchLabel} · chỉ gồm hóa đơn có khoản thanh toán bổ sung; có thể khác doanh thu hóa đơn, không phải chi phí.</p></div></div>
-            {state('details') === 'ready' && paymentMethods.length ? <div className="accountant-methods"><div className="accountant-method-donut" style={{ '--method-parts': methodParts }}><div><strong>{money(paymentTotal)}</strong><span>Giá trị hóa đơn hiển thị</span></div></div><div className="accountant-method-legend">{paymentMethods.map((item, index) => <div key={item.label}><span><i style={{ background: ['#168b87', '#6a3ee8', '#df9b28'][index % 3] }} />{item.label}</span><strong>{money(item.value)}</strong></div>)}</div></div> : <p className="accountant-dash-empty" role="status">{state('details') === 'loading' ? 'Đang tải…' : state('details') === 'error' ? 'Không tải được cơ cấu thanh toán.' : 'Không có hóa đơn theo phương thức thanh toán trong kỳ.'}</p>}
-          </section>
-        </div>
-        <nav className="accountant-dash-shortcuts" aria-label="Lối tắt nghiệp vụ kế toán"><Link to={`/ke-toan/bao-cao?${scopeQuery}`}>Báo cáo chi tiết</Link><Link to={`/ke-toan/bao-cao?${periodQuery}`}>Chốt kỳ</Link><Link to={`/ke-toan/bao-cao?${transactionsQuery}`}>Giao dịch &amp; điều chỉnh</Link></nav>
-        {resolutionTarget && <div className="accountant-exception-backdrop" role="presentation"><section ref={resolutionDialogRef} className="accountant-exception-dialog" role="dialog" aria-modal="true" aria-labelledby="resolve-sepay-title" onKeyDown={handleResolutionKeys}><h2 id="resolve-sepay-title">Đánh dấu ngoại lệ đã xử lý</h2><p>Giao dịch {resolutionTarget.externalId} · {money(resolutionTarget.amount)}. Thao tác chỉ ghi nhận trạng thái và ghi chú, không tạo bút toán tiền.</p><label>Ghi chú xử lý<textarea value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} maxLength={1000} required /></label><div><button type="button" disabled={resolutionBusy} onClick={() => setResolutionTarget(null)}>Hủy</button><button type="button" disabled={resolutionBusy || !resolutionNote.trim()} onClick={resolveSePayException}>{resolutionBusy ? 'Đang lưu…' : 'Xác nhận đã xử lý'}</button></div></section></div>}
-      </section> : <section className="accountant-scope-warning" role="status"><strong>Thông tin nghiệp vụ tháng chưa hiển thị cho phạm vi này.</strong>
-        <p>{!fullMonthRange && 'Chọn trọn một tháng (tháng hiện tại tính đến hôm nay). '}{selectedBranches.length > 1 && `Bạn đang chọn ${selectedBranches.length} cơ sở; phần này chỉ hỗ trợ toàn chuỗi hoặc một cơ sở. `}Tổng quan tài chính phía trên vẫn dùng đúng khoảng ngày và cơ sở đã chọn.</p>
-        <Link to={`/ke-toan/bao-cao?${scopeQuery}`}>Xem báo cáo theo phạm vi hiện tại</Link></section>}
     </main>
   </AppShell>;
 }

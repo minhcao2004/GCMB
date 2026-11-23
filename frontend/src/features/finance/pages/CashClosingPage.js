@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
 import ShiftCashHandoverPanel from '../components/ShiftCashHandoverPanel';
-import MoneyInput from '../components/MoneyInput';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import DrawerFundingPanel from '../components/DrawerFundingPanel';
 import '../styles/finance.css';
 

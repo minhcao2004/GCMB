@@ -38,28 +38,28 @@ public class CheckoutService {
     private final byte[] quoteKey = new java.security.SecureRandom().generateSeed(32);
     private final JdbcTemplate db;
     private final BookingRepository repository;
-    private final BookingService bookings;
+    private final BookingService bookingService;
     private final SePaySettings sepay;
     private final ObjectMapper json;
-    private final FoodOrderService foodOrders;
-    private final FinancialPeriodService periods;
+    private final FoodOrderService foodOrderService;
+    private final FinancialPeriodService financialPeriodService;
 
     public CheckoutService(
         JdbcTemplate db,
         BookingRepository repository,
-        BookingService bookings,
+        BookingService bookingService,
         SePaySettings sepay,
         ObjectMapper json,
-        FoodOrderService foodOrders,
-        FinancialPeriodService periods
+        FoodOrderService foodOrderService,
+        FinancialPeriodService financialPeriodService
     ) {
         this.db = db;
         this.repository = repository;
-        this.bookings = bookings;
+        this.bookingService = bookingService;
         this.sepay = sepay;
         this.json = json;
-        this.foodOrders = foodOrders;
-        this.periods = periods;
+        this.foodOrderService = foodOrderService;
+        this.financialPeriodService = financialPeriodService;
     }
 
     private Map<String, Object> depositStatus(Identity actor, UUID bookingId) {
@@ -88,24 +88,31 @@ public class CheckoutService {
         }
         if (!"CONFIRMED".equals(booking.status())) throw fail(409, "Chỉ xác nhận cọc cho booking chưa nhận phòng.");
         String content = reference == null ? "" : reference.trim();
-        if (content.isEmpty() || content.length() > 120) throw fail(400, "Nhập nội dung chuyển khoản, tối đa 120 ký tự.");
+        if (content.isEmpty() || content.length() > 120) throw fail(400, "Nhập mã giao dịch đã nhận cọc, tối đa 120 ký tự.");
         BigDecimal amount = BookingPricingService.depositFor(repository.activeChargeTotal(bookingId));
         if (amount.signum() <= 0 || reviewedAmount == null || amount.compareTo(reviewedAmount) != 0) {
             throw fail(409, "Số tiền cọc đã thay đổi. Vui lòng tải lại trước khi xác nhận.");
         }
-        var accounts = db.queryForList("SELECT id FROM gcmb.financial_account WHERE kind='BANK' AND active AND (branch_id IS NULL OR branch_id=?) ORDER BY code", UUID.class, branchId);
-        if (accounts.size() != 1) throw fail(409, "Cần cấu hình đúng một tài khoản ngân hàng nhận tiền cho cơ sở.");
         java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-        periods.requireOpen(day, "ghi nhận tiền cọc");
+        financialPeriodService.requireOpen(day, "ghi nhận tiền cọc");
         db.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", day.withDayOfMonth(1));
         var period = db.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE month=? FOR SHARE", day.withDayOfMonth(1));
         if (!"OPEN".equals(period.get("status"))) throw fail(409, "Kỳ tài chính đã đóng, chưa thể ghi nhận cọc.");
+        // HuyDV: sổ chuyển khoản ngoài hệ thống, không yêu cầu cấu hình tài khoản ngân hàng thực tế.
+        String accountCode = "EXTERNAL-DEPOSIT-" + branchId;
+        db.update("""
+            INSERT INTO gcmb.financial_account(code,name,kind,branch_id,active)
+            VALUES (?,'Cọc chuyển khoản nhận ngoài hệ thống','BANK',?,true)
+            ON CONFLICT(code) DO NOTHING
+            """, accountCode, branchId);
+        UUID account = db.queryForObject("SELECT id FROM gcmb.financial_account WHERE code=? AND branch_id=? AND kind='BANK'",
+            UUID.class, accountCode, branchId);
         db.update("UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')", bookingId);
         repository.receiveDeposit(branchId, bookingId, actor.id(), amount, "MANUAL_TRANSFER", content);
         UUID paymentId = db.queryForObject("SELECT p.id FROM gcmb.payment p WHERE p.booking_id=? AND p.purpose='DEPOSIT' ORDER BY p.created_at DESC LIMIT 1", UUID.class, bookingId);
         UUID transaction = UUID.randomUUID();
         db.update("INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,payment_id,reason,created_by,idempotency_key) VALUES (?,?,?,CURRENT_TIMESTAMP,'PAYMENT',?,?,?,?)", transaction, period.get("id"), day, paymentId, content, actor.id(), "MANUAL-DEPOSIT-"+paymentId);
-        db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)", transaction, accounts.get(0), branchId, amount);
+        db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)", transaction, account, branchId, amount);
         repository.event(bookingId, actor.id(), "CONFIRM_MANUAL_DEPOSIT", null, Map.of("amount", amount, "reference", content));
         return depositStatus(actor, bookingId);
     }
@@ -134,7 +141,7 @@ public class CheckoutService {
             "room",
             allocation == null ? "—" : allocation.roomCode() + " · " + allocation.roomName()
         );
-        var overtime = bookings.checkoutOvertime(actor, bookingId, checkoutAt);
+        var overtime = bookingService.checkoutOvertime(actor, bookingId, checkoutAt);
         var lines = checkoutLines(actor, bookingId, checkoutAt, overtime);
         result.put("overtime", overtime);
         result.put(
@@ -211,8 +218,8 @@ public class CheckoutService {
             at.isBefore(now.minusSeconds(300)) ||
             at.isBefore(booking.actualCheckin())
         ) throw fail(409, "Báo giá đã hết hiệu lực. Vui lòng cập nhật tiền phòng và xác nhận lại.");
-        periods.requireOpen(at.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "lập bill");
-        var overtime = bookings.checkoutOvertime(actor, bookingId, at);
+        financialPeriodService.requireOpen(at.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "lập bill");
+        var overtime = bookingService.checkoutOvertime(actor, bookingId, at);
         BigDecimal overtimeAmount = overtime
             .stream()
             .map(Overtime::amount)
@@ -236,7 +243,7 @@ public class CheckoutService {
                 input.quoteToken().getBytes(StandardCharsets.UTF_8)
             )
         ) throw fail(409, "Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
-        bookings.settleCheckoutCharges(actor, bookingId, at, overtime);
+        bookingService.settleCheckoutCharges(actor, bookingId, at, overtime);
         if (input.surcharges() != null) {
             if (input.surcharges().size() > 20) throw fail(400, "Tối đa 20 phụ phí.");
             for (var fee : input.surcharges()) {
@@ -449,7 +456,7 @@ public class CheckoutService {
     public Map<String, Object> plan(Identity actor, UUID id, PaymentPlan input) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
-        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "cập nhật thanh toán bill");
+        financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "cập nhật thanh toán bill");
         if (
             input == null || !List.of("CASH", "BANK_TRANSFER", "MIXED").contains(input.method())
         ) throw fail(400, "Chọn phương thức thanh toán hợp lệ.");
@@ -534,7 +541,7 @@ public class CheckoutService {
     public Map<String, Object> complete(Identity actor, UUID id) {
         var bill = lockBill(actor, id);
         if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
-        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "hoàn tất bill");
+        financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "hoàn tất bill");
         BigDecimal received = decimal(bill, "paid");
         BigDecimal cash = decimal(bill, "plannedCash");
         if (
@@ -550,7 +557,7 @@ public class CheckoutService {
             "Không có phiên sử dụng đang hoạt động."
         );
         // Quà combo đã được khách chọn lúc check-in; chỉ xuất kho khi bill được thanh toán đủ.
-        foodOrders.deductComboGiftStock(actor, bookingId);
+        foodOrderService.deductComboGiftStock(actor, bookingId);
         // Tiền mặt chỉ thành khoản thu chính thức cùng giao dịch hoàn tất bill.
         if (cash.signum() > 0) {
             BigDecimal tendered = decimal(bill, "plannedCashTendered");
@@ -628,7 +635,7 @@ public class CheckoutService {
     @Transactional
     public Map<String, Object> renew(Identity actor, UUID id) {
         var bill = lockBill(actor, id);
-        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "gia hạn mã thanh toán bill");
+        financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "gia hạn mã thanh toán bill");
         // Gia hạn cùng mã tham chiếu; không tạo mã thứ hai có thể nhận tiền trùng.
         int changed = db.update(
             """
@@ -654,7 +661,7 @@ public class CheckoutService {
     public Map<String, Object> changeMethod(Identity actor, UUID id) {
         // Khóa cùng thứ tự với webhook: giao dịch đã ghi nhận sẽ chặn đổi phương thức.
         var bill = lockBill(actor, id);
-        periods.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "đổi phương thức thanh toán bill");
+        financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "đổi phương thức thanh toán bill");
         if (!"ISSUED".equals(bill.get("status"))) {
             throw fail(409, "Chỉ đổi phương thức cho bill đang chờ thanh toán.");
         }
@@ -744,7 +751,7 @@ public class CheckoutService {
         if (!db.queryForList("SELECT id FROM gcmb.bank_transaction WHERE provider='SEPAY' AND account_id=? AND external_id=?",
                 UUID.class, account, payload.id().toString()).isEmpty()) return;
         try {
-            periods.requireOpen(occurred.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "ghi nhận giao dịch SePay");
+            financialPeriodService.requireOpen(occurred.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "ghi nhận giao dịch SePay");
         } catch (AuthFailure failure) {
             if (failure.status() != 409) throw failure;
             db.update("""
@@ -885,7 +892,7 @@ public class CheckoutService {
         Instant at,
         List<Overtime> overtime
     ) {
-        var hourly = bookings.checkoutHourlyCharges(actor, bookingId, at);
+        var hourly = bookingService.checkoutHourlyCharges(actor, bookingId, at);
         var result = new java.util.ArrayList<Map<String, Object>>();
         for (var original : sourceLines(bookingId)) {
             if ("OVERTIME".equals(original.get("chargeKind"))) continue;

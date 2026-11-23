@@ -66,10 +66,18 @@ public class BookingRepository {
                               BigDecimal hourlyPrice, BigDecimal overtimeHourlyPrice,
                               int billingStepMinutes, int priority) {}
     // Ảnh chụp booking phục vụ các thao tác trong một giao dịch.
-    public record BookingRow(UUID id, UUID branchId, String code, String contactName, String contactPhone, int guestCount,
+    public record BookingRow(UUID id, UUID branchId, UUID roomTypeId, String code, String contactName, String contactPhone, int guestCount,
                              String channel, Instant plannedStart, Instant plannedEnd, Instant actualCheckin,
                              Instant actualCheckout, String status, Instant cancelledAt, String cancellationReason,
-                             int refundCutoffMinutes, UUID createdBy, String note, Instant createdAt) {}
+                              int refundCutoffMinutes, UUID createdBy, String note, Instant createdAt) {
+        public BookingRow(UUID id, UUID branchId, String code, String contactName, String contactPhone, int guestCount,
+                          String channel, Instant plannedStart, Instant plannedEnd, Instant actualCheckin,
+                          Instant actualCheckout, String status, Instant cancelledAt, String cancellationReason,
+                          int refundCutoffMinutes, UUID createdBy, String note, Instant createdAt) {
+            this(id, branchId, null, code, contactName, contactPhone, guestCount, channel, plannedStart, plannedEnd,
+                actualCheckin, actualCheckout, status, cancelledAt, cancellationReason, refundCutoffMinutes, createdBy, note, createdAt);
+        }
+    }
     // Một chặng phòng riêng biệt để giữ được lịch sử đổi phòng và check-in.
     public record AllocationRow(UUID id, UUID bookingId, UUID roomId, UUID roomTypeId, String roomCode, String roomName, String roomTypeName,
                                 String operatingStatus, Instant startsAt, Instant endsAt, String state, String changeReason,
@@ -112,6 +120,34 @@ public class BookingRepository {
         List<RoomTypeRow> rows = db.query("SELECT id,code,name,mode,capacity FROM gcmb.room_type WHERE id=? AND active=true",
             (rs, rowNum) -> new RoomTypeRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), rs.getString("mode"), rs.getInt("capacity")), id);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public RoomTypeRow lockRoomType(UUID id) {
+        List<RoomTypeRow> rows = db.query("SELECT id,code,name,mode,capacity FROM gcmb.room_type WHERE id=? AND active=true FOR UPDATE",
+            (rs, rowNum) -> new RoomTypeRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), rs.getString("mode"), rs.getInt("capacity")), id);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public String roomTypeName(UUID id) {
+        return db.query("SELECT name FROM gcmb.room_type WHERE id=?", rs -> rs.next() ? rs.getString(1) : null, id);
+    }
+
+    public int unassignedBookings(UUID branchId, UUID roomTypeId, Instant start, Instant end, UUID excludeBookingId) {
+        return db.queryForObject("""
+            WITH held AS (
+                SELECT b.planned_start,b.planned_end FROM gcmb.booking b
+                WHERE b.branch_id=? AND b.room_type_id=? AND b.status='CONFIRMED'
+                  AND b.planned_start < ? AND b.planned_end > ?
+                  AND (?::uuid IS NULL OR b.id<>?::uuid)
+                  AND NOT EXISTS (SELECT 1 FROM gcmb.room_allocation a WHERE a.booking_id=b.id AND a.state IN ('RESERVED','OCCUPIED'))
+            ), points AS (
+                SELECT ?::timestamptz AS moment
+                UNION SELECT planned_start FROM held WHERE planned_start > ?
+            )
+            SELECT COALESCE(MAX((SELECT count(*) FROM held h WHERE h.planned_start <= p.moment AND h.planned_end > p.moment)),0)
+            FROM points p
+            """, Integer.class, branchId, roomTypeId, ts(end), ts(start), excludeBookingId, excludeBookingId,
+            ts(start), ts(start));
     }
 
     // Lấy combo hiện hành của hạng phòng.
@@ -298,13 +334,13 @@ public class BookingRepository {
     }
 
     // Ghi booking và trả ID do database tạo.
-    public UUID insertBooking(UUID branchId, String code, String contactName, String contactPhone, int guestCount, String channel,
+    public UUID insertBooking(UUID branchId, UUID roomTypeId, String code, String contactName, String contactPhone, int guestCount, String channel,
                               Instant start, Instant end, int refundCutoffMinutes, UUID createdBy, String note) {
         return db.queryForObject("""
-            INSERT INTO gcmb.booking(branch_id,code,contact_name,contact_phone,guest_count,channel,planned_start,planned_end,
+            INSERT INTO gcmb.booking(branch_id,room_type_id,code,contact_name,contact_phone,guest_count,channel,planned_start,planned_end,
                                      status,refund_cutoff_minutes,created_by,note)
-            VALUES (?,?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
-            """, UUID.class, branchId, code, contactName, contactPhone, guestCount, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
+            VALUES (?,?,?,?,?,?,?,?,?,'CONFIRMED',?,?,?) RETURNING id
+            """, UUID.class, branchId, roomTypeId, code, contactName, contactPhone, guestCount, channel, ts(start), ts(end), refundCutoffMinutes, createdBy, note);
     }
 
     public void setComboGiftQuantities(UUID bookingId, int drinks, int food) {
@@ -327,7 +363,7 @@ public class BookingRepository {
             contactName, contactPhone, ts(start), ts(end), note, id);
     }
 
-    // Tạo chặng giữ phòng ban đầu cho booking.
+    // Tạo chặng phòng ban đầu khi phòng cụ thể được gán cho booking.
     public UUID insertAllocation(UUID branchId, UUID bookingId, UUID roomId, Instant start, Instant end, UUID actorId) {
         return db.queryForObject("""
             INSERT INTO gcmb.room_allocation(branch_id,booking_id,room_id,starts_at,ends_at,state,created_by)
@@ -456,10 +492,6 @@ public class BookingRepository {
         db.update("UPDATE gcmb.booking SET status='CANCELLED',cancelled_at=?,cancellation_reason=? WHERE id=?", ts(now), reason, id);
     }
 
-    // Chuyển booking đã đến giờ sang trạng thái khách vắng mặt.
-    public int markNoShow(UUID id) {
-        return db.update("UPDATE gcmb.booking SET status='NO_SHOW' WHERE id=? AND status='CONFIRMED'", id);
-    }
 
     // Khóa tài khoản cọc để các bút toán không ghi đè nhau.
     public UUID lockDeposit(UUID bookingId) {
@@ -508,7 +540,7 @@ public class BookingRepository {
 
     // Đọc booking theo ID và chi nhánh, kể cả dữ liệu giờ được khôi phục từ lịch sử.
     public BookingRow booking(UUID bookingId, UUID branchId) {
-        String sql = "SELECT b.id,b.branch_id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," +
+        String sql = "SELECT b.id,b.branch_id,b.room_type_id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," +
             scheduledStartExpression("b") + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.actual_checkout,b.status," +
             "b.cancelled_at,b.cancellation_reason,b.refund_cutoff_minutes,b.created_by,b.note,b.created_at " +
             "FROM gcmb.booking b WHERE b.id=? AND b.branch_id=?";
@@ -518,7 +550,7 @@ public class BookingRepository {
 
     // Ánh xạ hàng SQL sang booking nội bộ.
     private static BookingRow bookingRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
-        return new BookingRow(rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class), rs.getString("code"),
+        return new BookingRow(rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class), rs.getObject("room_type_id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getInt("guest_count"), rs.getString("channel"), instant(rs, "planned_start"),
             instant(rs, "planned_end"), instant(rs, "actual_checkin"), instant(rs, "actual_checkout"), rs.getString("status"),
             instant(rs, "cancelled_at"), rs.getString("cancellation_reason"), rs.getInt("refund_cutoff_minutes"),
@@ -552,6 +584,11 @@ public class BookingRepository {
             VALUES (?,?,?,?,?,?,?,?,?,CAST(? AS jsonb),'ACTIVE')
             """, bookingId, allocationId, line.priceRuleId(), line.comboId(), line.kind(), line.description(),
             line.quantity(), line.unitPrice(), line.amount(), toJson(line.pricingSnapshot()));
+    }
+
+    public void attachUnassignedCharges(UUID bookingId, UUID allocationId) {
+        db.update("UPDATE gcmb.booking_charge SET allocation_id=? WHERE booking_id=? AND allocation_id IS NULL AND status='ACTIVE'",
+            allocationId, bookingId);
     }
 
     // Lấy toàn bộ dòng phí, kể cả dòng đã bị thay thế.
@@ -766,6 +803,7 @@ public class BookingRepository {
             LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
              LEFT JOIN gcmb.room r ON r.id=latest.room_id
              LEFT JOIN gcmb.room_type rt ON rt.id=r.room_type_id
+             LEFT JOIN gcmb.room_type requested_rt ON requested_rt.id=b.room_type_id
             LEFT JOIN (SELECT booking_id,SUM(amount) AS amount FROM gcmb.booking_charge WHERE status='ACTIVE' GROUP BY booking_id) ch ON ch.booking_id=b.id
             LEFT JOIN gcmb.deposit d ON d.booking_id=b.id
             LEFT JOIN gcmb.v_deposit_balance dep ON dep.id=d.id
@@ -787,7 +825,7 @@ public class BookingRepository {
                 ) AS amount
             ) received ON true
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,rt.name room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,COALESCE(rt.name,requested_rt.name) room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return db.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
             rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),

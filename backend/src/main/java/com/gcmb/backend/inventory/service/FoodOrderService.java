@@ -37,13 +37,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class FoodOrderService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final Pattern MR_CODE = Pattern.compile("MR-[A-F0-9]{32}");
-    private final FoodOrderRepository orders;
-    private final MenuItemRepository menuItems;
+    private final FoodOrderRepository foodOrderRepository;
+    private final MenuItemRepository menuItemRepository;
     private final AuthCrypto crypto;
 
-    public FoodOrderService(FoodOrderRepository orders, MenuItemRepository menuItems, AuthCrypto crypto) {
-        this.orders = orders;
-        this.menuItems = menuItems;
+    public FoodOrderService(FoodOrderRepository foodOrderRepository, MenuItemRepository menuItemRepository, AuthCrypto crypto) {
+        this.foodOrderRepository = foodOrderRepository;
+        this.menuItemRepository = menuItemRepository;
         this.crypto = crypto;
     }
 
@@ -51,22 +51,22 @@ public class FoodOrderService {
     public GuestSession openRoomSession(String mrCode) {
         ActiveRoom active = activeRoom(mrCode);
         String token = crypto.token();
-        orders.createSession(active.bookingId(), active.allocationId(), AuthCrypto.hash(token));
+        foodOrderRepository.createSession(active.bookingId(), active.allocationId(), AuthCrypto.hash(token));
         RoomContext context = new RoomContext(active.roomCode(), active.roomName(),
             active.branchName(), Instant.now().plus(Duration.ofHours(12)));
-        return new GuestSession(token, context, menuItems.publicList(active.branchId(), null, null));
+        return new GuestSession(token, context, menuItemRepository.publicList(active.branchId(), null, null));
     }
 
     @Transactional(readOnly = true)
     public RoomMenu roomMenu(String mrCode, String token) {
         RoomQrSession session = roomSession(mrCode, token);
-        return new RoomMenu(context(session), menuItems.publicList(session.branchId(), null, null));
+        return new RoomMenu(context(session), menuItemRepository.publicList(session.branchId(), null, null));
     }
 
     @Transactional(readOnly = true)
     public List<GuestOrderView> roomOrders(String mrCode, String token) {
         RoomQrSession session = roomSession(mrCode, token);
-        return orders.qrOrders(session.id()).stream().map(FoodOrderService::guestView).toList();
+        return foodOrderRepository.qrOrders(session.id()).stream().map(FoodOrderService::guestView).toList();
     }
 
     @Transactional
@@ -79,23 +79,23 @@ public class FoodOrderService {
         requireAvailableItems(sellable);
 
         String key = idempotencyKey(request.idempotencyKey());
-        UUID orderId = orders.createOrder(session.branchId(), session.bookingId(), session.allocationId(),
+        UUID orderId = foodOrderRepository.createOrder(session.branchId(), session.bookingId(), session.allocationId(),
             "ROOM_QR", null, session.id(), "PENDING", null, null, key);
         if (orderId == null) {
-            ExistingOrder existing = orders.existingByKey(key);
+            ExistingOrder existing = foodOrderRepository.existingByKey(key);
             if (existing == null || !session.branchId().equals(existing.branchId())
                     || !session.bookingId().equals(existing.bookingId())
                     || !session.id().equals(existing.qrSessionId()) || !"ROOM_QR".equals(existing.channel())) {
                 throw conflict("Mã gửi món đã được dùng cho yêu cầu khác. Vui lòng thử lại.");
             }
-            OrderView prior = orders.qrOrder(existing.id(), session.id());
+            OrderView prior = foodOrderRepository.qrOrder(existing.id(), session.id());
             if (prior == null) throw conflict("Không tìm thấy yêu cầu món đã gửi.");
             return guestView(prior);
         }
 
         quantities.forEach((menuItemId, quantity) -> {
             SellableItem item = sellable.get(menuItemId);
-            orders.insertLine(orderId, session.branchId(), session.bookingId(), menuItemId, null,
+            foodOrderRepository.insertLine(orderId, session.branchId(), session.bookingId(), menuItemId, null,
                 item.name(), BigDecimal.valueOf(quantity), item.salePrice());
         });
         return requiredQrOrder(orderId, session.id());
@@ -108,27 +108,27 @@ public class FoodOrderService {
         if (normalized != null && !List.of("PENDING", "ACCEPTED", "SERVED", "REJECTED", "CANCELLED").contains(normalized)) {
             throw bad("Trạng thái order không hợp lệ.");
         }
-        return orders.orders(branchId, normalized);
+        return foodOrderRepository.orders(branchId, normalized);
     }
 
     @Transactional(readOnly = true)
     public List<ActiveBooking> activeBookings(Identity actor) {
-        return orders.activeBookings(branch(actor));
+        return foodOrderRepository.activeBookings(branch(actor));
     }
 
     @Transactional(readOnly = true)
     public List<ServingEmployee> servingEmployees(Identity actor) {
-        return orders.onShiftEmployees(branch(actor));
+        return foodOrderRepository.onShiftEmployees(branch(actor));
     }
 
     @Transactional(readOnly = true)
     public List<PublicMenuItemView> receptionMenu(Identity actor) {
-        return menuItems.publicList(branch(actor), null, null);
+        return menuItemRepository.publicList(branch(actor), null, null);
     }
 
     @Transactional(readOnly = true)
     public List<ComboGiftOption> comboGiftMenu(Identity actor) {
-        return orders.comboGiftMenu(branch(actor));
+        return foodOrderRepository.comboGiftMenu(branch(actor));
     }
 
     @Transactional
@@ -146,7 +146,7 @@ public class FoodOrderService {
                 throw bad("Chọn đủ số lượng đồ uống tặng kèm combo.");
             quantities.merge(choice.menuItemId(),choice.quantity(),Integer::sum);
         }
-        ActiveRoom active = orders.lockGiftBooking(bookingId,branchId);
+        ActiveRoom active = foodOrderRepository.lockGiftBooking(bookingId,branchId);
         if (active == null || !active.allocationId().equals(allocationId))
             throw conflict("Booking không còn lịch phòng hợp lệ để thêm đồ uống combo.");
         Map<UUID,SellableItem> sellable = requireSellableItems(branchId,quantities.keySet());
@@ -166,22 +166,22 @@ public class FoodOrderService {
             if (foodIds.contains(item.id()) && !category.contains("ăn"))
                 throw bad("Chỉ chọn món thuộc danh mục đồ ăn cho suất đồ ăn combo.");
         }
-        UUID orderId = orders.createOrder(branchId,bookingId,allocationId,"STAFF",actor.id(),null,
+        UUID orderId = foodOrderRepository.createOrder(branchId,bookingId,allocationId,"STAFF",actor.id(),null,
             "ACCEPTED",actor.id(),null,"COMBO-GIFT-"+bookingId);
         if (orderId == null) throw conflict("Order quà combo đã được tạo trước đó; hãy tải lại booking.");
         for (var entry : quantities.entrySet()) {
             SellableItem item = sellable.get(entry.getKey());
-            UUID allowanceId = orders.insertGiftAllowance(bookingId,item.id(),item.name(),BigDecimal.valueOf(entry.getValue()));
-            orders.insertLine(orderId,branchId,bookingId,item.id(),allowanceId,item.name(),
+            UUID allowanceId = foodOrderRepository.insertGiftAllowance(bookingId,item.id(),item.name(),BigDecimal.valueOf(entry.getValue()));
+            foodOrderRepository.insertLine(orderId,branchId,bookingId,item.id(),allowanceId,item.name(),
                 BigDecimal.valueOf(entry.getValue()),ZERO);
         }
-        orders.serve(orderId,branchId);
+        foodOrderRepository.serve(orderId,branchId);
     }
 
     @Transactional
     public void deductComboGiftStock(Identity actor, UUID bookingId) {
         UUID branchId = branch(actor);
-        UUID orderId = orders.comboGiftOrderId(branchId,bookingId);
+        UUID orderId = foodOrderRepository.comboGiftOrderId(branchId,bookingId);
         if (orderId == null) return;
         deductAutomaticStock(orderId,branchId,actor.id(),"Xuất kho đồ ăn, đồ uống combo khi thanh toán bill booking");
     }
@@ -189,13 +189,13 @@ public class FoodOrderService {
     @Transactional
     public void returnComboGiftStock(Identity actor, UUID bookingId) {
         UUID branchId = branch(actor);
-        var movements = orders.comboGiftSales(branchId,bookingId);
+        var movements = foodOrderRepository.comboGiftSales(branchId,bookingId);
         for (var sale : movements) {
-            BigDecimal before = orders.lockStock(sale.inventoryItemId());
-            orders.insertReturn(sale.inventoryItemId(),sale.id(),sale.quantity(),before,actor.id(),
+            BigDecimal before = foodOrderRepository.lockStock(sale.inventoryItemId());
+            foodOrderRepository.insertReturn(sale.inventoryItemId(),sale.id(),sale.quantity(),before,actor.id(),
                 "Hoàn kho đồ uống combo do hủy booking " + bookingId);
         }
-        orders.cancelComboGiftOrder(branchId,bookingId);
+        foodOrderRepository.cancelComboGiftOrder(branchId,bookingId);
     }
 
     @Transactional
@@ -215,10 +215,10 @@ public class FoodOrderService {
             requestedPrices.put(line.menuItemId(), line.unitPrice());
         }
         String key = idempotencyKey(request.idempotencyKey());
-        ExistingOrder existing = orders.existingByKey(key);
+        ExistingOrder existing = foodOrderRepository.existingByKey(key);
         if (existing != null) return existingStaffOrder(existing, branchId, request.bookingId());
 
-        ActiveRoom booking = orders.lockActiveBooking(request.bookingId(), branchId);
+        ActiveRoom booking = foodOrderRepository.lockActiveBooking(request.bookingId(), branchId);
         if (booking == null) throw conflict("Booking không còn lượt sử dụng đang hoạt động tại cơ sở này.");
         requireOnShift(request.assignedEmployeeId(), branchId);
         Map<UUID, SellableItem> sellable = requireSellableItems(branchId, quantities.keySet());
@@ -230,17 +230,17 @@ public class FoodOrderService {
                     || (price.signum() != 0 && price.compareTo(catalogPrice) != 0)))
                 throw bad("Giá món chỉ được giữ nguyên giá bán hoặc đặt 0 đ cho món tặng kèm.");
         }
-        UUID orderId = orders.createOrder(branchId, booking.bookingId(), booking.allocationId(), "STAFF",
+        UUID orderId = foodOrderRepository.createOrder(branchId, booking.bookingId(), booking.allocationId(), "STAFF",
             actor.id(), null, "ACCEPTED", actor.id(), request.assignedEmployeeId(), key);
         if (orderId == null) {
-            ExistingOrder raced = orders.existingByKey(key);
+            ExistingOrder raced = foodOrderRepository.existingByKey(key);
             if (raced == null) throw conflict("Đơn vừa được gửi ở phiên khác; vui lòng tải lại.");
             return existingStaffOrder(raced, branchId, request.bookingId());
         }
 
         quantities.forEach((menuItemId, quantity) -> {
             SellableItem item = sellable.get(menuItemId);
-            orders.insertLine(orderId, branchId, booking.bookingId(), menuItemId, null,
+            foodOrderRepository.insertLine(orderId, branchId, booking.bookingId(), menuItemId, null,
                 item.name(), BigDecimal.valueOf(quantity), requestedPrices.get(menuItemId) == null
                     ? item.salePrice() : requestedPrices.get(menuItemId));
         });
@@ -259,14 +259,14 @@ public class FoodOrderService {
         if ("ACCEPTED".equals(order.status())) return requiredOrder(orderId, branchId);
         if (!"PENDING".equals(order.status())) throw conflict("Yêu cầu món đã được xử lý; vui lòng tải lại danh sách.");
 
-        ActiveRoom active = orders.lockActiveBooking(order.bookingId(), branchId);
+        ActiveRoom active = foodOrderRepository.lockActiveBooking(order.bookingId(), branchId);
         if (active == null || !active.allocationId().equals(order.allocationId())) {
             throw conflict("Booking hoặc phòng đã thay đổi; không thể xác nhận yêu cầu cũ.");
         }
         if (request == null || request.assignedEmployeeId() == null) throw bad("Vui lòng chọn lễ tân phụ trách đơn.");
         requireOnShift(request.assignedEmployeeId(), branchId);
 
-        List<PendingLine> pending = orders.pendingLines(orderId);
+        List<PendingLine> pending = foodOrderRepository.pendingLines(orderId);
         if (pending.isEmpty()) throw conflict("Yêu cầu không còn món để xác nhận.");
         LinkedHashMap<UUID, Integer> accepted = quantities(request.items(), true);
         Map<UUID, PendingLine> byMenuItem = pending.stream().collect(Collectors.toMap(
@@ -281,16 +281,16 @@ public class FoodOrderService {
                 throw bad("Số lượng xác nhận vượt quá số lượng khách đã yêu cầu cho " + line.name() + ".");
             }
             if (quantity == 0) {
-                orders.deleteLine(line.id());
+                foodOrderRepository.deleteLine(line.id());
             } else {
-                orders.updateLine(line.id(), null, BigDecimal.valueOf(quantity), line.unitPrice());
+                foodOrderRepository.updateLine(line.id(), null, BigDecimal.valueOf(quantity), line.unitPrice());
                 acceptedIds.add(line.menuItemId());
             }
         }
         if (acceptedIds.isEmpty()) throw bad("Chọn ít nhất một món để xác nhận hoặc từ chối toàn bộ yêu cầu.");
         Map<UUID, SellableItem> acceptedItems = requireSellableItems(branchId, new LinkedHashSet<>(acceptedIds));
         requireAvailableItems(acceptedItems);
-        if (orders.accept(orderId, branchId, actor.id(), request.assignedEmployeeId()) != 1) {
+        if (foodOrderRepository.accept(orderId, branchId, actor.id(), request.assignedEmployeeId()) != 1) {
             throw conflict("Yêu cầu món vừa được xử lý ở phiên khác; vui lòng tải lại.");
         }
         allocateComboInclusions(order.bookingId(), branchId, orderId);
@@ -306,7 +306,7 @@ public class FoodOrderService {
         if (!"ROOM_QR".equals(order.channel())) throw conflict("Chỉ từ chối yêu cầu món gửi từ mã MR.");
         if ("REJECTED".equals(order.status())) return requiredOrder(orderId, branchId);
         if (!"PENDING".equals(order.status())) throw conflict("Order đã được xử lý; vui lòng tải lại danh sách.");
-        if (orders.reject(orderId, branchId) != 1) throw conflict("Yêu cầu vừa thay đổi; vui lòng tải lại danh sách.");
+        if (foodOrderRepository.reject(orderId, branchId) != 1) throw conflict("Yêu cầu vừa thay đổi; vui lòng tải lại danh sách.");
         return requiredOrder(orderId, branchId);
     }
 
@@ -323,22 +323,22 @@ public class FoodOrderService {
         if (command == null || !"SERVED".equals(command.status())) throw bad("Chọn trạng thái phục vụ hợp lệ.");
         if ("SERVED".equals(order.status())) return requiredOrder(orderId, branchId);
         if (!"ACCEPTED".equals(order.status())) throw conflict("Chỉ cập nhật tiến độ cho order đã được xác nhận.");
-        if (orders.serve(orderId, branchId) != 1) throw conflict("Order vừa thay đổi; vui lòng tải lại danh sách.");
+        if (foodOrderRepository.serve(orderId, branchId) != 1) throw conflict("Order vừa thay đổi; vui lòng tải lại danh sách.");
         return requiredOrder(orderId, branchId);
     }
 
     // BR-30, BR-172: phần món đã nằm trong combo không bị tính lại như món gọi thêm.
     private void allocateComboInclusions(UUID bookingId, UUID branchId, UUID orderId) {
-        for (PendingLine line : orders.pendingLines(orderId)) {
-            ComboAllowance allowance = orders.comboAllowance(bookingId, line.menuItemId(), orderId);
+        for (PendingLine line : foodOrderRepository.pendingLines(orderId)) {
+            ComboAllowance allowance = foodOrderRepository.comboAllowance(bookingId, line.menuItemId(), orderId);
             if (allowance == null) continue;
             BigDecimal freeRemaining = allowance.includedQuantity().subtract(allowance.usedQuantity()).max(ZERO);
             BigDecimal freeQuantity = line.quantity().min(freeRemaining);
             if (freeQuantity.signum() <= 0) continue;
             BigDecimal paidQuantity = line.quantity().subtract(freeQuantity);
-            orders.updateLine(line.id(), allowance.id(), freeQuantity, ZERO);
+            foodOrderRepository.updateLine(line.id(), allowance.id(), freeQuantity, ZERO);
             if (paidQuantity.signum() > 0) {
-                orders.insertLine(orderId, branchId, bookingId, line.menuItemId(), null,
+                foodOrderRepository.insertLine(orderId, branchId, bookingId, line.menuItemId(), null,
                     line.name(), paidQuantity, line.unitPrice());
             }
         }
@@ -346,7 +346,7 @@ public class FoodOrderService {
 
     // BR-36, BR-37, BR-38; MSG18: trừ đúng một lần khi xác nhận bán và báo tên, số tồn, đơn vị khi thiếu hàng.
     private void deductAutomaticStock(UUID orderId, UUID branchId, UUID actorId, String reason) {
-        List<PendingLine> lines = orders.pendingLines(orderId);
+        List<PendingLine> lines = foodOrderRepository.pendingLines(orderId);
         LinkedHashSet<UUID> itemIds = lines.stream().map(PendingLine::menuItemId)
             .collect(Collectors.toCollection(LinkedHashSet::new));
         Map<UUID, SellableItem> items = requireSellableItems(branchId, itemIds);
@@ -355,7 +355,7 @@ public class FoodOrderService {
 
     private void deductAutomaticStock(UUID orderId, UUID branchId, UUID actorId, String reason,
                                      Map<UUID, SellableItem> items) {
-        List<PendingLine> lines = orders.pendingLines(orderId);
+        List<PendingLine> lines = foodOrderRepository.pendingLines(orderId);
         Map<UUID, BigDecimal> requiredByInventory = new LinkedHashMap<>();
         Map<UUID, String> nameByInventory = new HashMap<>();
         Map<UUID, String> unitByInventory = new HashMap<>();
@@ -371,7 +371,7 @@ public class FoodOrderService {
             .sorted(Comparator.comparing(UUID::toString)).toList();
         Map<UUID, BigDecimal> remaining = new LinkedHashMap<>();
         for (UUID inventoryId : inventoryIds) {
-            BigDecimal available = orders.lockStock(inventoryId);
+            BigDecimal available = foodOrderRepository.lockStock(inventoryId);
             BigDecimal required = requiredByInventory.get(inventoryId);
             if (available.compareTo(required) < 0) {
                 throw conflict(stockShortageMessage(nameByInventory.get(inventoryId), available,
@@ -385,14 +385,14 @@ public class FoodOrderService {
             UUID inventoryId = item.inventoryItemId();
             if (inventoryId == null || !"AUTO_ON_SALE".equals(item.trackingMode())) continue;
             BigDecimal before = remaining.get(inventoryId);
-            orders.insertSale(inventoryId, line.id(), before, line.quantity(), actorId, reason);
+            foodOrderRepository.insertSale(inventoryId, line.id(), before, line.quantity(), actorId, reason);
             remaining.put(inventoryId, before.subtract(line.quantity()));
         }
     }
 
     private Map<UUID, SellableItem> requireSellableItems(UUID branchId, java.util.Collection<UUID> ids) {
         List<UUID> uniqueIds = ids.stream().distinct().sorted(Comparator.comparing(UUID::toString)).toList();
-        List<SellableItem> found = orders.sellableItems(branchId, uniqueIds);
+        List<SellableItem> found = foodOrderRepository.sellableItems(branchId, uniqueIds);
         Map<UUID, SellableItem> result = found.stream().collect(Collectors.toMap(SellableItem::id,
             Function.identity(), (first, ignored) -> first, LinkedHashMap::new));
         if (result.size() != uniqueIds.size()) {
@@ -433,7 +433,7 @@ public class FoodOrderService {
     }
 
     private void requireOnShift(UUID employeeId, UUID branchId) {
-        if (!orders.eligibleOnShift(employeeId, branchId)) {
+        if (!foodOrderRepository.eligibleOnShift(employeeId, branchId)) {
             throw bad("Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.");
         }
     }
@@ -441,7 +441,7 @@ public class FoodOrderService {
     private RoomQrSession roomSession(String mrCode, String token) {
         mrCode = validateMrCode(mrCode);
         if (token == null || token.isBlank()) throw unauthorizedRoomSession();
-        RoomQrSession session = orders.validSession(mrCode, AuthCrypto.hash(token.trim()));
+        RoomQrSession session = foodOrderRepository.validSession(mrCode, AuthCrypto.hash(token.trim()));
         if (session == null) throw unauthorizedRoomSession();
         return session;
     }
@@ -450,7 +450,7 @@ public class FoodOrderService {
         String normalizedCode = validateMrCode(mrCode);
         ActiveRoom active;
         try {
-            active = orders.activeRoomByMrCode(normalizedCode);
+            active = foodOrderRepository.activeRoomByMrCode(normalizedCode);
         } catch (IllegalStateException ambiguousRoom) {
             throw conflict("Mã MR không xác định được một phòng duy nhất.");
         }
@@ -473,7 +473,7 @@ public class FoodOrderService {
     }
 
     private OrderLock lockOrder(UUID orderId, UUID branchId) {
-        OrderLock order = orders.lockOrder(orderId, branchId);
+        OrderLock order = foodOrderRepository.lockOrder(orderId, branchId);
         return order;
     }
 
@@ -485,13 +485,13 @@ public class FoodOrderService {
     }
 
     private OrderView requiredOrder(UUID orderId, UUID branchId) {
-        OrderView view = orders.order(orderId, branchId);
+        OrderView view = foodOrderRepository.order(orderId, branchId);
         if (view == null) throw notFound("Không tìm thấy order sau khi cập nhật.");
         return view;
     }
 
     private GuestOrderView requiredQrOrder(UUID orderId, UUID sessionId) {
-        OrderView view = orders.qrOrder(orderId, sessionId);
+        OrderView view = foodOrderRepository.qrOrder(orderId, sessionId);
         if (view == null) throw notFound("Không tìm thấy yêu cầu món đã gửi.");
         return guestView(view);
     }

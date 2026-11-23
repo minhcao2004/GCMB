@@ -24,6 +24,17 @@ public class AccountRepository {
         this.db = db;
     }
 
+    // HuyDV / UC-04/06: chỉ một tài khoản QLCC chưa thu hồi; không giới hạn kế toán.
+    public boolean headOfficeAvailable(String role, UUID except) {
+        if (!"HEAD_OFFICE_MANAGER".equals(role)) return true;
+        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return Boolean.TRUE.equals(db.queryForObject("""
+            SELECT NOT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
+              WHERE r.code='HEAD_OFFICE_MANAGER' AND u.status<>'REVOKED'
+                AND (CAST(? AS uuid) IS NULL OR u.id<>?))
+            """, Boolean.class, except, except));
+    }
+
     private static final String JOINS = """
         FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
         LEFT JOIN gcmb.employee e ON e.user_id=u.id

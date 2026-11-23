@@ -88,6 +88,100 @@ public class FinancialController {
         return performance.report(actor,month(month),branchId);
     }
 
+    @GetMapping("/reports/source-imports")
+    @Transactional(readOnly = true)
+    public Map<String, Object> sourceImportReport(@AuthenticationPrincipal Identity actor,
+                                                   @RequestParam String from,
+                                                   @RequestParam String to,
+                                                   @RequestParam(required = false) UUID branchId,
+                                                   @RequestParam(defaultValue = "ALL") String source) {
+        requireOverviewRole(actor);
+        LocalDate start = date(from), end = date(to);
+        if (start.isAfter(end)) throw bad("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+        if (end.isAfter(LocalDate.now(FinancialPeriodService.ZONE))) throw bad("Không thể xem báo cáo đến ngày trong tương lai.");
+        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > 62)
+            throw bad("Khoảng ngày báo cáo nguồn tối đa là 62 ngày.");
+        String selectedSource = source == null ? "ALL" : source.toUpperCase(java.util.Locale.ROOT);
+        if (!List.of("ALL", "SOURCE_FILES", "SYNTHETIC_DEMO").contains(selectedSource))
+            throw bad("Nguồn dữ liệu báo cáo không hợp lệ.");
+        String syntheticFilter = "ALL".equals(selectedSource) ? "ALL"
+            : "SYNTHETIC_DEMO".equals(selectedSource) ? "SYNTHETIC_DEMO" : "SOURCE_FILES";
+        List<Map<String, Object>> rows = db.queryForList("""
+            WITH imported AS (
+              SELECT r.id,r.record_type "recordType",i.source_system "sourceSystem",r.business_date "businessDate",
+                r.source_sheet "sourceSheet",r.source_row "sourceRow",COALESCE(r.source_key,'') "sourceKey",
+                b.id "branchId",b.name "branchName",r.payload,
+                CASE WHEN COALESCE(r.payload->>'Tổng sau giảm giá','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'Tổng sau giảm giá')::numeric ELSE 0::numeric END invoice_revenue,
+                CASE WHEN COALESCE(r.payload->>'Khách đã trả','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'Khách đã trả')::numeric ELSE 0::numeric END invoice_paid,
+                CASE WHEN COALESCE(r.payload->>'BILL KIOTVIET','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'BILL KIOTVIET')::numeric ELSE 0::numeric END booking_bill,
+                CASE WHEN COALESCE(r.payload->>'TIỀN KHÁCH TT','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'TIỀN KHÁCH TT')::numeric ELSE 0::numeric END booking_paid,
+                CASE WHEN COALESCE(r.payload->>'TIỀN MẶT','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'TIỀN MẶT')::numeric ELSE 0::numeric END cash_amount,
+                CASE WHEN COALESCE(r.payload->>'CK(TINGBOX)','') ~ '^-?[0-9]+([.][0-9]+)?$'
+                     THEN (r.payload->>'CK(TINGBOX)')::numeric ELSE 0::numeric END bank_amount
+              FROM gcmb.source_import_record r
+              JOIN gcmb.source_import_batch i ON i.id=r.batch_id
+              JOIN gcmb.branch b ON b.id=r.branch_id
+              WHERE r.business_date>=? AND r.business_date<=?
+                AND (CAST(? AS uuid) IS NULL OR r.branch_id=?)
+                AND (?='ALL' OR (?='SYNTHETIC_DEMO' AND i.source_system='SYNTHETIC_DEMO')
+                  OR (?='SOURCE_FILES' AND i.source_system<>'SYNTHETIC_DEMO'))
+            )
+            SELECT id,"recordType","sourceSystem","businessDate","sourceSheet","sourceRow","sourceKey",
+              "branchId","branchName",
+              COALESCE(NULLIF(payload->>'Mã hóa đơn',''),"sourceKey") "invoiceNumber",
+              COALESCE(NULLIF(payload->>'PHÒNG ĐÃ ĐẶT',''), '') room,
+              COALESCE(NULLIF(payload->>'PHƯƠNG THỨC THANH TOÁN',''), '') "paymentMethod",
+              CASE WHEN "recordType"='KIOT_INVOICE' THEN invoice_revenue ELSE booking_bill END amount,
+              CASE WHEN "recordType"='KIOT_INVOICE' THEN invoice_paid ELSE booking_paid END "paidAmount",
+              cash_amount "cashAmount",bank_amount "bankAmount"
+            FROM imported
+            ORDER BY "businessDate" DESC,"branchName", "recordType", "sourceRow"
+            """, start,end,branchId,branchId,syntheticFilter,syntheticFilter,syntheticFilter);
+        if ("ALL".equals(selectedSource)) {
+            List<Map<String, Object>> operationalBills = db.queryForList("""
+                WITH bill_payments AS (
+                  SELECT bill_id,SUM(amount) paid_amount,
+                    COUNT(DISTINCT method) method_count,BOOL_OR(method='CASH') has_cash,BOOL_OR(method='BANK_TRANSFER') has_bank,
+                    COALESCE(SUM(amount) FILTER (WHERE method='CASH'),0) cash_amount,
+                    COALESCE(SUM(amount) FILTER (WHERE method='BANK_TRANSFER'),0) bank_amount
+                  FROM gcmb.payment WHERE purpose='BILL' GROUP BY bill_id
+                )
+                SELECT b.id,'KIOT_INVOICE'::varchar AS "recordType",'OPERATIONAL'::varchar AS "sourceSystem",
+                  (b.completed_at AT TIME ZONE br.timezone)::date AS "businessDate",'BILL'::text AS "sourceSheet",
+                  row_number() OVER (ORDER BY b.completed_at DESC,b.number)::integer AS "sourceRow",
+                  b.number AS "sourceKey",br.id AS "branchId",br.name AS "branchName",b.number AS "invoiceNumber",
+                  ''::text AS room,
+                  CASE WHEN p.method_count>1 THEN 'Kết hợp' WHEN p.has_bank THEN 'Chuyển khoản'
+                       WHEN p.has_cash THEN 'Tiền mặt' ELSE '' END AS "paymentMethod",
+                  b.net_amount AS amount,COALESCE(p.paid_amount,0) AS "paidAmount",
+                  COALESCE(p.cash_amount,0) AS "cashAmount",COALESCE(p.bank_amount,0) AS "bankAmount"
+                FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
+                LEFT JOIN bill_payments p ON p.bill_id=b.id
+                WHERE b.status='SETTLED'
+                  AND (b.completed_at AT TIME ZONE br.timezone)::date>=?
+                  AND (b.completed_at AT TIME ZONE br.timezone)::date<=?
+                  AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM gcmb.source_import_record r
+                    WHERE r.branch_id=b.branch_id AND r.record_type='KIOT_INVOICE'
+                      AND r.business_date>=? AND r.business_date<=?
+                  )
+                ORDER BY "businessDate" DESC,"branchName","sourceRow"
+                """, start,end,branchId,branchId,start,end);
+            rows.addAll(operationalBills);
+        }
+        rows.sort(java.util.Comparator.comparing((Map<String, Object> row) -> String.valueOf(row.get("businessDate"))).reversed()
+            .thenComparing(row -> String.valueOf(row.get("branchName"))));
+        List<Map<String, Object>> branches = db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
+        return Map.of("from", start.toString(), "to", end.toString(), "source", selectedSource,
+            "branchOptions", branches, "rows", rows);
+    }
+
     @GetMapping("/reports/financial-overview")
     @Transactional(readOnly = true)
     public Map<String, Object> financialOverview(@AuthenticationPrincipal Identity actor,
@@ -255,9 +349,20 @@ public class FinancialController {
     @Transactional(readOnly = true)
     public Map<String, Object> dashboardDetails(@AuthenticationPrincipal Identity actor,
                                                 @RequestParam String month,
-                                                @RequestParam(required = false) UUID branchId) {
+                                                @RequestParam(required = false) UUID branchId,
+                                                @RequestParam(required = false) String from,
+                                                @RequestParam(required = false) String to) {
         requireAccountant(actor);
-        LocalDate start = month(month);
+        LocalDate start;
+        LocalDate endExclusive;
+        try {
+            start = from == null || from.isBlank() ? month(month) : LocalDate.parse(from);
+            LocalDate end = to == null || to.isBlank() ? start.plusMonths(1).minusDays(1) : LocalDate.parse(to);
+            if (end.isBefore(start)) throw bad("Khoảng ngày không hợp lệ.");
+            endExclusive = end.plusDays(1);
+        } catch (java.time.format.DateTimeParseException invalidDate) {
+            throw bad("Khoảng ngày không hợp lệ.");
+        }
         List<Map<String, Object>> methods = db.queryForList("""
             WITH bills AS (
               SELECT b.id,b.net_amount,
@@ -270,7 +375,7 @@ public class FinancialController {
                 AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
               GROUP BY b.id,b.net_amount
             ) SELECT method AS label,SUM(net_amount) AS value FROM bills GROUP BY method ORDER BY method
-            """, start, start.plusMonths(1), branchId, branchId);
+            """, start, endExclusive, branchId, branchId);
         List<Map<String, Object>> exceptions = db.queryForList("""
             SELECT bt.id,bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
               bt.match_status AS status,bt.exception_reason AS "exceptionReason",bt.transfer_content AS reason,
@@ -284,7 +389,7 @@ public class FinancialController {
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
             """, Timestamp.from(start.atStartOfDay(FinancialPeriodService.ZONE).toInstant()),
-                Timestamp.from(start.plusMonths(1).atStartOfDay(FinancialPeriodService.ZONE).toInstant()), branchId, branchId);
+                Timestamp.from(endExclusive.atStartOfDay(FinancialPeriodService.ZONE).toInstant()), branchId, branchId);
         return Map.of("paymentMethods", methods, "sepayExceptions", exceptions);
     }
 

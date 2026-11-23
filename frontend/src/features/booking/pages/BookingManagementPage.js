@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
+import BankNameInput from '../../../shared/components/BankNameInput';
 import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import { EmptyState } from '../../../shared/components/Feedback';
@@ -25,45 +26,11 @@ const navigation = [
   ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
-  { label: 'Tổng quan tài chính', icon: 'overview', target: '/ke-toan' },
-  { title: 'Thu nhập & doanh thu', short: 'Thu', items: [
-    { label: 'Doanh thu & khoản thu', icon: 'report', target: '/ke-toan/bao-cao' },
-    { label: 'Hóa đơn thuế', icon: 'tax', target: '/ke-toan/hoa-don-thue' },
-  ] },
-  // BR-108: Cọc đang giữ không được trình bày như doanh thu hóa đơn.
-  { label: 'Hoàn tiền cọc', hint: 'Tiền cọc không phải doanh thu hóa đơn', icon: 'deposit', target: '/ke-toan/hoan-coc', countKey: 'refunds', countLabel: 'yêu cầu hoàn cọc chờ xử lý' },
-  { title: 'Chi phí & quỹ', short: 'Chi', items: [
-    { label: 'Đề nghị chi', icon: 'plus', target: '/ke-toan/chi-phi?section=plus&tab=requests', countKey: 'expenses', countLabel: 'đề nghị chi chờ xử lý' },
-    { label: 'Chi định kỳ', icon: 'calendar', target: '/ke-toan/chi-phi?section=plus&tab=recurring', countKey: 'recurring', countLabel: 'kỳ chi định kỳ cần xử lý' },
-    { label: 'Cấp tiền két', icon: 'payments', target: '/ke-toan/chi-phi?section=plus&tab=drawer' },
-    { label: 'Lịch sử chi & hoàn ứng', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=history' },
-    { label: 'Hạng mục chi phí', icon: 'orders', target: '/ke-toan/chi-phi?section=plus&tab=categories' },
-    // BR-82: Tiền cấp quỹ từ quản lý cấp cao là luân chuyển nội bộ.
-    { label: 'Quỹ kế toán', hint: 'Tiền cấp quỹ là luân chuyển nội bộ', icon: 'payments', target: '/ke-toan/chi-phi?section=payments', countKey: 'payments', countLabel: 'khoản cấp quỹ chờ xác nhận' },
-    { label: 'Lương nhân viên', icon: 'booking', target: '/ke-toan/luong' },
-  ] },
-  { title: 'Báo cáo & đối soát', short: 'BC', items: [
-    { label: 'Báo cáo chi phí', icon: 'orders', target: '/ke-toan/bao-cao-chi-phi' },
-    { label: 'Giao dịch & đối soát', icon: 'report', target: '/ke-toan/bao-cao?tab=transactions' },
-    { label: 'Chốt quỹ', icon: 'calendar', target: '/ke-toan/chot-quy', countKey: 'closings', countLabel: 'phiếu chốt quỹ chờ đối soát' },
-    { label: 'Chốt kỳ tài chính', icon: 'calendar', target: '/ke-toan/bao-cao?tab=periods' },
-    { label: 'Xuất dữ liệu', icon: 'report', target: '/ke-toan/bao-cao?tab=export' },
-  ] },
+  { label: 'Tổng quan', items: [['Tổng quan tài chính', 'overview'], ['Báo cáo & thống kê', 'report']] },
+  { label: 'Thu chi & thanh toán', items: [['Thu & cấp quỹ', 'payments'], ['Chi & hoàn ứng', 'plus'], ['Hoàn tiền cọc', 'deposit'], ['Hóa đơn thuế', 'tax']] },
+  { label: 'Đối soát & kiểm soát', items: [['Đối soát chốt quỹ', 'calendar']] },
+  { label: 'Nhân sự & chi phí', items: [['Lương nhân viên', 'booking'], ['Báo cáo chi phí', 'orders']] },
 ];
-function accountingLinkIsCurrent(target, location) {
-  const [path, search = ''] = target.split('?');
-  if (location.pathname !== path) return false;
-  const selected = new URLSearchParams(location.search);
-  const expected = new URLSearchParams(search);
-  if (path === '/ke-toan/chi-phi') return (selected.get('section') || 'plus') === (expected.get('section') || 'plus')
-    && ((expected.get('section') === 'payments') || (selected.get('tab') || 'requests') === (expected.get('tab') || 'requests'));
-  if (path === '/ke-toan/bao-cao') return (selected.get('tab') || 'report') === (expected.get('tab') || 'report');
-  return true;
-}
-function readAccountingGroups() {
-  try { return JSON.parse(window.localStorage.getItem('gcmb:accountant:nav-groups') || '{}') || {}; }
-  catch { return {}; }
-}
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
@@ -72,16 +39,6 @@ const cancellationReasons = [
   'Khách không đồng ý giá hoặc phụ phí',
   'Khác',
 ];
-// BR-186, BR-187: gợi ý ngân hàng nhận hoàn và vẫn hỗ trợ ngân hàng ngoài danh sách.
-const vietnameseBanks = [
-  'Agribank', 'ABBank', 'ACB', 'Bac A Bank', 'BaoVietBank', 'BIDV', 'BVBank', 'Cake by VPBank',
-  'CBBank', 'Citibank', 'Co-opBank', 'Eximbank', 'GPBank', 'HDBank', 'Hong Leong Bank', 'HSBC',
-  'Indovina Bank', 'KBank', 'KienlongBank', 'LPBank', 'MB Bank', 'MSB', 'Nam A Bank', 'NCB',
-  'OCB', 'PGBank', 'Public Bank Vietnam', 'PVcomBank', 'Sacombank', 'Saigonbank', 'SeABank',
-  'SHB', 'Shinhan Bank', 'Standard Chartered', 'Techcombank', 'TPBank', 'VIB', 'Viet A Bank',
-  'VietBank', 'Vietcombank', 'VietinBank', 'VPBank', 'VRB', 'Woori Bank',
-];
-
 const iconPaths = {
   handover: <><path d="M3 7h14m-4-4 4 4-4 4M21 17H7m4-4-4 4 4 4"/></>,
   shifts: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 4h3m3 0h3m-9 4h3"/></>,
@@ -122,11 +79,11 @@ function displayPart(instant, options, timezone = 'Asia/Ho_Chi_Minh') {
 }
 // Đổi trạng thái API thành mã dùng cho CSS.
 function statusId(value) {
-  return ({ CONFIRMED: 'pending', IN_HOUSE: 'checkedIn', CANCELLED: 'cancelled', NO_SHOW: 'noShow', COMPLETED: 'completed', DRAFT: 'draft' })[value] || String(value || '').toLowerCase();
+  return ({ CONFIRMED: 'pending', IN_HOUSE: 'checkedIn', CANCELLED: 'cancelled', COMPLETED: 'completed', DRAFT: 'draft' })[value] || String(value || '').toLowerCase();
 }
 // Đổi trạng thái booking thành nhãn tiếng Việt.
 function statusLabel(value) {
-  return ({ CONFIRMED: 'Chờ check-in', IN_HOUSE: 'Đã check-in', CANCELLED: 'Đã hủy', NO_SHOW: 'No-show', COMPLETED: 'Hoàn tất', DRAFT: 'Nháp' })[value] || 'Chờ check-in';
+  return ({ CONFIRMED: 'Chờ check-in', IN_HOUSE: 'Đã check-in', CANCELLED: 'Đã hủy', COMPLETED: 'Hoàn tất', DRAFT: 'Nháp' })[value] || 'Chờ check-in';
 }
 // Định dạng giờ hẹn theo múi giờ chi nhánh.
 function timeText(value, timezone) { return displayPart(value, { hour: '2-digit', minute: '2-digit', hour12: false }, timezone); }
@@ -162,6 +119,7 @@ function checkInRoomTitle(booking, roomReady) {
 // Giải thích vì sao phòng có hoặc chưa có thể check-in.
 function checkInRoomHint(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return 'Check-in đã được ghi nhận.';
+  if (!booking.roomCode) return 'Vui lòng chọn phòng cụ thể để nhận khách.';
   if (booking.roomOperatingStatus === 'UNDER_MAINTENANCE') return 'Vui lòng chọn phòng khác.';
   return roomReady ? 'Phòng đã sẵn sàng cho booking này.' : 'Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.';
 }
@@ -184,20 +142,6 @@ export function AppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountingPending, setAccountingPending] = useState({});
   const isAccountant = audience === 'accountant';
-  const location = useLocation();
-  const accountingNavRef = useRef(null);
-  const [openAccountingGroups, setOpenAccountingGroups] = useState(readAccountingGroups);
-
-  useEffect(() => {
-    if (!isAccountant) return;
-    try { window.localStorage.setItem('gcmb:accountant:nav-groups', JSON.stringify(openAccountingGroups)); }
-    catch { /* Keep group choices in memory when browser storage is unavailable. */ }
-  }, [isAccountant, openAccountingGroups]);
-
-  useEffect(() => {
-    if (!isAccountant) return;
-    accountingNavRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [isAccountant, location.pathname, location.search]);
 
   useEffect(() => {
     if (!isAccountant) return undefined;
@@ -230,7 +174,7 @@ export function AppShell({
           next.refunds = (refundResult.value.items || []).filter((item) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(item.status)).length;
         }
         if (closingResult.status === 'fulfilled') {
-          next.closings = closingResult.value.filter((item) => item.status === 'SUBMITTED').length;
+          next.closings = closingResult.value.filter((item) => item.status !== 'RECONCILED').length;
         }
         if (recurringResult.status === 'fulfilled') next.recurring = recurringResult.value;
         return next;
@@ -247,17 +191,7 @@ export function AppShell({
   }, [isAccountant]);
 
   if (isAccountant) {
-    const accountingLink = ({ label, hint, icon, target, countKey, countLabel }) => {
-      const active = accountingLinkIsCurrent(target, location);
-      const pendingCount = accountingPending[countKey] || 0;
-      const accessibleLabel = `${label}${hint ? `. ${hint}` : ''}${pendingCount ? `, ${pendingCount} ${countLabel}` : ''}`;
-      return <button type="button" className="accounting-nav-link" key={target} aria-current={active ? 'page' : undefined}
-        aria-label={accessibleLabel} title={accessibleLabel} onClick={() => navigate(target)}>
-        <Icon name={icon} />
-        <span className="accounting-nav-link__copy"><span>{label}</span>{hint && <small>{hint}</small>}</span>
-        {pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
-      </button>;
-    };
+    const navItems = accountingNavigation;
     const roleLabel = 'KẾ TOÁN THU CHI';
     const now = new Date();
     const currentMonth = new Intl.DateTimeFormat('vi-VN', {
@@ -273,25 +207,41 @@ export function AppShell({
           sidebarLabel="Kế toán thu chi"
           brand={<div className="manager-brand"><BrandWordmark /></div>}
           roleLabel="KẾ TOÁN THU CHI"
-          navigation={<nav ref={accountingNavRef} id="booking-navigation" className="manager-navigation" aria-label="Điều hướng kế toán thu chi">
-                {accountingNavigation.map((entry, index) => {
-                  if (!entry.items) return accountingLink(entry);
-                  const { title, short, items } = entry;
-                  const hasCurrentPage = items.some(({ target }) => accountingLinkIsCurrent(target, location));
-                  const open = hasCurrentPage || Boolean(openAccountingGroups[title]);
-                  return <div className="accounting-nav-group" key={title}>
-                    <button type="button" className="accounting-nav-group__toggle" aria-label={title} title={title}
-                      aria-expanded={open} aria-controls={`accounting-nav-group-${index}`}
-                      onClick={() => setOpenAccountingGroups((current) => ({ ...current, [title]: hasCurrentPage || !open }))}>
-                      <span className="accounting-nav-group__title">{title}</span>
-                      <span className="accounting-nav-group__short" aria-hidden="true">{short}</span>
-                      <span aria-hidden="true" className="accounting-nav-group__chevron" />
-                    </button>
-                    <div id={`accounting-nav-group-${index}`} hidden={!open} className="accounting-nav-group__items">
-                      {items.map(accountingLink)}
-                    </div>
-                  </div>;
-                })}
+          navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
+                {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
+                  <summary>{group.label}</summary>
+                  {group.items.map(([label, icon, unavailable]) => {
+                  const pendingCount = icon === 'payments' ? accountingPending.payments
+                    : icon === 'plus' ? accountingPending.recurring
+                      : icon === 'deposit' ? accountingPending.refunds
+                        : icon === 'calendar' ? accountingPending.closings : 0;
+                  const pendingDescription = icon === 'plus' ? 'kỳ chi định kỳ cần xử lý' : 'yêu cầu cần xử lý';
+                  return (
+                  <button
+                    type="button"
+                    key={label}
+                    aria-label={pendingCount ? `${label}, ${pendingCount} ${pendingDescription}` : label}
+                    aria-current={icon === activeTab ? 'page' : undefined}
+                    aria-disabled={Boolean(unavailable)}
+                    disabled={Boolean(unavailable)}
+                    title={unavailable ? 'Đang phát triển' : pendingCount ? `${label} · ${pendingCount} ${pendingDescription}` : label}
+                    onClick={() => {
+                      if (unavailable) return;
+                      // HuyDV / UC-91..101: điều hướng lương và đối soát kế toán.
+                      if (icon === 'calendar') navigate('/ke-toan/chot-quy');
+                      if (icon === 'booking') navigate('/ke-toan/luong');
+                      if (icon === 'tax') navigate('/ke-toan/hoa-don-thue');
+                      if (icon === 'overview') navigate('/ke-toan');
+                      if (icon === 'report') navigate('/ke-toan/bao-cao');
+                      if (icon === 'orders') navigate('/ke-toan/bao-cao-chi-phi');
+                      if (icon === 'deposit') navigate('/ke-toan/hoan-coc');
+                      if (['payments', 'plus'].includes(icon)) navigate(`/ke-toan/chi-phi?section=${icon}`);
+                    }}
+                  >
+                    <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
+                  </button>
+                );})}
+                </details>)}
               </nav>}
           footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>
@@ -418,14 +368,9 @@ export function AppShell({
 function statusClass(id) { return `booking-status booking-status-${id}`; }
 
 // Hiển thị thông tin booking, cọc và các thao tác được phép tại thời điểm hiện tại.
-function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, onEdit, onCancel, onNoShow }) {
+function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, onEdit, onCancel }) {
   const navigate = useNavigate();
   const panelRef = useRef(null);
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, [booking?.id]);
   useEffect(() => {
     const panel = panelRef.current;
     panel?.querySelector('.booking-details-close')?.focus();
@@ -463,8 +408,6 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, depositForfeited, booking.status);
   const canCheckIn = booking.status === 'CONFIRMED';
   const canEdit = canCheckIn && new Date(booking.plannedStart) > new Date();
-  const hasReservedRoom = currentDetail?.allocations?.some((allocation) => allocation.state === 'RESERVED');
-  const canMarkNoShow = canCheckIn && hasReservedRoom && new Date(booking.plannedStart).getTime() <= now.getTime();
   const room = [booking.roomCode, booking.roomName].filter(Boolean).join(' · ') || 'Chưa gán phòng';
   return <aside ref={panelRef} className="booking-details" role={panelRole} aria-modal={modal || undefined} aria-label={`Chi tiết booking ${booking.code}`} tabIndex={-1}>
     <div className="booking-details-scroll">
@@ -482,6 +425,7 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
       <dl className="booking-detail-list">
         <div><dt>Khách hàng</dt><dd>{booking.contactName || '—'}</dd></div>
         <div><dt>Số điện thoại</dt><dd>{booking.contactPhone || '—'}</dd></div>
+        <div><dt>Nguồn khách</dt><dd>{({ FACEBOOK: 'FB', TIKTOK: 'TikTok', ZALO: 'Zalo', INSTAGRAM: 'IG', WALK_IN: 'Khách ngoài', PHONE: 'Điện thoại', OTHER: 'Khác' })[booking.channel] || '—'}</dd></div>
         <div><dt>Giờ hẹn lúc đặt</dt><dd>{timeText(booking.plannedStart, timezone)} · {dateText(booking.plannedStart, timezone)}</dd></div>
         <div><dt>Số khách</dt><dd>{booking.guestCount || '—'}</dd></div>
         <div><dt>Hạng phòng</dt><dd>{booking.roomTypeName || booking.roomName || '—'}</dd></div>
@@ -489,12 +433,11 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
         <div><dt>Giá dự kiến</dt><dd>{formatVnd(booking.expectedAmount)}</dd></div>
       </dl>
       {currentDetail?.note && <p className="booking-detail-note">{currentDetail.note}</p>}
-      <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Booking chưa được gán phòng'}</div>
+      <div className="booking-detail-room-ready"><i />{booking.roomCode ? `Phòng ${booking.roomCode} đã được giữ cho booking này` : 'Phòng cụ thể sẽ chọn khi check-in'}</div>
     </div>
     <div className="booking-details-actions" role="group" aria-label="Thao tác booking">
       <strong className="booking-details-actions-title">Thao tác</strong>
       <button type="button" className="booking-button booking-button-primary booking-detail-checkin" onClick={onCheckIn} disabled={!canCheckIn}>Check-in</button>
-      {canMarkNoShow && <button type="button" className="booking-button booking-button-danger booking-detail-no-show" onClick={() => onNoShow(booking)}>Đánh dấu no-show</button>}
       {booking.status === 'IN_HOUSE' && <button type="button" className="booking-detail-room-link" onClick={() => navigate('/le-tan/phong', { state: { roomId: booking.roomId } })}>Xem phòng và thao tác lưu trú</button>}
       <div className="booking-detail-actions"><button type="button" className="booking-detail-action-edit" disabled={!canEdit} onClick={() => onEdit(booking)}>Sửa booking</button><button type="button" className="booking-detail-action-cancel is-danger" disabled={!canCheckIn} onClick={() => onCancel(booking)}>Hủy booking</button></div>
     </div>
@@ -504,6 +447,10 @@ function BookingDetails({ booking, detail, timezone, modal, onClose, onCheckIn, 
 // Xác nhận phòng và thời lượng trước khi gửi thao tác check-in.
 function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, error }) {
   const [now, setNow] = useState(() => new Date());
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [selectedRoomId, setSelectedRoomId] = useState('');
+  const [roomLoading, setRoomLoading] = useState(false);
+  const [roomError, setRoomError] = useState('');
   const [giftRequirements, setGiftRequirements] = useState(null);
   const [giftMenu, setGiftMenu] = useState([]);
   const [giftLoading, setGiftLoading] = useState(false);
@@ -526,6 +473,20 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    let active = true;
+    setSelectedRoomId('');
+    setAvailableRooms([]);
+    setRoomError('');
+    if (!booking?.id || booking.status !== 'CONFIRMED' || booking.roomId) return () => { active = false; };
+    setRoomLoading(true);
+    bookingApi.checkInRooms(booking.id).then((rooms) => {
+      if (active) setAvailableRooms(rooms || []);
+    }).catch((requestError) => {
+      if (active) { const errors = apiErrors(requestError); setRoomError(errors.form || Object.values(errors)[0] || 'Không tải được phòng trống.'); }
+    }).finally(() => { if (active) setRoomLoading(false); });
+    return () => { active = false; };
+  }, [booking?.id, booking?.status, booking?.roomId]);
   useEffect(() => {
     let active = true;
     setGiftRequirements(null);
@@ -567,7 +528,9 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const depositOutcome = depositDetail?.cancellationOutcome;
   const depositStatus = depositOutcomeLabel(depositOutcome, depositReceived, booking?.status);
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, Number(depositDetail?.forfeitedAmount ?? 0), booking?.status);
-  const roomReady = booking?.roomOperatingStatus === 'AVAILABLE' && Boolean(booking?.roomCode);
+  const selectedRoom = availableRooms.find((room) => room.id === selectedRoomId);
+  const checkInRoom = selectedRoom ? { ...booking, roomCode: selectedRoom.code, roomName: selectedRoom.name, roomOperatingStatus: selectedRoom.operatingStatus } : booking;
+  const roomReady = checkInRoom?.roomOperatingStatus === 'AVAILABLE' && Boolean(checkInRoom?.roomCode);
   const plannedStartMs = booking ? new Date(booking.plannedStart).getTime() : NaN;
   const plannedEndMs = booking ? new Date(booking.plannedEnd).getTime() : NaN;
   const earlyCheckIn = Boolean(booking) && now.getTime() < plannedStartMs;
@@ -642,8 +605,19 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         <section className="booking-checkin-section"><h3>Khách hàng</h3><strong className="booking-checkin-customer">{booking.contactName}</strong><p>{booking.contactPhone || 'Chưa có số điện thoại'} · {booking.guestCount ? `${booking.guestCount} khách` : 'Chưa cập nhật số khách'}</p></section>
         <section className="booking-checkin-section"><h3>Thông tin đặt phòng</h3><div className="booking-checkin-grid">
           <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
-          <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{booking.roomCode ? `${booking.roomCode} · ${booking.roomName || ''}` : 'Chưa gán'}</strong></div>
+          <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{checkInRoom.roomCode ? `${checkInRoom.roomCode} · ${checkInRoom.roomName || ''}` : 'Chọn bên dưới'}</strong></div>
         </div></section>
+        {booking.status === 'CONFIRMED' && !booking.roomId && <section className="booking-checkin-section">
+          <h3>Chọn phòng cụ thể *</h3>
+          <label className="booking-form-field"><span>Phòng hạng {booking.roomTypeName || 'đã đặt'}</span>
+            <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} disabled={roomLoading || busy} required>
+              <option value="">{roomLoading ? 'Đang kiểm tra phòng trống…' : 'Chọn phòng còn trống'}</option>
+              {availableRooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name} · tối đa {room.capacity} khách</option>)}
+            </select>
+          </label>
+          {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
+          {!roomLoading && !roomError && !availableRooms.length && <p className="booking-checkin-time-note">Chưa có phòng phù hợp để nhận khách. Vui lòng kiểm tra lịch phòng hoặc sắp xếp lại booking.</p>}
+        </section>}
         {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
@@ -653,8 +627,8 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
         </section>}
         <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
-          <strong>{checkInRoomTitle(booking, roomReady)}</strong>
-          <p>{checkInRoomHint(booking, roomReady)}</p>
+           <strong>{checkInRoomTitle(checkInRoom, roomReady)}</strong>
+           <p>{checkInRoomHint(checkInRoom, roomReady)}</p>
         </div></div>
         <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
         <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
@@ -666,7 +640,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
       </div>
       <div className="booking-checkin-footer">
         {error && <p className="booking-inline-error" role="alert">{error}</p>}
-        <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
+         <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { roomId: selectedRoomId || booking.roomId, drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
     {giftPicker && <div className="booking-gift-picker-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGiftPicker(); }}>
@@ -775,7 +749,7 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeDescription = 'Vui lòng thử mở lại hộp thoại trước khi hủy booking.';
   } else if (!cancellationAllowed) {
     outcomeTitle = 'Đã đến giờ sử dụng';
-    outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in hoặc no-show.';
+    outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in.';
   } else if (refundEligible) {
     outcomeTitle = '✓ Đủ điều kiện hoàn cọc';
     outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
@@ -811,7 +785,8 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
         <div className="booking-cancel-account-grid">
           <label className="booking-form-field"><span>Chủ tài khoản *</span><input maxLength="200" value={beneficiaryName} onChange={(event) => setBeneficiaryName(event.target.value)} placeholder="Tên chủ tài khoản" /></label>
           <label className="booking-form-field"><span>Số tài khoản *</span><input maxLength="60" value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} inputMode="numeric" placeholder="Nhập số tài khoản" /></label>
-          <label className="booking-form-field"><span>Ngân hàng *</span><input list="vietnamese-bank-suggestions" maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Nhập tên ngân hàng" /><datalist id="vietnamese-bank-suggestions">{vietnameseBanks.map((name) => <option key={name} value={name} />)}</datalist></label>
+          {/* BR-186, BR-187: lưu ngân hàng nhận hoàn, tối đa 200 ký tự. */}
+          <label className="booking-form-field"><span>Ngân hàng *</span><BankNameInput maxLength="200" value={bankName} onChange={(event) => setBankName(event.target.value)} placeholder="Chọn hoặc nhập tên ngân hàng" /></label>
         </div>
         <div className="booking-cancel-next-step"><strong>Tạo yêu cầu hoàn {formatVnd(depositAmount)} và chuyển Kế toán xử lý.</strong><p>Lễ tân không đánh dấu giao dịch là đã hoàn.</p></div>
       </>}
@@ -819,68 +794,6 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
       {detailLoading && <p role="status">Đang tải số dư cọc và điều kiện hoàn…</p>}
       {cancelError && <p className="booking-inline-error" role="alert">{cancelError}</p>}
       <div className="booking-cancel-buttons"><button className={`booking-button ${refundEligible ? 'booking-button-primary' : 'booking-button-danger'}`} type="button" disabled={!reason.trim() || missingRefundDetails || !cancellationAllowed || busy || !currentDetail || detailLoading || Boolean(detailError)} onClick={() => onConfirm(booking, { reason: reason.trim(), beneficiaryName: beneficiaryName.trim(), bankAccount: bankAccount.trim(), bankName: bankName.trim() })}>{cancelButtonLabel}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose}>Quay lại</button></div>
-    </section>
-  </div>;
-}
-
-// Nạp booking mới nhất để xác nhận no-show và số cọc sẽ bị giữ.
-function NoShowDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
-  const [bookingDetail, setBookingDetail] = useState(null);
-  const [detailError, setDetailError] = useState('');
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [reason, setReason] = useState('Khách không đến nhận phòng');
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    setBookingDetail(null);
-    setDetailError('');
-    setReason('Khách không đến nhận phòng');
-    if (!booking?.id) return undefined;
-    let active = true;
-    setDetailLoading(true);
-    bookingApi.detail(booking.id).then((value) => { if (active) setBookingDetail(value); })
-      .catch((requestError) => { if (active) { const errors = apiErrors(requestError); setDetailError(errors.form || Object.values(errors)[0]); } })
-      .finally(() => { if (active) setDetailLoading(false); });
-    return () => { active = false; };
-  }, [booking?.id]);
-  useEffect(() => {
-    setNow(new Date());
-    if (!booking?.id) return undefined;
-    const timer = window.setInterval(() => setNow(new Date()), 15000);
-    return () => window.clearInterval(timer);
-  }, [booking?.id]);
-  if (!booking) return null;
-  const currentDetail = bookingDetail?.booking?.id === booking.id ? bookingDetail : null;
-  const currentBooking = currentDetail?.booking || booking;
-  const depositBalance = currentDetail ? Number(currentDetail.deposit?.balance ?? 0) : null;
-  const hasReservedRoom = currentDetail?.allocations?.some((allocation) => allocation.state === 'RESERVED');
-  const hasStarted = new Date(currentBooking.plannedStart).getTime() <= now.getTime();
-  const canMarkNoShow = currentBooking.status === 'CONFIRMED' && hasStarted && hasReservedRoom;
-  const detailMessage = detailError || (!currentDetail && !detailLoading ? 'Không tải được thông tin booking. Hãy đóng và mở lại hộp thoại.' : '');
-  const markedAt = displayPart(now, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone);
-  let outcomeTitle = 'Đang tải thông tin tiền cọc';
-  let outcomeDescription = 'Đang đối chiếu số dư tiền cọc còn lại.';
-  let outcomeClass = 'is-empty';
-  if (currentDetail && depositBalance > 0) {
-    outcomeTitle = `Cọc ${formatVnd(depositBalance)} sẽ bị tịch thu`;
-    outcomeDescription = 'Số dư cọc hiện tại được ghi thành khoản FORFEIT theo chính sách no-show.';
-    outcomeClass = 'is-forfeited';
-  } else if (currentDetail) {
-    outcomeTitle = 'Không có cọc cần xử lý';
-    outcomeDescription = 'Booking sẽ chuyển sang NO_SHOW và phòng được giải phóng.';
-  }
-  const buttonLabel = busy ? 'Đang ghi nhận…' : !hasStarted ? 'Chưa tới giờ bắt đầu' : !hasReservedRoom && currentDetail ? 'Không còn phòng đang giữ' : !canMarkNoShow ? 'Chưa thể đánh dấu no-show' : 'Xác nhận no-show';
-  return <div className="booking-cancel-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="booking-cancel-dialog booking-no-show-dialog" role="dialog" aria-modal="true" aria-labelledby="no-show-title">
-      <div className="booking-cancel-title"><div><h2 id="no-show-title">Đánh dấu khách no-show</h2><p>{currentBooking.code} · {currentBooking.contactName}</p></div><button type="button" className="booking-panel-close" onClick={onClose} aria-label="Đóng" disabled={busy}>×</button></div>
-      <h3 className="booking-cancel-section-title">Thông tin booking</h3>
-      <div className="booking-cancel-booking-info"><div><span>Khách hàng</span><strong>{currentBooking.contactName}</strong></div><div><span>Số điện thoại</span><strong>{currentBooking.contactPhone || '—'}</strong></div><div><span>Giờ bắt đầu</span><strong>{timeText(currentBooking.plannedStart, timezone)} · {dateText(currentBooking.plannedStart, timezone)}</strong></div><div><span>Phòng</span><strong>{currentBooking.roomCode ? `${currentBooking.roomCode} · ${currentBooking.roomName || ''}` : 'Chưa gán'}</strong></div></div>
-      <div className={`booking-cancel-outcome ${outcomeClass}`} role="status"><strong>{outcomeTitle}</strong><p>{outcomeDescription}</p><small>Thời điểm ghi nhận dự kiến: {markedAt}</small></div>
-      <label className="booking-form-field booking-cancel-reason"><span>Ghi chú</span><textarea rows="2" maxLength="1000" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Khách không đến nhận phòng" /></label>
-      <p className="booking-no-show-warning">Xác nhận sẽ đổi trạng thái booking thành NO_SHOW, giải phóng phòng đang giữ và tịch thu số dư cọc (nếu có). Không thể check-in booking sau thao tác này.</p>
-      {detailLoading && <p role="status">Đang tải số dư cọc…</p>}
-      {detailMessage && <p className="booking-inline-error" role="alert">{detailMessage}</p>}
-      {error && <p className="booking-inline-error" role="alert">{error}</p>}
-      <div className="booking-cancel-buttons"><button className="booking-button booking-button-danger" type="button" disabled={!currentDetail || !canMarkNoShow || detailLoading || Boolean(detailError) || busy} onClick={() => onConfirm(booking, { reason: reason.trim() || undefined })}>{buttonLabel}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={busy}>Quay lại</button></div>
     </section>
   </div>;
 }
@@ -921,8 +834,6 @@ export default function BookingManagementPage() {
   const [reload, setReload] = useState(0);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelError, setCancelError] = useState('');
-  const [noShowTarget, setNoShowTarget] = useState(null);
-  const [noShowError, setNoShowError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const openBookingDetails = (id, row) => {
@@ -1024,13 +935,12 @@ export default function BookingManagementPage() {
     pending: rows.filter((item) => item.status === 'CONFIRMED').length,
     checkedIn: rows.filter((item) => item.status === 'IN_HOUSE').length,
     cancelled: rows.filter((item) => item.status === 'CANCELLED').length,
-    noShow: rows.filter((item) => item.status === 'NO_SHOW').length,
     paid: rows.filter((item) => Number(item.depositReceivedAmount ?? item.depositBalance) > 0).length,
     unpaid: rows.filter((item) => Number(item.depositReceivedAmount ?? item.depositBalance) <= 0).length,
   }), [rows]);
   const visibleRows = useMemo(() => rows.filter((item) => {
     const id = statusId(item.status);
-    if (['pending', 'checkedIn', 'cancelled', 'noShow'].includes(activeFilter) && id !== activeFilter) return false;
+    if (['pending', 'checkedIn', 'cancelled'].includes(activeFilter) && id !== activeFilter) return false;
     if (activeFilter === 'paid' && Number(item.depositReceivedAmount ?? item.depositBalance) <= 0) return false;
     if (activeFilter === 'unpaid' && Number(item.depositReceivedAmount ?? item.depositBalance) > 0) return false;
     if (roomTier !== 'all' && !(item.roomTypeName || item.roomName || '').toLocaleLowerCase('vi-VN').includes(roomTier.toLocaleLowerCase('vi-VN'))) return false;
@@ -1140,22 +1050,6 @@ export default function BookingManagementPage() {
     finally { setBusy(false); }
   };
 
-  // Ghi no-show và làm mới số dư cọc, trạng thái phòng.
-  const markNoShow = async (booking, payload) => {
-    setBusy(true);
-    setNoShowError('');
-    try {
-      const result = await bookingApi.markNoShow(booking.id, payload);
-      setNoShowTarget(null);
-      setNoticeKind('success');
-      setNotice(result.depositOutcome === 'NON_REFUNDABLE'
-        ? `Đã ghi nhận no-show cho ${booking.code}; ${formatVnd(result.depositAmount)} cọc đã bị tịch thu và phòng được giải phóng.`
-        : `Đã ghi nhận no-show cho ${booking.code}; phòng được giải phóng.`);
-      setReload((value) => value + 1);
-    } catch (requestError) { const errors = apiErrors(requestError); setNoShowError(errors.form || Object.values(errors)[0]); }
-    finally { setBusy(false); }
-  };
-
   // Ghi check-in rồi tải lại booking để hiển thị giờ thực tế.
   const confirmCheckIn = async (booking, gifts) => {
     setBusy(true);
@@ -1198,7 +1092,7 @@ export default function BookingManagementPage() {
 
   const tabs = [
     ['all', 'Tất cả', counts.all], ['pending', 'Chờ check-in', counts.pending], ['checkedIn', 'Đã check-in', counts.checkedIn],
-    ['cancelled', 'Đã hủy', counts.cancelled], ['noShow', 'No-show', counts.noShow], ['paid', 'Có cọc', counts.paid], ['unpaid', 'Không cọc', counts.unpaid],
+    ['cancelled', 'Đã hủy', counts.cancelled], ['paid', 'Có cọc', counts.paid], ['unpaid', 'Không cọc', counts.unpaid],
   ];
 
   // Chuyển đến đường dẫn xác nhận check-in của booking được chọn.
@@ -1264,8 +1158,7 @@ export default function BookingManagementPage() {
       {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
         <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}
           onCheckIn={() => selected && openCheckIn(selected)} onEdit={openEdit}
-          onCancel={(booking) => { setDetailsOpen(false); setCancelError(''); setCancelTarget(booking); }}
-          onNoShow={(booking) => { setDetailsOpen(false); setNoShowError(''); setNoShowTarget(booking); }} />
+          onCancel={(booking) => { setDetailsOpen(false); setCancelError(''); setCancelTarget(booking); }} />
       </div>}
     </div>
   </>;
@@ -1275,6 +1168,5 @@ export default function BookingManagementPage() {
     {editMode && <BookingEditDialog bookingId={bookingId} timezone={timezone} onClose={() => navigate('/le-tan/bookings')} onUpdate={updateBooking} />}
     {checkinMode && <CheckInPanel booking={selected} detail={detail} timezone={timezone} onClose={closeCheckIn} onConfirm={confirmCheckIn} busy={busy} error={checkInError} />}
     <CancelDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={cancelBooking} busy={busy} error={cancelError} timezone={timezone} />
-    <NoShowDialog booking={noShowTarget} onClose={() => setNoShowTarget(null)} onConfirm={markNoShow} busy={busy} error={noShowError} timezone={timezone} />
   </AppShell>;
 }

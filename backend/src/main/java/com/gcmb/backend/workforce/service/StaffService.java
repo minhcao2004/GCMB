@@ -25,11 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class StaffService {
 
     private final StaffRepository staff;
-    private final AccountRepository accounts;
+    private final AccountRepository accountRepository;
 
-    public StaffService(StaffRepository staff, AccountRepository accounts) {
+    public StaffService(StaffRepository staff, AccountRepository accountRepository) {
         this.staff = staff;
-        this.accounts = accounts;
+        this.accountRepository = accountRepository;
     }
 
     public static final Set<String> POSITIONS = Set.of(
@@ -49,9 +49,9 @@ public class StaffService {
         if (!staff.actorActive(actor.id(), actor.role())) throw denied();
         if ("HEAD_OFFICE_MANAGER".equals(actor.role())) return null;
         if (
-            actor.branchId() == null || !accounts.manages(actor.id(), actor.branchId(), false)
+            actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
         ) throw denied();
-        if (writing && !accounts.manages(actor.id(), actor.branchId(), true)) throw new AuthFailure(
+        if (writing && !accountRepository.manages(actor.id(), actor.branchId(), true)) throw new AuthFailure(
             403,
             "form",
             "Cơ sở " +
@@ -66,14 +66,14 @@ public class StaffService {
         var row = staff.find(id);
         if (row == null) throw missing();
         if (scope != null && !scope.equals(row.get("branchId"))) throw denied();
+        // HuyDV / UC-79, BR-52 / MSG24: BM không sửa hồ sơ kế toán/QLCC qua màn nhân sự.
+        if (lock && scope != null && (protectedPosition(row.get("position")) ||
+            protectedPosition(row.get("accountRole")))) throw denied();
         return row;
     }
 
-    private static void protectAccountantAccount(Map<String, Object> row, String action) {
-        // MSG24: hồ sơ liên kết cung cấp họ tên và liên hệ cho tài khoản kế toán; không cho quản lý sửa gián tiếp.
-        if ("ACCOUNTANT".equals(row.get("accountRole"))) throw new AuthFailure(
-            403, "form", "Bạn không có quyền " + action + " đối với hồ sơ nhân viên của tài khoản kế toán."
-        );
+    private static boolean protectedPosition(Object position) {
+        return "ACCOUNTANT".equals(position) || "HEAD_OFFICE_MANAGER".equals(position);
     }
 
     private void version(Map<String, Object> row, Long version) {
@@ -140,6 +140,8 @@ public class StaffService {
     public Map<String, Object> create(Identity actor, StaffCommand input) {
         UUID scope = scope(actor, true);
         StaffCommand c = validate(input, null);
+        // HuyDV / UC-77: QLCS chỉ tạo lễ tân; kiểm tra cả khi gọi API trực tiếp.
+        if (scope != null && !"RECEPTIONIST".equals(c.position())) throw denied();
         UUID id = UUID.randomUUID();
         staff.create(id, c);
         // UC-77/BR-52: BM creates inside the current assigned branch. UC-81/82 remain HOM-only.
@@ -156,9 +158,11 @@ public class StaffService {
 
     public Map<String, Object> update(Identity actor, UUID id, StaffCommand input) {
         var before = record(id, scope(actor, true), true);
-        protectAccountantAccount(before, "sửa thông tin");
         version(before, input == null ? null : input.version());
         StaffCommand c = validate(input, id);
+        // HuyDV: không cho đổi vị trí sau khi tạo để vượt quyền của QLCS.
+        if ("BRANCH_MANAGER".equals(actor.role()) &&
+            (protectedPosition(c.position()) || !Objects.equals(before.get("position"), c.position()))) throw denied();
         staff.update(id, c);
         var after = staff.find(id);
         staff.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);
@@ -168,7 +172,6 @@ public class StaffService {
     // UC-80, BR-171, BR-199: status, automatic account lock (DB trigger), tokens and audit share the transaction.
     public Map<String, Object> status(Identity actor, UUID id, StatusCommand input) {
         var before = record(id, scope(actor, true), true);
-        protectAccountantAccount(before, "đổi trạng thái");
         if (input == null) throw new AuthFailure(400, "form", "Vui lòng bổ sung trạng thái hồ sơ.");
         version(before, input.version());
         if (!input.active() && actor.id().equals(before.get("userId"))) throw new AuthFailure(
@@ -211,7 +214,6 @@ public class StaffService {
     ) {
         if (scope(actor, true) != null) throw denied(); // UC-81/82: only Head Office Manager.
         var before = record(id, null, true);
-        protectAccountantAccount(before, "phân công");
         if (input == null || input.branchId() == null) throw new AuthFailure(
             400,
             "branchId",
@@ -287,12 +289,12 @@ public class StaffService {
             throw new AuthFailure(400, "contactEmail", e.getMessage());
         }
         // UC-77/79: chặn ngay tại hồ sơ, không đợi đến bước cấp tài khoản (mở rộng BR-134/MSG35).
-        if (email != null && accounts.emailReserved(email, id, null)) throw new AuthFailure(
+        if (email != null && accountRepository.emailReserved(email, id, null)) throw new AuthFailure(
             409,
             "contactEmail",
             "Email này đã được sử dụng cho hồ sơ nhân viên hoặc tài khoản khác. Vui lòng nhập email khác."
         );
-        if (phone != null && accounts.staffPhoneTaken(phone, id, null)) throw new AuthFailure(
+        if (phone != null && accountRepository.staffPhoneTaken(phone, id, null)) throw new AuthFailure(
             409,
             "phone",
             "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."

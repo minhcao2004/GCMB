@@ -1,0 +1,140 @@
+/**
+ * Copyright (c) 2026 SEP490-G12.
+ * Description: Đồng bộ cỡ chữ, tiêu đề, nút chính, bộ lọc và bảng của các màn thiết bị
+ * (danh sách, nhóm, sự cố, điều chuyển) với các màn quản trị khác (tài khoản, nhân sự).
+ * Selector ba lớp để thắng các luật chung như `.dashboard-page button` mà không cần !important.
+ */
+
+/* Cỡ chữ nền của nội dung: 13px như các màn quản trị khác, thay vì kế thừa 16px. */
+.equipment-management .equipment-assets,
+.equipment-management .equipment-categories,
+.equipment-management .equipment-incidents,
+.manager-content .equipment-incidents,
+main.equipment-incidents { font-size: var(--gcmb-font-size-base); }
+
+/* Tiêu đề trang */
+.equipment-assets .ea-heading h1,
+.equipment-categories .ec-heading h1,
+.equipment-incidents .ei-heading h1 {
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-2xl);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+.equipment-assets .ea-heading,
+.equipment-categories .ec-heading,
+.equipment-incidents .ei-heading { align-items: center; margin-bottom: var(--gcmb-space-4); }
+
+/* Nút chính */
+.equipment-assets .ea-heading .ea-primary,
+.equipment-categories .ec-heading .ec-primary,
+.equipment-incidents .ei-heading .ei-primary,
+.equipment-assets .ea-drawer .ea-primary,
+.equipment-categories .ec-dialog .ec-primary,
+.equipment-incidents .ei-drawer .ei-primary {
+  min-height: 40px;
+  padding: 0 var(--gcmb-space-4);
+  border: 1px solid var(--gcmb-color-primary);
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-primary);
+  color: var(--gcmb-color-on-primary);
+  font-family: var(--gcmb-font-family);
+  font-size: var(--gcmb-font-size-base);
+  font-weight: 600;
+  box-shadow: none;
+  transform: none;
+}
+.equipment-assets .ea-heading .ea-primary:hover:not(:disabled),
+.equipment-categories .ec-heading .ec-primary:hover:not(:disabled),
+.equipment-incidents .ei-heading .ei-primary:hover:not(:disabled),
+.equipment-assets .ea-drawer .ea-primary:hover:not(:disabled),
+.equipment-categories .ec-dialog .ec-primary:hover:not(:disabled),
+.equipment-incidents .ei-drawer .ei-primary:hover:not(:disabled) {
+  border-color: var(--gcmb-color-primary-hover);
+  background: var(--gcmb-color-primary-hover);
+  color: var(--gcmb-color-on-primary-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Bộ lọc */
+.equipment-assets .ea-filters,
+.equipment-categories .ec-filters,
+.equipment-incidents .ei-filters {
+  gap: var(--gcmb-space-3);
+  padding: var(--gcmb-space-4);
+  margin-bottom: var(--gcmb-space-4);
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  box-shadow: none;
+}
+@media (min-width: 981px) {
+  /* 4 ô lọc (quản lý cơ sở) hoặc 5 ô (quản lý cấp cao, thêm "Cơ sở") đều nằm trên một hàng. */
+  .equipment-assets .ea-filters { grid-template-columns: minmax(220px, 1.6fr) repeat(auto-fit, minmax(140px, 1fr)); }
+}
+.equipment-assets .ea-filters label,
+.equipment-categories .ec-filters label,
+.equipment-incidents .ei-filters label {
+  gap: 6px;
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-sm);
+  font-weight: 600;
+}
+.equipment-assets .ea-filters :is(input, select),
+.equipment-categories .ec-filters :is(input, select),
+.equipment-incidents .ei-filters :is(input, select) {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--gcmb-space-3);
+  border-color: var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--gcmb-color-ink);
+  font-family: var(--gcmb-font-family);
+  font-size: var(--gcmb-font-size-base);
+  font-weight: 400;
+}
+.equipment-assets .ea-filters input::placeholder,
+.equipment-categories .ec-filters input::placeholder,
+.equipment-incidents .ei-filters input::placeholder { color: var(--gcmb-color-muted); }
+.equipment-assets .ea-filters small,
+.equipment-categories .ec-filters small,
+.equipment-incidents .ei-filters small { color: var(--gcmb-color-muted); font-size: var(--gcmb-font-size-sm); }
+
+/* Bảng */
+.equipment-assets .ea-table-wrap,
+.equipment-categories .ec-table-wrap,
+.equipment-incidents .ei-table-wrap {
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  box-shadow: none;
+  font-size: var(--gcmb-font-size-base);
+}
+.equipment-assets .ea-table-wrap th,
+.equipment-categories .ec-table-wrap th,
+.equipment-incidents .ei-table-wrap th {
+  padding: 10px var(--gcmb-space-4);
+  background: var(--gcmb-color-bg);
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.equipment-assets .ea-table-wrap td,
+.equipment-categories .ec-table-wrap td,
+.equipment-incidents .ei-table-wrap td {
+  padding: var(--gcmb-space-3) var(--gcmb-space-4);
+  border-bottom-color: var(--gcmb-color-line);
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-base);
+  line-height: 1.45;
+}
+.equipment-assets .ea-table-wrap tbody td strong,
+.equipment-categories .ec-table-wrap tbody td strong,
+.equipment-incidents .ei-table-wrap tbody td strong { color: var(--gcmb-color-ink); font-weight: 600; }
+/* Cột trạng thái/sử dụng ngắn: không xuống dòng giữa chừng. */
+.equipment-assets .ea-table-wrap td:nth-last-child(-n + 2) { white-space: nowrap; }
+
+/* Tab chuyển màn */
+.equipment-management .em-tabs button { font-size: var(--gcmb-font-size-base); font-weight: 600; }

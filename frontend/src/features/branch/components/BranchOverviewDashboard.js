@@ -1,164 +1,203 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import {
+  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 import api from '../../../api/client';
 import './branch-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
-const chartMoney = (value) => `${new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} ₫`;
-const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}%`;
+const compactMoney = (value) => {
+  const amount = Number(value) || 0;
+  if (Math.abs(amount) >= 1_000_000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(amount / 1_000_000)} tr`;
+  if (Math.abs(amount) >= 1_000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(amount / 1_000)} k`;
+  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(amount);
+};
 const days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
 const shiftNames = { NIGHT: 'Ca đêm', MORNING: 'Ca sáng', AFTERNOON: 'Ca chiều', EVENING: 'Ca tối' };
 const localDate = (value) => String(value || '').slice(0, 10);
 const localTime = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date); };
-const todayVN = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const iso = (date) => date.toISOString().slice(0, 10);
-const dateOf = (value) => new Date(`${value}T00:00:00Z`);
-const addDays = (value, days) => { const date = dateOf(value); date.setUTCDate(date.getUTCDate() + days); return iso(date); };
-const validDate = (value) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false; const date = dateOf(value); return !Number.isNaN(date.getTime()) && iso(date) === value; };
-const periodIds = ['day', 'week', 'month', 'quarter', 'year', 'custom'];
-const periodNames = { day: 'Ngày', week: 'Tuần', month: 'Tháng', quarter: 'Quý', year: 'Năm', custom: 'Tùy chỉnh' };
-const periodBounds = (period, anchor, today) => {
-  const start = dateOf(anchor);
-  if (period === 'week') start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
-  if (period === 'month') start.setUTCDate(1);
-  if (period === 'quarter') start.setUTCMonth(Math.floor(start.getUTCMonth() / 3) * 3, 1);
-  if (period === 'year') start.setUTCMonth(0, 1);
-  const end = new Date(start);
-  if (period === 'week') end.setUTCDate(end.getUTCDate() + 7);
-  else if (period === 'month') end.setUTCMonth(end.getUTCMonth() + 1);
-  else if (period === 'quarter') end.setUTCMonth(end.getUTCMonth() + 3);
-  else if (period === 'year') end.setUTCFullYear(end.getUTCFullYear() + 1);
-  else end.setUTCDate(end.getUTCDate() + 1);
-  end.setUTCDate(end.getUTCDate() - 1);
-  return { from: iso(start), to: iso(end) > today ? today : iso(end) };
+const todayDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const currentMonth = () => todayDate().slice(0, 7);
+const monthStart = (year, month) => `${year}-${String(month).padStart(2, '0')}-01`;
+const monthEnd = (year, month) => `${year}-${String(month).padStart(2, '0')}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(2, '0')}`;
+const addDays = (value, count) => { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10); };
+const dateLabel = (value) => value ? value.split('-').reverse().join('/') : '';
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
+const adjustRangeStart = (value, setStart, currentEnd, setEnd) => {
+  setStart(value);
+  if (currentEnd < value) setEnd(value);
+  else if (daysBetween(value, currentEnd) > 365) setEnd(addDays(value, 365));
 };
-const shiftPeriod = (period, from, to, step, today) => {
-  if (period === 'custom') {
-    const length = Math.round((dateOf(to) - dateOf(from)) / 86400000) + 1;
-    const nextFrom = addDays(from, step * length);
-    const nextTo = addDays(to, step * length);
-    return { from: nextFrom, to: nextTo > today ? today : nextTo };
-  }
-  const start = dateOf(from);
-  if (period === 'day') start.setUTCDate(start.getUTCDate() + step);
-  if (period === 'week') start.setUTCDate(start.getUTCDate() + step * 7);
-  if (period === 'month') start.setUTCMonth(start.getUTCMonth() + step);
-  if (period === 'quarter') start.setUTCMonth(start.getUTCMonth() + step * 3);
-  if (period === 'year') start.setUTCFullYear(start.getUTCFullYear() + step);
-  return periodBounds(period, iso(start), today);
+const adjustRangeEnd = (value, currentStart, setStart, setEnd) => {
+  setEnd(value);
+  if (value < currentStart) setStart(value);
+  else if (daysBetween(currentStart, value) > 365) setStart(addDays(value, -365));
 };
-const displayDate = (value) => value.split('-').reverse().join('/');
 
-function Panel({ title, note, children, className = '' }) {
-  return <section className={`bm-panel ${className}`}><header className="bm-panel-head"><div><h2>{title}</h2>{note && <p>{note}</p>}</div></header>{children}</section>;
+function selectedRange(period, month, year, from, to, today) {
+  if (period === 'YEAR') return { from: `${year}-01-01`, to: year === today.slice(0, 4) ? today : `${year}-12-31` };
+  if (period === 'RANGE') return { from, to };
+  const selectedMonth = Number(month);
+  const start = monthStart(year, selectedMonth);
+  const end = monthEnd(year, selectedMonth);
+  return { from: start, to: start <= today ? (end < today ? end : today) : end };
 }
 
-function RevenueChart({ series, label }) {
-  if (!series.length) return <p className="bm-chart-empty">Chưa có doanh thu theo ngày trong kỳ.</p>;
-  const max = Math.max(0, ...series.map((point) => point.value));
-  const step = max ? 10 ** Math.floor(Math.log10(max / 2)) : 1;
-  const half = max ? Math.max(1, Math.ceil(max / 2 / step) * step) : 0;
-  const ceiling = half * 2;
-  const x = (index) => series.length === 1 ? 50 : index / (series.length - 1) * 100;
-  const y = (value) => 94 - value / (ceiling || 1) * 76;
-  const points = series.map((point, index) => `${x(index)},${y(point.value)}`).join(' ');
-  const dateTicks = series.map((point, index) => ({ point, index })).filter(({ index }) => index === 0 || index === series.length - 1 || index % Math.max(1, Math.ceil((series.length - 1) / 5)) === 0);
-  return <div className="bm-revenue-chart"><div className="bm-chart-y">{[ceiling, half, 0].map((value, index) => <span key={index} title={ceiling || index === 2 ? money(value) : undefined}>{ceiling || index === 2 ? chartMoney(value) : ''}</span>)}</div>
-    <div className="bm-chart-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={label}>{(ceiling ? [18, 56, 94] : [94]).map((tick) => <line key={tick} x1="0" x2="100" y1={tick} y2={tick} stroke="var(--bm-line)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}<polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /></svg>
-      {series.length <= 31 && series.map((point, index) => <span key={point.label + index} className="bm-chart-point" aria-hidden="true" style={{ left: `${x(index)}%`, top: `${y(point.value)}%` }} />)}</div>
-    <div className="bm-chart-x">{dateTicks.map(({ point, index }) => <span key={point.label + index} style={{ left: `${x(index)}%` }}>{point.label}</span>)}</div>
+function rangeLabel(period, selectedMonth, selectedYear, from, to) {
+  if (period === 'YEAR') return `Năm ${selectedYear}`;
+  if (period === 'RANGE') return `${dateLabel(from)} – ${dateLabel(to)}`;
+  return `Tháng ${Number(selectedMonth)}/${selectedYear}`;
+}
+
+function Panel({ title, note, children, className = '', trailing }) {
+  return <section className={`bm-panel ${className}`}><header className="bm-panel-head"><div><h2>{title}</h2>{note && <p>{note}</p>}</div>{trailing}</header>{children}</section>;
+}
+
+const incidentStatus = (status) => ({
+  REPORTED: 'Mới báo', WAITING_APPROVAL: 'Chờ duyệt', IN_PROGRESS: 'Đang xử lý',
+  ASSESSED: 'Đã đánh giá', VERIFIED: 'Đã xác minh', CLOSED: 'Đã đóng', REJECTED: 'Từ chối',
+}[status] || status || 'Chưa cập nhật');
+const incidentTone = (status) => ({
+  REPORTED: 'warning', WAITING_APPROVAL: 'warning', IN_PROGRESS: 'info',
+  ASSESSED: 'info', REJECTED: 'danger',
+}[status] || 'neutral');
+const attendanceTone = (status) => status === 'ĐANG LÀM' || status === 'ĐÃ CHẤM CÔNG'
+  ? 'success' : status === 'VẮNG' ? 'danger' : 'warning';
+
+function RevenueTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+  return <div className="bm-chart-tooltip"><span>{point.fullLabel}</span><strong>{money(point.value)}</strong></div>;
+}
+
+function RevenueChart({ series, chartKey, hasRevenue }) {
+  if (!series.length || !hasRevenue) return <p className="bm-chart-empty">Chưa có doanh thu trong kỳ.</p>;
+  return <div className="bm-revenue-chart" role="img" aria-label="Biểu đồ doanh thu theo kỳ">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart key={chartKey} data={series} margin={{ top: 12, right: 14, left: 4, bottom: 3 }}>
+        <defs><linearGradient id="bmRevenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#168b83" stopOpacity={0.23} /><stop offset="95%" stopColor="#168b83" stopOpacity={0.015} /></linearGradient></defs>
+        <CartesianGrid vertical={false} stroke="#e8eef2" strokeDasharray="3 5" />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={20} tick={{ fill: '#758596', fontSize: 10 }} />
+        <YAxis tickFormatter={compactMoney} tickLine={false} axisLine={false} width={48} tick={{ fill: '#758596', fontSize: 10 }} />
+        <Tooltip content={<RevenueTooltip />} cursor={{ stroke: '#9bb9b5', strokeDasharray: '4 4' }} />
+        <Area type="monotone" dataKey="value" name="Doanh thu" stroke="#147b75" strokeWidth={2.6} fill="url(#bmRevenueFill)" activeDot={{ r: 5, strokeWidth: 2, fill: '#fff' }} dot={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
   </div>;
 }
 
-function DataTable({ headings, rows, labels, title, emptyMessage }) {
-  return <div className="bm-table-wrap" role="region" aria-label={`Bảng ${title}, cuộn ngang khi cần`} tabIndex="0"><table className="bm-table"><thead><tr>{headings.map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index} data-label={labels[index]}>{cell}</td>)}</tr>) : <tr><td colSpan={headings.length}>{emptyMessage}</td></tr>}</tbody></table></div>;
+function PeriodControls({ idPrefix, period, onPeriodChange, month, onMonthChange, year, onYearChange, from, to, onFromChange, onToChange, years, today }) {
+  return <div className="bm-period-controls">
+    <label htmlFor={`${idPrefix}-period`}>Xem theo<select id={`${idPrefix}-period`} value={period} onChange={(event) => onPeriodChange(event.target.value)}>
+      <option value="MONTH">Tháng</option><option value="YEAR">Năm</option><option value="RANGE">Khoảng ngày</option>
+    </select></label>
+    {period === 'MONTH' && <>
+      <label htmlFor={`${idPrefix}-month`}>Tháng<select id={`${idPrefix}-month`} value={month} onChange={(event) => onMonthChange(event.target.value)}>{months.map((name, index) => <option key={name} value={String(index + 1).padStart(2, '0')}>{name}</option>)}</select></label>
+      <label htmlFor={`${idPrefix}-year`}>Năm<select id={`${idPrefix}-year`} value={year} onChange={(event) => onYearChange(event.target.value)}>{years.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+    </>}
+    {period === 'YEAR' && <label htmlFor={`${idPrefix}-year`}>Năm<select id={`${idPrefix}-year`} value={year} onChange={(event) => onYearChange(event.target.value)}>{years.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>}
+    {period === 'RANGE' && <>
+      <label htmlFor={`${idPrefix}-from`}>Từ ngày<input id={`${idPrefix}-from`} type="date" value={from} max={today} onChange={(event) => { if (event.target.value) onFromChange(event.target.value); }} /></label>
+      <label htmlFor={`${idPrefix}-to`}>Đến ngày<input id={`${idPrefix}-to`} type="date" value={to} min={from} max={today} onChange={(event) => { if (event.target.value) onToChange(event.target.value); }} /></label>
+    </>}
+  </div>;
 }
 
-export default function BranchOverviewDashboard({ user, onNavigate }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const today = todayVN();
-  const period = searchParams.get('period') || (searchParams.has('from') || searchParams.has('to') ? 'custom' : 'month');
-  const defaultRange = periodBounds(periodIds.includes(period) && period !== 'custom' ? period : 'month', today, today);
-  const from = searchParams.get('from') || (!searchParams.has('from') && !searchParams.has('to') ? defaultRange.from : '');
-  const to = searchParams.get('to') || (!searchParams.has('from') && !searchParams.has('to') ? defaultRange.to : '');
-  const [draftFrom, setDraftFrom] = useState(from);
-  const [draftTo, setDraftTo] = useState(to);
-  const [request, setRequest] = useState({ key: '', status: 'loading', data: null, error: '' });
-  const [retry, setRetry] = useState(0);
-  // BR-163 / MSG106: bộ lọc ngày bắt đầu phải bằng hoặc trước ngày kết thúc.
-  const filterError = !user.branchId ? 'Chưa có cơ sở được phân công để xem tổng quan.'
-    : !periodIds.includes(period) ? 'Kỳ lọc không hợp lệ.'
-    : !validDate(from) || !validDate(to) ? 'Ngày lọc không hợp lệ. Vui lòng chọn lại Từ ngày và Đến ngày.'
-      : from > to ? 'Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.'
-        : to > today ? 'Không thể chọn ngày trong tương lai.'
-          : Math.round((dateOf(to) - dateOf(from)) / 86400000) >= 366 ? 'Khoảng lọc tối đa 366 ngày.'
-            : period !== 'custom' && (periodBounds(period, from, today).from !== from || periodBounds(period, from, today).to !== to) ? 'Ngày trên URL không khớp với kỳ đã chọn.' : '';
-  const requestKey = `${user.branchId}|${from}|${to}`;
-  const data = !filterError && request.key === requestKey && request.status === 'ready' ? request.data : null;
-  const loading = !filterError && (!data && (request.key !== requestKey || request.status === 'loading'));
-  const error = !filterError && request.key === requestKey && request.status === 'error' ? request.error : '';
+function DataTable({ headings, rows, labels }) {
+  return <div className="bm-table-wrap"><table className="bm-table"><thead><tr>{headings.map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={index} data-label={labels[index]}>{cell}</td>)}</tr>) : <tr><td colSpan={headings.length}>Chưa có dữ liệu cho kỳ báo cáo này.</td></tr>}</tbody></table></div>;
+}
+
+export default function BranchOverviewDashboard({ user }) {
+  const today = todayDate();
+  const initialMonth = currentMonth();
+  const [scopePeriod, setScopePeriod] = useState('MONTH');
+  const [scopeMonth, setScopeMonth] = useState(initialMonth.slice(5, 7));
+  const [scopeYear, setScopeYear] = useState(initialMonth.slice(0, 4));
+  const [scopeFrom, setScopeFrom] = useState(`${initialMonth}-01`);
+  const [scopeTo, setScopeTo] = useState(today);
+  const [chartPeriod, setChartPeriod] = useState('MONTH');
+  const [chartMonth, setChartMonth] = useState(initialMonth.slice(5, 7));
+  const [chartYear, setChartYear] = useState(initialMonth.slice(0, 4));
+  const [chartFrom, setChartFrom] = useState(`${initialMonth}-01`);
+  const [chartTo, setChartTo] = useState(today);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const currentYear = today.slice(0, 4);
+  const availableYears = Array.from({ length: Math.max(1, Number(currentYear) - 2019) }, (_, index) => String(Number(currentYear) - index));
+  const reportRange = selectedRange(scopePeriod, scopeMonth, scopeYear, scopeFrom, scopeTo, today);
+  const chartRange = selectedRange(chartPeriod, chartMonth, chartYear, chartFrom, chartTo, today);
+  const reportRangeLabel = rangeLabel(scopePeriod, scopeMonth, scopeYear, reportRange.from, reportRange.to);
+  const chartRangeLabel = rangeLabel(chartPeriod, chartMonth, chartYear, chartRange.from, chartRange.to);
+  const revenueDate = chartPeriod === 'MONTH' ? `${chartYear}-${chartMonth}` : chartPeriod === 'YEAR' ? chartYear : undefined;
   useEffect(() => {
-    if (!searchParams.has('period') || (!searchParams.has('from') && !searchParams.has('to'))) {
-      const next = new URLSearchParams(searchParams);
-      next.set('period', period);
-      if (!next.has('from') && !next.has('to')) { next.set('from', from); next.set('to', to); }
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, setSearchParams, period, from, to]);
-  useEffect(() => { setDraftFrom(from); setDraftTo(to); }, [from, to]);
-  useEffect(() => {
-    if (filterError || !user.branchId) return undefined;
     let active = true;
-    setRequest({ key: requestKey, status: 'loading', data: null, error: '' });
-    api.get('/branch-management/dashboard', { params: { from, to }, headers: { 'X-GCMB-Branch-Id': user.branchId } })
-      .then(({ data: result }) => {
-        if (!active) return;
-        if (result.from !== from || result.to !== to || String(result.result?.id) !== String(user.branchId)) throw new Error('Dữ liệu trả về không khớp kỳ hoặc cơ sở đã chọn.');
-        setRequest({ key: requestKey, status: 'ready', data: result, error: '' });
-      })
-      .catch((cause) => { if (active) setRequest({ key: requestKey, status: 'error', data: null, error: cause.response?.data?.detail || cause.response?.data?.message || cause.message || 'Không tải được dữ liệu cơ sở.' }); });
+    setLoading(true); setError('');
+    const month = reportRange.from.slice(0, 7);
+    const params = {
+      month,
+      scopePeriod,
+      scopeFrom: reportRange.from,
+      scopeTo: reportRange.to,
+      revenuePeriod: chartPeriod,
+      revenueDate,
+      ...(chartPeriod === 'RANGE' ? { revenueFrom: chartRange.from, revenueTo: chartRange.to } : {}),
+    };
+    api.get('/branch-management/dashboard', { params, headers: { 'X-GCMB-Branch-Id': user.branchId } })
+      .then(({ data: result }) => { if (active) setData(result); })
+      .catch((cause) => { if (active) setError(cause.response?.data?.detail || cause.response?.data?.message || 'Không tải được dữ liệu cơ sở.'); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [user.branchId, from, to, requestKey, filterError, retry]);
-  const selectRange = (nextPeriod, range) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('period', nextPeriod); next.set('from', range.from); next.set('to', range.to);
-    setSearchParams(next);
-  };
-  const applyCustom = (event) => { event.preventDefault(); selectRange('custom', { from: draftFrom, to: draftTo }); };
-  const nextRange = !filterError ? shiftPeriod(period, from, to, 1, today) : null;
-  const canNext = !!nextRange && nextRange.from <= today && (nextRange.from !== from || nextRange.to !== to);
-  const rangeLabel = validDate(from) && validDate(to) ? `${displayDate(from)}–${displayDate(to)}` : 'kỳ không hợp lệ';
+  }, [user.branchId, scopePeriod, reportRange.from, reportRange.to, chartPeriod, chartRange.from, chartRange.to, revenueDate]);
   const result = data?.result || {};
   const ops = data?.operations || {};
-  // BR-177: cơ sở tạm ngừng vẫn xem được lịch sử, nhưng các đường tác nghiệp chỉ để xem.
-  const readOnly = user.readOnly || result.status === 'SUSPENDED';
-  const branchName = data?.result?.name || user.branchName || 'Cơ sở đang quản lý';
-  const year = from.slice(0, 4);
-  const month = Number(from.slice(5, 7));
-  const periodTitle = !validDate(from) ? 'Kỳ chưa hợp lệ' : period === 'month' ? `Tháng ${month}/${year}` : period === 'quarter' ? `Quý ${Math.ceil(month / 3)}/${year}`
-    : period === 'year' ? `Năm ${year}` : period === 'week' ? 'Tuần' : period === 'day' ? 'Ngày' : 'Khoảng tùy chỉnh';
-  const periodScope = `${branchName} · ${periodTitle} · ${rangeLabel}`;
-  const currentScope = `${branchName} · hiện tại, không theo kỳ lọc`;
   const occupied = Number(ops.occupiedRooms) || 0;
   const maintenance = Number(ops.maintenanceRooms) || 0;
   const totalRooms = Number(ops.roomCount) || 0;
-  const hasRoomStatus = [ops.roomCount, ops.occupiedRooms, ops.bookedRooms, ops.maintenanceRooms].every((value) => value != null);
-  const revenue = result.revenue == null ? null : Number(result.revenue);
   const booked = Number(ops.bookedRooms) || 0;
-  const dailyRows = Array.isArray(data?.dailyRevenue) ? data.dailyRevenue : null;
-  const revenueByDate = new Map((dailyRows || []).map((row) => [localDate(row.date), Number(row.revenue) || 0]));
-  const dailySeries = dailyRows?.length ? Array.from({ length: Math.round((dateOf(to) - dateOf(from)) / 86400000) + 1 }, (_, index) => {
-    const date = addDays(from, index);
-    return { label: `${date.slice(8, 10)}/${date.slice(5, 7)}`, value: revenueByDate.get(date) || 0 };
-  }) : [];
-  const billCount = dailyRows?.reduce((sum, row) => sum + Number(row.billCount || 0), 0) ?? null;
+  const revenueRows = data?.dailyRevenue || [];
+  const revenueByDate = new Map(revenueRows.map((row) => [localDate(row.date), Number(row.revenue) || 0]));
+  const showMonthlyBuckets = chartPeriod === 'YEAR' || (chartPeriod === 'RANGE' && daysBetween(chartRange.from, chartRange.to) > 62);
+  const chartSeries = (() => {
+    if (showMonthlyBuckets) {
+      const totals = new Map();
+      revenueByDate.forEach((value, date) => {
+        const month = date.slice(0, 7);
+        totals.set(month, (totals.get(month) || 0) + value);
+      });
+      const monthsInRange = [];
+      let year = Number(chartRange.from.slice(0, 4));
+      let month = Number(chartRange.from.slice(5, 7));
+      const lastKey = chartRange.to.slice(0, 7);
+      while (`${year}-${String(month).padStart(2, '0')}` <= lastKey) {
+        const key = `${year}-${String(month).padStart(2, '0')}`;
+        monthsInRange.push({ label: `${key.slice(5, 7)}/${key.slice(2, 4)}`, fullLabel: `${months[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`, value: totals.get(key) || 0 });
+        month += 1;
+        if (month > 12) { year += 1; month = 1; }
+      }
+      return monthsInRange;
+    }
+    const resultRows = [];
+    for (let cursor = chartRange.from; cursor <= chartRange.to; cursor = addDays(cursor, 1)) {
+      const sameMonth = chartRange.from.slice(0, 7) === chartRange.to.slice(0, 7);
+      resultRows.push({ label: sameMonth ? cursor.slice(8, 10) : `${cursor.slice(8, 10)}/${cursor.slice(5, 7)}`, fullLabel: dateLabel(cursor), value: revenueByDate.get(cursor) || 0 });
+    }
+    return resultRows;
+  })();
   const rooms = { occupied, maintenance, booked, vacant: Math.max(0, totalRooms - occupied - maintenance - booked) };
-  const topItems = (data?.topItems || []).map((row) => [row.name, Number(row.quantity) || 0]);
   const roomTypes = (data?.roomTypePerformance || []).map((row) => [row.name, row.count, money(row.revenue), `${Math.round(Number(row.minutes) || 0)} phút`]);
-  const inventory = (data?.lowStockItems || []).map((row) => [row.name, `${row.quantity} ${row.unit}`, `${row.minimum} ${row.unit}`, 'Dưới định mức']);
-  const incidents = (data?.openIncidents || []).map((row) => [row.assetCode || row.id, row.assetName, row.location, row.status, localDate(row.createdAt)]);
-  const shifts = (data?.todayShifts || []).map((row) => [localDate(row.date).split('-').reverse().join('/'), `${shiftNames[row.shift] || row.shift} · ${localTime(row.startsAt)}–${localTime(row.endsAt)}`, row.employee, row.attendance]);
-  const fnbRevenue = dailyRows?.reduce((sum, row) => sum + Number(row.fnbRevenue || 0), 0) ?? null;
+  const inventory = data?.lowStockItems || [];
+  const incidents = data?.openIncidents || [];
+  const shifts = (data?.todayShifts || []).map((row) => {
+    const date = localDate(row.date);
+    return { ...row, date, dateLabel: date.split('-').reverse().join('/'), dayLabel: date === today ? 'Hôm nay' : 'Ngày mai', shiftLabel: shiftNames[row.shift] || row.shift };
+  });
+  const reportSummary = data?.reportSummary || {};
+  const chartSummary = data?.revenueSummary || {};
+  const fnbRevenue = Number(reportSummary.fnbRevenue ?? result.fnbRevenue) || 0;
+  const selectedRevenue = Number(reportSummary.revenue ?? result.revenue) || 0;
+  const selectedTransactions = Number(reportSummary.billCount ?? result.billCount) || 0;
   const hourly = new Map((data?.hourlyOccupancy || []).map((row) => [`${row.weekday}-${row.hour}`, Number(row.occupied_room_hours) || 0]));
   const peakMax = Math.max(0, ...hourly.values());
   const heatLevel = (weekday, hour) => {
@@ -166,82 +205,84 @@ export default function BranchOverviewDashboard({ user, onNavigate }) {
     return value === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil(value / peakMax * 4)));
   };
   const dataView = {
+    kpis: { revenue: selectedRevenue, transactions: selectedTransactions, occupied, roomTotal: totalRooms, fnbRevenue },
     rooms,
-    revenue: dailySeries,
-    peakHours: hourly, topItems, roomTypes, inventory, incidents, shifts,
-    tasks: [
-      ...(maintenance > 0 ? [['Phòng đang bảo trì', `${maintenance} phòng cần theo dõi`, 'Phòng']] : []),
-      ...(Number(ops.openIncidents) > 0 ? [['Sự cố thiết bị đang mở', `${ops.openIncidents} sự cố cần xử lý`, 'Thiết bị & sự cố']] : []),
-      ...(Number(ops.lowStockItems) > 0 ? [['Mặt hàng tồn thấp', `${ops.lowStockItems} mặt hàng dưới định mức`, 'Kho hàng']] : []),
-    ],
+    revenue: chartSeries,
+    peakHours: hourly, roomTypes, shifts,
   };
-  // BR-102/103/104/105/107/108/211: dùng các giá trị cùng kỳ do API trả; cọc và CAPEX không nhập vào lợi nhuận vận hành.
-  const hasRevenue = revenue != null && revenue > 0;
-  const margin = hasRevenue ? percent(result.margin) : '—';
-  const hasCapacity = result.sellableRoomHours != null && Number(result.sellableRoomHours) > 0;
-  const occupancy = hasCapacity ? percent(result.occupancyRate) : '—';
-  const financialKpis = [
-    ['Doanh thu hóa đơn', money(result.revenue), `Hóa đơn hoàn tất · ${rangeLabel}${result.revenue == null ? ' · API chưa cung cấp số liệu' : ''}`],
-    ['Chi phí vận hành và lương', money(result.expenses), `Chi phí vận hành và lương theo ngày thanh toán · ${rangeLabel}${result.expenses == null ? ' · API chưa cung cấp số liệu' : ''}`],
-    ['Lợi nhuận vận hành', money(result.profit), `${result.profit != null && Number(result.profit) < 0 ? 'Lỗ trong kỳ · ' : ''}doanh thu hóa đơn trừ chi phí vận hành và lương · ${rangeLabel}${result.profit == null ? ' · API chưa cung cấp số liệu' : ''} · Biên lợi nhuận: ${margin}${!hasRevenue ? ' (doanh thu bằng 0 hoặc chưa có)' : result.margin == null ? ' (API chưa cung cấp)' : ''}`],
-    ['Lấp đầy ước tính', occupancy, `${hasCapacity ? 'Giờ sử dụng / giờ phòng khả dụng ước tính theo hiện trạng' : '— vì không có phòng khả dụng hoặc API chưa cung cấp mẫu số'} · ${rangeLabel}${hasCapacity && result.occupancyRate == null ? ' · API chưa cung cấp tỷ lệ' : ''}`],
-  ];
+  if (!data) return <main className="bm-dashboard" aria-live="polite"><h1>Tổng quan cơ sở</h1>{loading && <p>Đang tải dữ liệu…</p>}{error && <p role="alert">{error}</p>}</main>;
+  const { kpis } = dataView;
   const total = rooms.vacant + rooms.booked + rooms.occupied + rooms.maintenance;
   const occupiedShare = total ? rooms.occupied / total * 100 : 0;
   const slices = [rooms.vacant, rooms.booked, rooms.occupied, rooms.maintenance].map((n) => n / Math.max(1, total) * 100);
-  const gradient = total ? `conic-gradient(#16855b 0 ${slices[0]}%, #2586a0 ${slices[0]}% ${slices[0] + slices[1]}%, #a91669 ${slices[0] + slices[1]}% ${slices[0] + slices[1] + slices[2]}%, #bf6744 ${slices[0] + slices[1] + slices[2]}% 100%)` : 'var(--gcmb-color-bg)';
-  const itemMax = Math.max(1, ...dataView.topItems.map(([, amount]) => amount));
+  const gradient = `conic-gradient(#16855b 0 ${slices[0]}%, #2586a0 ${slices[0]}% ${slices[0] + slices[1]}%, #a91669 ${slices[0] + slices[1]}% ${slices[0] + slices[1] + slices[2]}%, #bf6744 ${slices[0] + slices[1] + slices[2]}% 100%)`;
   const shiftRows = dataView.shifts;
   return <main className="bm-dashboard" aria-labelledby="bm-title">
-    <div className="bm-heading"><div><h1 id="bm-title">Tổng quan cơ sở</h1><p>{branchName}{data?.result?.status === 'SUSPENDED' ? ' · Tạm ngừng (xem lịch sử)' : ''} · {periodTitle} · {rangeLabel}</p></div></div>
-    <div className="bm-filter" aria-label="Bộ lọc kỳ báo cáo">
-      <div className="bm-filter-presets">{[['day', 'Hôm nay'], ['week', 'Tuần này'], ['month', 'Tháng này'], ['quarter', 'Quý này'], ['year', 'Năm nay']].map(([id, label]) => { const current = periodBounds(id, today, today); const selected = period === id && from === current.from && to === current.to; return <button key={id} type="button" className={selected ? 'is-active' : ''} aria-pressed={selected} onClick={() => selectRange(id, current)}>{label}</button>; })}</div>
-      <div className="bm-filter-step"><button type="button" disabled={!!filterError} onClick={() => selectRange(period, shiftPeriod(period, from, to, -1, today))}>← Kỳ trước</button><strong>{periodNames[period] || 'Kỳ'} · {rangeLabel}</strong><button type="button" disabled={!canNext} onClick={() => selectRange(period, nextRange)}>Kỳ sau →</button></div>
-      <form className="bm-filter-dates" onSubmit={applyCustom}><label>Từ ngày <input type="date" value={draftFrom} max={today} onChange={(event) => setDraftFrom(event.target.value)} /></label><label>Đến ngày <input type="date" value={draftTo} max={today} onChange={(event) => setDraftTo(event.target.value)} /></label><button type="submit">Áp dụng</button></form>
-    </div>
-    {filterError && <p role="alert" className="bm-message">{filterError}</p>}
-    {loading && <p role="status" className="bm-message">Đang tải dữ liệu cho {user.branchName || 'cơ sở đang quản lý'} · {rangeLabel}…</p>}
-    {error && <div className="bm-message" role="alert"><p>Không tải được dữ liệu cơ sở: {error}</p><button type="button" onClick={() => setRetry((count) => count + 1)}>Thử lại</button></div>}
-    {data && <>
-    <section className="bm-section" aria-labelledby="bm-financial-title">
-      <div className="bm-section-heading"><h2 id="bm-financial-title">Kết quả kinh doanh trong kỳ</h2><p>{periodScope} · chi phí theo ngày thanh toán</p></div>
-      {revenue === 0 && billCount === 0 && <p className="bm-message">Không có hóa đơn hoàn tất trong kỳ. Chi phí phát sinh, nếu có, vẫn được tính vào lợi nhuận.</p>}
-      <div className="bm-kpis bm-kpis-primary">{financialKpis.map(([label, value, note]) =>
-        <article className={`bm-kpi${label === 'Lợi nhuận vận hành' && result.profit != null && Number(result.profit) < 0 ? ' is-negative' : ''}`} key={label} aria-label={`${label} · ${periodScope}`}>
-          <h3>{label}</h3><strong>{value}</strong><small>{note}</small>
-        </article>)}</div>
-      <div className="bm-support" aria-label="Chỉ số hỗ trợ trong kỳ"><div><span>Tổng bill hoàn tất</span><strong>{billCount ?? '—'}</strong><small>{rangeLabel}{billCount == null ? ' · API chưa cung cấp chi tiết theo ngày' : ''}</small></div><div><span>Doanh thu F&amp;B trong hóa đơn</span><strong>{money(fnbRevenue)}</strong><small>{rangeLabel} · đã nằm trong doanh thu hóa đơn{fnbRevenue == null ? ' · API chưa cung cấp chi tiết theo ngày' : ''}</small></div></div>
+    <div className="bm-heading"><div><span className="bm-eyebrow">QUẢN TRỊ VẬN HÀNH</span><h1 id="bm-title">Tổng quan cơ sở</h1><p>{user.branchName || 'Cơ sở đang quản lý'} · {reportRangeLabel}</p></div><span className="bm-live"><i /> Dữ liệu trực tiếp</span></div>
+    {error && <p role="alert">{error}</p>}{loading && <p role="status">Đang cập nhật…</p>}
+    <section className="bm-report-filter" aria-label="Phạm vi báo cáo tổng quan">
+      <div className="bm-filter-summary"><span>PHẠM VI BÁO CÁO</span><strong>{reportRangeLabel}</strong></div>
+      <PeriodControls idPrefix="bm-scope" period={scopePeriod} onPeriodChange={setScopePeriod}
+        month={scopeMonth} onMonthChange={setScopeMonth} year={scopeYear} onYearChange={setScopeYear}
+        from={scopeFrom} to={scopeTo} onFromChange={(value) => adjustRangeStart(value, setScopeFrom, scopeTo, setScopeTo)}
+        onToChange={(value) => adjustRangeEnd(value, scopeFrom, setScopeFrom, setScopeTo)} years={availableYears} today={today} />
     </section>
+    <div className="bm-kpis" aria-label="Các chỉ số vận hành chính">{[
+      ['revenue', 'Doanh thu', money(kpis.revenue), reportRangeLabel], ['transactions', 'Tổng giao dịch', new Intl.NumberFormat('vi-VN').format(kpis.transactions), 'Hóa đơn đã hoàn tất'],
+      ['rooms', 'Phòng đang sử dụng', `${kpis.occupied} / ${kpis.roomTotal}`, 'Trạng thái phòng hiện tại'], ['fnb', 'Doanh thu F&B', money(kpis.fnbRevenue), reportRangeLabel],
+      ['inventory', 'Mặt hàng tồn thấp', new Intl.NumberFormat('vi-VN').format(ops.lowStockItems ?? 0), 'Dưới định mức tối thiểu'],
+      ['staff', 'Nhân viên đi làm hôm nay', `${ops.staffPresent ?? '—'} / ${ops.staffTotal ?? '—'}`, 'Đã vào ca / được phân ca'],
+    ].map(([tone, label, value, note]) => <article className={`bm-kpi is-${tone}`} key={label}>
+      <span className="bm-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{tone === 'revenue' ? <><path d="M4 19V5m0 14h16"/><path d="m7 15 4-4 3 2 5-6"/></> : tone === 'transactions' ? <><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6m-6 4h6"/></> : tone === 'rooms' ? <><path d="M3 20V8l9-5 9 5v12"/><path d="M7 20v-6h10v6M8 9h.01M12 9h.01M16 9h.01"/></> : tone === 'fnb' ? <><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18m8-18v18m0-18c3 2 4 5 4 9h-4"/></> : tone === 'inventory' ? <><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7m-9 4v10"/></> : <><circle cx="9" cy="8" r="4"/><path d="M2 21v-2a7 7 0 0 1 14 0v2m3-13a4 4 0 0 1 0 8m3 5v-2a7 7 0 0 0-3-5.7"/></>}</svg></span>
+      <div className="bm-kpi-copy"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+    </article>)}</div>
 
-    <section className="bm-section" aria-labelledby="bm-operations-title">
-      <div className="bm-section-heading"><h2 id="bm-operations-title">Việc cần xử lý và vận hành hiện tại</h2><p>{currentScope}; nhân sự theo hôm nay</p></div>
-      <div className="bm-grid bm-grid-lead">
-      <Panel title="Việc cần làm" note={readOnly ? 'Cơ sở tạm ngừng · chỉ xem trạng thái hiện tại' : 'Từ trạng thái vận hành hiện tại, không theo kỳ lọc'} className="bm-tasks-panel">
-        {dataView.tasks.length ? <ul className="bm-tasks">{dataView.tasks.map(([title, detail, destination]) => <li key={title}><span className="bm-task-mark" aria-hidden="true" /><div><strong>{title}</strong><small>{detail}</small></div><button type="button" aria-label={`${readOnly ? 'Xem' : 'Mở'} ${destination}${readOnly ? '' : ` để xử lý ${title.toLowerCase()}`}`} onClick={() => onNavigate?.(destination, destination === 'Thiết bị & sự cố' ? 'incidents' : undefined)}>{readOnly ? 'Xem' : 'Mở'} {destination}</button></li>)}</ul> : <p className="bm-empty">Không có phòng bảo trì, sự cố đang mở hoặc mặt hàng tồn thấp.</p>}
-      </Panel>
-      <Panel title="Trạng thái phòng hiện tại" note={currentScope} className="bm-room-panel">
-        {hasRoomStatus ? <div className="bm-room-content"><div className="bm-donut" style={{ '--bm-donut': gradient }} role="img" aria-label={total ? `Đang sử dụng ${rooms.occupied} trên ${total} phòng hiện tại` : 'Chưa có phòng hoạt động hiện tại'}><div><strong>{total ? `${Math.round(occupiedShare)}%` : '—'}</strong><span>{total ? 'đang dùng' : 'chưa có phòng'}</span></div></div>
+    <div className="bm-grid bm-grid-lead">
+      <Panel title="Trạng thái phòng" note={`${total} phòng trong cơ sở`} className="bm-room-panel">
+        <div className="bm-room-content"><div className="bm-donut" style={{ '--bm-donut': gradient }} role="img" aria-label={`Đang sử dụng ${rooms.occupied} trên ${total} phòng`}><div><strong>{Math.round(occupiedShare)}%</strong><span>đang dùng</span></div></div>
           <ul className="bm-legend">{[['Trống', rooms.vacant, 'vacant'], ['Đã đặt', rooms.booked, 'booked'], ['Đang sử dụng', rooms.occupied, 'occupied'], ['Bảo trì', rooms.maintenance, 'maintenance']].map(([name, count, tone]) => <li key={name}><i className={`is-${tone}`} /><span>{name}</span><strong>{count == null ? '—' : count}</strong></li>)}</ul></div>
-          : <p className="bm-empty">— Không có dữ liệu trạng thái phòng hiện tại từ API.</p>}
       </Panel>
-      </div>
-      <div className="bm-support bm-support-current" aria-label="Chỉ số vận hành hỗ trợ"><div><span>Mặt hàng tồn thấp hiện tại</span><strong>{ops.lowStockItems ?? '—'}</strong><small>Dưới định mức tối thiểu</small></div><div><span>Nhân viên đi làm hôm nay</span><strong>{ops.staffPresent ?? '—'} / {ops.staffTotal ?? '—'}</strong><small>Theo chấm công hôm nay</small></div></div>
-      <div className="bm-grid bm-grid-tables">
-        <Panel title="Tồn kho cần chú ý" note={currentScope}><DataTable title="tồn kho cần chú ý" headings={['Mặt hàng', 'Tồn hiện tại', 'Mức tối thiểu', '']} labels={['Mặt hàng', 'Tồn hiện tại', 'Mức tối thiểu', 'Trạng thái']} rows={dataView.inventory} emptyMessage="Không có mặt hàng tồn thấp hiện tại." /></Panel>
-        <Panel title="Sự cố thiết bị đang mở" note={currentScope}><DataTable title="sự cố thiết bị" headings={['Mã sự cố', 'Thiết bị', 'Vị trí', 'Trạng thái', 'Tạo lúc']} labels={['Mã sự cố', 'Thiết bị', 'Vị trí', 'Trạng thái', 'Tạo lúc']} rows={dataView.incidents} emptyMessage="Không có sự cố thiết bị đang mở." /></Panel>
-        <Panel title="Ca làm hôm nay và ngày mai" note={`${branchName} · lịch hôm nay và ngày mai, không theo kỳ lọc`}><DataTable title="ca làm hôm nay và ngày mai" headings={['Ngày', 'Khung giờ', 'Nhân viên', 'Chấm công']} labels={['Ngày', 'Khung giờ', 'Nhân viên', 'Chấm công']} rows={shiftRows} emptyMessage="Không có ca làm hôm nay và ngày mai." /></Panel>
-      </div>
-    </section>
-
-    <section className="bm-section" aria-labelledby="bm-analysis-title">
-      <div className="bm-section-heading"><h2 id="bm-analysis-title">Xu hướng và phân tích trong kỳ</h2><p>{periodScope}</p></div>
-      <div className="bm-grid bm-grid-lead">
-        <Panel title={`Doanh thu hóa đơn theo ngày · ${periodTitle}`} note={`${branchName} · ${rangeLabel}`} className="bm-revenue-panel">{dailyRows ? <RevenueChart series={dataView.revenue} label={`Doanh thu hóa đơn theo ngày, ${periodScope}`} /> : <p className="bm-empty">— API chưa cung cấp doanh thu theo ngày.</p>}</Panel>
-        <Panel title={`Giờ-phòng sử dụng theo khung giờ · ${periodTitle}`} note={`${branchName} · tổng giờ-phòng theo thứ và giờ · ${rangeLabel}`} className="bm-heat-panel">{Array.isArray(data.hourlyOccupancy) && data.hourlyOccupancy.length ? <><div className="bm-heatmap" aria-label={`Giờ-phòng sử dụng theo khung giờ · ${periodScope}`}><span className="bm-heat-empty" />{days.map((day) => <span className="bm-heat-day" key={day}>{day}</span>)}{Array.from({ length: 12 }, (_, index) => <div className="bm-heat-row" key={index}><span>{`${String(index + 8).padStart(2, '0')}:00`}</span>{days.map((day, dayIndex) => { const value = hourly.get(`${dayIndex + 1}-${index + 8}`) || 0; return <i key={day} className={`heat-${heatLevel(dayIndex + 1, index + 8)}`} title={`${day} ${String(index + 8).padStart(2, '0')}:00 · ${value} giờ-phòng`} />; })}</div>)}</div><div className="bm-heat-foot"><span>Ít</span>{[0,1,2,3,4].map((level) => <i key={level} className={`heat-${level}`} />)}<span>Nhiều</span></div></> : <p className="bm-empty">{Array.isArray(data.hourlyOccupancy) ? 'Không có giờ-phòng sử dụng trong kỳ.' : '— API chưa cung cấp khung giờ sử dụng phòng.'}</p>}</Panel>
-        <Panel title={`Top 10 món F&B bán chạy · ${periodTitle}`} note={`${branchName} · số lượng bán · ${rangeLabel}`} className="bm-items-panel">{dataView.topItems.length ? <ol className="bm-bars">{dataView.topItems.map(([name, count], index) => <li key={name}><span className="bm-rank">{String(index + 1).padStart(2, '0')}</span><span className="bm-item-name">{name}</span><span className="bm-bar-track"><i style={{ width: `${count / itemMax * 100}%` }} /></span><strong>{count}</strong></li>)}</ol> : <p className="bm-empty">Không có món F&amp;B đã bán trong kỳ.</p>}</Panel>
-        <Panel title={`Hiệu suất theo hạng phòng · ${periodTitle}`} note={`${branchName} · lượt sử dụng kết thúc và hóa đơn hoàn tất · ${rangeLabel}`} className="bm-roomtype-panel"><DataTable title="hiệu suất theo hạng phòng" headings={['Hạng phòng', 'Số lượt', 'Doanh thu phòng', 'Thời gian dùng TB']} labels={['Hạng phòng', 'Số lượt', 'Doanh thu phòng', 'Thời gian dùng TB']} rows={dataView.roomTypes} emptyMessage="Không có lượt sử dụng phòng kết thúc trong kỳ." /></Panel>
-      </div>
-    </section>
-    </>}
+      <Panel title="Xu hướng doanh thu" note={`Doanh thu vận hành · ${chartRangeLabel}`} className="bm-revenue-panel">
+        <div className="bm-revenue-controls">
+          <PeriodControls idPrefix="bm-chart" period={chartPeriod} onPeriodChange={setChartPeriod}
+            month={chartMonth} onMonthChange={setChartMonth} year={chartYear} onYearChange={setChartYear}
+            from={chartFrom} to={chartTo} onFromChange={(value) => adjustRangeStart(value, setChartFrom, chartTo, setChartTo)}
+            onToChange={(value) => adjustRangeEnd(value, chartFrom, setChartFrom, setChartTo)} years={availableYears} today={today} />
+        </div>
+        <div className="bm-revenue-total"><span>Tổng doanh thu</span><strong>{money(chartSummary.revenue || 0)}</strong><small>{chartRangeLabel}</small></div>
+        <RevenueChart series={dataView.revenue} chartKey={`${chartPeriod}-${chartRange.from}-${chartRange.to}`} hasRevenue={revenueRows.length > 0} />
+      </Panel>
+      <Panel title="Khung giờ cao điểm" note="Số lượt phòng được sử dụng theo thứ và giờ trong kỳ" className="bm-heat-panel"><div className="bm-heatmap" aria-label="Lượt sử dụng phòng theo khung giờ"><span className="bm-heat-empty" />{days.map((day) => <span className="bm-heat-day" key={day}>{day}</span>)}{Array.from({ length: 12 }, (_, index) => <div className="bm-heat-row" key={index}><span>{`${String(index + 8).padStart(2, '0')}:00`}</span>{days.map((day, dayIndex) => { const value = hourly.get(`${dayIndex + 1}-${index + 8}`) || 0; return <i key={day} className={`heat-${heatLevel(dayIndex + 1, index + 8)}`} title={`${day} ${String(index + 8).padStart(2, '0')}:00 · ${value} lượt phòng`} />; })}</div>)}</div><div className="bm-heat-foot"><span>Ít</span>{[0,1,2,3,4].map((level) => <i key={level} className={`heat-${level}`} />)}<span>Nhiều</span></div></Panel>
+    </div>
+    <div className="bm-grid bm-grid-tables">
+      <Panel title="Hiệu suất theo hạng phòng" note="Số liệu các lượt sử dụng kết thúc trong kỳ"><DataTable headings={['Hạng phòng', 'Số lượt', 'Doanh thu', 'Thời gian dùng TB']} labels={['Hạng phòng', 'Số lượt', 'Doanh thu', 'Thời gian dùng TB']} rows={dataView.roomTypes} /></Panel>
+      <Panel title="Tồn kho cần chú ý" note="Mặt hàng đang dưới định mức tối thiểu" className="bm-inventory-panel" trailing={<span className="bm-panel-count">{inventory.length} mặt hàng</span>}>
+        {inventory.length ? <ul className="bm-attention-list">{inventory.map((item) => {
+          const quantity = Number(item.quantity) || 0;
+          const minimum = Number(item.minimum) || 0;
+          const level = minimum ? Math.max(0, Math.min(100, quantity / minimum * 100)) : 0;
+          return <li key={item.id || item.name}>
+            <span className="bm-attention-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2.8 19h18.4L12 3Z"/><path d="M12 9v4m0 3h.01"/></svg></span>
+            <div className="bm-attention-content"><strong>{item.name}</strong><span>Còn {quantity} {item.unit} · Định mức {minimum} {item.unit}</span><div className="bm-stock-track" role="meter" aria-label={`Tồn kho ${item.name}`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={level}><i style={{ width: `${level}%` }} /></div></div>
+            <span className="bm-attention-badge">Cần nhập</span>
+          </li>;
+        })}</ul> : <p className="bm-panel-empty">Không có mặt hàng nào dưới định mức.</p>}
+      </Panel>
+      <Panel title="Sự cố thiết bị" note="Các sự cố đang cần theo dõi" className="bm-incidents-panel" trailing={<span className={`bm-panel-count${incidents.length ? ' is-attention' : ''}`}>{incidents.length} đang mở</span>}>
+        {incidents.length ? <ul className="bm-incident-list">{incidents.slice(0, 6).map((incident) => <li key={incident.id}>
+          <span className={`bm-incident-mark is-${incidentTone(incident.status)}`} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4m0 4h.01M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3l-7.6-13.1a2 2 0 0 0-3.4 0Z"/></svg></span>
+          <div className="bm-incident-copy"><strong>{incident.assetCode || incident.id} · {incident.assetName}</strong><span>{incident.location || 'Chưa có vị trí'} · {localDate(incident.createdAt).split('-').reverse().join('/')}</span></div>
+          <span className={`bm-incident-status is-${incidentTone(incident.status)}`}>{incidentStatus(incident.status)}</span>
+        </li>)}</ul> : <p className="bm-panel-empty is-success">Không có sự cố nào đang mở.</p>}
+      </Panel>
+      <Panel title="Ca làm hôm nay & ngày mai" note="Lịch ca đã xác nhận và tình trạng chấm công" className="bm-shifts-panel" trailing={<span className="bm-panel-count">{shiftRows.length} ca</span>}>
+        {shiftRows.length ? <ul className="bm-shift-list">{shiftRows.map((shift, index) => <li key={`${shift.date}-${shift.shift}-${shift.employee}-${index}`}>
+          <div className="bm-shift-time"><span>{shift.dayLabel}</span><strong>{localTime(shift.startsAt)}<i aria-hidden="true">→</i>{localTime(shift.endsAt)}</strong><small>{shift.dateLabel}</small></div>
+          <div className="bm-shift-person"><strong>{shift.employee}</strong><span>{shiftNames[shift.shift] || shift.shiftLabel}</span></div>
+          <span className={`bm-attendance-status is-${attendanceTone(shift.attendance)}`}>{shift.attendance}</span>
+        </li>)}</ul> : <p className="bm-panel-empty">Chưa có ca làm được xác nhận trong hai ngày tới.</p>}
+      </Panel>
+    </div>
+    <p className="bm-disclaimer">Biểu đồ và bảng hiển thị dữ liệu từ API; các mục chưa được API cung cấp được để trống rõ ràng.</p>
   </main>;
 }
