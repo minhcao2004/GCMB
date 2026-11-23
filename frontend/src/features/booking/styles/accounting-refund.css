@@ -35,7 +35,6 @@
 .accounting-refund-details { min-height: 500px; }
 .accounting-refund-reason p { margin: 0; color: #707d8d; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .accounting-refund-action { padding-top: 13px; }
-.accounting-refund-action .deposit-accounting-note { margin-top: 0; }
 .accounting-refund-confirm { display: grid; grid-template-columns: 16px minmax(0,1fr); align-items: start; gap: 9px; margin: 2px 0 13px; color: #657182; font-size: 10px; line-height: 1.5; cursor: pointer; }
 .accounting-refund-confirm input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--booking-pink); }
 .accounting-refund-action > .booking-button { width: 100%; }
@@ -93,7 +92,6 @@
 .accounting-refund-summary { display: flex; flex-direction: column; gap: 8px; }
 .accounting-refund-summary-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .accounting-refund-summary-heading h2 { margin: 0; color: var(--booking-ink); font-size: 16px; font-weight: 750; }
-.accounting-refund-summary-heading p { margin: 0; color: #536071; font-size: 12px; text-align: right; }
 .accounting-refund-summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .accounting-refund-metric { border: 1px solid #e5e8ed; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); }
 .accounting-refund-metric span { color: #536071; font-size: 13px; }
@@ -153,7 +151,6 @@
 
 @media (max-width: 1199px) {
   .accounting-refund-summary-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .accounting-refund-summary-heading p { text-align: left; }
   .accounting-refund-summary-metrics { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .accounting-refund-controls { align-items: stretch; flex-direction: column; }
   .accounting-refund-filters { width: 100%; }
@@ -223,7 +220,6 @@
 }
 
 .accounting-refund-page .accounting-refund-metric span,
-.accounting-refund-page .accounting-refund-summary-heading p,
 .accounting-refund-page .accounting-refund-search input::placeholder {
   color: var(--gcmb-color-text);
 }

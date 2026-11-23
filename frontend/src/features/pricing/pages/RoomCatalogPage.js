@@ -1,3 +1,4 @@
+import { PaginatedTable, Pagination } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
@@ -325,7 +326,7 @@ export default function RoomCatalogPage() {
             </tr>
           </thead>
           <tbody>
-      {visibleRooms.slice(page * 10, (page + 1) * 10).map(room => <tr key={room.id} className={`${room.id === selectedRoom?.id ? 'highlighted' : ''} ${!room.active ? 'inactive-row' : ''}`} onClick={() => setSelectedRoom(room)}>
+      {visibleRooms.slice(Math.min(page, Math.max(0, Math.ceil(visibleRooms.length / 10) - 1)) * 10, (Math.min(page, Math.max(0, Math.ceil(visibleRooms.length / 10) - 1)) + 1) * 10).map(room => <tr key={room.id} className={`${room.id === selectedRoom?.id ? 'highlighted' : ''} ${!room.active ? 'inactive-row' : ''}`} onClick={() => setSelectedRoom(room)}>
               <td>
                 <strong>{room.code}</strong>
                 <small>{room.name}</small>
@@ -357,7 +358,7 @@ export default function RoomCatalogPage() {
       {visibleRooms.length === 0 && <Empty colSpan={6} />}</tbody>
         </table>
       </div> : tab === 'Giá theo thời gian' ? <div className="catalog-table-scroll">
-        <table className="catalog-table price-table">
+        <PaginatedTable pageSize={10} className="catalog-table price-table">
           <thead>
             <tr>
               <th>Quy tắc</th>
@@ -393,9 +394,9 @@ export default function RoomCatalogPage() {
               </td>
             </tr>)}
       {visibleRules.length === 0 && <Empty colSpan={7} />}</tbody>
-        </table>
+        </PaginatedTable>
       </div> : <div className="catalog-table-scroll">
-        <table className="catalog-table price-table">
+        <PaginatedTable pageSize={5} className="catalog-table price-table">
           <thead>
             <tr>
               <th>Mã / tên combo</th>
@@ -429,12 +430,9 @@ export default function RoomCatalogPage() {
               </td>
             </tr>)}
       {visibleCombos.length === 0 && <Empty colSpan={6} />}</tbody>
-        </table>
+        </PaginatedTable>
       </div>}
-      <div className="catalog-table-footer">
-        <span>{rows.length ? `Hiển thị ${tab === 'Hạng phòng' ? page * 10 + 1 : 1}–${tab === 'Hạng phòng' ? Math.min((page + 1) * 10, rows.length) : rows.length} / ${rows.length} dòng` : 'Không có dữ liệu phù hợp'}</span>
-        <span>{tab === 'Hạng phòng' && <><button disabled={page === 0} onClick={() => setPage(page - 1)}>Trước</button> <span>Trang {page + 1}</span> <button disabled={(page + 1) * 10 >= rows.length} onClick={() => setPage(page + 1)}>Sau</button></>}</span>
-      </div>
+      <div className="catalog-table-footer">{tab === 'Hạng phòng' && <Pagination page={page} pageSize={10} total={rows.length} onPageChange={setPage} label="Phân trang hạng phòng" />}</div>
     </section>
     {tab === 'Hạng phòng' && selectedRoom && <button className="catalog-view-prices" onClick={() => {
       setRoomFilterId(selectedRoom.id);

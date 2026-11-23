@@ -299,7 +299,12 @@ public class StaffService {
             "phone",
             "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
         );
-        String identity = optional(c.identityNumber(), "identityNumber", "Số định danh", 30);
+        String identity = optional(c.identityNumber(), "identityNumber", "Số định danh", 12);
+        if (identity != null && !identity.matches("[0-9]{12}")) throw new AuthFailure(
+            400,
+            "identityNumber",
+            "Số định danh phải gồm đúng 12 chữ số."
+        );
         if (staff.duplicate("code", code, id)) throw new AuthFailure(
             409,
             "code",

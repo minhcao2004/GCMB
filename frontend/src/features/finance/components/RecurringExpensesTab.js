@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import BankNameInput from '../../../shared/components/BankNameInput';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -86,7 +87,7 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
 
     {notifications.length > 0 && <section className="finance-recurring-notices" aria-label="Nhắc hạn chi định kỳ">
       <h3>Nhắc hạn gần đây</h3>
-      <ul>{notifications.map((item) => <li key={item.id}><span className={`finance-recurring-notice-type ${String(item.reminder_type).toLowerCase()}`}>{item.reminder_type === 'BEFORE_DUE' ? 'Sắp đến hạn' : item.reminder_type === 'OVERDUE' ? 'Quá hạn' : 'Đến hạn'}</span><span>{item.message}</span><small>{dateLabel(item.reminder_date)}</small></li>)}</ul>
+      <PaginatedList as="ul" pageSize={5}>{notifications.map((item) => <li key={item.id}><span className={`finance-recurring-notice-type ${String(item.reminder_type).toLowerCase()}`}>{item.reminder_type === 'BEFORE_DUE' ? 'Sắp đến hạn' : item.reminder_type === 'OVERDUE' ? 'Quá hạn' : 'Đến hạn'}</span><span>{item.message}</span><small>{dateLabel(item.reminder_date)}</small></li>)}</PaginatedList>
     </section>}
 
     <form className="finance-form finance-recurring-editor" onSubmit={save}>
@@ -107,7 +108,7 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
     </form>
 
     <div className="finance-section-heading finance-list-heading"><div><h3>Mẫu chi định kỳ</h3><p>{templates.length} khoản</p></div></div>
-    <div className="finance-table-wrap"><table className="finance-recurring-table">
+    <div className="finance-table-wrap"><PaginatedTable pageSize={5} className="finance-recurring-table">
       <thead><tr><th>Cơ sở · hạng mục</th><th>Người nhận</th><th>Đến hạn</th><th>Số tiền</th><th>Ghi nhận</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
       <tbody>{templates.map((item) => <tr key={item.id}>
         <td><strong>{item.branch_name}</strong><small>{item.category_code} · {item.category_name}</small></td>
@@ -118,7 +119,7 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
         <td><span className={`finance-status ${item.status === 'ACTIVE' ? 'received' : 'rejected'}`}>{item.status === 'ACTIVE' ? 'Đang dùng' : 'Đã chấm dứt'}</span></td>
         <td><div className="finance-category-actions">{item.status === 'ACTIVE' && <><button type="button" disabled={busy} onClick={() => setDraft(fromTemplate(item))}>Sửa</button><button type="button" disabled={busy} onClick={() => window.confirm(`Chấm dứt khoản chi định kỳ cho ${item.beneficiary_name}?`) && onTerminate(item.id)}>Chấm dứt</button></>}</div></td>
       </tr>)}{!templates.length && <tr><td colSpan="7" className="finance-empty">Chưa có khoản chi định kỳ.</td></tr>}</tbody>
-    </table></div>
+    </PaginatedTable></div>
 
     <div className="finance-section-heading finance-list-heading"><div><h3>Các kỳ đến hạn</h3><p>{periods.length} kỳ trong tháng đã chọn</p></div></div>
     <div className="finance-recurring-filters" aria-label="Lọc kỳ chi định kỳ">
@@ -127,7 +128,7 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
       <label>Trạng thái<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">Tất cả</option><option value="PENDING">Chờ thanh toán</option><option value="PAID">Đã thanh toán</option><option value="SKIPPED">Đã bỏ qua</option></select></label>
     </div>
     {error && <p className="finance-error" role="alert">{error}</p>}
-    {loading ? <p className="finance-empty">Đang tải kỳ chi…</p> : <div className="finance-table-wrap"><table className="finance-recurring-table">
+    {loading ? <p className="finance-empty">Đang tải kỳ chi…</p> : <div className="finance-table-wrap"><PaginatedTable pageSize={5} className="finance-recurring-table">
       <thead><tr><th>Ngày · kỳ ghi nhận</th><th>Cơ sở · hạng mục</th><th>Người nhận</th><th>Số tiền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
       <tbody>{periods.map((period) => {
         const overdue = period.status === 'PENDING' && String(period.due_date).slice(0, 10) < todayText;
@@ -140,6 +141,6 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
           <td><div className="finance-category-actions">{period.status === 'PENDING' && <><button type="button" disabled={busy} onClick={() => onPay(period)}>Chi kỳ này</button><button type="button" disabled={busy} onClick={() => skip(period)}>Bỏ qua</button></>}</div></td>
         </tr>;
       })}{!periods.length && <tr><td colSpan="6" className="finance-empty">Không có kỳ chi trong bộ lọc này.</td></tr>}</tbody>
-    </table></div>}
+    </PaginatedTable></div>}
   </section>;
 }

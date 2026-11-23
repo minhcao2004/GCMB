@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import inventoryApi from '../services/inventoryApi';
@@ -132,14 +133,15 @@ export default function InventoryPage({ user }) {
   const activeItems = useMemo(() => items.filter((item) => item.active), [items]);
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('vi-VN');
-    return activeItems.filter((item) => {
+    return items.filter((item) => {
       const matchesSearch = !term || `${item.sku} ${item.name} ${item.category} ${item.unitName}`
         .toLocaleLowerCase('vi-VN').includes(term);
       const matchesCategory = category === 'all' || item.category.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN');
       const matchesStatus = stockStatus === 'all' || item.stockStatus === stockStatus;
-      return matchesSearch && matchesCategory && matchesStatus;
+      const matchesUsage = itemStatus === 'all' || (itemStatus === 'archived' ? !item.active : item.active);
+      return matchesSearch && matchesCategory && matchesStatus && matchesUsage;
     });
-  }, [activeItems, search, category, stockStatus]);
+  }, [items, search, category, stockStatus, itemStatus]);
   const selectedItem = items.find((item) => item.id === selectedId) || null;
   const receiptLines = useMemo(() => receiptDraft?.items || EMPTY_LINES, [receiptDraft]);
   const receiptSummary = useMemo(() => receiptLines.map((line) => {
@@ -161,12 +163,6 @@ export default function InventoryPage({ user }) {
   const canSubmitAdjustment = !busy && !adjustLoading && adjustItem?.id === adjustmentItemId
     && validActualQuantity && Boolean(adjustDraft?.reason.trim()) && adjustDelta !== null && adjustDelta !== 0
     && !Boolean(staleStock && !staleStock.reviewed);
-  const managedItems = items.filter((item) => {
-    const term = search.trim().toLocaleLowerCase('vi-VN');
-    return (itemStatus === 'archived' ? !item.active : item.active)
-      && (!term || `${item.sku} ${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(term));
-  });
-
   const setToastMessage = (message) => { setToast(message); setError(''); };
 
   const openHistory = (item) => {
@@ -232,7 +228,7 @@ export default function InventoryPage({ user }) {
       else await inventoryApi.updateItem(selectedId, command);
       await reload();
       setToastMessage(itemMode === 'create' ? 'Đã tạo mặt hàng kho.' : 'Đã cập nhật thông tin mặt hàng.');
-      setScreen('items');
+      setScreen('stock');
     } catch (saveError) {
       setError(displayError(saveError));
     } finally {
@@ -446,7 +442,7 @@ export default function InventoryPage({ user }) {
 
   if (screen === 'history') return <main ref={pageRef} className="inventory-page">
     {heading(`Lịch sử kho · ${selectedItem?.name || 'Mặt hàng'}`, `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`,
-      <button type="button" className="inv-button inv-button-primary" onClick={() => setScreen('stock')}>Quay lại tồn kho</button>)}
+      <button type="button" className="inv-button inv-button-primary" onClick={() => setScreen('stock')}>Quay lại kho hàng</button>)}
     {toastNotice}
     {errorNotice}
     <section className="inv-filter-panel inv-history-filters" aria-label="Bộ lọc lịch sử kho">
@@ -459,7 +455,7 @@ export default function InventoryPage({ user }) {
       <small>Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {historyLoading ? 'Đang tải lịch sử…' : `${movements.length} bản ghi`}</small>
     </section>
     <section className="inv-table-card" aria-label="Các biến động tồn kho">
-      {historyLoading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /></div> : movements.length ? <div className="inv-table-scroll"><table className="inv-table inv-history-table">
+      {historyLoading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /></div> : movements.length ? <div className="inv-table-scroll"><PaginatedTable pageSize={5} className="inv-table inv-history-table">
         <thead><tr><th>Thời gian</th><th>Nguồn</th><th>Nhà cung cấp</th><th>Hạn sử dụng</th><th>Biến động</th><th>Tồn sau</th><th>Người ghi</th></tr></thead>
         <tbody>{movements.map((movement) => <tr key={movement.id}>
           <td className="inv-strong">{dateTimeLabel(movement.occurredAt)}</td>
@@ -470,50 +466,15 @@ export default function InventoryPage({ user }) {
           <td>{formatQuantity(movement.quantityAfter)} {selectedItem?.unitName || ''}</td>
           <td>{movement.actor}</td>
         </tr>)}</tbody>
-      </table></div> : <div className="inv-empty"><strong>Chưa có biến động phù hợp</strong><span>Thử đổi bộ lọc hoặc chọn khoảng thời gian rộng hơn.</span></div>}
+      </PaginatedTable></div> : <div className="inv-empty"><strong>Chưa có biến động phù hợp</strong><span>Thử đổi bộ lọc hoặc chọn khoảng thời gian rộng hơn.</span></div>}
     </section>
     <p className="inv-results">Hiển thị {movements.length} kết quả · Tối đa 500 biến động gần nhất</p>
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Mọi điều chỉnh đều được lưu lý do và người ghi nhận</p>
   </main>;
 
-  if (screen === 'items') return <main ref={pageRef} className="inventory-page">
-    {heading('Danh mục mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Danh mục mặt hàng kho`,
-      <><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Tồn kho</button><button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
-    {toastNotice}
-    {errorNotice}
-    <section className="inv-filter-panel inv-item-filters">
-      <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
-      <label className="inv-field"><span>Trạng thái</span><select value={itemStatus} onChange={(event) => setItemStatus(event.target.value)}>
-        <option value="active">Đang sử dụng</option><option value="archived">Ngừng sử dụng</option>
-      </select></label>
-      <small>{items.length} mặt hàng · Mã hàng duy nhất trong cơ sở</small>
-    </section>
-    <section className="inv-table-card">
-      {loading ? <div className="inv-loading-rows"><i /><i /><i /></div> : <div className="inv-table-scroll"><table className="inv-table inv-items-table">
-        <thead><tr><th>Mặt hàng</th><th>Nhóm</th><th>Đơn vị</th><th>Theo dõi tồn</th><th>Tồn hiện tại</th><th>Ngưỡng</th><th>Trạng thái</th><th><span className="inv-sr-only">Thao tác</span></th></tr></thead>
-        <tbody>{managedItems.map((item) => <Fragment key={item.id}>
-          <tr>
-            <td><strong>{item.sku} · {item.name}</strong></td><td>{item.category}</td><td>{item.unitName}</td><td>{trackingLabel(item.trackingMode)}</td>
-            <td>{formatQuantity(item.quantity)}</td><td>{formatQuantity(item.minimumQuantity)}</td>
-            <td><span className={`inv-status ${stockClass(item)}`}>{stockLabel(item)}</span></td>
-            <td className="inv-row-actions"><button type="button" className="inv-text-button" onClick={() => openItemForm('update', item)}>Sửa</button>
-              {item.active && <button type="button" className="inv-text-button inv-danger-text" onClick={() => setConfirmDeleteId(item.id)}>Xóa</button>}</td>
-          </tr>
-          {confirmDeleteId === item.id && <tr><td colSpan="8" className="inv-confirm-cell"><div className="inv-inline-confirm" role="group" aria-label={`Xác nhận xóa ${item.name}`}>
-            <span><strong>Ngừng sử dụng mặt hàng này?</strong> Lịch sử kho sẽ được giữ nguyên. Không thể ngừng khi món F&amp;B đang bán còn liên kết.</span>
-            <button type="button" className="inv-button inv-button-quiet" onClick={() => setConfirmDeleteId(null)} disabled={busy}>Hủy</button>
-            <button type="button" className="inv-button inv-button-danger" onClick={() => deleteItem(item)} disabled={busy}>{busy ? 'Đang lưu…' : 'Xác nhận xóa'}</button>
-          </div></td></tr>}
-        </Fragment>)}</tbody>
-      </table></div>}
-      {!loading && managedItems.length === 0 && <div className="inv-empty"><strong>{search.trim() ? 'Không tìm thấy mặt hàng phù hợp' : itemStatus === 'archived' ? 'Chưa có mặt hàng ngừng sử dụng' : 'Chưa có mặt hàng kho'}</strong><span>{search.trim() ? 'Thử đổi từ khóa tìm kiếm.' : itemStatus === 'archived' ? 'Các mặt hàng đã ngừng sử dụng sẽ xuất hiện tại đây.' : 'Tạo mặt hàng để quản lý tồn kho của cơ sở này.'}</span>{!search.trim() && itemStatus === 'active' && <button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Tạo mặt hàng</button>}</div>}
-    </section>
-    <p className="inv-footnote">Cập nhật thông tin mặt hàng không làm thay đổi số tồn hoặc lịch sử kho</p>
-  </main>;
-
   if (screen === 'item-form') return <main ref={pageRef} className="inventory-page">
     {heading(itemMode === 'create' ? 'Tạo mặt hàng kho' : 'Cập nhật mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Quản lý danh mục`,
-      <button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('items')}>Quay lại danh sách</button>)}
+      <button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Quay lại danh sách</button>)}
     {toastNotice}
     {errorNotice}
     <div className="inv-form-layout">
@@ -534,7 +495,7 @@ export default function InventoryPage({ user }) {
           {itemMode === 'update' && <label className="inv-check-field"><input type="checkbox" checked={Boolean(itemDraft?.active)} onChange={(event) => setItemDraft({ ...itemDraft, active: event.target.checked })} /><span>Đang sử dụng</span></label>}
         </div>
         <div className="inv-alert inv-alert-info">{itemMode === 'create' ? 'Mặt hàng mới bắt đầu với tồn kho 0. Dùng phiếu nhập để ghi nhận hàng nhận thực tế.' : 'Lưu thông tin mặt hàng không thay đổi số tồn hoặc các biến động đã ghi nhận.'}</div>
-        <div className="inv-form-actions"><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('items')} disabled={busy}>Hủy</button><button type="submit" className="inv-button inv-button-primary" disabled={busy}>{busy ? 'Đang lưu…' : itemMode === 'create' ? 'Tạo mặt hàng' : 'Lưu thay đổi'}</button></div>
+        <div className="inv-form-actions"><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')} disabled={busy}>Hủy</button><button type="submit" className="inv-button inv-button-primary" disabled={busy}>{busy ? 'Đang lưu…' : itemMode === 'create' ? 'Tạo mặt hàng' : 'Lưu thay đổi'}</button></div>
       </form>
       <aside className="inv-summary inv-item-summary"><h2>Tóm tắt mặt hàng</h2>
         <p><strong>{itemDraft?.name || 'Tên mặt hàng'}</strong><span>{itemDraft?.sku || 'Mã mặt hàng'} · {metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || 'Đơn vị'}</span></p>
@@ -686,28 +647,39 @@ export default function InventoryPage({ user }) {
   </main>;
 
   return <main ref={pageRef} className="inventory-page">
-    {heading('Tồn kho', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
-      <><button type="button" className="inv-button inv-button-manage" onClick={() => { setError(''); setScreen('items'); }}>Danh mục mặt hàng</button><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-primary" onClick={openReceipt} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button></>)}
+    {heading('Kho hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
+      <><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-quiet" onClick={openReceipt} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button><button type="button" className="inv-button inv-button-primary" disabled={busy || user.readOnly} onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
     {errorNotice}
     {toastNotice}
-    <section className="inv-filter-panel" aria-label="Tìm và lọc tồn kho">
+    <section className="inv-filter-panel inv-unified-filters" aria-label="Tìm và lọc kho hàng">
       <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
       <label className="inv-field"><span>Nhóm hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       <label className="inv-field"><span>Tình trạng tồn</span><select value={stockStatus} onChange={(event) => setStockStatus(event.target.value)}>
         <option value="all">Tình trạng tồn</option><option value="AVAILABLE">Còn hàng</option><option value="LOW_STOCK">Sắp hết</option><option value="OUT_OF_STOCK">Hết hàng</option>
       </select></label>
+      <label className="inv-field"><span>Trạng thái sử dụng</span><select value={itemStatus} onChange={(event) => setItemStatus(event.target.value)}><option value="active">Đang sử dụng</option><option value="archived">Ngừng sử dụng</option><option value="all">Tất cả</option></select></label>
       <small>Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải dữ liệu…' : `${visibleItems.length} mặt hàng`}</small>
     </section>
-    <section className="inv-table-card" aria-label="Tồn kho hiện tại">
-      {loading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /><i /></div> : visibleItems.length ? <div className="inv-table-scroll"><table className="inv-table inv-stock-table">
-        <thead><tr><th>Mặt hàng</th><th>Đơn vị</th><th>Tồn hiện tại</th><th>Ngưỡng</th><th>Trạng thái</th></tr></thead>
-        <tbody>{visibleItems.map((item) => <tr key={item.id}>
-          <td><button type="button" className="inv-item-link" aria-label={`Xem lịch sử biến động của ${item.name}`} onClick={() => openHistory(item)}><strong>{item.sku} · {item.name}</strong><span>{item.category} · {trackingLabel(item.trackingMode)}</span><span className="inv-item-action">Xem lịch sử</span></button></td>
-          <td>{item.unitName}</td><td className="inv-quantity-cell">{formatQuantity(item.quantity)}</td><td>{formatQuantity(item.minimumQuantity)}</td><td><span className={`inv-status ${stockClass(item)}`}>{stockLabel(item)}</span></td>
-        </tr>)}</tbody>
-      </table></div> : <div className="inv-empty"><strong>{activeItems.length ? 'Không tìm thấy mặt hàng phù hợp' : 'Chưa có mặt hàng kho'}</strong><span>{activeItems.length ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Tạo danh mục mặt hàng trước khi ghi nhận nhập kho.'}</span>{!activeItems.length && <button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Tạo mặt hàng</button>}</div>}
+    <section className="inv-table-card" aria-label="Mặt hàng và tồn kho">
+      {loading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /><i /></div> : visibleItems.length ? <div className="inv-table-scroll"><PaginatedTable pageSize={5} className="inv-table inv-items-table inv-unified-table" resetKey={`${search}:${category}:${stockStatus}:${itemStatus}`} paginationLabel="Phân trang kho hàng">
+        <thead><tr><th>Mặt hàng</th><th>Nhóm</th><th>Đơn vị</th><th>Theo dõi tồn</th><th>Tồn hiện tại</th><th>Ngưỡng</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+        <tbody>{visibleItems.map((item) => <Fragment key={item.id}>
+          <tr>
+            <td><strong>{item.sku} · {item.name}</strong></td><td>{item.category}</td><td>{item.unitName}</td><td>{trackingLabel(item.trackingMode)}</td>
+            <td>{formatQuantity(item.quantity)}</td><td>{formatQuantity(item.minimumQuantity)}</td>
+            <td><span className={`inv-status ${stockClass(item)}`}>{stockLabel(item)}</span></td>
+            <td className="inv-row-actions"><button type="button" className="inv-text-button" aria-label={`Xem lịch sử biến động của ${item.name}`} onClick={() => openHistory(item)}>Xem lịch sử</button><button type="button" className="inv-text-button" disabled={busy || user.readOnly} onClick={() => openItemForm('update', item)}>Sửa</button>
+              {item.active && <button type="button" className="inv-text-button inv-danger-text" disabled={busy || user.readOnly} onClick={() => setConfirmDeleteId(item.id)}>Xóa</button>}</td>
+          </tr>
+          {confirmDeleteId === item.id && <tr><td colSpan="8" className="inv-confirm-cell"><div className="inv-inline-confirm" role="group" aria-label={`Xác nhận xóa ${item.name}`}>
+            <span><strong>Ngừng sử dụng mặt hàng này?</strong> Lịch sử kho sẽ được giữ nguyên. Không thể ngừng khi món F&amp;B đang bán còn liên kết.</span>
+            <button type="button" className="inv-button inv-button-quiet" onClick={() => setConfirmDeleteId(null)} disabled={busy}>Hủy</button>
+            <button type="button" className="inv-button inv-button-danger" onClick={() => deleteItem(item)} disabled={busy}>{busy ? 'Đang lưu…' : 'Xác nhận xóa'}</button>
+          </div></td></tr>}
+        </Fragment>)}</tbody>
+      </PaginatedTable></div> : <div className="inv-empty"><strong>{!items.length ? 'Chưa có mặt hàng kho' : itemStatus === 'archived' && !search.trim() && category === 'all' && stockStatus === 'all' ? 'Chưa có mặt hàng ngừng sử dụng' : 'Không tìm thấy mặt hàng phù hợp'}</strong><span>{items.length ? 'Thử thay đổi từ khóa hoặc bộ lọc.' : 'Thêm mặt hàng để quản lý tồn kho của cơ sở.'}</span>{!items.length && <button type="button" className="inv-button inv-button-primary" disabled={busy || user.readOnly} onClick={() => openItemForm('create')}>Tạo mặt hàng</button>}</div>}
     </section>
-    <p className="inv-results">Hiển thị {visibleItems.length} kết quả · Chọn mặt hàng để xem lịch sử biến động</p>
+    <p className="inv-results">Tổng {visibleItems.length} mặt hàng phù hợp</p>
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Mặt hàng tự trừ tồn khi bán dùng chung quy tắc AUTO_ON_SALE</p>
   </main>;
 }

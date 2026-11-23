@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useRef, useState } from 'react';
 import './IncomingRoomOrderDialog.css';
 
@@ -108,7 +109,7 @@ export default function IncomingRoomOrderDialog({
       </label>
       {employees.length === 0 && <p className="incoming-order-empty-staff">Chưa có lễ tân đang làm ca tại cơ sở của booking để phụ trách order.</p>}
 
-      <div className="incoming-order-lines" aria-label="Món khách đã gọi">
+      <PaginatedList as="div" pageSize={10} className="incoming-order-lines" aria-label="Món khách đã gọi">
         {order.items.map((item) => {
           const quantity = quantities[item.menuItemId] ?? Number(item.quantity);
           return <div className="incoming-order-line" key={item.id}>
@@ -117,7 +118,7 @@ export default function IncomingRoomOrderDialog({
             <b>{formatVnd(Number(item.unitPrice) * quantity)}</b>
           </div>;
         })}
-      </div>
+      </PaginatedList>
 
       <footer>
         <div className="incoming-order-total"><span>Tạm tính</span><strong>{formatVnd(acceptedTotal)}</strong></div>

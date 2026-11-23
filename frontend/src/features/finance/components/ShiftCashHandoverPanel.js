@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 /** Author: HuyDV. Bàn giao ca giữ nguyên tiền két; chênh lệch chuyển QLCS xử lý. */
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
@@ -121,14 +122,14 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
     {loading ? <p role="status">Đang tải bàn giao ca…</p> : data && <>
       {data.pending.length > 0 && <section className="finance-card cash-handover-pending">
         <h3>{data.pending.length} bàn giao chênh lệch cần QLCS xử lý</h3>
-        {data.pending.map((record) => <div className="cash-handover-pending-row" key={record.id}>
+        {<PaginatedList pageSize={5}>{data.pending.map((record) => <div className="cash-handover-pending-row" key={record.id}>
           <div><strong>{displayDate(record.business_date)} · Ca {record.shift_number} · {record.stage === 'DISPATCH' ? 'Giao tiền' : 'Nhận tiền'}</strong>
             <p>Thực đếm {vnd(record.actual_amount)} · Chênh lệch {vnd(record.variance)}</p>
             <p>{record.actor_name}: {record.note}</p></div>
           {manager && <button type="button" disabled={readOnly || busy} onClick={() => {
             setPendingId(record.id); setResolution('');
           }}>Xử lý chênh lệch</button>}
-        </div>)}
+        </div>)}</PaginatedList>}
         {manager && pendingId && <form className="cash-handover-form" onSubmit={resolve}>
           <label>Kết quả xử lý<textarea required maxLength={2000} value={resolution}
             onChange={(event) => setResolution(event.target.value)} disabled={busy || readOnly} /></label>

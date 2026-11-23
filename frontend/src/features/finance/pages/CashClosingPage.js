@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
@@ -237,14 +238,14 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         </form>
       </div>}
     </> : <div>
-      <article className="finance-card finance-table-wrap"><table>
+      <article className="finance-card finance-table-wrap"><PaginatedTable pageSize={5}>
         <thead><tr><th>Ngày / cơ sở</th><th>Thực đếm</th><th>Chênh lệch tiền mặt</th><th>Trạng thái</th><th /></tr></thead>
         <tbody>{shown.map((r) => <tr key={r.id}>
           <td>{displayDate(r.business_date)}<small>{r.branchName}</small></td>
           <td>{vnd(r.actual_closing)}</td><td>{vnd(r.variance)}</td>
           <td>{labels[r.status]}</td><td><button disabled={busy} onClick={() => open(r.id)}>Chi tiết</button></td>
         </tr>)}</tbody>
-      </table>{!shown.length && <p>{emptyMessage}</p>}</article>
+      </PaginatedTable>{!shown.length && <p>{emptyMessage}</p>}</article>
       {detail && <div className="cash-closing-dialog-backdrop">
         <article className="finance-card cash-closing-dialog" role="dialog"
           aria-modal="true" aria-labelledby="cash-closing-dialog-title">
@@ -259,12 +260,12 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
           catch (e) { setError(message(e)); }
         }}>Minh chứng phiên bản {f.revision || 'cũ'}: {f.name}</button>)}
         <details><summary>Giao dịch nguồn lúc gửi</summary><MovementTable rows={detail.source.movements || []} /></details>
-        {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{detail.versions.map((v) => <div key={v.revision} className="finance-info">
+        {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{<PaginatedList pageSize={5}>{detail.versions.map((v) => <div key={v.revision} className="finance-info">
           <strong>Phiên bản {v.revision} · {v.username} · {new Date(v.submitted_at).toLocaleString('vi-VN')}</strong>
           <p>Thực đếm {vnd(v.payload.actual_closing)} · Chênh lệch {vnd(v.payload.variance)}</p>
           <p>{v.payload.explanation || 'Không có giải trình.'}</p>
-        </div>)}</details>}
-        {detail.reviews.map((r) => <div className="finance-info" key={r.id}><strong>{r.decision === 'RECONCILED' ? 'Kết luận đối soát' : 'Yêu cầu bổ sung'} · {r.username}</strong><p>{r.note}</p></div>)}
+        </div>)}</PaginatedList>}</details>}
+        {<PaginatedList pageSize={5}>{detail.reviews.map((r) => <div className="finance-info" key={r.id}><strong>{r.decision === 'RECONCILED' ? 'Kết luận đối soát' : 'Yêu cầu bổ sung'} · {r.username}</strong><p>{r.note}</p></div>)}</PaginatedList>}
         {!accounting && detail.status === 'NEEDS_EXPLANATION' && !readOnly && <button className="finance-primary" onClick={() => edit(detail)}>Bổ sung báo cáo</button>}
         {accounting && detail.status === 'SUBMITTED' && <form onSubmit={(e) => { e.preventDefault(); review(false); }}>
           <label>Kết luận / nội dung cần bổ sung (không bắt buộc)<textarea maxLength={2000} value={conclusion} onChange={(e) => setConclusion(e.target.value)} /></label>
@@ -305,8 +306,8 @@ function ReportSummary({ source }) {
   </>;
 }
 function MovementTable({ rows }) {
-  return <div className="finance-table-wrap"><table>
+  return <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
     <thead><tr><th>Giao dịch</th><th>Số tiền</th></tr></thead>
     <tbody>{rows.map((r) => <tr key={r.id}><td>{r.description}<small>{new Date(r.time).toLocaleString('vi-VN')}</small></td><td>{vnd(r.amount)}</td></tr>)}</tbody>
-  </table>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
+  </PaginatedTable>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
 }

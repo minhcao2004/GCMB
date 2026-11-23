@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -85,7 +86,7 @@ const kindLabel=(item)=>item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_
 
 function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile }) {
   const [expandedAllocation, setExpandedAllocation] = useState(null);
-  return <div className="finance-table-wrap"><table><thead><tr><th>Mã · Cơ sở</th><th>Ngày · Hạng mục</th><th>Nội dung · Lịch sử</th><th>Số tiền</th><th>Người nhận · Cách chi</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead><tbody>
+  return <div className="finance-table-wrap"><PaginatedTable pageSize={5}><thead><tr><th>Mã · Cơ sở</th><th>Ngày · Hạng mục</th><th>Nội dung · Lịch sử</th><th>Số tiền</th><th>Người nhận · Cách chi</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead><tbody>
     {rows.map((row)=>{
       const form = paymentForms[row.id] || {};
       const months = form.allocationMonths ?? row.allocation_months ?? '';
@@ -96,7 +97,7 @@ function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaym
       return <tr key={row.id}>
       <td><strong>{row.code}</strong><small>{row.branch_name} · {row.kind==='REIMBURSEMENT'?'Hoàn ứng':'Thanh toán'}{row.origin==='ACCOUNTANT_DIRECT'?' · Chi trực tiếp':''}</small></td>
       <td>{localDate(row.expense_on)}<small>{row.category_name}</small>{allocated&&<small><button type="button" className="finance-allocation-toggle" aria-expanded={expandedAllocation===row.id} onClick={()=>setExpandedAllocation(expandedAllocation===row.id?null:row.id)}>Phân bổ {row.allocation_months} tháng</button></small>}
-        {allocated&&expandedAllocation===row.id&&<div className="finance-allocation-detail"><table><thead><tr><th>Tháng</th><th>Số tiền</th></tr></thead><tbody>{(row.allocations||[]).map((line)=><tr key={line.id}><td>{monthLabel(line.period_month)}</td><td>{money(line.amount)}</td></tr>)}</tbody></table></div>}
+        {allocated&&expandedAllocation===row.id&&<div className="finance-allocation-detail"><PaginatedTable pageSize={10}><thead><tr><th>Tháng</th><th>Số tiền</th></tr></thead><tbody>{(row.allocations||[]).map((line)=><tr key={line.id}><td>{monthLabel(line.period_month)}</td><td>{money(line.amount)}</td></tr>)}</tbody></PaginatedTable></div>}
       </td>
       <td>{row.description}<small>Gửi bởi {row.requested_by_name}</small>{row.stockReceipts?.map((receipt)=><small key={receipt.code}>Phiếu nhập {receipt.code} · {receipt.supplier_name} · {money(receipt.amount)}</small>)}{row.history?.map((event)=><small className="finance-history" key={event.id}>{historyName[event.action]||event.action} · {event.actor_name} · {localDateTime(event.created_at)}{event.note?` · ${event.note}`:''}</small>)}</td>
       <td><strong>{money(row.amount)}</strong></td>
@@ -125,7 +126,7 @@ function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaym
       </td>
     </tr>})}
     {!rows.length&&<tr><td colSpan="7" className="finance-empty">Chưa có đề nghị chi nào.</td></tr>}
-  </tbody></table></div>;
+  </tbody></PaginatedTable></div>;
 }
 
 function BranchFilter({ branches, value, onChange }) {
@@ -141,13 +142,13 @@ function FundTransferTable({ rows, busy, fundFiles, setFundFiles, onUpload, onCo
   return <div className="finance-fund-grid-outer" aria-label="Danh sách yêu cầu chuyển tiền" role="table">
     <div className="finance-fund-grid-inner">
         <div className="finance-fund-fixed-head" role="row"><span role="columnheader">Người gửi</span><span role="columnheader">Ngày gửi</span><span role="columnheader">Số tiền</span><span role="columnheader">Mã giao dịch · Chứng từ</span><span role="columnheader">Trạng thái</span></div>
-      <div className="finance-fund-grid-scroll" role="rowgroup">{rows.map((item)=><div className="finance-fund-grid-row" role="row" key={item.id}>
+      <PaginatedList as="div" pageSize={5} className="finance-fund-grid-scroll" role="rowgroup">{rows.map((item)=><div className="finance-fund-grid-row" role="row" key={item.id}>
         <div className="finance-fund-grid-cell finance-fund-sender" role="cell" title={`${item.sent_by_name||'Quản lý cấp cao'} · ${item.code}`}><strong>{item.sent_by_name||'Quản lý cấp cao'} · {item.code}</strong></div>
         <div className="finance-fund-grid-cell" role="cell" title={localDate(item.sent_on)}><strong>{localDate(item.sent_on)}</strong></div>
         <div className="finance-fund-grid-cell finance-fund-grid-amount" role="cell"><strong>{money(item.amount)}</strong></div>
         <div className="finance-fund-grid-cell finance-fund-bill" role="cell"><span className="finance-fund-reference" title={item.transfer_reference||'—'}>{item.transfer_reference||'—'}</span>{item.has_proof&&<Attachments compact rows={[{id:item.attachment_id,kind:'TRANSFER_PROOF',original_name:item.attachment_name,mime_type:item.attachment_mime}]} />}{!item.has_proof&&item.status==='WAITING_CONFIRMATION'&&onUpload&&<form className="finance-fund-upload" onSubmit={(event)=>onUpload(event,item.id)}><input aria-label={`Chọn chứng từ cho ${item.code}`} type="file" required accept={fileAccept} onChange={(event)=>setFundFiles({...fundFiles,[item.id]:{proof:event.target.files?.[0]||null}})}/><button disabled={busy}>{busy?'Lưu…':'Tải chứng từ'}</button></form>}{!item.has_proof&&item.status!=='WAITING_CONFIRMATION'&&<small>Chưa có chứng từ</small>}</div>
         <div className="finance-fund-grid-cell finance-fund-grid-status" role="cell"><span className={`finance-status ${item.status.toLowerCase()}`}>{statusName[item.status]}</span>{item.status==='WAITING_CONFIRMATION'&&onConfirm&&<button disabled={busy} onClick={()=>onConfirm(item.id)}>Đã nhận</button>}</div>
-      </div>)}{!rows.length&&<div className="finance-empty">Chưa có yêu cầu chuyển tiền.</div>}</div>
+      </div>)}{!rows.length&&<div className="finance-empty">Chưa có yêu cầu chuyển tiền.</div>}</PaginatedList>
     </div>
   </div>;
 }
@@ -259,7 +260,7 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
     {notice&&<p className="finance-notice" role="status">{notice}</p>}{error&&<p className="finance-error" role="alert">{error}</p>}
 
     {role==='ACCOUNTANT'&&accountantSection==='payments'&&<>
-      <section className="finance-balance"><div><span>Quỹ chi của kế toán (toàn chuỗi)</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div><p>Nguồn chi lương và chi phí là quỹ QLCC cấp cho kế toán. Quỹ này tách biệt với báo cáo thu ngân cuối ngày của cơ sở.</p></section>
+      <section className="finance-balance"><div><span>Quỹ chi của kế toán (toàn chuỗi)</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div></section>
       {accountTab==='incoming'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Lịch sử tiền vào</h2></div><div className="finance-mini-total"><span>Đã xác nhận</span><strong>{money(receivedTotal)}</strong></div><div className="finance-mini-total pending"><span>Chờ xác nhận</span><strong>{money(waitingTotal)}</strong></div></div>
         <FundTransferTable rows={transfers} busy={busy} onConfirm={(id)=>act(()=>financeApi.confirmFund(id),'Đã xác nhận nhận tiền; số dư quỹ đã cập nhật.')}/>
       </section>}
@@ -311,10 +312,10 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
           {requestKind==='REIMBURSEMENT'&&<fieldset className="finance-receipt-picker wide">
             <legend>Phiếu nhập kho đã tự chi</legend>
             <p>Chọn phiếu bạn đã thanh toán bằng tiền cá nhân để cộng vào đề nghị. Người ứng tiền: {user.username}.</p>
-            {loading?<p className="finance-receipt-empty">Đang tải phiếu nhập kho…</p>:stockReceipts.length?<div className="finance-receipt-options">{stockReceipts.map((receipt)=><label className="finance-receipt-option" key={receipt.id}>
+            {loading?<p className="finance-receipt-empty">Đang tải phiếu nhập kho…</p>:stockReceipts.length?<PaginatedList as="div" pageSize={10} className="finance-receipt-options">{stockReceipts.map((receipt)=><label className="finance-receipt-option" key={receipt.id}>
               <input type="checkbox" checked={selectedReceiptIds.includes(receipt.id)} disabled={busy} onChange={(event)=>setSelectedReceiptIds((current)=>event.target.checked?[...current,receipt.id]:current.filter((id)=>id!==receipt.id))}/>
               <span><strong>{receipt.code}</strong><small>{receipt.supplier_name} · {localDateTime(receipt.received_at)}</small></span><b>{money(receipt.amount)}</b>
-            </label>)}</div>:<p className="finance-receipt-empty">Chưa có phiếu nhập kho nào có thể chọn.</p>}
+            </label>)}</PaginatedList>:<p className="finance-receipt-empty">Chưa có phiếu nhập kho nào có thể chọn.</p>}
             <div className="finance-receipt-total" aria-live="polite"><span>Đã chọn {selectedReceiptIds.length} phiếu</span><strong>{money(selectedReceiptTotal)}</strong></div>
           </fieldset>}
           <label>Hạng mục chi phí *<select required value={request.categoryId} onChange={(event)=>setRequest({...request,categoryId:event.target.value})}><option value="">Chọn hạng mục</option>{categories.filter((item)=>requestKind!=='REIMBURSEMENT'||item.reimbursement_allowed).sort((left,right)=>Object.keys(expenseGroupName).indexOf(left.category_group)-Object.keys(expenseGroupName).indexOf(right.category_group)||left.name.localeCompare(right.name,'vi')).map((item)=><option value={item.id} key={item.id}>{expenseGroupName[item.category_group]||'Khác'} · {item.name}</option>)}</select><small>Hạng mục được kế toán chuẩn bị sẵn và sắp theo nhóm.</small></label><label>Số tiền *<MoneyInput required min="1" readOnly={requestKind==='REIMBURSEMENT'&&selectedReceiptIds.length>0} value={requestKind==='REIMBURSEMENT'&&selectedReceiptIds.length>0?selectedReceiptTotal:request.amount} onValueChange={(amount)=>setRequest({...request,amount})}/></label>

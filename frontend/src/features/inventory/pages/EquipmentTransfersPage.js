@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  * Author: TrongNV
@@ -148,7 +149,7 @@ export default function EquipmentTransfersPage({ user, headOffice = false }) {
     {error && <p className="ei-error" role="alert">{error}</p>}
     <section className="ei-transfer-records" aria-labelledby="ei-transfer-list-title">
       <div className="ei-transfer-records-heading"><div><h2 id="ei-transfer-list-title">Phiếu điều chuyển</h2><p>{rows.length} phiếu trong phạm vi đang xem</p></div></div>
-      <div className="ei-table-wrap"><table>
+      <div className="ei-table-wrap"><PaginatedTable pageSize={5}>
       <thead><tr><th>Phiếu / thiết bị</th><th>Nguồn → đích</th><th>Lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
       <tbody>
         {rows.map((item) => <tr key={item.id}>
@@ -171,7 +172,7 @@ export default function EquipmentTransfersPage({ user, headOffice = false }) {
         </tr>)}
         {!rows.length && <tr><td colSpan="5" className="ei-empty">Chưa có phiếu điều chuyển.</td></tr>}
       </tbody>
-      </table></div>
+      </PaginatedTable></div>
     </section>
     <p className="ei-footnote">Quy trình gồm hai bước: cơ sở nguồn xác nhận bàn giao; cơ sở đích chọn phòng nhận và xác nhận tiếp nhận. Thiết bị chỉ đổi cơ sở sau bước tiếp nhận.</p>
   </main>;

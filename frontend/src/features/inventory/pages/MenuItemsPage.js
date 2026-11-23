@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiAssetUrl } from '../../../api/client';
@@ -476,7 +477,7 @@ export default function MenuItemsPage({ user }) {
         {loading ? <div className="menu-loading" role="status" aria-label="Đang tải thực đơn">
           {[0, 1, 2, 3].map((row) => <div className="menu-skeleton-row" key={row}><i /><i /><i /><i /><i /></div>)}
         </div> : visibleItems.length ? <div className="menu-table-scroll">
-          <table className="menu-table">
+          <PaginatedTable pageSize={10} className="menu-table">
             <thead><tr>
               <th scope="col">Món / dịch vụ</th>
               <th scope="col">Danh mục</th>
@@ -514,7 +515,7 @@ export default function MenuItemsPage({ user }) {
                 </div>
               </td>
             </tr>)}</tbody>
-          </table>
+          </PaginatedTable>
         </div> : <div className="menu-empty">
           <h2>{items.length ? 'Không tìm thấy món phù hợp' : 'Chưa có món trong thực đơn'}</h2>
           <p>{items.length ? 'Thử đổi từ khóa hoặc điều kiện lọc.' : 'Món sẽ xuất hiện ở đây sau khi được thêm vào thực đơn của cơ sở.'}</p>

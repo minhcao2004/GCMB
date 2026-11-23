@@ -10,7 +10,6 @@
 .room-toolbar input,.room-toolbar select { width: 100%; height: 44px; border: 1px solid var(--room-line); border-radius: var(--gcmb-radius-control); padding: 0 12px; color: var(--room-ink); background: var(--room-panel); font: inherit; font-size: var(--gcmb-font-size-sm); }
 .room-toolbar input:focus-visible,.room-toolbar select:focus-visible,.room-floors button:focus-visible,.room-status-filters button:focus-visible,.room-card:focus-visible,.room-actions button:focus-visible { outline: 2px solid var(--booking-cyan); outline-offset: 2px; }
 .room-toolbar input::placeholder { color: var(--room-muted); }
-.room-view-note { margin: 8px 0 12px; color: var(--room-text); font-size: var(--gcmb-font-size-xs); line-height: var(--gcmb-line-height); }
 .room-board-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .room-board-heading h2 { margin: 0; color: var(--room-ink); font-size: var(--gcmb-font-size-lg); font-weight: 700; }
 .room-board-heading span { color: var(--room-muted); font-size: var(--gcmb-font-size-xs); }
@@ -224,7 +223,6 @@
   .booking-main--rooms .room-board { display: flex; min-height: 0; flex-direction: column; }
   .booking-main--rooms .room-toolbar input,
   .booking-main--rooms .room-toolbar select { height: 38px; }
-  .booking-main--rooms .room-view-note { margin: 6px 0 8px; }
   .booking-main--rooms .room-board-heading { margin-bottom: 6px; }
   .booking-main--rooms .room-floors,
   .booking-main--rooms .room-status-filters { flex: 0 0 auto; gap: 6px; margin-bottom: 7px; }

@@ -407,6 +407,7 @@ The detailed project references are:
 
 - [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
 - [Finance Fund and Expense Workflow](docs/Finance%20Fund%20and%20Expense%20Workflow.md) — fund receipt confirmation, category maintenance, branch expense requests, approval thresholds, payment, reimbursement, and evidence access.
+- [UI Pagination](docs/UI%20Pagination.md) — quy tắc 5/10 mục mỗi trang, các màn đã tích hợp và phạm vi kiểm tra.
 
 
 Keep detailed requirements, design, business rules, and test documentation outside this README. Add repository-relative links when approved documents are placed in `docs/`, or link to their authorized shared location.

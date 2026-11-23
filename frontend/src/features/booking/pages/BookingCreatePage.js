@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
@@ -283,12 +284,12 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             <button type="button" className={form.pricingMode === 'HOURLY' ? 'is-selected' : ''} onClick={() => { markTouched('pricingMode'); setFormError(''); setForm((current) => ({ ...current, pricingMode: 'HOURLY' })); }}>Tính giờ</button>
             <button type="button" className={form.pricingMode === 'COMBO' ? 'is-selected' : ''} onClick={() => { markTouched('pricingMode'); setFormError(''); setForm((current) => ({ ...current, pricingMode: 'COMBO' })); }}>Combo</button>
           </div>
-          {form.pricingMode === 'COMBO' ? <div className={`booking-package-grid${showComboError ? ' is-invalid' : ''}`}>
+          {form.pricingMode === 'COMBO' ? <PaginatedList as="div" pageSize={10} className={`booking-package-grid${showComboError ? ' is-invalid' : ''}`}>
             {combos.map((combo) => <button key={combo.id} type="button" className={`booking-package-choice${form.comboId === combo.id ? ' is-selected' : ''}`} onClick={() => { markTouched('comboId'); setFormError(''); setForm((current) => ({ ...current, comboId: combo.id })); }}>
               <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>{(combo.includedFnbQuantity > 0 || combo.includedFoodQuantity > 0) && <small>Tặng {combo.includedFnbQuantity || 0} đồ uống · {combo.includedFoodQuantity || 0} đồ ăn (chọn lúc check-in)</small>}
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
-          </div> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
+          </PaginatedList> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
             <input type="number" name="durationHours" min="1" max="24" step="0.5" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
             <small id="booking-duration-help" className={showDurationError ? 'booking-field-error' : 'booking-field-hint'} aria-live={showDurationError ? 'polite' : undefined}>
               {showDurationError ? 'Thời lượng thuê phải từ 1 đến 24 giờ, theo bước 0,5 giờ.' : 'Nhập thời lượng từ 1 đến 24 giờ; chấp nhận bước 0,5 giờ.'}
@@ -338,7 +339,6 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
         <div className="booking-summary-money"><span>Giá dự kiến</span><strong>{formatVnd(estimatedAmount)}</strong></div>
         <div className="booking-summary-money booking-deposit-money"><span>Tiền cọc đã nhận</span><strong>{form.depositEnabled ? `−${formatVnd(depositAmount)}` : formatVnd(0)}</strong></div>
         <div className="booking-summary-total"><strong>Còn lại sau khi thu cọc</strong><b>{formatVnd(Math.max(estimatedAmount - depositAmount, 0))}</b></div>
-         <div className="booking-summary-hint">Booking giữ chỗ theo hạng phòng và ngày/giờ đã chọn. Phòng cụ thể sẽ chọn khi khách check-in.<br />Giá cuối có thể thay đổi khi checkout.</div>
         <button className="booking-button booking-button-primary booking-submit-button" type="submit" disabled={submitting || !bookingReady}>{submitting ? 'Đang tạo booking…' : 'Tạo booking'}</button>
         <button className="booking-summary-cancel" type="button" onClick={cancelDraft}>Hủy</button>
       </aside>

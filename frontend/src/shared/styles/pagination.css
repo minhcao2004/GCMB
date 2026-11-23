@@ -1,0 +1,36 @@
+.gcmb-pagination {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  grid-column: 1 / -1;
+  flex: 0 0 100%;
+  width: 100%;
+  padding: 14px 4px;
+  color: #52637a;
+  background: #fff;
+  font: 400 13px/1.5 var(--gcmb-font-family, sans-serif);
+}
+.gcmb-pagination-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.gcmb-pagination-position { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gcmb-pagination .gcmb-pagination-controls > button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  color: #34465f;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.gcmb-pagination .gcmb-pagination-controls > button:hover:not(:disabled) { border-color: #e50088; color: #ac0066; }
+.gcmb-pagination .gcmb-pagination-controls > button:disabled { color: #6c7788; background: #f5f7fa; cursor: default; }
+.gcmb-pagination .gcmb-pagination-controls > button:focus-visible { outline: 2px solid #008aa0; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .gcmb-pagination { flex-direction: column; align-items: flex-start; }
+  .gcmb-pagination-controls { width: 100%; justify-content: space-between; gap: 6px; }
+  .gcmb-pagination .gcmb-pagination-controls > button { min-height: 40px; padding: 7px 9px; }
+}
+@media print { .gcmb-pagination { display: none; } }
