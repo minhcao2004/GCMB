@@ -6,6 +6,7 @@
  * Description: Danh sách, chi tiết, thêm/sửa, gán quản lý và ngừng hoạt động cơ sở.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { branchAdministrationApi as api, branchError } from '../services/branchAdministrationApi';
 import { actionNames } from '../../backoffice/accounts/services/accountAccessApi';
 import './branch-administration.css';
@@ -223,11 +224,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
           {error} <button onClick={refresh}>Thử lại</button>
         </div>
       )}
-      {notice && (
-        <div className="ba-success" role="status">
-          {notice}
-        </div>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {selected && initialAlert?.kind && (
         <aside className="ba-alert-context" role="status">
           <strong>{initialAlert.kind}</strong><span>{initialAlert.detail}</span>

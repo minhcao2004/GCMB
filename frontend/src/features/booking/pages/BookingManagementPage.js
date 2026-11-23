@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BankNameInput from '../../../shared/components/BankNameInput';
@@ -35,6 +36,7 @@ const accountingNavigation = [
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
+  'Khách không đến',
   'Khách không còn nhu cầu',
   'Khách đặt nhầm booking',
   'Khách không đồng ý giá hoặc phụ phí',
@@ -620,8 +622,10 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const hasDeposit = depositAmount !== null && depositAmount > 0;
   const cutoffMinutes = Number(currentDetail?.deposit?.refundCutoffMinutes || 40);
   const millisecondsUntilStart = new Date(currentBooking.plannedStart).getTime() - now.getTime();
-  const refundEligible = hasDeposit && millisecondsUntilStart >= cutoffMinutes * 60000;
-  const cancellationAllowed = millisecondsUntilStart > 0 && ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
+  // BR-14, BR-15, BR-16: quá giờ hẹn vẫn hủy được nếu chưa check-in; khách không đến không hoàn cọc.
+  const noShow = reasonOption === 'Khách không đến';
+  const refundEligible = hasDeposit && !noShow && millisecondsUntilStart >= cutoffMinutes * 60000;
+  const cancellationAllowed = ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
   const remainingMinutes = Math.max(0, Math.floor(millisecondsUntilStart / 60000));
   let remainingLabel;
   if (millisecondsUntilStart <= 0) remainingLabel = 'Đã đến giờ nhận phòng';
@@ -644,15 +648,19 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeTitle = 'Không tải được thông tin tiền cọc';
     outcomeDescription = 'Vui lòng thử mở lại hộp thoại trước khi hủy booking.';
   } else if (!cancellationAllowed) {
-    outcomeTitle = 'Đã đến giờ sử dụng';
-    outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in.';
+    outcomeTitle = 'Không thể hủy booking';
+    outcomeDescription = 'Không thể hủy booking này vì khách đã nhận phòng hoặc lượt sử dụng đã kết thúc.';
   } else if (refundEligible) {
     outcomeTitle = '✓ Đủ điều kiện hoàn cọc';
     outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
   } else if (hasDeposit) {
     outcomeTitle = '! Không đủ điều kiện hoàn cọc';
-    // MSG16: giải thích việc giữ cọc và yêu cầu lễ tân xác nhận tiếp tục hủy.
-    outcomeDescription = `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
+    // MSG16, MSG65: nêu đúng nguyên nhân không hoàn cọc trước khi xác nhận.
+    outcomeDescription = noShow
+      ? `Hủy booking ${currentBooking.code} với lý do khách không đến sẽ không hoàn lại tiền cọc. Bạn có muốn tiếp tục?`
+      : millisecondsUntilStart <= 0
+        ? `Booking đã quá giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`
+        : `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
   } else {
     outcomeTitle = 'Không có tiền cọc';
     outcomeDescription = 'Booking sẽ được hủy và phòng được giải phóng.';
@@ -1010,7 +1018,7 @@ export default function BookingManagementPage() {
       <div><h1>Booking</h1></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
     </div>
-    {notice && <div className={`booking-live-notice${noticeKind === 'warning' ? ' is-warning' : ''}`} role={noticeKind === 'warning' ? 'alert' : 'status'}><span>{noticeKind === 'warning' ? '!' : '✓'}</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+    <ToastStack notice={notice} noticeVariant={noticeKind === 'warning' ? 'warning' : 'success'} onCloseNotice={() => setNotice('')} />
     {listError && <div className="booking-inline-error" role="alert">{listError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
     <section className="booking-filters" aria-label="Bộ lọc booking">
       <div className="booking-filter-date-group"><span className="booking-filter-label">Ngày nhận phòng</span><div className="booking-date-buttons">

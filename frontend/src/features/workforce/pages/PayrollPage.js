@@ -1,5 +1,6 @@
 /** Author: HuyDV. UC-91..97 / BR-64..81/213/225/227: bảng lương kế toán. */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useSearchParams } from 'react-router-dom';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../../finance/services/financeApi';
@@ -188,16 +189,7 @@ export default function PayrollPage() {
   return (
     <section className="finance-page">
       <h1>Lương nhân viên</h1>
-      {error && (
-        <p role="alert" className="finance-error">
-          {error}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="finance-info">
-          {notice}
-        </p>
-      )}
+      <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       <div className="finance-toolbar">
         <label>
           Tháng lương

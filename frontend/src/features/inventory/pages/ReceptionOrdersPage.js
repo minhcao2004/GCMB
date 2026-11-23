@@ -1,4 +1,5 @@
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -236,8 +237,7 @@ export default function ReceptionOrdersPage() {
     <div className="food-orders-staff">
       <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
       {soundError && <div className="food-sound-note" role="status">{soundError}</div>}
-      {error && <div className="food-alert" role="alert">{error}</div>}
-      {notice && <div className="food-alert food-alert--success" role="status">{notice}</div>}
+    <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       {incomingOrderAlert && <div className="food-alert food-alert--incoming" role="alert" aria-live="assertive"><div><strong>Khách vừa gửi {incomingOrderAlert.count} yêu cầu món mới.</strong><span>{incomingOrderAlert.roomCodes.length > 0 ? `Phòng ${incomingOrderAlert.roomCodes.slice(0, 3).join(', ')}${incomingOrderAlert.roomCodes.length > 3 ? ` và ${incomingOrderAlert.roomCodes.length - 3} phòng khác` : ''}.` : 'Vui lòng kiểm tra danh sách chờ xác nhận.'}</span></div><button type="button" onClick={() => { setIncomingOrderAlert(null); setStatus('PENDING'); document.getElementById('food-staff-order-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem yêu cầu</button></div>}
 
       <section className="food-staff-add">

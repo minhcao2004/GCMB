@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import apiClient from '../../../api/client';
 import MoneyInput from '../../../shared/components/MoneyInput';
-import { Toast } from '../../../shared/components/Feedback';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { financeApi } from '../services/financeApi';
 import '../styles/finance.css';
@@ -257,10 +257,7 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
 
   return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}${role==='BRANCH_MANAGER'?' finance-page-branch-expenses':''}`}>
     <header className="finance-heading"><div><h1>{role==='HEAD_OFFICE_MANAGER'?'Quỹ & duyệt chi toàn chuỗi':role==='ACCOUNTANT'?accountantSection==='payments'?'Quản lý thu và cấp quỹ':'Chi và hoàn ứng':'Chi phí cơ sở'}</h1></div><div className="finance-heading-actions">{role==='ACCOUNTANT'&&accountantSection==='plus'&&<button type="button" className="finance-primary-action" onClick={()=>{setRecurringPayPeriod(null);setDirectDialogOpen(true);}}>＋ Ghi nhận chi trực tiếp</button>}<button type="button" onClick={()=>{reload();setRecurringRevision((value)=>value+1);}} disabled={loading}>Làm mới</button></div></header>
-    {createPortal(<div className="finance-toast-region" role="region" aria-label="Thông báo">
-      <Toast open={Boolean(notice)} variant="success" message={notice} onClose={()=>setNotice('')}/>
-      <Toast open={Boolean(error)} variant="danger" message={error} onClose={()=>setError('')}/>
-    </div>, document.body)}
+    <ToastStack error={error} notice={notice} onCloseError={()=>setError('')} onCloseNotice={()=>setNotice('')}/>
 
     {role==='ACCOUNTANT'&&accountantSection==='payments'&&<>
       <section className="finance-balance"><div><span>Quỹ chi của kế toán (toàn chuỗi)</span><strong>{loading?'Đang tải…':money(data?.balance)}</strong></div><p>Nguồn chi lương và chi phí là quỹ QLCC cấp cho kế toán. Quỹ này tách biệt với báo cáo thu ngân cuối ngày của cơ sở.</p></section>

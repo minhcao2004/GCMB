@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { staffApi, positions, staffStatuses, dateLabel, timeLabel } from '../services/staffApi';
 import StaffDialog from '../components/StaffDialog';
@@ -113,11 +114,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
   }
   return (
     <section className="staff-page" aria-labelledby="staff-page-title">
-      {notice && (
-        <p className="staff-banner success" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {error && (
         <div className="staff-banner error" role="alert">
           {error}{' '}

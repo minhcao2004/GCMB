@@ -1,5 +1,6 @@
 /** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
 import ShiftCashHandoverPanel from '../components/ShiftCashHandoverPanel';
@@ -179,8 +180,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
       Có {preview.pendingHandovers} bàn giao ca chênh lệch cần xử lý.{' '}
       <button type="button" onClick={() => setTab('handover')}>Xem bàn giao ca</button>
     </p>}
-    {error && <p className="finance-error" role="alert">{error}</p>}
-    {notice && <p className="finance-success" role="status">{notice}</p>}
+    <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
     <div className="finance-toolbar">
       {tab === 'create' || tab === 'remit' ? <label>Ngày
         <input type="date" value={date} max={today()} onChange={(e) => changeDate(e.target.value)} />

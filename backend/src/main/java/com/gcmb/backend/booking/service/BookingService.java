@@ -902,7 +902,7 @@ public class BookingService {
     }
 
     @Transactional
-    // BR-01, BR-12, BR-14, BR-15, BR-183, BR-186, BR-187: hủy booking, giải phóng phòng nếu đã gán và xử lý cọc.
+    // BR-01, BR-12, BR-14, BR-15, BR-16, BR-183, BR-186, BR-187: hủy booking, giải phóng phòng nếu đã gán và xử lý cọc.
     public BookingDtos.CancellationResult cancel(Identity identity, UUID bookingId, BookingDtos.CancelBookingRequest request) {
         BranchScope branch = branch(identity);
         UUID actorId = identity.id();
@@ -913,8 +913,6 @@ public class BookingService {
         if (!"CONFIRMED".equals(booking.status()) && !"DRAFT".equals(booking.status()))
             throw new BookingFailure(409, "form", "Booking hiện tại không thể hủy");
         Instant now = Instant.now();
-        if (!booking.plannedStart().isAfter(now))
-            throw new BookingFailure(409, "plannedStart", "Không thể hủy booking này vì khách đã nhận phòng hoặc lượt sử dụng đã kết thúc.");
         AllocationRow allocation = bookingRepository.currentAllocationForUpdate(bookingId);
         if (allocation != null && !"RESERVED".equals(allocation.state()))
             throw new BookingFailure(409, "form", "Booking không còn lịch giữ phòng để hủy");
@@ -924,7 +922,8 @@ public class BookingService {
         UUID depositId = bookingRepository.lockDeposit(bookingId);
         BigDecimal deposit = bookingRepository.depositBalance(bookingId);
         long secondsUntilStart = Duration.between(now, booking.plannedStart()).getSeconds();
-        boolean eligible = secondsUntilStart >= booking.refundCutoffMinutes() * 60L;
+        // BR-14, BR-15, BR-16: khách không đến hoặc hủy muộn đều không được hoàn cọc.
+        boolean eligible = !"Khách không đến".equals(reason) && secondsUntilStart >= booking.refundCutoffMinutes() * 60L;
         String outcome = deposit.signum() == 0 ? "NO_DEPOSIT" : eligible ? "REFUND_ELIGIBLE" : "NON_REFUNDABLE";
         UUID refundRequestId = null;
         // Đủ điều kiện hoàn chỉ tạo yêu cầu chờ xử lý, chưa coi là tiền đã trả cho khách.

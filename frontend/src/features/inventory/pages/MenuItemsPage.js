@@ -1,4 +1,5 @@
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiAssetUrl } from '../../../api/client';
 import menuItemApi from '../services/menuItemApi';
@@ -581,7 +582,7 @@ export default function MenuItemsPage({ user }) {
         />
       </section>
     </div>}
-    {toast && <div className="menu-toast" role="status" aria-live="polite">{toast}</div>}
+    <ToastStack notice={toast} onCloseNotice={() => setToast('')} />
   </div>;
 }
 

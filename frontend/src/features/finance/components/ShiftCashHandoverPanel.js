@@ -1,5 +1,6 @@
 /** Author: HuyDV. Bàn giao ca giữ nguyên tiền két; chênh lệch chuyển QLCS xử lý. */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, today, vnd } from '../services/financeApi';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -116,8 +117,7 @@ export default function ShiftCashHandoverPanel({ user, manager = false, readOnly
         <button type="button" disabled={loading || busy} onClick={() => setRefresh((value) => value + 1)}>Tải lại</button>
       </div>
     </header>
-    {error && !selected && <p className="finance-error" role="alert">{error}</p>}
-    {notice && <p className="finance-success" role="status">{notice}</p>}
+    <ToastStack error={!selected ? error : ''} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
     {loading ? <p role="status">Đang tải bàn giao ca…</p> : data && <>
       {data.pending.length > 0 && <section className="finance-card cash-handover-pending">
         <h3>{data.pending.length} bàn giao chênh lệch cần QLCS xử lý</h3>

@@ -567,8 +567,6 @@
 .finance-page:not(.branch-payroll-page) .finance-success { color: var(--finance-success-text); background: var(--gcmb-color-success-soft, #e8f6ef); }
 .finance-page:not(.branch-payroll-page) .finance-warning { color: var(--finance-warning-text); background: var(--gcmb-color-warning-soft, #fff5e5); }
 .finance-page:not(.branch-payroll-page) .finance-error { color: var(--gcmb-color-danger, #b12642); background: var(--gcmb-color-danger-soft, #fbecef); }
-.finance-toast-region { position: fixed; right: 16px; bottom: 16px; z-index: 1500; display: grid; gap: 8px; width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; }
-.finance-toast-region .gcmb-ui-toast { position: static; width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 8px; }
 .finance-page:not(.branch-payroll-page) .finance-table-wrap { border-color: var(--finance-line); border-radius: var(--gcmb-radius-control, 8px); }
 .finance-page:not(.branch-payroll-page) th { color: var(--finance-copy); background: var(--gcmb-color-bg, #f5f7fa); }
 .finance-page:not(.branch-payroll-page) td { border-color: var(--finance-line); }

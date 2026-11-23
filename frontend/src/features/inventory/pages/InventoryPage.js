@@ -1,4 +1,5 @@
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import inventoryApi from '../services/inventoryApi';
 import { newReceiptLine, RECEIVING_UNITS, receiptAmount, receiptQuantity, receivingUnitName } from '../utils/receiptQuantity';
@@ -429,8 +430,7 @@ export default function InventoryPage({ user }) {
     {actions && <div className="inv-heading-actions">{actions}</div>}
   </div>;
 
-  const errorNotice = error && <div className="inv-alert inv-alert-error" role="alert">{error}</div>;
-  const toastNotice = toast && <div className="inv-toast" role="status">{toast}</div>;
+  const feedbackNotice = <ToastStack error={error} notice={toast} onCloseError={() => setError('')} onCloseNotice={() => setToast('')} />;
   const attachmentField = <div className="inv-field inv-evidence-field">
     <label htmlFor="inventory-evidence">Chứng từ <span className="inv-optional">Không bắt buộc</span></label>
     <input key={evidence?.name || 'empty'} id="inventory-evidence" type="file" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf" onChange={(event) => setEvidence(event.target.files?.[0] || null)} />
@@ -447,8 +447,7 @@ export default function InventoryPage({ user }) {
   if (screen === 'history') return <main ref={pageRef} className="inventory-page">
     {heading(`Lịch sử kho · ${selectedItem?.name || 'Mặt hàng'}`, `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`,
       <button type="button" className="inv-button inv-button-primary" onClick={() => setScreen('stock')}>Quay lại tồn kho</button>)}
-    {toastNotice}
-    {errorNotice}
+    {feedbackNotice}
     <section className="inv-filter-panel inv-history-filters" aria-label="Bộ lọc lịch sử kho">
       <label className="inv-search"><span className="inv-sr-only">Tìm trong lịch sử kho</span><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." /></label>
       <label className="inv-field"><span>Từ ngày</span><input type="date" value={historyFrom} onChange={(event) => setHistoryFrom(event.target.value)} /></label>
@@ -479,8 +478,7 @@ export default function InventoryPage({ user }) {
   if (screen === 'items') return <main ref={pageRef} className="inventory-page">
     {heading('Danh mục mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Danh mục mặt hàng kho`,
       <><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')}>Tồn kho</button><button type="button" className="inv-button inv-button-primary" onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
-    {toastNotice}
-    {errorNotice}
+    {feedbackNotice}
     <section className="inv-filter-panel inv-item-filters">
       <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
       <label className="inv-field"><span>Trạng thái</span><select value={itemStatus} onChange={(event) => setItemStatus(event.target.value)}>
@@ -514,8 +512,7 @@ export default function InventoryPage({ user }) {
   if (screen === 'item-form') return <main ref={pageRef} className="inventory-page">
     {heading(itemMode === 'create' ? 'Tạo mặt hàng kho' : 'Cập nhật mặt hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Quản lý danh mục`,
       <button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('items')}>Quay lại danh sách</button>)}
-    {toastNotice}
-    {errorNotice}
+    {feedbackNotice}
     <div className="inv-form-layout">
       <form className="inv-panel inv-item-form" onSubmit={saveItem}>
         <h2>Thông tin mặt hàng</h2>
@@ -549,8 +546,7 @@ export default function InventoryPage({ user }) {
 
   if (screen === 'receipt') return <main ref={pageRef} className="inventory-page">
     {heading('Ghi nhận nhập hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`)}
-    {toastNotice}
-    {errorNotice}
+    {feedbackNotice}
     <div className="inv-form-layout inv-receipt-layout">
       <form id="inventory-receipt-form" className="inv-panel inv-receipt-form" onSubmit={submitReceipt}>
         <h2>Thông tin phiếu nhập</h2>
@@ -648,8 +644,7 @@ export default function InventoryPage({ user }) {
 
   if (screen === 'adjustment') return <main ref={pageRef} className="inventory-page">
     {heading('Kiểm kê & điều chỉnh tồn', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`)}
-    {toastNotice}
-    {errorNotice}
+    {feedbackNotice}
     <div className="inv-form-layout inv-adjust-layout">
       <form id="inventory-adjustment-form" className="inv-panel inv-adjust-form" onSubmit={submitAdjustment}>
         <h2>Thông tin ghi nhận</h2>
@@ -688,8 +683,7 @@ export default function InventoryPage({ user }) {
   return <main ref={pageRef} className="inventory-page">
     {heading('Tồn kho', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
       <><button type="button" className="inv-button inv-button-manage" onClick={() => { setError(''); setScreen('items'); }}>Danh mục mặt hàng</button><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-primary" onClick={openReceipt} disabled={!activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button></>)}
-    {errorNotice}
-    {toastNotice}
+    {feedbackNotice}
     <section className="inv-filter-panel" aria-label="Tìm và lọc tồn kho">
       <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
       <label className="inv-field"><span>Nhóm hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>

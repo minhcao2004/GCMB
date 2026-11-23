@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { checkoutApi } from '../services/checkoutApi';
 import { clearBookingDraft } from '../services/bookingDraft';
 import { formatVnd, toLocalDateInput } from '../data/bookingData';
 import { AppShell } from './BookingManagementPage';
@@ -101,6 +103,7 @@ export default function RoomOverviewPage() {
   const [detailOpen, setDetailOpen] = useState(true);
   const [preferredRoomId, setPreferredRoomId] = useState('');
   const [detail, setDetail] = useState(null);
+  const [checkoutQuote, setCheckoutQuote] = useState(null);
   const [hourlyMetersByBookingId, setHourlyMetersByBookingId] = useState({});
   const meterDetailsRequestedRef = useRef(new Set());
   const [stayMode, setStayMode] = useState(null);
@@ -361,6 +364,31 @@ export default function RoomOverviewPage() {
   const timezone = options?.timezone || 'Asia/Ho_Chi_Minh';
   const selectedDetail = selectedBooking && detail?.booking?.id === selectedBooking.id ? detail : null;
   const currentBooking = selectedDetail?.booking || selectedBooking || null;
+  let checkoutAmountText = 'Đang tính…';
+  if (checkoutQuote && checkoutQuote.bookingId === currentBooking?.id) {
+    checkoutAmountText = checkoutQuote.amount == null ? 'Chưa tính được' : formatVnd(checkoutQuote.amount);
+  }
+  useEffect(() => {
+    setCheckoutQuote(null);
+    if (selected?.status !== 'occupied' || !selectedBooking?.id) return undefined;
+    let active = true;
+    let pending = false;
+    const refreshQuote = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const quote = await checkoutApi.preview(selectedBooking.id);
+        if (active) setCheckoutQuote({ bookingId: selectedBooking.id, amount: quote.remaining ?? quote.payableAmount });
+      } catch {
+        if (active) setCheckoutQuote({ bookingId: selectedBooking.id, amount: null });
+      } finally {
+        pending = false;
+      }
+    };
+    refreshQuote();
+    const timer = window.setInterval(refreshQuote, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [selectedBooking?.id, selected?.status, selectedDetail?.meter?.status, reload]);
   const meterForBooking = (bookingId) => selectedDetail && selectedDetail.booking?.id === bookingId
     ? selectedDetail.meter : hourlyMetersByBookingId[bookingId];
   const selectedMeter = currentBooking ? meterForBooking(currentBooking.id) : null;
@@ -579,7 +607,7 @@ export default function RoomOverviewPage() {
   return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms" hideSearch>
     <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1></div><div className="room-page-heading-actions">{orderSoundError && <span role="status">{orderSoundError}</span>}<button type="button" className={`room-order-sound-toggle${orderSoundEnabled ? ' is-enabled' : ''}`} aria-pressed={orderSoundEnabled} onClick={toggleOrderSound}>{orderSoundEnabled ? 'Tắt âm báo order' : 'Bật âm báo order'}</button></div></div>
     {roomOrderCheckError && <div className="booking-inline-error" role="alert">{roomOrderCheckError}<button type="button" onClick={() => setRoomOrderCheckError('')}>Đóng</button></div>}
-    {notice && <div className="booking-live-notice" role="status"><span>✓</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+    <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
     {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
     {overdueCount > 0 && <section className="room-overdue-alert" role="alert">
       <span className="room-overdue-indicator" aria-hidden="true" />
@@ -644,7 +672,7 @@ export default function RoomOverviewPage() {
               <span>Mở Booking ngày {dateInputText(date)} với bộ lọc phòng {selected.code} được chọn sẵn.</span>
             </button>
           </>}
-          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính</span><strong>{formatVnd(currentBooking.expectedAmount)}</strong></div></>}
+          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính cần thanh toán</span><strong>{checkoutAmountText}</strong></div></>}
           {selectedPendingOrders.length > 0 && <section className="room-pending-orders" aria-label="Yêu cầu món đang chờ">
             <div className="room-pending-orders-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></div>
             <div><strong>{selectedPendingOrders.length} order QR đang chờ</strong><span>{selectedPendingOrders.map((order) => order.code).join(' · ')}</span></div>

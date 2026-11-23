@@ -1,4 +1,5 @@
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -309,8 +310,7 @@ export default function RoomCatalogPage() {
         <option value="all">Trạng thái: Tất cả</option>
       </select>
     </div>
-    {error && <div className="catalog-message error" role="alert">{error}</div>}
-    {notice && <div className="catalog-toast" role="status">{notice}</div>}
+      <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
     <section className="room-catalog-table-card">
       {loading ? <div className="catalog-loading">Đang tải dữ liệu…</div> : tab === 'Hạng phòng' ? <div className="catalog-table-scroll">
         <table className="catalog-table">

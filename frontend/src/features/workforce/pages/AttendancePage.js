@@ -4,6 +4,7 @@
  * Description: UC-87..89, chấm công theo ngày/ca, tổng hợp và chốt công tháng theo mockup.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { today } from '../services/shiftApi';
 import { attendanceApi, hoursLabel, dateTimeLabel } from '../services/attendanceApi';
@@ -141,11 +142,7 @@ export default function AttendancePage({
           </span>
         )}
       </header>
-      {notice && (
-        <p className="shift-message success" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {monthly && payrollError && (
         <p className="shift-message error" role="alert">
           Không tải được tiền lương: {payrollError}
