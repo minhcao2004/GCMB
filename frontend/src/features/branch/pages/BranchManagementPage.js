@@ -40,8 +40,8 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
   const isStatus = modal === 'SUSPENDED' || modal === 'ACTIVE';
   const phoneError =
-    form.phone.trim() && !/^\+?[0-9]+$/.test(form.phone.trim())
-      ? 'Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu.'
+    form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
+      ? 'Số điện thoại phải có từ 7 đến 15 chữ số, bắt đầu bằng 0; không được chứa dấu + hoặc ký tự định dạng.'
       : '';
 
   async function refresh() {
@@ -509,7 +509,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                     <input
                       type="tel"
                       inputMode="numeric"
-                      maxLength="30"
+                      maxLength="15"
                       value={form.phone}
                       aria-invalid={!!phoneError}
                       aria-describedby={phoneError ? 'branch-phone-error' : undefined}
