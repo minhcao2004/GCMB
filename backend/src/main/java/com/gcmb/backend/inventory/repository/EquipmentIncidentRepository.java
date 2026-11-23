@@ -151,6 +151,12 @@ public class EquipmentIncidentRepository {
             Boolean.class, id, destination));
     }
 
+    public UUID transferBranch(UUID id, boolean source) {
+        String column = source ? "from_branch_id" : "to_branch_id";
+        return db.query("SELECT " + column + " FROM gcmb.asset_transfer WHERE id=?",
+            rs -> rs.next() ? rs.getObject(1, UUID.class) : null, id);
+    }
+
     // UC-76: Chuyển cơ sở và vị trí chỉ sau khi nguồn đã bàn giao và đích xác nhận.
     public int receive(UUID id, UUID branch, UUID actor, UUID room) {
         return db.update("WITH x AS (UPDATE gcmb.asset_transfer SET status='COMPLETED',received_by=?,received_at=CURRENT_TIMESTAMP,to_room_id=? WHERE id=? AND to_branch_id=? AND status='IN_TRANSIT' AND (CAST(? AS uuid) IS NULL OR EXISTS(SELECT 1 FROM gcmb.room r WHERE r.id=? AND r.branch_id=? AND r.operating_status<>'INACTIVE')) RETURNING asset_id,to_branch_id) UPDATE gcmb.asset a SET branch_id=x.to_branch_id,room_id=?,status='IN_USE' FROM x WHERE a.id=x.asset_id",actor,room,id,branch,room,room,branch,room);

@@ -201,7 +201,7 @@ public class FoodOrderService {
     @Transactional
     // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: tính phí đơn booking và phân công lễ tân ca hiện tại.
     public OrderView addItems(Identity actor, StaffOrderRequest request) {
-        UUID branchId = branch(actor);
+        UUID branchId = branch(actor, "thêm món", "booking");
         if (request == null || request.bookingId() == null) throw bad("Vui lòng chọn booking đang sử dụng.");
         if (request.assignedEmployeeId() == null) throw bad("Vui lòng chọn lễ tân đang làm ca để phụ trách đơn.");
         if (request.items() == null || request.items().isEmpty()) throw bad("Chọn ít nhất một món.");
@@ -466,8 +466,12 @@ public class FoodOrderService {
     }
 
     private UUID branch(Identity actor) {
+        return branch(actor, "truy cập", "đơn món");
+    }
+
+    private UUID branch(Identity actor, String action, String entity) {
         if (actor == null || !"RECEPTIONIST".equals(actor.role()) || actor.branchId() == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được phân công tại cơ sở đang làm việc.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền " + action + " đối với " + entity + ".");
         }
         return actor.branchId();
     }
