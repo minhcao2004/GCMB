@@ -885,7 +885,7 @@ public class CheckoutService {
         );
     }
 
-    // BR-13/21/28/29/30/172/215/216/218: preview chỉ đọc, không ghi phí; món đã xác nhận vẫn được tính dù chưa phục vụ.
+    // BR-13/21/28/29/30/172/215/216/218: preview chỉ đọc; chỉ món đã phục vụ mới được tính vào bill.
     private List<Map<String, Object>> checkoutLines(
         Identity actor,
         UUID bookingId,
@@ -956,7 +956,7 @@ public class CheckoutService {
             UNION ALL
             SELECT NULL::uuid,l.id,l.name_snapshot,l.quantity,l.unit_price,round(l.quantity*l.unit_price),'FNB','FNB'
             FROM gcmb.order_line l JOIN gcmb.fb_order o ON o.id=l.order_id
-            WHERE l.booking_id=? AND o.status IN ('ACCEPTED','SERVED') AND l.unit_price>0
+            WHERE l.booking_id=? AND o.status='SERVED' AND l.unit_price>0
             """,
             booking,
             booking
