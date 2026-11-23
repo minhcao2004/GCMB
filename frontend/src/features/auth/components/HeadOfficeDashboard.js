@@ -90,7 +90,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
   return <AppShell
     audience="head-office-manager"
     sidebarLabel="Quản lý cấp cao"
-    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    brand={<div className="manager-brand"><BrandWordmark to={dashboardPath} /></div>}
     roleLabel="QUẢN LÝ CẤP CAO"
     navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
         {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>

@@ -22,7 +22,7 @@ public final class EquipmentAssetDtos {
     public record StatusCommand(Boolean active) {}
     public record CategoryOption(UUID id, String code, String name, boolean active) {}
     public record RoomOption(UUID id, String code, String name, String operatingStatus) {}
-    public record Options(List<CategoryOption> categories, List<RoomOption> rooms) {}
+    public record Options(List<CategoryOption> categories, List<RoomOption> rooms, String codePrefix, String nextCode) {}
     public record View(UUID id, UUID branchId, String code, String name, UUID categoryId,
                        String categoryCode, String categoryName, UUID roomId, String roomCode, String roomName,
                        String locationNote, String serialNumber, LocalDate purchaseDate,

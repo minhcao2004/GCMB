@@ -8,6 +8,7 @@ import WalkInDialog from './WalkInDialog';
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
+  Link: ({ to, ...props }) => <a href={to} {...props} />,
   useNavigate: () => mockNavigate,
   useLocation: () => ({ state: null }),
   useParams: () => ({}),
@@ -54,6 +55,11 @@ test('renders the room page while data is loading and when no room is returned',
 
   expect(screen.getByText('Đang kiểm tra phiên đăng nhập…')).toBeInTheDocument();
   expect(await screen.findByRole('heading', { name: 'Phòng', level: 1 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'GenZ · Về Booking' })).toHaveAttribute('href', '/le-tan/bookings');
+  expect(screen.queryByRole('button', { name: 'Tổng quan' })).not.toBeInTheDocument();
+  expect(screen.queryByText('reception')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Thông tin tài khoản' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeEnabled();
   expect(await screen.findByText(/Không có phòng phù hợp với bộ lọc này/)).toBeInTheDocument();
 });
 

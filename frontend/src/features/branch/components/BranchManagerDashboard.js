@@ -106,7 +106,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     audience="branch-manager"
     className={`branch-manager-dashboard${active === 'Thực đơn F&B' ? ' has-menu-items' : ''}${active === 'Kho hàng' ? ' has-inventory' : ''}`}
     sidebarLabel="Quản lý cơ sở"
-    brand={<div className="manager-brand"><BrandWordmark /></div>}
+    brand={<div className="manager-brand"><BrandWordmark to="/quan-ly-chi-nhanh" /></div>}
     roleLabel="QUẢN LÝ CƠ SỞ"
     navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
         {branchNav.map((label, i) => <button key={label} aria-label={label} title={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>

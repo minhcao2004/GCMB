@@ -4,6 +4,7 @@ import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import api from '../../../api/client';
+import CustomerSourcesChart from '../../dashboard/CustomerSourcesChart';
 import './branch-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
@@ -253,6 +254,7 @@ export default function BranchOverviewDashboard({ user }) {
         <div className="bm-revenue-total"><span>Tổng doanh thu</span><strong>{money(chartSummary.revenue || 0)}</strong><small>{chartRangeLabel}</small></div>
         <RevenueChart series={dataView.revenue} chartKey={`${chartPeriod}-${chartRange.from}-${chartRange.to}`} hasRevenue={revenueRows.length > 0} />
       </Panel>
+      <CustomerSourcesChart branchId={user.branchId} className="bm-panel bm-sources-panel" />
       <Panel title="Khung giờ cao điểm" note="Số lượt phòng được sử dụng theo thứ và giờ trong kỳ" className="bm-heat-panel"><div className="bm-heatmap" aria-label="Lượt sử dụng phòng theo khung giờ"><span className="bm-heat-empty" />{days.map((day) => <span className="bm-heat-day" key={day}>{day}</span>)}{Array.from({ length: 12 }, (_, index) => <div className="bm-heat-row" key={index}><span>{`${String(index + 8).padStart(2, '0')}:00`}</span>{days.map((day, dayIndex) => { const value = hourly.get(`${dayIndex + 1}-${index + 8}`) || 0; return <i key={day} className={`heat-${heatLevel(dayIndex + 1, index + 8)}`} title={`${day} ${String(index + 8).padStart(2, '0')}:00 · ${value} lượt phòng`} />; })}</div>)}</div><div className="bm-heat-foot"><span>Ít</span>{[0,1,2,3,4].map((level) => <i key={level} className={`heat-${level}`} />)}<span>Nhiều</span></div></Panel>
     </div>
     <div className="bm-grid bm-grid-tables">

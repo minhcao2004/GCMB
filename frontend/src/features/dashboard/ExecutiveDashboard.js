@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import { financeApi } from '../finance/services/financeApi';
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
+  Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import CustomerSourcesChart from './CustomerSourcesChart';
+import PeriodControls, { initialPeriodValue, vietnamToday } from './DashboardPeriodControls';
 import './executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
@@ -13,13 +15,6 @@ const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-
 const changeText = (value) => value == null ? 'Chưa có doanh thu kỳ trước để so sánh' : `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}% so kỳ trước`;
 const tooltipMoney = (value) => money(value);
 const axisMoney = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value / 1_000_000)} tr`;
-const periodNames = { DAY: 'Ngày', MONTH: 'Tháng', YEAR: 'Năm' };
-
-function vietnamToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
 
 function periodRange(type, value) {
   const today = vietnamToday();
@@ -31,27 +26,8 @@ function periodRange(type, value) {
   return { from: `${value}-01`, to: end > today ? today : end };
 }
 
-function initialPeriodValue(type) {
-  const today = vietnamToday();
-  return type === 'DAY' ? today : type === 'YEAR' ? today.slice(0, 4) : today.slice(0, 7);
-}
-
 function periodDescription(type, value) {
   return type === 'DAY' ? `ngày ${value}` : type === 'YEAR' ? `năm ${value}` : `tháng ${value}`;
-}
-
-function PeriodControls({ id, type, value, onTypeChange, onValueChange }) {
-  const setType = (nextType) => { onTypeChange(nextType); onValueChange(initialPeriodValue(nextType)); };
-  return <div className="executive-period-controls">
-    <label className="executive-compact-filter"><span>Xem theo</span><select aria-label={`Loại kỳ ${id}`} value={type} onChange={(event) => setType(event.target.value)}>
-      <option value="DAY">Ngày</option><option value="MONTH">Tháng</option><option value="YEAR">Năm</option>
-    </select></label>
-    <label className="executive-compact-filter"><span>{periodNames[type]}</span>
-      {type === 'DAY' ? <input aria-label={`Ngày ${id}`} type="date" max={vietnamToday()} value={value} onChange={(event) => onValueChange(event.target.value)} />
-        : type === 'YEAR' ? <select aria-label={`Năm ${id}`} value={value} onChange={(event) => onValueChange(event.target.value)}>{Array.from({ length: 7 }, (_, index) => Number(vietnamToday().slice(0, 4)) - index).map((year) => <option key={year} value={String(year)}>{year}</option>)}</select>
-          : <input aria-label={`Tháng ${id}`} type="month" max={vietnamToday().slice(0, 7)} value={value} onChange={(event) => onValueChange(event.target.value)} />}
-    </label>
-  </div>;
 }
 
 function financialWarnings(overview, type, value, scope = 'Toàn chuỗi', branchId = '') {
@@ -207,8 +183,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
       api.get('/head-office/dashboard', { params: { month: operationsMonth, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
       api.get('/head-office/finance'),
       financeApi.financialOverview(overviewParams(periodType, periodValue, reportBranchId)),
-      api.get('/head-office/dashboard/revenue-mix', { params: { ...selectedRange, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
-    ]).then(([reportResult, financeResult, overviewResult, mixResult]) => {
+    ]).then(([reportResult, financeResult, overviewResult]) => {
       if (!active) return;
       if (reportResult.status === 'rejected' || overviewResult.status === 'rejected') {
         setData(null);
@@ -238,7 +213,6 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
         revenueByBranch: revenueRows,
         occupancyByBranch: monthlyBranches.map((row) => ({ ...row, occupancy: row.occupancyRate == null ? 0 : Number(row.occupancyRate) / 100 })),
         revenueByDay: (overview.series || []).map((row) => ({ ...row, label: row.label, roomRevenue: Number(row.revenue) || 0, fnbRevenue: Number(row.profit) || 0, overtimeRevenue: 0, otherRevenue: 0 })),
-        revenueMix: (mixResult.status === 'fulfilled' ? mixResult.value.data.revenueMix : report.revenueMix || []).map((row) => ({ name: row.label, value: Number(row.value) || 0, color: row.label === 'Tiền mặt' ? '#168b87' : row.label === 'Chuyển khoản' ? '#6a3ee8' : '#df9b28' })),
         ranking: [...revenueRows].sort((a, b) => b.revenue - a.revenue),
         approvals: requests.filter((row) => ['WAITING_HEAD_OFFICE', 'WAITING_APPROVAL', 'WAITING_MANAGER'].includes(row.status)).map((row) => ({ id: row.id, category: row.description || row.categoryName || 'Đề nghị chi', branch: row.branchName || '—', amount: row.amount || 0 })),
         warnings: [...financeAlerts, ...operationalAlerts],
@@ -265,10 +239,9 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
     }).catch(() => { if (active) setTrendRows([]); }).finally(() => { if (active) setTrendLoading(false); });
     return () => { active = false; };
   }, [trendPeriodType, trendPeriodValue]);
-  const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], revenueMix: [], ranking: [], approvals: [], warnings: [] };
+  const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], ranking: [], approvals: [], warnings: [] };
   const selectedBranch = incomeRows.find((branch) => branch.id === selectedBranchId);
   const { kpis } = safeData;
-  const selectedRevenueMix = safeData.revenueMix.reduce((sum, item) => sum + item.value, 0);
   const rankedRevenue = [...incomeRows].sort((a, b) => b.revenue - a.revenue);
   const chartRevenueRows = rankedRevenue.slice(0, 8);
   const leadingBranch = rankedRevenue[0];
@@ -367,21 +340,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
         </div>
       </article>
 
-      <article className="executive-panel executive-panel-mix">
-        <PanelHeading title="Cơ cấu thu nhập" description="Theo phương thức thanh toán và cọc tịch thu" trailing={<span className="executive-panel-kicker">TỶ TRỌNG</span>} />
-        <div className="executive-chart-area executive-chart-area-donut">
-          {safeData.revenueMix.length ? <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={safeData.revenueMix} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={3} stroke="none">
-                {safeData.revenueMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-              </Pie>
-              <Tooltip formatter={tooltipMoney} />
-            </PieChart>
-          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Chưa có cơ cấu doanh thu trong kỳ.' : noReportMessage}</p>}
-          <div className="executive-donut-center"><strong>{data ? money(selectedRevenueMix) : '—'}</strong><span>Thu nhập vận hành</span></div>
-        </div>
-        <div className="executive-mix-legend">{safeData.revenueMix.length ? safeData.revenueMix.map((item) => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><strong>{money(item.value)}<small>{selectedRevenueMix ? percent(item.value / selectedRevenueMix) : '0%'}</small></strong></div>) : <p className="executive-empty">{data ? 'Không có khoản thu từ hóa đơn hoặc cọc bị tịch thu trong kỳ.' : noReportMessage}</p>}</div>
-      </article>
+      <CustomerSourcesChart headOffice className="executive-panel executive-panel-sources" />
 
       <article className="executive-panel executive-panel-occupancy">
         <PanelHeading title="Tỷ lệ lấp đầy" description="Số giờ phòng có khách · khung 08:00–20:00" trailing={<span className="executive-panel-kicker">BÌNH QUÂN {occupancyAverage == null ? '—' : percent(occupancyAverage)}</span>} />

@@ -9,15 +9,17 @@ package com.gcmb.backend.inventory.repository;
 
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.CategoryOption;
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.Command;
-import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.ImageContent;
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.Options;
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.RoomOption;
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.StoredImage;
 import com.gcmb.backend.inventory.dto.EquipmentAssetDtos.View;
 import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService.StoredFile;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -75,7 +77,37 @@ public class EquipmentAssetRepository {
             ORDER BY code
             """, (r,n) -> new RoomOption(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"), r.getString("operating_status")),
             branchId, assetId, branchId);
-        return new Options(categories, rooms);
+        CodeSeries series = assetId == null ? codeSeries(branchId) : null;
+        return new Options(categories, rooms, series == null ? null : series.prefix(),
+            series == null || series.lastNumber() == null ? null : series.code(series.lastNumber().add(BigInteger.ONE)));
+    }
+
+    public record CodeSeries(String branchCode, BigInteger lastNumber) {
+        public String prefix() { return "ASSET-" + branchCode + "-"; }
+
+        String code(BigInteger number) { return prefix() + String.format(Locale.ROOT, "%04d", number); }
+    }
+
+    public CodeSeries codeSeries(UUID branchId) {
+        return jdbcTemplate.query("""
+            SELECT upper(b.code) AS branch_code, c.last_number
+            FROM gcmb.branch b
+            LEFT JOIN gcmb.equipment_asset_code_counter c ON c.branch_code = upper(b.code)
+            WHERE b.id = ?
+            """, (row, index) -> {
+                BigDecimal last = row.getBigDecimal("last_number");
+                return new CodeSeries(row.getString("branch_code"), last == null ? null : last.toBigIntegerExact());
+            }, branchId).stream().findFirst().orElse(null);
+    }
+
+    public String allocateCode(CodeSeries series, BigInteger startingNumber) {
+        BigDecimal number = jdbcTemplate.queryForObject("""
+            INSERT INTO gcmb.equipment_asset_code_counter AS counter (branch_code, last_number)
+            VALUES (?, ?)
+            ON CONFLICT (branch_code) DO UPDATE SET last_number = counter.last_number + 1
+            RETURNING last_number
+            """, BigDecimal.class, series.branchCode(), new BigDecimal(startingNumber));
+        return series.code(number.toBigIntegerExact());
     }
 
     // UC-66/67: Lấy hồ sơ đầy đủ để hiển thị hoặc nạp biểu mẫu sửa.
@@ -105,12 +137,12 @@ public class EquipmentAssetRepository {
     }
 
     // UC-65: Tạo tài sản trong cơ sở đang quản lý, khởi tạo hoạt động và không tự gán tài sản sang cơ sở khác.
-    public View create(UUID branchId, Command c) {
+    public View create(UUID branchId, Command c, String code) {
         UUID id = jdbcTemplate.queryForObject("""
             INSERT INTO gcmb.asset(code,category_id,branch_id,room_id,location_note,name,serial_number,
               purchase_date,purchase_value,warranty_expiry,status,active)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,true) RETURNING id
-            """, UUID.class, c.code().trim(), c.categoryId(), branchId, c.roomId(), clean(c.locationNote()), c.name().trim(),
+            """, UUID.class, code, c.categoryId(), branchId, c.roomId(), clean(c.locationNote()), c.name().trim(),
             clean(c.serialNumber()), c.purchaseDate(), c.purchaseValue(), c.warrantyExpiry(), c.status());
         return get(branchId, id);
     }
@@ -118,10 +150,10 @@ public class EquipmentAssetRepository {
     // UC-67/BR-110: Cập nhật thông tin không đổi branch_id; điều chuyển vẫn phải qua quy trình xác nhận riêng.
     public View update(UUID branchId, UUID id, Command c) {
         int changed = jdbcTemplate.update("""
-            UPDATE gcmb.asset SET code=?,category_id=?,room_id=?,location_note=?,name=?,serial_number=?,
+            UPDATE gcmb.asset SET category_id=?,room_id=?,location_note=?,name=?,serial_number=?,
               purchase_date=?,purchase_value=?,warranty_expiry=?,status=?
             WHERE id=? AND branch_id=?
-            """, c.code().trim(), c.categoryId(), c.roomId(), clean(c.locationNote()), c.name().trim(), clean(c.serialNumber()),
+            """, c.categoryId(), c.roomId(), clean(c.locationNote()), c.name().trim(), clean(c.serialNumber()),
             c.purchaseDate(), c.purchaseValue(), c.warrantyExpiry(), c.status(), id, branchId);
         return changed == 0 ? null : get(branchId, id);
     }

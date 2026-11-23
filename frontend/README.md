@@ -9,7 +9,7 @@ npm.cmd ci
 npm.cmd start
 ```
 
-`npm start` tự chạy cả backend Spring Boot và frontend React. PostgreSQL cần đang chạy; cấu hình riêng trong `backend/.env`, xem mẫu `backend/.env.example`. Không cần bấm thêm BackendApplication trong IntelliJ. Nhấn Ctrl+C để dừng cả hai.
+`npm start` chạy backend Spring Boot và frontend React theo cấu hình trong `backend/.env`, xem mẫu `backend/.env.example`. Hãy bật PostgreSQL trước hoặc cấu hình launcher tự bật [cụm PostgreSQL local đã khôi phục](../docs/Local%20Database%20Reset%202026-11-13.md#khởi-động-cụm-dữ-liệu-đã-khôi-phục-trên-windows). Nhấn Ctrl+C để dừng Spring Boot và React. Cụm PostgreSQL được quản lý riêng và tiếp tục chạy.
 
 Mở `http://localhost:3000/dang-nhap`. Frontend gọi `/api/v1` qua proxy tới backend cổng 8080. Lệnh báo lỗi nếu cổng 3000/8080 đang bị dùng, không tự chuyển sang 3001.
 

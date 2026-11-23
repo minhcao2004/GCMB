@@ -48,4 +48,19 @@ Các con số này là dữ liệu hư cấu chỉ để xem giao diện và là
 
 Theo yêu cầu của người dùng, file `GCMB_du_lieu_10_thang_2026.sql` được khôi phục vào một cụm PostgreSQL 18 riêng, database `gcmb`, chỉ lắng nghe trên `127.0.0.1:55433`. Không nhập chồng lên `localhost:5432/gcmb`; database cũ và fixture xem trước vẫn nguyên trạng. Dữ liệu khôi phục được lưu trong thư mục build bị Git bỏ qua `backend/target/gcmb-2026-realdata-pgdata`.
 
-Đối chiếu sau restore: 18 cơ sở, 108 phòng, 34.034 booking, 30.471 hóa đơn, 64.499 khoản thanh toán và 239 tài khoản; hóa đơn đã thanh toán có ngày từ 01/02/2026 đến 21/11/2026. `flyway_schema_history` ở V59 (`salary payment evidence`), trong khi source hiện có migration đến V58. Đã áp dụng `backend/scripts/source_import_schema.sql` vào database riêng để các API báo cáo có đủ bảng provenance; báo cáo dùng hóa đơn và khoản thanh toán vận hành làm dữ liệu thay thế khi cơ sở chưa có invoice nhập nguồn. `backend/.env` local trỏ đến database nhập riêng và tắt Flyway validate cho môi trường này; không chuyển tùy chọn đó sang database khác. Khi cụm PostgreSQL local đang chạy, dùng `npm start` để mở ứng dụng. Bản dump gốc nằm ngoài repository và không được thêm vào Git.
+Đối chiếu sau restore: 18 cơ sở, 108 phòng, 34.034 booking, 30.471 hóa đơn, 64.499 khoản thanh toán và 239 tài khoản; hóa đơn đã thanh toán có ngày từ 01/02/2026 đến 21/11/2026. `flyway_schema_history` ở V59 (`salary payment evidence`), trong khi source hiện có migration đến V58. Đã áp dụng `backend/scripts/source_import_schema.sql` vào database riêng để các API báo cáo có đủ bảng provenance; báo cáo dùng hóa đơn và khoản thanh toán vận hành làm dữ liệu thay thế khi cơ sở chưa có invoice nhập nguồn. `backend/.env` local trỏ đến database nhập riêng và tắt Flyway validate cho môi trường này; không chuyển tùy chọn đó sang database khác. Bản dump gốc nằm ngoài repository và không được thêm vào Git.
+
+### Khởi động cụm dữ liệu đã khôi phục trên Windows
+
+Với `DB_URL=jdbc:postgresql://127.0.0.1:55433/gcmb`, thêm hai dòng sau vào `backend/.env` và dùng `npm.cmd start` trong `frontend/`.
+
+```dotenv
+GCMB_LOCAL_PGDATA=target/gcmb-2026-realdata-pgdata
+GCMB_LOCAL_PG_CTL="C:/Program Files/PostgreSQL/18/bin/pg_ctl.exe"
+```
+
+Launcher dùng `pg_ctl` của PostgreSQL 18 để bật cụm hiện có và chờ cụm sẵn sàng trước khi chạy Spring Boot. Nếu cụm đã chạy đúng địa chỉ, launcher dùng lại tiến trình đó. Sau khi dừng ứng dụng bằng Ctrl+C, PostgreSQL tiếp tục chạy. Nếu PostgreSQL không khởi động, xem `backend/target/gcmb-2026-realdata-pgdata.log`.
+
+Khi kiểm tra bản sửa khởi động trên máy này, Flyway áp dụng migration V65 có sẵn trong source. Lần khởi động kế tiếp xác nhận schema đã cập nhật, API health trả `UP` và trang `/dang-nhap` trả HTTP 200.
+
+Vì thư mục dữ liệu đang nằm dưới `backend/target/`, hãy sao lưu hoặc chuyển cụm sang thư mục dữ liệu riêng và cập nhật `GCMB_LOCAL_PGDATA` trước khi chạy Maven `clean`.

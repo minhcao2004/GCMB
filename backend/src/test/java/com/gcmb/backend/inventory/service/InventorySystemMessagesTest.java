@@ -154,7 +154,6 @@ class InventorySystemMessagesTest {
 
     static Stream<Arguments> assetInputs() {
         return Stream.of(
-            Arguments.of(" ", "Loa", CATEGORY, "Kho", "Vui lòng bổ sung mã thiết bị."),
             Arguments.of("ASSET-HN01-0001", " ", CATEGORY, "Kho", "Vui lòng bổ sung tên thiết bị."),
             Arguments.of("ASSET-HN01-0001", "Loa", null, "Kho", "Vui lòng bổ sung nhóm thiết bị."),
             Arguments.of("ASSET-HN01-0001", "Loa", CATEGORY, " ", "Vui lòng bổ sung vị trí thiết bị.")
@@ -168,6 +167,17 @@ class InventorySystemMessagesTest {
         error(400, message, () -> service.create(MANAGER, BRANCH,
             new EquipmentAssetDtos.Command(code, name, category, null, location, null, null, null, null, "IN_USE")));
         verifyNoInteractions(repo);
+    }
+
+    @Test void firstAssetOfAnUninitializedSeriesRequiresACode() {
+        var repo = mock(EquipmentAssetRepository.class);
+        when(repo.categoryAvailable(BRANCH, CATEGORY, null)).thenReturn(true);
+        when(repo.roomAvailable(BRANCH, null, null)).thenReturn(true);
+        when(repo.codeSeries(BRANCH)).thenReturn(new EquipmentAssetRepository.CodeSeries("HN01", null));
+        error(400, "Vui lòng nhập mã thiết bị đầu tiên của cơ sở.", () -> new EquipmentAssetService(repo, null)
+            .create(MANAGER, BRANCH, new EquipmentAssetDtos.Command(null, "Loa", CATEGORY, null, "Kho", null, null, null, null, "IN_USE")));
+        verify(repo, never()).allocateCode(any(), any());
+        verify(repo, never()).create(any(), any(), any());
     }
 
     @Test void assetScopeNamesTheRequestedAction() {

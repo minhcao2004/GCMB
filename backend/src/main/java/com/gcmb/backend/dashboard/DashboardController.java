@@ -1,7 +1,9 @@
 package com.gcmb.backend.dashboard;
 
 import com.gcmb.backend.auth.dto.Identity;
+import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -81,8 +83,7 @@ public class DashboardController {
                                       @RequestParam(required = false) String revenueTo) {
         requireRole(actor, "BRANCH_MANAGER");
         // Phạm vi được kiểm tra lại tại máy chủ, kể cả khi không có header chọn cơ sở.
-        if (actor.branchId() == null || !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
+        requireAssignedBranch(actor);
         LocalDate start = month(month);
         String timezone = jdbcTemplate.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
         LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
@@ -140,6 +141,72 @@ public class DashboardController {
             Map.entry("openIncidents", openIncidents(actor.branchId())),
             Map.entry("todayShifts", todayShifts(actor.branchId(), today)));
     }
+
+    @GetMapping("/api/v1/head-office/dashboard/customer-sources")
+    @Transactional(readOnly = true)
+    public Map<String, Object> chainCustomerSources(@AuthenticationPrincipal Identity actor,
+            @RequestParam String period, @RequestParam String date, @RequestParam(required = false) UUID branchId) {
+        requireRole(actor, "HEAD_OFFICE_MANAGER");
+        return customerSources(period, date, branchId);
+    }
+
+    @GetMapping("/api/v1/branch-management/dashboard/customer-sources")
+    @Transactional(readOnly = true)
+    public Map<String, Object> branchCustomerSources(@AuthenticationPrincipal Identity actor,
+            @RequestParam String period, @RequestParam String date) {
+        requireRole(actor, "BRANCH_MANAGER");
+        requireAssignedBranch(actor);
+        return customerSources(period, date, actor.branchId());
+    }
+
+    private Map<String, Object> customerSources(String period, String date, UUID branchId) {
+        CustomerSourceRange range = customerSourceRange(period, date);
+        List<Map<String, Object>> sources = jdbcTemplate.queryForList("""
+            WITH channels(channel, sort_order) AS (
+              VALUES ('FACEBOOK',1), ('ZALO',2), ('TIKTOK',3), ('INSTAGRAM',4)
+            ), booking_counts AS (
+              SELECT b.channel, count(*) AS count
+              FROM gcmb.booking b
+              JOIN gcmb.branch br ON br.id=b.branch_id
+              WHERE b.channel IN (SELECT channel FROM channels) AND b.status<>'CANCELLED'
+                AND b.planned_start >= (CAST(? AS timestamp) AT TIME ZONE br.timezone)
+                AND b.planned_start < (CAST(? AS timestamp) AT TIME ZONE br.timezone)
+                AND (CAST(? AS uuid) IS NULL OR b.branch_id=?)
+              GROUP BY b.channel
+            )
+            SELECT channels.channel, COALESCE(booking_counts.count,0) AS count
+            FROM channels LEFT JOIN booking_counts USING (channel)
+            ORDER BY channels.sort_order
+            """, range.from(), range.toExclusive(), branchId, branchId);
+        return Map.of("sources", sources);
+    }
+
+    private static CustomerSourceRange customerSourceRange(String period, String date) {
+        try {
+            CustomerSourceRange range = switch (period.trim().toUpperCase(Locale.ROOT)) {
+                case "DAY" -> {
+                    LocalDate day = LocalDate.parse(date);
+                    yield new CustomerSourceRange(day, day.plusDays(1));
+                }
+                case "MONTH" -> {
+                    YearMonth month = YearMonth.parse(date);
+                    yield new CustomerSourceRange(month.atDay(1), month.plusMonths(1).atDay(1));
+                }
+                case "YEAR" -> {
+                    Year year = Year.parse(date);
+                    yield new CustomerSourceRange(year.atDay(1), year.plusYears(1).atDay(1));
+                }
+                default -> throw new DateTimeException("Unsupported customer source period");
+            };
+            if (range.from().getYear() < 1 || range.from().getYear() > 9999)
+                throw new DateTimeException("Unsupported customer source year");
+            return range;
+        } catch (DateTimeException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày hoặc kỳ thống kê nguồn khách không hợp lệ.");
+        }
+    }
+
+    private record CustomerSourceRange(LocalDate from, LocalDate toExclusive) {}
 
     private List<Map<String, Object>> dailyRevenue(LocalDate start, UUID branchId) {
         return monthlyPerformanceService.dailyRevenue(start,branchId);
@@ -373,6 +440,15 @@ public class DashboardController {
     private static void requireRole(Identity actor, String role) {
         if (actor == null || !role.equals(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với dashboard.");
     }
+
+    private void requireAssignedBranch(Identity actor) {
+        if (actor.branchId() == null || !Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)",
+                Boolean.class, actor.id(), actor.branchId()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
+        }
+    }
+
     private static LocalDate month(String value) {
         try { if (!value.matches("\\d{4}-\\d{2}")) throw new DateTimeParseException("invalid", value, 0); return YearMonth.parse(value).atDay(1); }
         catch (DateTimeParseException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tháng báo cáo không hợp lệ."); }

@@ -52,7 +52,6 @@ export default function DashboardTopbar({
       <div className={`manager-account${accountHeader ? ' has-branch-selector' : ''}`}>
         {user?.role === 'ACCOUNTANT' && <TaxInvoiceNotice />}
         {accountHeader}
-        <span>{user?.username || 'Đang tải…'}</span>
         <button type="button" disabled={!user} onClick={onProfile}>
           Thông tin tài khoản
         </button>

@@ -6,15 +6,17 @@
  * Description: Hiển thị biểu trưng thương hiệu dùng chung gồm hình logo và chữ GenZ.
  */
 
+import { Link } from 'react-router-dom';
 import logo from '../../assets/images/logo.png';
 import './brand.css';
 
-// Hiển thị tên thương hiệu dùng chung.
-export default function BrandWordmark() {
-  return (
-    <div className="brand-wordmark">
+export default function BrandWordmark({ to, destinationLabel = 'Tổng quan' }) {
+  const wordmark = <>
       <img src={logo} alt="" />
       <span className="brand-gradient">GenZ</span>
-    </div>
-  );
+  </>;
+
+  return to
+    ? <Link className="brand-wordmark" to={to} aria-label={`GenZ · Về ${destinationLabel}`}>{wordmark}</Link>
+    : <div className="brand-wordmark">{wordmark}</div>;
 }

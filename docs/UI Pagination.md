@@ -22,6 +22,7 @@ Các nhóm màn hình sử dụng thành phần dùng chung gồm tài khoản/n
 - Giao dịch kế toán: 5 giao dịch/trang, giữ bộ lọc và định dạng bảng của nhánh main. Lịch sử điều chỉnh dài: 5 lần/trang.
 - Chọn quà combo dùng chung cho đặt phòng và khách đang sử dụng phòng: 10 lựa chọn/trang, giữ kiểm tra tồn và số lượng đã chọn.
 - Bảng chi phí: 5 yêu cầu/trang; chi tiết phân bổ: 10 tháng/trang.
+- Booking Lễ tân: vùng dòng đặt phòng cuộn độc lập trên desktop. Thanh phân trang nằm dưới bảng và chỉ chiếm chiều cao nội dung của chính nó. Đã kiểm tra với 7 booking, hiển thị 5 dòng ở trang đầu và 2 dòng ở trang sau.
 
 ## Kiểm tra khi thay đổi
 

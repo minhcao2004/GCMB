@@ -36,6 +36,55 @@ function readConfig() {
   return env;
 }
 
+// Chỉ tự bật cụm PostgreSQL đã được cấu hình cho môi trường local.
+async function startLocalPostgres(config) {
+  if ((config.SPRING_PROFILES_ACTIVE || 'dev') !== 'dev') return;
+  const { GCMB_LOCAL_PGDATA: dataDirectory, GCMB_LOCAL_PG_CTL: pgCtl } = config;
+  if (!dataDirectory && !pgCtl) return;
+  if (!dataDirectory || !pgCtl) {
+    throw new Error('Cần cấu hình cả GCMB_LOCAL_PGDATA và GCMB_LOCAL_PG_CTL trong backend/.env.');
+  }
+
+  const jdbcUrl = config.SPRING_DATASOURCE_URL || config.DB_URL || '';
+  const endpoint = /^jdbc:postgresql:\/\/127\.0\.0\.1(?::(\d+))?\/[^/?,#]+(?:\?.*)?$/.exec(jdbcUrl);
+  const port = Number(endpoint?.[1] ?? 5432);
+  if (!endpoint || port < 1 || port > 65535) {
+    throw new Error('PostgreSQL tự khởi động cần URL JDBC trỏ tới một database trên 127.0.0.1.');
+  }
+
+  const dataPath = path.resolve(backend, dataDirectory);
+  if (!fs.existsSync(path.join(dataPath, 'PG_VERSION'))) {
+    throw new Error(`Không tìm thấy cụm PostgreSQL tại ${dataPath}. Kiểm tra GCMB_LOCAL_PGDATA.`);
+  }
+
+  const runPgCtl = (args) => new Promise((resolve, reject) => {
+    const child = spawn(pgCtl, ['-D', dataPath, ...args], {
+      cwd: backend,
+      stdio: ['ignore', 'ignore', 'inherit'],
+      windowsHide: true,
+    });
+    child.once('error', () => reject(new Error('Không chạy được pg_ctl. Kiểm tra GCMB_LOCAL_PG_CTL và quyền chạy chương trình.')));
+    child.once('exit', resolve);
+  });
+  const status = await runPgCtl(['status']);
+  if (status === 0) {
+    const pidFile = fs.readFileSync(path.join(dataPath, 'postmaster.pid'), 'utf8').split(/\r?\n/);
+    if (Number(pidFile[3]) !== port || pidFile[5] !== '127.0.0.1') {
+      throw new Error(`Cụm PostgreSQL đang chạy với địa chỉ khác 127.0.0.1:${port}. Kiểm tra URL JDBC và cấu hình cụm.`);
+    }
+    return;
+  }
+  // pg_ctl status trả mã 3 khi cụm đã dừng.
+  if (status !== 3) throw new Error(`Không kiểm tra được cụm PostgreSQL (mã ${status}). Kiểm tra quyền truy cập ${dataPath}.`);
+
+  const logFile = `${dataPath}.log`;
+  console.log(`[GenZ] Đang khởi động PostgreSQL tại 127.0.0.1:${port}…`);
+  const started = await runPgCtl(['-l', logFile, '-o', `-h 127.0.0.1 -p ${port}`, '-w', '-t', '30', 'start']);
+  if (started !== 0) {
+    throw new Error(`Không khởi động được PostgreSQL (mã ${started}). Xem log tại ${logFile}.`);
+  }
+}
+
 // Báo lỗi rõ ràng nếu cổng loopback cần dùng đã bị chiếm.
 async function assertFree(port) {
   // Hai server chỉ nghe trên 127.0.0.1; tiến trình IPv6 chỉ nghe ở ::1 không cản phiên này.
@@ -113,6 +162,7 @@ async function main() {
   const config = readConfig();
   await assertFree(8080);
   await assertFree(3000);
+  await startLocalPostgres(config);
   const temporary = path.join(backend, 'target', 'dev-tmp');
   const migrationOutput = path.join(backend, 'target', 'classes', 'db', 'migration');
   // Maven's resources goal overwrites current migrations but leaves files whose

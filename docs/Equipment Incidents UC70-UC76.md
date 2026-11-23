@@ -45,6 +45,6 @@ Migration V37 mở rộng tập trạng thái sự cố để hỗ trợ chờ d
 
 - Dùng severity để đo hậu quả/khu vực ảnh hưởng; dùng priority để quyết định thứ tự phản hồi theo thời gian. Ví dụ thiết bị hỏng nhẹ nhưng phục vụ phòng sắp check-in có thể severity thấp, priority cao.
 - Bắt buộc ngày dự kiến hoàn tất ngay khi đã có đánh giá; cập nhật ngày và ghi chú mỗi lần nhà cung cấp thay đổi lịch. Đừng xóa các mốc cũ khỏi nhật ký.
-- Dùng mã `ASSET-{BRANCH}-{NNNN}` cho tài sản và mã nhóm `EQ-{LOẠI}`. Cấp số tăng dần theo cơ sở, không tái sử dụng mã đã xóa/đã nghỉ hưu.
+- Mã tài sản được cấp tự động theo [quy tắc UC65–UC69](Equipment%20Assets%20UC65-UC69.md#quy-tắc-cấp-mã-thiết-bị) và giữ nguyên khi điều chuyển. Dùng mã nhóm `EQ-{LOẠI}`.
 - Lễ tân báo cáo, chọn phương án và hạn dự kiến; quản lý cơ sở duyệt/từ chối, cập nhật tiến trình, chi phí, nghiệm thu rồi đóng. Báo cáo có severity `CRITICAL` hoặc priority `URGENT` cần được ưu tiên xử lý ngay và kiểm tra tình trạng phòng liên quan.
 

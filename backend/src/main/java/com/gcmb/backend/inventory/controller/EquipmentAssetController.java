@@ -44,14 +44,14 @@ public class EquipmentAssetController {
         return equipmentAssetService.list(actor, branchId, search, roomId, status, active);
     }
 
-    // UC-65/67: Cung cấp lựa chọn nhóm và phòng hợp lệ theo chi nhánh đang thao tác.
+    // UC-65/67: Cung cấp nhóm, phòng và mã dự kiến cho hồ sơ mới.
     @GetMapping({"/api/v1/branch-management/equipment-assets/options", "/api/v1/head-office/equipment-assets/options"})
     public Options options(@AuthenticationPrincipal Identity actor, @RequestParam(required = false) UUID branchId,
                            @RequestParam(required = false) UUID assetId) {
         return equipmentAssetService.options(actor, branchId, assetId);
     }
 
-    // UC-65/BR-202: Tạo thiết bị với mã, tên, nhóm và vị trí bắt buộc.
+    // UC-65/BR-202: Cấp mã và tạo thiết bị trong cơ sở được phân quyền.
     @PostMapping({"/api/v1/branch-management/equipment-assets", "/api/v1/head-office/equipment-assets"})
     public View create(@AuthenticationPrincipal Identity actor, @RequestParam(required = false) UUID branchId,
                        @RequestBody Command command) {

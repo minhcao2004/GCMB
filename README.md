@@ -158,7 +158,7 @@ GCMB/
 | `booking` | Reservations by room type with the physical room selected at check-in, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts with supplier and item expiry dates, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and draggable severity-colored operational alerts linked to related reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; receptionist room and booking status charts; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and draggable severity-colored operational alerts linked to related reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
 | `finance` (frontend) | Accountant fund and expense workflows with cash or bank payment selection, receipt-linked reimbursements, configurable expense categories, one-time direct expenses, recurring expense templates and idempotent monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
 | `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with recorded payment methods, receipt-linked reimbursements, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, cash reconciliation, financial transactions, and period closing. |
 
@@ -233,15 +233,7 @@ The example configuration runs the backend at **http://localhost:8080**. Keep th
 
 ### 4. Configure and run the frontend
 
-Create `frontend/.env.local`:
-
-```dotenv
-REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
-```
-
-`/api/v1` is the proposed API base path. Match it to the backend routes, and ensure the shared API client in `src/api/` reads `process.env.REACT_APP_API_BASE_URL`.
-
-Open a second terminal at the repository root.
+For single-terminal development, put the backend settings in `backend/.env` using `backend/.env.example` as a template. Start PostgreSQL, then run the following from the repository root. `npm start` reads `backend/.env`, starts Spring Boot, and starts React with an `/api/v1` proxy once the backend is ready.
 
 **Windows PowerShell:**
 
@@ -259,9 +251,9 @@ npm ci
 npm start
 ```
 
-`npm ci` requires a committed `package-lock.json` matching `package.json`. If the project has no lockfile yet, run `npm install` once and commit the generated lockfile.
+Open **http://localhost:3000/dang-nhap**. For the [restored local database on port 55433](docs/Local%20Database%20Reset%202026-11-13.md#bản-dump-vận-hành-10-tháng-23112026), the launcher can start the existing PostgreSQL cluster when `GCMB_LOCAL_PGDATA` and `GCMB_LOCAL_PG_CTL` are set in `backend/.env`.
 
-Open **http://localhost:3000**. Create React App uses `npm start`. Restart the frontend after changing `.env.local`.
+If you already started Spring Boot in step 3, run `npm.cmd run start:frontend` on Windows or `npm run start:frontend` on macOS/Linux. Use `frontend/.env.local` with `REACT_APP_API_BASE_URL=http://localhost:8080/api/v1` if you need to set the API URL for that standalone frontend.
 
 ### Troubleshooting
 
@@ -270,7 +262,7 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 | Problem | Check or action |
 | --- | --- |
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
-| Backend cannot connect to PostgreSQL | Check the database service, port, database name, username, and password. |
+| Backend cannot connect to PostgreSQL | Check the database service, port, database name, username, and password. For `127.0.0.1:55433`, see the [Windows startup settings for the restored database](docs/Local%20Database%20Reset%202026-11-13.md#khởi-động-cụm-dữ-liệu-đã-khôi-phục-trên-windows). |
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
 | Flyway reports more than one migration with the same version after a migration was renamed or renumbered | Preserve migration versions that have already been applied, then run `cd backend; .\\mvnw.cmd clean spring-boot:run` on Windows (or `./mvnw clean spring-boot:run` on macOS/Linux) to remove stale migration files from `target/classes` and rebuild. If the duplicate is still reported, check `src/main/resources/db/migration/` for duplicate version prefixes. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
@@ -305,7 +297,7 @@ spring:
     password: ${DB_PASSWORD}
 ```
 
-Set the active profile through `SPRING_PROFILES_ACTIVE`. Backend `.env` files are not loaded automatically by Spring Boot; supply variables through the terminal, IDE run configuration, or deployment environment.
+Set the active profile through `SPRING_PROFILES_ACTIVE`. The `npm start` launcher reads `backend/.env`. For direct Spring Boot startup, supply variables through the terminal, IDE run configuration, or deployment environment.
 
 Keep database passwords and SePay, email, and cloud-storage credentials outside source control. Frontend `REACT_APP_*` variables are exposed in the browser bundle and must contain only public configuration.
 
@@ -314,6 +306,8 @@ Keep database passwords and SePay, email, and cloud-storage credentials outside 
 Store schema changes under `backend/src/main/resources/db/migration/`. For Flyway, use names such as `V1__create_initial_schema.sql` and `V2__add_booking_indexes.sql`.
 
 Migration ownership: V21 and V22 are the F&B menu migrations; V30 and V31 are the equipment category and asset migrations. V30/V31 use idempotent DDL because some development databases already contain those schema changes from the earlier V21/V22 numbering. For those existing databases, reconcile Flyway history before startup; do not reset the schema or change domain data. The `npm start` launcher removes only the generated `backend/target/classes/db/migration/` copy before Maven starts, so renamed source migrations cannot remain as stale duplicate files.
+
+V66 initializes equipment code counters from history by branch code. The first asset in an uninitialized series requires a starting code or number. Later assets receive their `ASSET-{BRANCH_CODE}-{SERIAL}` automatically when saved. See [equipment asset management](docs/Equipment%20Assets%20UC65-UC69.md#quy-tắc-cấp-mã-thiết-bị).
 
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
@@ -465,10 +459,18 @@ Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_
 - Biểu đồ xu hướng doanh thu có bộ lọc riêng theo tháng, năm hoặc khoảng ngày. Biểu đồ vùng có tooltip theo ngày/tháng; khoảng ngày dài được gom theo tháng để dễ đọc. Khoảng ngày tùy chọn tối đa 366 ngày.
 - API `/api/v1/branch-management/dashboard` nhận `scopePeriod`, `scopeFrom`, `scopeTo` cho phạm vi tổng quan và `revenuePeriod`, `revenueDate`, `revenueFrom`, `revenueTo` riêng cho biểu đồ; hai bộ lọc không ghi đè nhau. File ảnh hưởng: `frontend/src/features/branch/components/BranchOverviewDashboard.js`, `frontend/src/features/branch/components/branch-dashboard.css`, `backend/src/main/java/com/gcmb/backend/dashboard/DashboardController.java`.
 
+### Nguồn khách và điều hướng Tổng quan (24/11/2026)
+
+- Biểu đồ **Nguồn khách** đếm lượt booking theo kênh Facebook, Zalo, TikTok và Instagram. Khoảng thời gian tính theo ngày nhận phòng dự kiến trong múi giờ của cơ sở. Bỏ qua booking đã hủy và các kênh khác. Biểu đồ hiển thị số 0 cho kênh không có lượt trong kỳ.
+- Tổng quan Quản lý cấp cao thay **Cơ cấu thu nhập** bằng **Nguồn khách** với bộ lọc Ngày, Tháng, Năm và Cơ sở riêng. Tổng quan Quản lý cơ sở thêm cùng biểu đồ với bộ lọc Ngày, Tháng, Năm, giới hạn ở cơ sở đang quản lý. Hai màn hình mặc định tháng hiện tại. Mỗi biểu đồ giữ bộ lọc riêng với bộ lọc báo cáo và doanh thu.
+- API `GET /api/v1/{head-office|branch-management}/dashboard/customer-sources` nhận `period=DAY|MONTH|YEAR` và `date` tương ứng `YYYY-MM-DD`, `YYYY-MM` hoặc `YYYY`. Quản lý cấp cao có thể gửi `branchId` hoặc xem toàn chuỗi. Quản lý cơ sở dùng cơ sở được xác thực từ phiên và `X-GCMB-Branch-Id`. Phản hồi `sources` gồm bốn mục `{channel, count}`. Triển khai frontend và backend cùng nhau để dùng biểu đồ mới.
+- Logo GenZ trên thanh bên dẫn Quản lý cấp cao, Quản lý cơ sở và Kế toán về Tổng quan của vai trò. Với Lễ tân, logo mở danh sách **Booking** tại `/le-tan/bookings`. Mục Tổng quan của Lễ tân đã được bỏ. Đường dẫn cũ `/le-tan/tong-quan` chuyển tiếp về danh sách Booking.
+- Thanh trên cùng của Quản lý cấp cao, Quản lý cơ sở, Lễ tân và Kế toán ẩn tên đăng nhập cạnh hai nút **Thông tin tài khoản** và **Đăng xuất**.
+
 ### Giới hạn hai quản lý và bố trí dropdown (25/10/2026)
 
 - Yêu cầu hiện hành: mỗi cơ sở tối đa 2 quản lý; một quản lý vẫn có thể quản lý nhiều cơ sở. BranchAdministrationService chặn người thứ ba, kể cả khi gán từ màn tài khoản; giao diện phân quyền và bộ đếm cơ sở hiển thị giới hạn 2.
-- Dropdown cơ sở nằm cùng hàng với tên đăng nhập, Thông tin tài khoản và Đăng xuất trên desktop; màn hình nhỏ được xuống hàng để không tràn. Thay đổi CSS tại frontend/src/features/branch/pages/branch-rooms.css.
+- Dropdown cơ sở nằm cùng hàng với **Thông tin tài khoản** và **Đăng xuất** trên desktop. Trên màn hình nhỏ, các điều khiển có thể xuống hàng để vừa khung.
 - V20__limit_two_branch_managers.sql thay hàm trigger giới hạn 3 thành 2, không sửa V18/V19 đã phát hành. Migration kiểm tra phân công hiện hữu và báo cơ sở có quá 2 người để quản lý chủ động chọn người cần thu hồi; không tự xóa phân công. Khởi động lại backend để Flyway áp dụng các migration còn thiếu.
 - Theo lựa chọn trực tiếp của người dùng, đã bỏ phân công qlcs.nguyenluongbang tại HN_HOA_BANG trên database local, ghi UNASSIGN_BRANCH_MANAGER. Giữ nguyên tài khoản và phân công tại cơ sở khác. Các môi trường khác cần tự kiểm tra dữ liệu trước khi chạy V20. Không thêm file test.
 

@@ -27,3 +27,5 @@
 .equipment-management .ea-fields :where(input, select, textarea):focus-visible { outline: 2px solid var(--gcmb-color-info); outline-offset: 2px; border-color: var(--gcmb-color-info); }
 .equipment-management .ea-table-wrap th { color: var(--gcmb-color-text); background: var(--gcmb-color-bg); }
 .equipment-management .ea-table-wrap tbody tr:hover { background: var(--gcmb-color-primary-soft); }
+.ea-fields .ea-code-field input { color: var(--gcmb-color-ink); }
+.ea-fields .ea-code-field small { display: block; margin-top: 6px; color: var(--gcmb-color-text); }

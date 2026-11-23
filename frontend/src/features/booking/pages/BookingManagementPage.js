@@ -21,6 +21,7 @@ import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingDa
 import '../styles/booking.css';
 import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
 
+const receptionBookingPath = '/le-tan/bookings';
 const navigation = [
   ['Ca làm việc', 'shifts'],
   ['Bàn giao tiền mặt', 'handover'],
@@ -209,7 +210,7 @@ export function AppShell({
           audience={audience}
           className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}
           sidebarLabel="Kế toán thu chi"
-          brand={<div className="manager-brand"><BrandWordmark /></div>}
+          brand={<div className="manager-brand"><BrandWordmark to="/ke-toan" /></div>}
           roleLabel="KẾ TOÁN THU CHI"
           navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
                 {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
@@ -284,7 +285,7 @@ export function AppShell({
     if (icon === 'shifts') navigate('/le-tan/ca-lam');
     if (icon === 'tax') navigate('/le-tan/hoa-don-thue');
     if (icon === 'booking') {
-      navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
+      navigate(readBookingDraft(user) ? `${receptionBookingPath}/new` : receptionBookingPath);
     } else if (icon === 'rooms') {
       navigate('/le-tan/phong');
     } else if (icon === 'orders') {
@@ -304,7 +305,7 @@ export function AppShell({
         audience={audience}
         className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}
         sidebarLabel="Lễ tân"
-        brand={<div className="manager-brand"><BrandWordmark /></div>}
+        brand={<div className="manager-brand"><BrandWordmark to={receptionBookingPath} destinationLabel="Booking" /></div>}
         roleLabel="LỄ TÂN"
         navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
               {navigation.map(([label, icon]) => (
