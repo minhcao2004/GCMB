@@ -242,10 +242,9 @@ export default function InventoryPage({ user }) {
 
   const saveReceiptItem = async () => {
     if (!receiptItemDraft || busy) return;
-    if (!receiptItemDraft.name.trim() || !receiptItemDraft.category.trim() || !receiptItemDraft.unitId) {
-      setError('Vui lòng nhập tên, nhóm hàng và đơn vị tồn kho.');
-      return;
-    }
+    if (!receiptItemDraft.name.trim()) { setError('Vui lòng bổ sung tên mặt hàng.'); return; }
+    if (!receiptItemDraft.category.trim()) { setError('Vui lòng bổ sung nhóm hàng.'); return; }
+    if (!receiptItemDraft.unitId) { setError('Vui lòng bổ sung đơn vị tồn kho.'); return; }
     setBusy(true);
     setError('');
     try {

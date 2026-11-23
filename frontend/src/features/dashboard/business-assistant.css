@@ -1,0 +1,83 @@
+.business-assistant { --assistant-accent: var(--gcmb-color-primary, #ed188d); font: 13px/1.5 var(--gcmb-font-family, 'Be Vietnam Pro', sans-serif); color: var(--gcmb-color-ink, #1a1a2e); }
+.business-assistant *, .business-assistant *::before, .business-assistant *::after { box-sizing: border-box; }
+.business-assistant button, .business-assistant input, .business-assistant select, .business-assistant textarea { font: inherit; }
+.business-assistant button { cursor: pointer; }
+.business-assistant button:disabled { opacity: .5; cursor: not-allowed; }
+.business-assistant :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid #087f93; outline-offset: 3px; }
+.business-assistant-launcher { position: fixed; bottom: 22px; right: 24px; z-index: 1050; display: flex; align-items: center; gap: 8px; padding: 8px 16px 8px 10px; border: 1px solid #f4bfdb; border-radius: 28px; background: #fff; color: #af0763; font-weight: 700; box-shadow: 0 6px 20px #41263824; min-height: 52px; }
+.business-assistant .business-assistant-launcher { font-weight: 700; }
+.business-assistant-launcher svg { width: 38px; height: 38px; }
+.business-assistant-launcher:hover, .business-assistant-launcher.is-open { background: #fdecf5; border-color: #ed188d; }
+.business-assistant-panel { position: fixed; bottom: 90px; right: 24px; z-index: 1050; display: flex; flex-direction: column; width: min(var(--assistant-width, 470px), calc(100vw - 32px)); height: min(var(--assistant-height, 760px), calc(100dvh - 112px)); min-height: 240px; overflow: hidden; border: 1px solid #dce3ed; border-radius: 16px; background: white; box-shadow: 0 16px 48px #2732482e; }
+.business-assistant .business-assistant-header { display: flex; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid #e5e8ed; flex-shrink: 0; }
+.business-assistant-avatar { width: 42px; height: 42px; color: #087f93; flex-shrink: 0; }
+.business-assistant-header h2 { margin: 0; font-size: 17px; line-height: 1.4; }
+.business-assistant-header p { margin: 3px 0 0; font-size: 11px; color: #536071; }
+.business-assistant-header-actions { display: flex; gap: 4px; margin-left: auto; }
+.business-assistant-header-actions button { border: 0; background: transparent; color: #536071; width: 36px; height: 36px; font-size: 25px; border-radius: 8px; }
+.business-assistant-conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px; overscroll-behavior: contain; scrollbar-width: thin; }
+.business-assistant-setup, .business-assistant-status { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: #e8f6f8; color: #075e71; font-size: 12px; }
+.business-assistant-welcome h3 { margin: 18px 0 7px; font-size: 15px; }
+.business-assistant-welcome p { margin: 0 0 14px; color: #536071; font-size: 12px; }
+.business-assistant-suggestions { display: grid; gap: 8px; }
+.business-assistant-suggestions button { padding: 10px 12px; border: 1px solid #dce3ed; border-radius: 9px; background: #fff; text-align: left; color: #314254; font-size: 12px; }
+.business-assistant-suggestions button:hover { border-color: #ed188d; background: #fff5fa; }
+.business-assistant-message { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #e5e8ed; border-radius: 12px; overflow-wrap: anywhere; }
+.business-assistant-message.user { margin-left: 28px; background: #fdecf5; border-color: #f5d5e6; }
+.business-assistant-message > span { display: block; font-size: 11px; font-weight: 700; color: #536071; margin-bottom: 6px; }
+.business-assistant-message > p { margin: 0; white-space: pre-wrap; line-height: 1.75; }
+.business-assistant-error { color: #b12642; background: #fbecef; padding: 10px 12px; border-radius: 8px; margin-top: 12px; }
+.business-assistant-error p { margin: 0; }
+.business-assistant-error button { color: inherit; margin-top: 8px; background: white; border: 1px solid #e5b1bd; border-radius: 7px; padding: 6px 10px; }
+.business-assistant-footer { flex-shrink: 0; padding: 12px 20px 14px; border-top: 1px solid #e5e8ed; background: #fff; }
+.business-assistant-input-label { display: block; font-size: 11px; color: #536071; margin-bottom: 5px; }
+.business-assistant textarea { display: block; resize: vertical; width: 100%; min-height: 62px; max-height: 120px; padding: 10px 12px; border: 1px solid #dce3ed; border-radius: 9px; color: #1a1a2e; background: #fff; }
+.business-assistant-composer-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 9px; }
+.business-assistant-composer-actions button { padding: 8px 12px; border-radius: 8px; border: 1px solid #dce3ed; background: white; color: #536071; font-size: 12px; }
+.business-assistant-composer-actions .business-assistant-send { background: #ed188d; border-color: #ed188d; color: #fff; font-weight: 600; }
+@media (max-width: 600px) {
+  .business-assistant-launcher { right: 16px; bottom: max(12px, env(safe-area-inset-bottom)); padding: 6px 12px 6px 8px; min-height: 48px; }
+  .business-assistant-launcher svg { width: 32px; height: 32px; }
+  .business-assistant-panel { right: 12px; bottom: calc(72px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); height: min(760px, calc(100dvh - 92px - env(safe-area-inset-bottom))); }
+  .business-assistant .business-assistant-header { padding: 14px 16px; }
+  .business-assistant-conversation { padding: 14px 16px; }
+  .business-assistant-footer { padding: 10px 16px 12px; }
+}
+@media (max-height: 580px) {
+  .business-assistant-panel { bottom: 12px; height: calc(100dvh - 24px); min-height: 0; }
+  .business-assistant-launcher.is-open { visibility: hidden; }
+  .business-assistant-header p { display: none; }
+  .business-assistant .business-assistant-header { padding-block: 8px; }
+  .business-assistant-footer { padding-block: 8px; max-height: 58%; overflow-y: auto; }
+  .business-assistant textarea { height: 44px; min-height: 44px; resize: none; }
+}
+
+.business-assistant-header-actions svg { width: 20px; height: 20px; }
+.business-assistant-header-actions button { display: grid; place-items: center; cursor: pointer; }
+.business-assistant-panel.is-expanded { right: 12px; bottom: 12px; width: calc(100vw - 24px); height: calc(100dvh - 24px); min-height: 0; }
+.business-assistant-toolbar { display: flex; justify-content: space-between; gap: 12px; padding: 9px 20px; border-bottom: 1px solid #e5e8ed; }
+.business-assistant-toolbar button { padding: 6px 8px; border: 0; background: transparent; color: #536071; border-radius: 6px; font-size: 12px; }
+.business-assistant-toolbar button:hover, .business-assistant-toolbar button[aria-pressed="true"] { background: #fdecf5; color: #af0763; }
+.business-assistant-history { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px; }
+.business-assistant-history h3 { margin: 0 0 16px; font-size: 15px; }
+.business-assistant-history-row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e5e8ed; }
+.business-assistant-history-row button { padding: 12px 0; border: 0; background: transparent; color: #536071; font-size: 12px; text-align: left; }
+.business-assistant-history-row button:first-child { flex: 1; min-width: 0; color: #1a1a2e; }
+.business-assistant-history-row button:first-child:hover, .business-assistant-history-row button[aria-current] { color: #af0763; }
+.business-assistant-history-row button:last-child { color: #b12642; padding-inline: 8px; }
+.business-assistant-history-row span { display: block; overflow-wrap: anywhere; }
+.business-assistant-history-row time { display: block; margin-top: 5px; color: #536071; font-size: 11px; }
+.business-assistant-resize { position: absolute; left: 0; top: 0; width: 24px; height: 24px; padding: 3px; border: 0; background: transparent; color: #68778b; cursor: nwse-resize; touch-action: none; }
+.business-assistant-resize svg { display: block; width: 15px; height: 15px; }
+.business-assistant-answer p { margin: 0 0 12px; white-space: pre-wrap; }
+.business-assistant-answer p:last-child { margin-bottom: 0; }
+.business-assistant-answer ul { margin: 8px 0 12px; padding-left: 20px; }
+.business-assistant-answer li { margin: 7px 0; }
+.business-assistant-answer strong { font-weight: 700; }
+.business-assistant-message.assistant { border: 0; padding-inline: 0; }
+.business-assistant-panel.is-expanded .business-assistant-messages { max-width: 860px; margin-inline: auto; }
+.business-assistant-panel.is-expanded .business-assistant-footer form { max-width: 860px; margin-inline: auto; }
+@media (max-width: 600px) {
+  .business-assistant-toolbar { padding-inline: 12px; }
+  .business-assistant-resize { display: none; }
+}

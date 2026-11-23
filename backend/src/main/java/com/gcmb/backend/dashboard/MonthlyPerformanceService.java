@@ -46,6 +46,20 @@ public class MonthlyPerformanceService {
       "expenseGroups", expenseGroups);
   }
 
+  /** Read-only assistant history uses the same accounting definitions, including inactive branches. */
+  @Transactional(readOnly = true)
+  public Map<String, Object> assistantReport(Identity actor, LocalDate month, UUID branchId) {
+    if (actor == null || !"HEAD_OFFICE_MANAGER".equals(actor.role()))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ quản lý cấp cao được tra cứu lịch sử kinh doanh.");
+    if (month == null || month.getDayOfMonth() != 1 || month.getYear() < 2000 || YearMonth.from(month).isAfter(YearMonth.now(FinancialPeriodService.ZONE)))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tháng tra cứu không hợp lệ.");
+    if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy cơ sở cần tra cứu.");
+    var current = rows(month, branchId);
+    return Map.of("month", YearMonth.from(month).toString(), "results", current, "totals", totals(current),
+        "periodStatus", current.stream().anyMatch(row -> "CLOSED".equals(row.get("periodStatus"))) ? "CLOSED" : "OPEN");
+  }
+
   @Transactional(readOnly = true)
   public Map<String, Object> overview(Identity actor, LocalDate from, LocalDate to, List<UUID> requestedBranchIds,
                                       String compare, String granularity) {

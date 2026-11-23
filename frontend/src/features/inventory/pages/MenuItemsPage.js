@@ -299,9 +299,12 @@ export default function MenuItemsPage({ user }) {
   const reviewSave = (event) => {
     event.preventDefault();
     if (!draft) return;
-    if (!draft.name.trim() || !draft.category.trim()) {
-      setError('Vui lòng nhập tên món và danh mục.');
-      return;
+    if (!draft.name.trim()) { setError('Vui lòng bổ sung tên món.'); return; }
+    if (!draft.category.trim()) { setError('Vui lòng bổ sung danh mục.'); return; }
+    if (!draft.salePrice.trim()) { setError('Vui lòng bổ sung giá bán.'); return; }
+    if (Number(draft.salePrice) < 0) { setError('Giá bán phải lớn hơn hoặc bằng 0.'); return; }
+    if (Number.isFinite(Number(draft.salePrice)) && !Number.isInteger(Number(draft.salePrice))) {
+      setError('Giá bán phải là số tiền nguyên đồng, không có phần thập phân.'); return;
     }
     if (!/^\d{1,18}$/.test(draft.salePrice)) {
       setError('Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.');
@@ -313,7 +316,7 @@ export default function MenuItemsPage({ user }) {
       return;
     }
     if (draft.description.length > 1000) {
-      setError('Mô tả không được vượt quá 1.000 ký tự.');
+      setError('Mô tả chỉ được chứa tối đa 1000 ký tự.');
       return;
     }
     setError('');

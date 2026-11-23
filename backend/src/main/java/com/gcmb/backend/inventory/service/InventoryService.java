@@ -75,7 +75,7 @@ public class InventoryService {
 
     @Transactional
     public InventoryItemView create(Identity actor, InventoryItemCommand input) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "tạo", "mặt hàng kho");
         if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
         // Mã mặt hàng được cấp tự động trong phạm vi từng cơ sở.
         InventoryItemCommand command = validate(new InventoryItemCommand(repository.nextInventorySku(branchId),
@@ -85,13 +85,13 @@ public class InventoryService {
                 command.trackingMode(), command.minimumQuantity());
             return required(branchId, id);
         } catch (DataIntegrityViolationException exception) {
-            throw duplicateOrInvalid(exception);
+            throw constraintFailure(exception, "tạo mặt hàng");
         }
     }
 
     @Transactional
     public InventoryItemView update(Identity actor, UUID id, InventoryItemCommand input) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "cập nhật", "mặt hàng kho");
         LockedItem existing = repository.lockItem(branchId, id);
         if (existing == null) throw notFound();
         InventoryItemCommand command = validate(input, branchId);
@@ -105,14 +105,17 @@ public class InventoryService {
             repository.update(branchId, id, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity(), Boolean.TRUE.equals(command.active()));
             return required(branchId, id);
+        } catch (org.springframework.dao.DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã mặt hàng “" + command.sku()
+                + "” đã tồn tại tại cơ sở này. Vui lòng nhập mã khác.", exception);
         } catch (DataIntegrityViolationException exception) {
-            throw duplicateOrInvalid(exception);
+            throw constraintFailure(exception, "cập nhật mặt hàng");
         }
     }
 
     @Transactional
     public void delete(Identity actor, UUID id) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "xóa", "mặt hàng kho");
         LockedItem existing = repository.lockItem(branchId, id);
         if (existing == null) throw notFound();
         if (!existing.active()) return;
@@ -135,7 +138,7 @@ public class InventoryService {
         if (kind != null && !MOVEMENT_KINDS.contains(kind)) throw bad("Loại biến động kho không hợp lệ.");
         String normalizedSearch = clean(search);
         if (normalizedSearch != null && normalizedSearch.length() > 100) {
-            throw bad("Từ khóa tìm kiếm không được vượt quá 100 ký tự.");
+            throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         }
         return repository.history(branchId, itemId, from, to, kind, normalizedSearch);
     }
@@ -143,7 +146,7 @@ public class InventoryService {
     @Transactional
     // BR-31, BR-32, BR-33, BR-40, BR-197: xác nhận phiếu nhập cộng kho theo số lượng nhận, không ghi nhận thanh toán nhà cung cấp.
     public StockReceiptResult receive(Identity actor, StockReceiptCommand input, MultipartFile evidence) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "tạo", "phiếu nhập kho");
         StockReceiptCommand command = validateReceipt(input, branchId);
         StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence, "kho-hang");
         if (stored != null) cleanupIfRolledBack(stored.objectKey());
@@ -191,7 +194,7 @@ public class InventoryService {
     @Transactional
     // BR-34, BR-35, BR-40, BR-189, BR-190: lưu lý do và chênh lệch kiểm kê; yêu cầu rà soát khi số tồn đã đổi.
     public StockMovementView adjust(Identity actor, StockAdjustmentCommand input, MultipartFile evidence) {
-        UUID branchId = writableBranch(actor);
+        UUID branchId = writableBranch(actor, "điều chỉnh", "tồn kho");
         if (input == null || input.inventoryItemId() == null) throw bad("Vui lòng chọn mặt hàng cần kiểm kê.");
         if (input.occurredAt() == null) throw bad("Vui lòng nhập thời điểm kiểm kê.");
         if (input.expectedStockVersion() == null || input.expectedQuantity() == null) {
@@ -205,7 +208,7 @@ public class InventoryService {
         if (item.version() != input.expectedStockVersion() || item.quantity().compareTo(input.expectedQuantity()) != 0) {
             InventoryItemView view = required(branchId, item.id());
             throw conflict("Tồn kho đã thay đổi từ " + quantityText(input.expectedQuantity()) + " thành "
-                + quantityText(item.quantity()) + " " + view.unitName() + ". Vui lòng kiểm tra lại trước khi xác nhận.");
+                + quantityText(item.quantity()) + " " + view.unitName() + ". Vui lòng kiểm tra lại trước khi xác nhận điều chỉnh.");
         }
         BigDecimal delta = actual.subtract(item.quantity());
         if (delta.signum() == 0) throw bad("Tồn thực tế không thay đổi. Không cần ghi nhận điều chỉnh.");
@@ -292,15 +295,15 @@ public class InventoryService {
 
     private String required(String value, String field, int maxLength) {
         String normalized = value == null ? "" : value.trim();
-        if (normalized.isEmpty()) throw bad(field + " không được để trống.");
-        if (normalized.length() > maxLength) throw bad(field + " không được vượt quá " + maxLength + " ký tự.");
+        if (normalized.isEmpty()) throw bad("Vui lòng bổ sung " + field.toLowerCase(Locale.ROOT) + ".");
+        if (normalized.length() > maxLength) throw bad(field + " chỉ được chứa tối đa " + maxLength + " ký tự.");
         return normalized;
     }
 
     private String optional(String value, int maxLength, String field) {
         String normalized = clean(value);
         if (normalized != null && normalized.length() > maxLength) {
-            throw bad(field + " không được vượt quá " + maxLength + " ký tự.");
+            throw bad(field + " chỉ được chứa tối đa " + maxLength + " ký tự.");
         }
         return normalized;
     }
@@ -314,16 +317,21 @@ public class InventoryService {
     }
 
     // BR-177: cơ sở tạm ngừng chỉ được xem dữ liệu; thao tác ghi tồn kho bị từ chối.
-    private UUID writableBranch(Identity actor) {
-        UUID branchId = branch(actor);
+    private UUID writableBranch(Identity actor, String action, String entity) {
+        UUID branchId = branch(actor, action, entity);
         if (!repository.activeBranch(branchId)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-            "Cơ sở đang tạm ngưng; không thể thay đổi tồn kho.");
+            "Cơ sở " + repository.branchName(branchId)
+                + " đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
         return branchId;
     }
 
     private UUID branch(Identity actor) {
+        return branch(actor, "xem", "mặt hàng kho");
+    }
+
+    private UUID branch(Identity actor, String action, String entity) {
         if (actor == null || !"BRANCH_MANAGER".equals(actor.role()) || actor.branchId() == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được phân quyền quản lý cơ sở.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền " + action + " đối với " + entity + ".");
         }
         return actor.branchId();
     }
@@ -337,9 +345,9 @@ public class InventoryService {
         });
     }
 
-    private ResponseStatusException duplicateOrInvalid(DataIntegrityViolationException cause) {
+    private ResponseStatusException constraintFailure(DataIntegrityViolationException cause, String action) {
         return new ResponseStatusException(HttpStatus.CONFLICT,
-            "Mã mặt hàng đã tồn tại hoặc đơn vị tính không còn hợp lệ. Vui lòng kiểm tra lại.", cause);
+            "Chưa thể xác nhận kết quả " + action + ". Vui lòng kiểm tra lại trạng thái của mặt hàng kho trước khi thực hiện lại.", cause);
     }
 
     private static String quantityText(BigDecimal value) {

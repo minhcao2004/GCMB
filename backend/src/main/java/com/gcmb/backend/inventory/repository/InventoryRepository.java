@@ -68,6 +68,10 @@ public class InventoryRepository {
             "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')", Boolean.class, branchId));
     }
 
+    public String branchName(UUID branchId) {
+        return db.queryForObject("SELECT name FROM gcmb.branch WHERE id=?", String.class, branchId);
+    }
+
     public String nextInventorySku(UUID branchId) {
         db.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> {}, "GCMB_INVENTORY_ITEM_SKU:" + branchId);
         Long next = db.queryForObject("""
