@@ -19,29 +19,29 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class ShiftCashHandoverService {
   private static final int[] HOURS = {0,7,12,18,24};
-  private final JdbcTemplate db;
-  private final FinanceAccess access;
-  private final CashClosingService cash;
-  private final ObjectMapper json;
+  private final JdbcTemplate jdbcTemplate;
+  private final FinanceAccess financeAccess;
+  private final CashClosingService cashClosingService;
+  private final ObjectMapper objectMapper;
 
-  public ShiftCashHandoverService(JdbcTemplate db, FinanceAccess access, CashClosingService cash, ObjectMapper json) {
-    this.db=db;
-    this.access=access;
-    this.cash=cash;
-    this.json=json;
+  public ShiftCashHandoverService(JdbcTemplate jdbcTemplate, FinanceAccess financeAccess, CashClosingService cashClosingService, ObjectMapper objectMapper) {
+    this.jdbcTemplate=jdbcTemplate;
+    this.financeAccess=financeAccess;
+    this.cashClosingService=cashClosingService;
+    this.objectMapper=objectMapper;
   }
 
   public record Receive(LocalDate date, int shift, BigDecimal actual, String note, boolean confirmed, String revision) {}
   public record Resolution(String note) {}
 
   private UUID branch(Identity actor, boolean write) {
-    if (actor!=null && "BRANCH_MANAGER".equals(actor.role())) return access.branch(actor,write);
-    access.role(actor,"RECEPTIONIST");
-    if (actor.branchId()==null || !Boolean.TRUE.equals(db.queryForObject("""
+    if (actor!=null && "BRANCH_MANAGER".equals(actor.role())) return financeAccess.branch(actor,write);
+    financeAccess.role(actor,"RECEPTIONIST");
+    if (actor.branchId()==null || !Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
         SELECT EXISTS(SELECT 1 FROM gcmb.user_account WHERE id=? AND branch_id=? AND status='ACTIVE')
         """,Boolean.class,actor.id(),actor.branchId())))
       throw new AuthFailure(403,"form","Bạn không có quyền truy cập két của cơ sở này.");
-    String status=db.queryForObject("SELECT status FROM gcmb.branch WHERE id=?"+(write?" FOR SHARE":""),
+    String status=jdbcTemplate.queryForObject("SELECT status FROM gcmb.branch WHERE id=?"+(write?" FOR SHARE":""),
       String.class,actor.branchId());
     if (write && !"ACTIVE".equals(status)) throw new AuthFailure(403,"form",
       "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi."); // BR-177/MSG43.
@@ -49,7 +49,7 @@ public class ShiftCashHandoverService {
   }
 
   private ZoneId zone(UUID branch) {
-    return ZoneId.of(db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?",String.class,branch));
+    return ZoneId.of(jdbcTemplate.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?",String.class,branch));
   }
 
   private LocalDate date(LocalDate input, ZoneId zone) {
@@ -74,7 +74,7 @@ public class ShiftCashHandoverService {
     if (!"RECEPTIONIST".equals(actor.role())) return false;
     Instant starts=day.atStartOfDay().plusHours(HOURS[shift-1]).atZone(zone).toInstant();
     Instant ends=end(day,shift,zone);
-    return Boolean.TRUE.equals(db.queryForObject("""
+    return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
       SELECT EXISTS(
         SELECT 1 FROM gcmb.shift_assignment a
         JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
@@ -90,7 +90,7 @@ public class ShiftCashHandoverService {
   private List<Map<String,Object>> records(UUID branch, LocalDate date, boolean pending, boolean dispatch) {
     String table=dispatch?"shift_cash_dispatch":"shift_cash_handover";
     String user=dispatch?"handed_by":"received_by";
-    var result=db.queryForList("SELECT h.*,coalesce(e.full_name,u.username) AS actor_name, "
+    var result=jdbcTemplate.queryForList("SELECT h.*,coalesce(e.full_name,u.username) AS actor_name, "
       +"coalesce(me.full_name,m.username) AS resolver FROM gcmb."+table+" h "
       +"JOIN gcmb.user_account u ON u.id=h."+user+" "
       +"LEFT JOIN gcmb.user_account m ON m.id=h.resolved_by "
@@ -107,7 +107,7 @@ public class ShiftCashHandoverService {
       Instant starts=receivingDay.atStartOfDay().plusHours(HOURS[incoming-1]).atZone(zone).toInstant();
       Timestamp at=(Timestamp)record.get(dispatch?"handed_at":"received_at");
       // Giữ bản ghi cũ; đối chiếu phân công tại thời điểm nhận, kể cả ca được thay người sau đó.
-      boolean verified=Boolean.TRUE.equals(db.queryForObject("""
+      boolean verified=Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
         SELECT EXISTS(SELECT 1 FROM gcmb.shift_assignment a
           JOIN gcmb.scheduled_shift s ON s.id=a.shift_id JOIN gcmb.employee e ON e.id=a.employee_id
           WHERE e.user_id=? AND s.branch_id=? AND s.work_date=? AND s.starts_at=? AND s.ends_at=?
@@ -149,7 +149,7 @@ public class ShiftCashHandoverService {
         row.put("receiveRevision",dispatch.get("id").toString());
       }
       if (ended && existing==null && dispatch==null) {
-        var source=cash.sourceAt(branch,day,cutoff);
+        var source=cashClosingService.sourceAt(branch,day,cutoff);
         row.put("expected",source.get("expected"));
         row.put("opening",source.get("opening"));
         row.put("cashIn",source.get("cashIn"));
@@ -173,10 +173,10 @@ public class ShiftCashHandoverService {
 
   private Map<String,Object> count(Identity actor, Receive input, boolean dispatch) {
     // Khóa tiền trước hồ sơ như AccountProfileService; giữ khóa phân ca đến khi ghi nhận xong.
-    access.lock();
-    db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+    financeAccess.lock();
+    jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
     UUID branch=branch(actor,true);
-    access.role(actor,"RECEPTIONIST");
+    financeAccess.role(actor,"RECEPTIONIST");
     ZoneId zone=zone(branch);
     LocalDate day=date(input.date(),zone);
     Instant cutoff=end(day,input.shift(),zone);
@@ -186,20 +186,20 @@ public class ShiftCashHandoverService {
         dispatch?"Bạn không được phân công ca giao nên không thể bàn giao tiền mặt."
           :"Bạn không được phân công ca nhận tiếp theo nên không thể nhận bàn giao này."); // MSG24.
     if (!input.confirmed()) throw bad("Vui lòng xác nhận đã kiểm đếm tiền mặt thực tế.");
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
         SELECT EXISTS(SELECT 1 FROM gcmb.shift_cash_handover WHERE branch_id=? AND business_date=? AND shift_number=?)
         """,Boolean.class,branch,java.sql.Date.valueOf(day),input.shift())))
       throw conflict("Ca này đã xác nhận bàn giao. Vui lòng tải lại để xem kết quả.");
-    if (Boolean.TRUE.equals(db.queryForObject("""
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
         SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE month=? AND status='CLOSED')
         """,Boolean.class,java.sql.Date.valueOf(day.withDayOfMonth(1)))))
       throw conflict("Kỳ tài chính đã chốt, không thể bổ sung bàn giao.");
-    var dispatches=db.queryForList("SELECT * FROM gcmb.shift_cash_dispatch WHERE branch_id=? AND business_date=? AND shift_number=?",
+    var dispatches=jdbcTemplate.queryForList("SELECT * FROM gcmb.shift_cash_dispatch WHERE branch_id=? AND business_date=? AND shift_number=?",
       branch,java.sql.Date.valueOf(day),input.shift());
     if (dispatch && !dispatches.isEmpty()) throw conflict("Ca này đã gửi bàn giao. Vui lòng tải lại để xem kết quả.");
     if (!dispatch && dispatches.isEmpty()) throw conflict("Ca trước chưa gửi bàn giao tiền mặt. Vui lòng liên hệ nhân viên ca giao.");
     Map<String,Object> source;
-    if (dispatch) source=cash.sourceAt(branch,day,cutoff);
+    if (dispatch) source=cashClosingService.sourceAt(branch,day,cutoff);
     else {
       source=new LinkedHashMap<>(dispatches.get(0));
       source.put("expected",source.get("actual_amount"));
@@ -213,26 +213,26 @@ public class ShiftCashHandoverService {
     String note=text(input.note(),"Lý do chênh lệch",!matched);
     UUID id=UUID.randomUUID();
     String table=dispatch?"shift_cash_dispatch":"shift_cash_handover";
-    db.update("INSERT INTO gcmb."+table+"(id,branch_id,business_date,shift_number,expected_amount,"
+    jdbcTemplate.update("INSERT INTO gcmb."+table+"(id,branch_id,business_date,shift_number,expected_amount,"
       +"actual_amount,source_revision,source_snapshot,note,status,"+(dispatch?"handed_by":"received_by")+") "
       +"VALUES (?,?,?,?,?,?,?::uuid,?::jsonb,?,?,?)",
       id,branch,java.sql.Date.valueOf(day),input.shift(),expected,actual,input.revision(),
-      json.writeValueAsString(source),note,matched?"MATCHED":"DISCREPANCY",actor.id());
-    var result=db.queryForMap("SELECT * FROM gcmb."+table+" WHERE id=?",id);
-    access.audit(actor,branch,id,dispatch?"SHIFT_CASH_DISPATCHED":"SHIFT_CASH_RECEIVED",null,result);
+      objectMapper.writeValueAsString(source),note,matched?"MATCHED":"DISCREPANCY",actor.id());
+    var result=jdbcTemplate.queryForMap("SELECT * FROM gcmb."+table+" WHERE id=?",id);
+    financeAccess.audit(actor,branch,id,dispatch?"SHIFT_CASH_DISPATCHED":"SHIFT_CASH_RECEIVED",null,result);
     return result;
   }
 
   public Map<String,Object> resolve(Identity actor, UUID id, Resolution input) {
-    access.lock();
-    UUID branch=access.branch(actor,true);
+    financeAccess.lock();
+    UUID branch=financeAccess.branch(actor,true);
     String note=text(input.note(),"Kết quả xử lý chênh lệch",true);
     for (String table:List.of("shift_cash_dispatch","shift_cash_handover")) {
-      int count=db.update("UPDATE gcmb."+table+" SET status='RESOLVED',resolution=?,resolved_by=?,resolved_at=clock_timestamp() "
+      int count=jdbcTemplate.update("UPDATE gcmb."+table+" SET status='RESOLVED',resolution=?,resolved_by=?,resolved_at=clock_timestamp() "
         +"WHERE id=? AND branch_id=? AND status='DISCREPANCY'",note,actor.id(),id,branch);
       if (count==1) {
-        var result=db.queryForMap("SELECT * FROM gcmb."+table+" WHERE id=?",id);
-        access.audit(actor,branch,id,"SHIFT_CASH_RESOLVED",null,result);
+        var result=jdbcTemplate.queryForMap("SELECT * FROM gcmb."+table+" WHERE id=?",id);
+        financeAccess.audit(actor,branch,id,"SHIFT_CASH_RESOLVED",null,result);
         return result;
       }
     }

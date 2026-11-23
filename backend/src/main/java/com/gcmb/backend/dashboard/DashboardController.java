@@ -14,9 +14,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 public class DashboardController {
-    private final JdbcTemplate db;
-    private final MonthlyPerformanceService performance;
-    public DashboardController(JdbcTemplate db, MonthlyPerformanceService performance) { this.db = db; this.performance = performance; }
+    private final JdbcTemplate jdbcTemplate;
+    private final MonthlyPerformanceService monthlyPerformanceService;
+    public DashboardController(JdbcTemplate jdbcTemplate, MonthlyPerformanceService monthlyPerformanceService) { this.jdbcTemplate = jdbcTemplate; this.monthlyPerformanceService = monthlyPerformanceService; }
 
     @GetMapping("/api/v1/head-office/dashboard")
     @Transactional(readOnly = true)
@@ -24,8 +24,8 @@ public class DashboardController {
     public Map<String, Object> chain(@AuthenticationPrincipal Identity actor, @RequestParam String month, @RequestParam(required = false) UUID branchId) {
         requireRole(actor, "HEAD_OFFICE_MANAGER");
         LocalDate start = month(month);
-        List<Map<String, Object>> options = db.queryForList("SELECT id, name, code FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name, id");
-        Map<String, Object> report = performance.report(actor,start,branchId);
+        List<Map<String, Object>> options = jdbcTemplate.queryForList("SELECT id, name, code FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name, id");
+        Map<String, Object> report = monthlyPerformanceService.report(actor,start,branchId);
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         return Map.ofEntries(Map.entry("month",month),Map.entry("branches",options),Map.entry("results",rows),
             Map.entry("totals",report.get("totals")),Map.entry("previousTotals",report.get("previousTotals")),
@@ -36,7 +36,7 @@ public class DashboardController {
     }
 
     private List<Map<String,Object>> operationalWarnings(UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT id,branch_id AS "branchId",branch,kind,detail,level FROM (
               SELECT 'branch-'||b.id::text AS id,b.id AS branch_id,b.name AS branch,'Cơ sở tạm ngừng' AS kind,
                 COALESCE(NULLIF(b.status_reason,''),'Cơ sở đang ở trạng thái '||b.status||'.') AS detail,
@@ -81,17 +81,17 @@ public class DashboardController {
                                       @RequestParam(required = false) String revenueTo) {
         requireRole(actor, "BRANCH_MANAGER");
         // Phạm vi được kiểm tra lại tại máy chủ, kể cả khi không có header chọn cơ sở.
-        if (actor.branchId() == null || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
+        if (actor.branchId() == null || !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)", Boolean.class, actor.id(), actor.branchId())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem đối với cơ sở này.");
         LocalDate start = month(month);
-        String timezone = db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
+        String timezone = jdbcTemplate.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, actor.branchId());
         LocalDate today = LocalDate.now(java.time.ZoneId.of(timezone));
         ReportRange selectedReport = reportRange(scopePeriod, scopeFrom, scopeTo, start, today);
         RevenueRange selectedRevenue = revenueRange(revenuePeriod, revenueDate, revenueFrom, revenueTo, start, today);
-        Map<String,Object> report = performance.report(actor,start,actor.branchId());
+        Map<String,Object> report = monthlyPerformanceService.report(actor,start,actor.branchId());
         List<Map<String,Object>> rows = (List<Map<String,Object>>) report.get("results");
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
-        Map<String, Object> operational = db.queryForMap("""
+        Map<String, Object> operational = jdbcTemplate.queryForMap("""
             SELECT count(*) FILTER (WHERE r.operating_status <> 'INACTIVE') AS "roomCount",
                    count(*) FILTER (WHERE r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE') AND EXISTS (SELECT 1 FROM gcmb.room_allocation a WHERE a.room_id=r.id AND a.state='OCCUPIED')) AS "occupiedRooms",
                    count(*) FILTER (WHERE r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE')
@@ -100,25 +100,25 @@ public class DashboardController {
                    count(*) FILTER (WHERE r.operating_status='UNDER_MAINTENANCE') AS "maintenanceRooms"
             FROM gcmb.room r WHERE r.branch_id=?
             """, actor.branchId());
-        operational.put("openIncidents", db.queryForObject("SELECT count(*) FROM gcmb.asset_incident WHERE branch_id=? AND status NOT IN ('VERIFIED','CLOSED')", Long.class, actor.branchId()));
-        operational.put("lowStockItems", db.queryForObject("""
+        operational.put("openIncidents", jdbcTemplate.queryForObject("SELECT count(*) FROM gcmb.asset_incident WHERE branch_id=? AND status NOT IN ('VERIFIED','CLOSED')", Long.class, actor.branchId()));
+        operational.put("lowStockItems", jdbcTemplate.queryForObject("""
             SELECT count(*) FROM gcmb.inventory_item i JOIN gcmb.stock_balance s ON s.inventory_item_id=i.id
             WHERE i.branch_id=? AND i.active AND s.minimum_quantity>0 AND s.quantity<s.minimum_quantity
             """, Long.class, actor.branchId()));
-        operational.put("staffPresent", db.queryForObject("""
+        operational.put("staffPresent", jdbcTemplate.queryForObject("""
             SELECT count(DISTINCT a.employee_id) FROM gcmb.shift_assignment a JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
             JOIN gcmb.attendance t ON t.assignment_id=a.id
             WHERE s.branch_id=? AND s.work_date=(CURRENT_TIMESTAMP AT TIME ZONE (SELECT timezone FROM gcmb.branch WHERE id=?))::date
               AND a.status='CONFIRMED' AND s.status<>'CANCELLED' AND t.actual_in IS NOT NULL
             """, Long.class, actor.branchId(), actor.branchId()));
-        operational.put("staffTotal", db.queryForObject("""
+        operational.put("staffTotal", jdbcTemplate.queryForObject("""
             SELECT count(DISTINCT a.employee_id) FROM gcmb.shift_assignment a JOIN gcmb.scheduled_shift s ON s.id=a.shift_id
             WHERE s.branch_id=? AND s.work_date=(CURRENT_TIMESTAMP AT TIME ZONE (SELECT timezone FROM gcmb.branch WHERE id=?))::date
               AND a.status='CONFIRMED' AND s.status<>'CANCELLED'
             """, Long.class, actor.branchId(), actor.branchId()));
-        List<Map<String,Object>> dailyRevenue = performance.dailyRevenue(selectedRevenue.from(), selectedRevenue.to(), actor.branchId());
+        List<Map<String,Object>> dailyRevenue = monthlyPerformanceService.dailyRevenue(selectedRevenue.from(), selectedRevenue.to(), actor.branchId());
         Map<String,Object> revenueSummary = revenueSummary(dailyRevenue);
-        List<Map<String,Object>> reportDailyRevenue = performance.dailyRevenue(selectedReport.from(), selectedReport.toExclusive(), actor.branchId());
+        List<Map<String,Object>> reportDailyRevenue = monthlyPerformanceService.dailyRevenue(selectedReport.from(), selectedReport.toExclusive(), actor.branchId());
         Map<String,Object> reportSummary = revenueSummary(reportDailyRevenue);
         return Map.ofEntries(
             Map.entry("month", month),
@@ -142,7 +142,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> dailyRevenue(LocalDate start, UUID branchId) {
-        return performance.dailyRevenue(start,branchId);
+        return monthlyPerformanceService.dailyRevenue(start,branchId);
     }
 
     private RevenueRange revenueRange(String period, String date, String fromValue, String toValue, LocalDate defaultMonth, LocalDate today) {
@@ -247,7 +247,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> revenueMix(LocalDate start, LocalDate endExclusive, UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             WITH revenue_mix AS (
               SELECT CASE WHEN p.method='BANK_TRANSFER' THEN 'Chuyển khoản'
                           WHEN p.method='CASH' THEN 'Tiền mặt' ELSE p.method END AS label,
@@ -270,7 +270,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> occupancy(UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT b.id,b.name,COUNT(r.id) FILTER (WHERE r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE')) AS total,
               COUNT(r.id) FILTER (WHERE r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE') AND EXISTS (
                 SELECT 1 FROM gcmb.room_allocation a WHERE a.room_id=r.id AND a.state='OCCUPIED'
@@ -282,7 +282,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> roomTypePerformance(LocalDate start, LocalDate endExclusive, UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT rt.name,COUNT(DISTINCT a.id) AS count,COALESCE(SUM(bl.amount),0) AS revenue,
               COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(a.actual_end,a.ends_at)-COALESCE(a.actual_start,a.starts_at)))/60),0) AS minutes
             FROM gcmb.room_type rt JOIN gcmb.room r ON r.room_type_id=rt.id
@@ -301,7 +301,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> hourlyOccupancy(LocalDate start, LocalDate endExclusive, UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT EXTRACT(ISODOW FROM local_day)::int AS weekday, hour_slot AS hour,
               COUNT(*) AS occupied_room_hours
             FROM (
@@ -319,7 +319,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> openIncidents(UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT i.id,i.asset_id AS "assetId",a.code AS "assetCode",a.name AS "assetName",
               COALESCE(r.code,r.name,a.location_note,'—') AS location,i.status,i.created_at AS "createdAt"
             FROM gcmb.asset_incident i JOIN gcmb.asset a ON a.id=i.asset_id
@@ -330,7 +330,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> todayShifts(UUID branchId, LocalDate today) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT s.work_date AS date,st.code AS shift,e.full_name AS employee,
               CASE WHEN att.id IS NULL THEN 'CHƯA CHẤM CÔNG'
                    WHEN att.status='ABSENT' THEN 'VẮNG'
@@ -348,7 +348,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> topItems(LocalDate start, LocalDate endExclusive, UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT ol.name_snapshot AS name,COALESCE(SUM(ol.quantity),0) AS quantity,
               COALESCE(SUM(bl.amount),0) AS revenue
             FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
@@ -361,7 +361,7 @@ public class DashboardController {
     }
 
     private List<Map<String, Object>> lowStock(UUID branchId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT i.name,b.quantity,b.minimum_quantity AS minimum,u.name AS unit
             FROM gcmb.inventory_item i JOIN gcmb.stock_balance b ON b.inventory_item_id=i.id
             JOIN gcmb.unit u ON u.id=i.unit_id

@@ -20,23 +20,23 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 @Transactional
 public class CashClosingService {
-  private final JdbcTemplate db;
-  private final FinanceAccess access;
-  private final ObjectMapper json;
-  private final RefundEvidenceStorageService storage;
+  private final JdbcTemplate jdbcTemplate;
+  private final FinanceAccess financeAccess;
+  private final ObjectMapper objectMapper;
+  private final RefundEvidenceStorageService refundEvidenceStorageService;
   private final FinancialPeriodService financialPeriodService;
 
   public CashClosingService(
-    JdbcTemplate db,
-    FinanceAccess access,
-    ObjectMapper json,
-    RefundEvidenceStorageService storage,
+    JdbcTemplate jdbcTemplate,
+    FinanceAccess financeAccess,
+    ObjectMapper objectMapper,
+    RefundEvidenceStorageService refundEvidenceStorageService,
     FinancialPeriodService financialPeriodService
   ) {
-    this.db = db;
-    this.access = access;
-    this.json = json;
-    this.storage = storage;
+    this.jdbcTemplate = jdbcTemplate;
+    this.financeAccess = financeAccess;
+    this.objectMapper = objectMapper;
+    this.refundEvidenceStorageService = refundEvidenceStorageService;
     this.financialPeriodService = financialPeriodService;
   }
 
@@ -62,7 +62,7 @@ public class CashClosingService {
   }
 
   private UUID drawer(UUID branch) {
-    var accounts = db.queryForList(
+    var accounts = jdbcTemplate.queryForList(
       "SELECT id FROM gcmb.financial_account WHERE branch_id=? AND kind='CASH_DRAWER' AND active",
       UUID.class, branch);
     if (accounts.size() != 1)
@@ -71,28 +71,28 @@ public class CashClosingService {
   }
 
   private ZoneId zone(UUID branch) {
-    return ZoneId.of(db.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, branch));
+    return ZoneId.of(jdbcTemplate.queryForObject("SELECT timezone FROM gcmb.branch WHERE id=?", String.class, branch));
   }
 
   private void checkDate(UUID account, LocalDate date) {
-    if (Boolean.TRUE.equals(db.queryForObject(
+    if (Boolean.TRUE.equals(jdbcTemplate.queryForObject(
       "SELECT EXISTS(SELECT 1 FROM gcmb.daily_cash_closing WHERE account_id=? AND business_date>?)",
       Boolean.class, account, date)))
       throw conflict("Không được chốt lùi trước ngày đã có báo cáo chốt quỹ mới hơn.");
   }
 
   private void requireOpenPeriod(LocalDate date) {
-    if(Boolean.TRUE.equals(db.queryForObject(
+    if(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
       "SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE month=? AND status='CLOSED')",
       Boolean.class,date.withDayOfMonth(1))))
       throw conflict("Kỳ tài chính của ngày này đã khóa. Không được thay đổi báo cáo hoặc số dư két.");
   }
 
   public Map<String,Object> preview(Identity actor, LocalDate value) {
-    UUID branch = access.branch(actor, false);
+    UUID branch = financeAccess.branch(actor, false);
     LocalDate date = day(value);
     var result = source(branch, date);
-    java.sql.Date latest = db.queryForObject(
+    java.sql.Date latest = jdbcTemplate.queryForObject(
       "SELECT max(business_date) FROM gcmb.daily_cash_closing WHERE account_id=?",
       java.sql.Date.class, result.get("accountId"));
     result.put("closingBlocked", latest != null && date.isBefore(latest.toLocalDate()));
@@ -100,7 +100,7 @@ public class CashClosingService {
     var current=source(branch,LocalDate.now(zone(branch)));
     result.put("currentBalance",current.get("expected"));
     result.put("cashCycle",cashCycle((UUID)result.get("accountId"),zone(branch),current));
-    result.put("pendingHandovers",db.queryForObject(
+    result.put("pendingHandovers",jdbcTemplate.queryForObject(
       "SELECT (SELECT count(*) FROM gcmb.shift_cash_handover WHERE branch_id=? AND status='DISCREPANCY') "
       +"+ (SELECT count(*) FROM gcmb.shift_cash_dispatch WHERE branch_id=? AND status='DISCREPANCY')",Integer.class,branch,branch));
     return result;
@@ -117,7 +117,7 @@ public class CashClosingService {
     Timestamp end = Timestamp.from(cutoff);
     // BR-95: cash receipts not yet posted to the ledger are included exactly once.
     // V44 receipt movements remain historical; no new report creates a handover.
-    var all = db.queryForList("""
+    var all = jdbcTemplate.queryForList("""
       SELECT e.id::text AS id,t.occurred_at AS time,e.amount_signed AS amount,
         CASE WHEN p.purpose='DEPOSIT' THEN 'DEPOSIT' WHEN p.purpose='BILL' THEN 'CHECKOUT' ELSE t.kind END AS kind,
         t.reason AS description
@@ -170,8 +170,8 @@ public class CashClosingService {
       && !Set.of("COUNT_VARIANCE","DRAWER_FUNDING").contains(String.valueOf(r.get("kind"))))
       .map(r->decimal(r.get("amount"))).reduce(BigDecimal.ZERO,BigDecimal::add));
     result.put("scope","CASH_ONLY");
-    result.put("revision",UUID.nameUUIDFromBytes(json.writeValueAsBytes(all)).toString());
-    result.put("existing",db.queryForList("""
+    result.put("revision",UUID.nameUUIDFromBytes(objectMapper.writeValueAsBytes(all)).toString());
+    result.put("existing",jdbcTemplate.queryForList("""
       SELECT c.id,coalesce(r.state,c.status) AS status,coalesce(r.revision,0) AS report_version
       FROM gcmb.daily_cash_closing c LEFT JOIN gcmb.cash_closing_report r ON r.closing_id=c.id
       WHERE c.account_id=? AND c.business_date=?
@@ -181,13 +181,13 @@ public class CashClosingService {
 
   // HuyDV: five calendar days is a reminder, never an automatic withdrawal.
   private Map<String,Object> cashCycle(UUID account,ZoneId zone,Map<String,Object> current) {
-    Timestamp last=db.queryForObject("""
+    Timestamp last=jdbcTemplate.queryForObject("""
       SELECT max(time) FROM (
         SELECT occurred_at AS time FROM gcmb.cash_drawer_remittance WHERE account_id=? AND full_sweep
         UNION ALL SELECT received_at FROM gcmb.cash_closing_handover WHERE account_id=? AND received_at IS NOT NULL
       ) swept
       """,Timestamp.class,account,account);
-    Timestamp anchor=db.queryForObject("""
+    Timestamp anchor=jdbcTemplate.queryForObject("""
       SELECT min(time) FROM (
         SELECT t.occurred_at AS time FROM gcmb.financial_entry e JOIN gcmb.financial_transaction t ON t.id=e.transaction_id
         WHERE e.account_id=? AND e.amount_signed>0 AND t.occurred_at>coalesce(CAST(? AS timestamptz),'-infinity'::timestamptz)
@@ -215,8 +215,8 @@ public class CashClosingService {
 
   @SuppressWarnings("unchecked")
   public Map<String,Object> submit(Identity actor, Submit input, MultipartFile evidence) {
-    access.lock();
-    UUID branch=access.branch(actor,true);
+    financeAccess.lock();
+    UUID branch=financeAccess.branch(actor,true);
     LocalDate date=day(input.date());
     requireOpenPeriod(date);
     var preview=source(branch,date);
@@ -237,12 +237,12 @@ public class CashClosingService {
       variance.signum()!=0);
     if(decimal(preview.get("opening")).signum()<0 || expected.signum()<0)
       throw conflict("Số dư tiền mặt âm. Cần kiểm tra giao dịch nguồn trước khi chốt quỹ.");
-    if(existing.isEmpty()) db.update("""
+    if(existing.isEmpty()) jdbcTemplate.update("""
       INSERT INTO gcmb.daily_cash_closing(id,branch_id,account_id,business_date,opening_amount,cash_in,cash_out,
         expected_closing,actual_closing,variance,explanation,status,submitted_by,submitted_at,source_snapshot)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,'SUBMITTED',?,CURRENT_TIMESTAMP,?::jsonb)
       """,id,branch,preview.get("accountId"),date,preview.get("opening"),preview.get("cashIn"),
-      preview.get("cashOut"),expected,actual,variance,explanation,actor.id(),json.writeValueAsString(preview));
+      preview.get("cashOut"),expected,actual,variance,explanation,actor.id(),objectMapper.writeValueAsString(preview));
     int next=version+1;
     var payload=new LinkedHashMap<String,Object>();
     payload.put("opening_amount",preview.get("opening"));
@@ -254,29 +254,29 @@ public class CashClosingService {
     payload.put("scope","CASH_ONLY");
     payload.put("explanation",explanation);
     payload.put("source",preview);
-    db.update("INSERT INTO gcmb.cash_closing_report_revision(closing_id,revision,payload,submitted_by) VALUES (?,?,?::jsonb,?)",
-      id,next,json.writeValueAsString(payload),actor.id());
-    if(version==0) db.update("INSERT INTO gcmb.cash_closing_report VALUES (?,?,'SUBMITTED')",id,next);
-    else db.update("UPDATE gcmb.cash_closing_report SET revision=?,state='SUBMITTED' WHERE closing_id=?",next,id);
+    jdbcTemplate.update("INSERT INTO gcmb.cash_closing_report_revision(closing_id,revision,payload,submitted_by) VALUES (?,?,?::jsonb,?)",
+      id,next,objectMapper.writeValueAsString(payload),actor.id());
+    if(version==0) jdbcTemplate.update("INSERT INTO gcmb.cash_closing_report VALUES (?,?,'SUBMITTED')",id,next);
+    else jdbcTemplate.update("UPDATE gcmb.cash_closing_report SET revision=?,state='SUBMITTED' WHERE closing_id=?",next,id);
     if(evidence!=null && !evidence.isEmpty()) storeEvidence(id,next,evidence);
-    access.audit(actor,branch,id,version==0?"SUBMIT_DAILY_TILL_REPORT":"RESUBMIT_DAILY_TILL_REPORT",null,payload);
+    financeAccess.audit(actor,branch,id,version==0?"SUBMIT_DAILY_TILL_REPORT":"RESUBMIT_DAILY_TILL_REPORT",null,payload);
     return detail(actor,id);
   }
 
   private void storeEvidence(UUID id,int version,MultipartFile evidence) {
-    var stored=storage.store(evidence, "chot-quy");
+    var stored=refundEvidenceStorageService.store(evidence, "chot-quy");
     TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
       @Override public void afterCompletion(int status) {
-        if(status!=STATUS_COMMITTED) storage.deleteQuietly(stored.objectKey());
+        if(status!=STATUS_COMMITTED) refundEvidenceStorageService.deleteQuietly(stored.objectKey());
       }
     });
-    db.update("INSERT INTO gcmb.cash_closing_revision_evidence VALUES (?,?,?,?,?)",
+    jdbcTemplate.update("INSERT INTO gcmb.cash_closing_revision_evidence VALUES (?,?,?,?,?)",
       id,version,stored.originalName(),stored.mimeType(),stored.objectKey());
   }
 
   @SuppressWarnings("unchecked")
   private void reportRow(Map<String,Object> row, boolean history) {
-    var report=db.queryForList("""
+    var report=jdbcTemplate.queryForList("""
       SELECT r.state,r.revision,v.payload,v.submitted_at,u.username
       FROM gcmb.cash_closing_report r JOIN gcmb.cash_closing_report_revision v
         ON v.closing_id=r.closing_id AND v.revision=r.revision
@@ -285,7 +285,7 @@ public class CashClosingService {
     row.put("report_version",0);
     if(!report.isEmpty()) {
       var current=report.get(0);
-      var payload=json.readValue(current.get("payload").toString(),Map.class);
+      var payload=objectMapper.readValue(current.get("payload").toString(),Map.class);
       row.putAll(payload);
       // Normalize JSON numbers so review validation also works for small/zero amounts.
       for(String key:List.of("opening_amount","cash_in","cash_out","expected_closing","actual_closing","variance","actual_bank","bank_variance"))
@@ -295,22 +295,22 @@ public class CashClosingService {
       row.put("submitted_at",current.get("submitted_at"));
       row.put("submittedBy",current.get("username"));
     }
-    if(history) row.put("versions",db.queryForList("""
+    if(history) row.put("versions",jdbcTemplate.queryForList("""
       SELECT v.revision,v.submitted_at,u.username,v.payload FROM gcmb.cash_closing_report_revision v
       JOIN gcmb.user_account u ON u.id=v.submitted_by WHERE v.closing_id=? ORDER BY v.revision
       """,row.get("id")).stream().map(v -> {
-        v.put("payload",json.readValue(v.get("payload").toString(),Map.class));
+        v.put("payload",objectMapper.readValue(v.get("payload").toString(),Map.class));
         return v;
       }).toList());
   }
 
   public List<Map<String,Object>> list(Identity actor,LocalDate from,LocalDate to,UUID branch,String status,boolean alerts) {
-    if("BRANCH_MANAGER".equals(actor.role())) branch=access.branch(actor,false);
-    else access.accountant(actor);
+    if("BRANCH_MANAGER".equals(actor.role())) branch=financeAccess.branch(actor,false);
+    else financeAccess.accountant(actor);
     LocalDate until=to==null?LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")):to;
     LocalDate start=from==null?until.withDayOfMonth(1):from;
     if(start.isAfter(until)||start.plusYears(2).isBefore(until)) throw bad("Khoảng ngày không hợp lệ, tối đa hai năm.");
-    var rows=db.queryForList("""
+    var rows=jdbcTemplate.queryForList("""
       SELECT c.*,b.name AS "branchName",u.username AS "submittedBy"
       FROM gcmb.daily_cash_closing c JOIN gcmb.branch b ON b.id=c.branch_id
       JOIN gcmb.user_account u ON u.id=c.submitted_by
@@ -326,7 +326,7 @@ public class CashClosingService {
   }
 
   public Map<String,Object> detail(Identity actor,UUID id) {
-    var rows=db.queryForList("""
+    var rows=jdbcTemplate.queryForList("""
       SELECT c.*,b.name AS "branchName",u.username AS "submittedBy"
       FROM gcmb.daily_cash_closing c JOIN gcmb.branch b ON b.id=c.branch_id
       JOIN gcmb.user_account u ON u.id=c.submitted_by WHERE c.id=?
@@ -334,20 +334,20 @@ public class CashClosingService {
     if(rows.isEmpty()) throw bad("Không tìm thấy báo cáo chốt quỹ.");
     var row=rows.get(0);
     if("BRANCH_MANAGER".equals(actor.role())) {
-      if(!Objects.equals(row.get("branch_id"),access.branch(actor,false)))
+      if(!Objects.equals(row.get("branch_id"),financeAccess.branch(actor,false)))
         throw new com.gcmb.backend.auth.exception.AuthFailure(403,"form","Bạn không có quyền xem bản chốt quỹ này.");
-    } else access.accountant(actor);
-    row.put("source",json.readValue(row.remove("source_snapshot").toString(),Map.class));
+    } else financeAccess.accountant(actor);
+    row.put("source",objectMapper.readValue(row.remove("source_snapshot").toString(),Map.class));
     reportRow(row,true);
-    row.put("reviews",db.queryForList("""
+    row.put("reviews",jdbcTemplate.queryForList("""
       SELECT r.*,u.username FROM gcmb.cash_reconciliation r JOIN gcmb.user_account u ON u.id=r.reviewed_by
       WHERE closing_id=? ORDER BY created_at,id
       """,id));
-    row.put("evidence",db.queryForList("""
+    row.put("evidence",jdbcTemplate.queryForList("""
       SELECT original_name AS name,0 AS revision FROM gcmb.cash_closing_evidence WHERE closing_id=?
       UNION ALL SELECT original_name,revision FROM gcmb.cash_closing_revision_evidence WHERE closing_id=? ORDER BY revision
       """,id,id));
-    row.put("legacyHandover",db.queryForList("""
+    row.put("legacyHandover",jdbcTemplate.queryForList("""
       SELECT h.received_at,c.actual_closing AS amount,u.username FROM gcmb.cash_closing_handover h
       JOIN gcmb.daily_cash_closing c ON c.id=h.closing_id
       LEFT JOIN gcmb.user_account u ON u.id=h.received_by WHERE h.closing_id=? AND h.received_at IS NOT NULL
@@ -364,13 +364,13 @@ public class CashClosingService {
       movements.add(Arrays.asList(row.get("id"),row.get("kind"),row.get("time"),
         decimal(row.get("amount")),row.get("description")));
     }
-    return json.writeValueAsString(List.of(decimal(source.get("opening")),decimal(source.get("cashIn")),
+    return objectMapper.writeValueAsString(List.of(decimal(source.get("opening")),decimal(source.get("cashIn")),
       decimal(source.get("cashOut")),decimal(source.get("expected")),movements));
   }
 
   public Map<String,Object> reconcile(Identity actor,UUID id,Review input) {
-    access.accountant(actor);
-    access.lock();
+    financeAccess.accountant(actor);
+    financeAccess.lock();
     var old=detail(actor,id);
     if(!"SUBMITTED".equals(old.get("status"))) throw conflict("Chỉ được đối soát báo cáo đang chờ kế toán.");
     requireOpenPeriod(((java.sql.Date)old.get("business_date")).toLocalDate());
@@ -385,17 +385,17 @@ public class CashClosingService {
     if(decimal(old.get("variance")).signum()!=0)
       text((String)old.get("explanation"),"Giải trình chênh lệch",true);
     if(((Number)old.get("report_version")).intValue()>0)
-      db.update("UPDATE gcmb.cash_closing_report SET state='RECONCILED' WHERE closing_id=?",id);
-    db.update("INSERT INTO gcmb.cash_reconciliation(closing_id,reviewed_by,decision,note) VALUES (?,?,'RECONCILED',?)",
+      jdbcTemplate.update("UPDATE gcmb.cash_closing_report SET state='RECONCILED' WHERE closing_id=?",id);
+    jdbcTemplate.update("INSERT INTO gcmb.cash_reconciliation(closing_id,reviewed_by,decision,note) VALUES (?,?,'RECONCILED',?)",
       id,actor.id(),conclusion);
-    db.update("UPDATE gcmb.daily_cash_closing SET status='RECONCILED' WHERE id=?",id);
-    access.audit(actor,(UUID)old.get("branch_id"),id,"RECONCILE_DAILY_TILL_REPORT",old,Map.of("conclusion",conclusion));
+    jdbcTemplate.update("UPDATE gcmb.daily_cash_closing SET status='RECONCILED' WHERE id=?",id);
+    financeAccess.audit(actor,(UUID)old.get("branch_id"),id,"RECONCILE_DAILY_TILL_REPORT",old,Map.of("conclusion",conclusion));
     return detail(actor,id);
   }
 
   public Map<String,Object> returnReport(Identity actor,UUID id,Review input) {
-    access.accountant(actor);
-    access.lock();
+    financeAccess.accountant(actor);
+    financeAccess.lock();
     var old=detail(actor,id);
     if(!"SUBMITTED".equals(old.get("status"))) throw conflict("Chỉ được trả lại báo cáo đang chờ đối soát.");
     requireOpenPeriod(((java.sql.Date)old.get("business_date")).toLocalDate());
@@ -404,25 +404,25 @@ public class CashClosingService {
       var payload=new LinkedHashMap<String,Object>();
       for(String key:List.of("opening_amount","cash_in","cash_out","expected_closing","actual_closing","variance","explanation","source"))
         payload.put(key,old.get(key));
-      db.update("INSERT INTO gcmb.cash_closing_report_revision VALUES (?,1,?::jsonb,?,CURRENT_TIMESTAMP)",
-        id,json.writeValueAsString(payload),old.get("submitted_by"));
-      db.update("INSERT INTO gcmb.cash_closing_report VALUES (?,1,'SUBMITTED')",id);
+      jdbcTemplate.update("INSERT INTO gcmb.cash_closing_report_revision VALUES (?,1,?::jsonb,?,CURRENT_TIMESTAMP)",
+        id,objectMapper.writeValueAsString(payload),old.get("submitted_by"));
+      jdbcTemplate.update("INSERT INTO gcmb.cash_closing_report VALUES (?,1,'SUBMITTED')",id);
     }
-    db.update("UPDATE gcmb.cash_closing_report SET state='NEEDS_EXPLANATION' WHERE closing_id=?",id);
-    db.update("INSERT INTO gcmb.cash_reconciliation(closing_id,reviewed_by,decision,note) VALUES (?,?,'NEEDS_EXPLANATION',?)",
+    jdbcTemplate.update("UPDATE gcmb.cash_closing_report SET state='NEEDS_EXPLANATION' WHERE closing_id=?",id);
+    jdbcTemplate.update("INSERT INTO gcmb.cash_reconciliation(closing_id,reviewed_by,decision,note) VALUES (?,?,'NEEDS_EXPLANATION',?)",
       id,actor.id(),note);
-    access.audit(actor,(UUID)old.get("branch_id"),id,"RETURN_DAILY_TILL_REPORT",old,Map.of("note",note));
+    financeAccess.audit(actor,(UUID)old.get("branch_id"),id,"RETURN_DAILY_TILL_REPORT",old,Map.of("note",note));
     return detail(actor,id);
   }
 
   public Map<String,Object> remit(Identity actor,Remittance input) {
-    access.lock();
-    UUID branch=access.branch(actor,true);
+    financeAccess.lock();
+    UUID branch=financeAccess.branch(actor,true);
     LocalDate date=day(input.date());
     requireOpenPeriod(date);
     UUID account=drawer(branch);
     if(input.requestId()==null) throw bad("Thiếu mã xác nhận khoản nộp tiền.");
-    var duplicate=db.queryForList("SELECT * FROM gcmb.cash_drawer_remittance WHERE idempotency_key=?",input.requestId());
+    var duplicate=jdbcTemplate.queryForList("SELECT * FROM gcmb.cash_drawer_remittance WHERE idempotency_key=?",input.requestId());
     if(!duplicate.isEmpty()) {
       var old=duplicate.get(0);
       if(!Objects.equals(old.get("branch_id"),branch) || decimal(old.get("amount")).compareTo(decimal(input.amount()))!=0
@@ -435,7 +435,7 @@ public class CashClosingService {
       return old;
     }
     checkDate(account,date);
-    if(date.isBefore(LocalDate.now(zone(branch))) && Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.daily_cash_closing WHERE account_id=? AND business_date=?)",
+    if(date.isBefore(LocalDate.now(zone(branch))) && Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.daily_cash_closing WHERE account_id=? AND business_date=?)",
       Boolean.class,account,date))) throw conflict("Ngày này đã gửi chốt quỹ; không được thêm khoản nộp vào ngày đã chốt.");
     BigDecimal amount=money(input.amount(),"Số tiền nộp khỏi két",true);
     var source=source(branch,date);
@@ -448,19 +448,19 @@ public class CashClosingService {
     if(reference.length()>200) throw bad("Mã chứng từ tối đa 200 ký tự.");
     UUID id=UUID.randomUUID();
     Timestamp time=Timestamp.from(date.atTime(LocalTime.now(zone(branch))).atZone(zone(branch)).toInstant());
-    db.update("INSERT INTO gcmb.cash_drawer_remittance(id,account_id,branch_id,occurred_at,amount,reason,reference,recorded_by,idempotency_key,balance_before,full_sweep) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    jdbcTemplate.update("INSERT INTO gcmb.cash_drawer_remittance(id,account_id,branch_id,occurred_at,amount,reason,reference,recorded_by,idempotency_key,balance_before,full_sweep) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       id,account,branch,time,amount,reason,reference,actor.id(),input.requestId(),balance,amount.compareTo(balance)==0);
-    access.audit(actor,branch,id,"RECORD_DRAWER_REMITTANCE",null,Map.of("amount",amount,"reason",reason));
-    return db.queryForMap("SELECT * FROM gcmb.cash_drawer_remittance WHERE id=?",id);
+    financeAccess.audit(actor,branch,id,"RECORD_DRAWER_REMITTANCE",null,Map.of("amount",amount,"reason",reason));
+    return jdbcTemplate.queryForMap("SELECT * FROM gcmb.cash_drawer_remittance WHERE id=?",id);
   }
 
   public Map<String,Object> evidence(Identity actor,UUID id,int version) {
     detail(actor,id);
-    var rows=version==0?db.queryForList("SELECT * FROM gcmb.cash_closing_evidence WHERE closing_id=?",id)
-      :db.queryForList("SELECT * FROM gcmb.cash_closing_revision_evidence WHERE closing_id=? AND revision=?",id,version);
+    var rows=version==0?jdbcTemplate.queryForList("SELECT * FROM gcmb.cash_closing_evidence WHERE closing_id=?",id)
+      :jdbcTemplate.queryForList("SELECT * FROM gcmb.cash_closing_revision_evidence WHERE closing_id=? AND revision=?",id,version);
     if(rows.isEmpty()) throw bad("Không tìm thấy minh chứng.");
     var row=rows.get(0);
-    try { row.put("bytes",storage.read((String)row.get("object_key"))); }
+    try { row.put("bytes",refundEvidenceStorageService.read((String)row.get("object_key"))); }
     catch(java.io.IOException e) { throw conflict("Không thể đọc minh chứng. Vui lòng thử lại."); }
     return row;
   }

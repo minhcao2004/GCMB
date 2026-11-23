@@ -28,13 +28,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class EquipmentAssetService {
     private static final Set<String> ASSET_STATUSES = Set.of("IN_USE", "BROKEN", "REPAIRING", "IN_TRANSIT", "RETIRED");
-    private final EquipmentAssetRepository repository;
-    private final EquipmentAssetFileStorageService fileStorage;
+    private final EquipmentAssetRepository equipmentAssetRepository;
+    private final EquipmentAssetFileStorageService equipmentAssetFileStorageService;
 
     // BR-202: Dùng chung repository và file storage cho mọi luồng tài sản.
-    public EquipmentAssetService(EquipmentAssetRepository repository, EquipmentAssetFileStorageService fileStorage) {
-        this.repository = repository;
-        this.fileStorage = fileStorage;
+    public EquipmentAssetService(EquipmentAssetRepository equipmentAssetRepository, EquipmentAssetFileStorageService equipmentAssetFileStorageService) {
+        this.equipmentAssetRepository = equipmentAssetRepository;
+        this.equipmentAssetFileStorageService = equipmentAssetFileStorageService;
     }
 
     // BR-202: Quản lý cơ sở bị giới hạn theo branch trong phiên; quản lý cấp cao phải chỉ định branch.
@@ -55,16 +55,16 @@ public class EquipmentAssetService {
 
     // UC-66: Trả danh sách trong phạm vi cơ sở cùng bộ lọc tìm kiếm, vị trí, tình trạng và hoạt động.
     public List<View> list(Identity actor, UUID branchId, String search, UUID roomId, String status, Boolean active) {
-        return repository.list(scope(actor, branchId), search == null ? "" : search.trim(), roomId,
+        return equipmentAssetRepository.list(scope(actor, branchId), search == null ? "" : search.trim(), roomId,
             status == null ? "" : status, active);
     }
 
     // UC-65/67: Tải lựa chọn nhóm và phòng phù hợp với cơ sở và thiết bị đang sửa.
     public Options options(Identity actor, UUID branchId, UUID assetId) {
         UUID authorizedBranch = scope(actor, branchId);
-        if (assetId != null && repository.get(authorizedBranch, assetId) == null)
+        if (assetId != null && equipmentAssetRepository.get(authorizedBranch, assetId) == null)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
-        return repository.options(authorizedBranch, assetId);
+        return equipmentAssetRepository.options(authorizedBranch, assetId);
     }
 
     // BR-111/BR-202: Bắt buộc mã, tên, nhóm và vị trí; kiểm tra giới hạn, giá mua và tình trạng hợp lệ.
@@ -87,9 +87,9 @@ public class EquipmentAssetService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hạn bảo hành không được trước ngày mua");
         if (input.status() == null || !ASSET_STATUSES.contains(input.status()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái thiết bị không hợp lệ");
-        if (!repository.categoryAvailable(branchId, input.categoryId(), assetId))
+        if (!equipmentAssetRepository.categoryAvailable(branchId, input.categoryId(), assetId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chọn nhóm đang hoạt động trong cơ sở");
-        if (!repository.roomAvailable(branchId, input.roomId(), assetId))
+        if (!equipmentAssetRepository.roomAvailable(branchId, input.roomId(), assetId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phòng/vị trí phải thuộc cơ sở đang quản lý và còn sử dụng");
         return new Command(input.code().trim(), input.name().trim(), input.categoryId(), input.roomId(), clean(input.locationNote()),
             clean(input.serialNumber()), input.purchaseDate(), input.purchaseValue(), input.warrantyExpiry(), input.status());
@@ -103,7 +103,7 @@ public class EquipmentAssetService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mã thiết bị theo mẫu ASSET-{MÃ_CƠ_SỞ}-{SỐ_TĂNG_DẦN 4 CHỮ SỐ}, ví dụ ASSET-HN01-0001");
         if ("IN_TRANSIT".equals(command.status()) || "RETIRED".equals(command.status()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiết bị mới phải được tạo trước khi chuyển hoặc ngừng sử dụng");
-        try { return repository.create(authorizedBranch, command); }
+        try { return equipmentAssetRepository.create(authorizedBranch, command); }
         catch (org.springframework.dao.DuplicateKeyException e) { throw new ResponseStatusException(HttpStatus.CONFLICT,
             "Mã thiết bị “" + command.code() + "” đã tồn tại trong toàn chuỗi. Vui lòng nhập mã khác.", e); }
         catch (DataIntegrityViolationException e) { throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -113,7 +113,7 @@ public class EquipmentAssetService {
     // UC-67/BR-110: Sửa hồ sơ nhưng không đổi branch; trạng thái IN_TRANSIT không thể bị đổi để bỏ qua xác nhận bàn giao.
     public View update(Identity actor, UUID branchId, UUID id, Command input) {
         UUID authorizedBranch = scope(actor, branchId, "cập nhật");
-        View before = repository.get(authorizedBranch, id);
+        View before = equipmentAssetRepository.get(authorizedBranch, id);
         if (before == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
         if (input == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung thông tin thiết bị.");
         if ("IN_TRANSIT".equals(before.status()))
@@ -121,7 +121,7 @@ public class EquipmentAssetService {
         if ("IN_TRANSIT".equals(input.status()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ quy trình điều chuyển UC74–UC76 được chuyển thiết bị sang trạng thái đang chuyển");
         Command command = validate(input, authorizedBranch, id);
-        try { return repository.update(authorizedBranch, id, command); }
+        try { return equipmentAssetRepository.update(authorizedBranch, id, command); }
         catch (org.springframework.dao.DuplicateKeyException e) { throw new ResponseStatusException(HttpStatus.CONFLICT,
             "Mã thiết bị “" + command.code() + "” đã tồn tại trong toàn chuỗi. Vui lòng nhập mã khác.", e); }
         catch (DataIntegrityViolationException e) { throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -132,10 +132,10 @@ public class EquipmentAssetService {
     public View setActive(Identity actor, UUID branchId, UUID id, Boolean active) {
         if (active == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung trạng thái sử dụng thiết bị.");
         UUID authorizedBranch = scope(actor, branchId, "đổi trạng thái");
-        View current = repository.get(authorizedBranch, id);
+        View current = equipmentAssetRepository.get(authorizedBranch, id);
         if (current != null && "IN_TRANSIT".equals(current.status()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Không đổi trạng thái sử dụng khi thiết bị đang điều chuyển");
-        View result = repository.setActive(authorizedBranch, id, active);
+        View result = equipmentAssetRepository.setActive(authorizedBranch, id, active);
         if (result == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
         return result;
     }
@@ -143,7 +143,7 @@ public class EquipmentAssetService {
     // UC-69/BR-118: Chặn xóa mọi tài sản đã có sự cố, điều chuyển hoặc lịch sử tài sản thay thế.
     public void delete(Identity actor, UUID branchId, UUID id) {
         try {
-            if (!repository.deleteUnused(scope(actor, branchId, "xóa"), id))
+            if (!equipmentAssetRepository.deleteUnused(scope(actor, branchId, "xóa"), id))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
@@ -154,23 +154,23 @@ public class EquipmentAssetService {
     @Transactional
     public View uploadImage(Identity actor, UUID branchId, UUID id, MultipartFile image) {
         UUID authorizedBranch = scope(actor, branchId);
-        if (repository.get(authorizedBranch, id) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
-        EquipmentAssetFileStorageService.StoredFile stored = fileStorage.store(image, "thiet-bi");
+        if (equipmentAssetRepository.get(authorizedBranch, id) == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
+        EquipmentAssetFileStorageService.StoredFile stored = equipmentAssetFileStorageService.store(image, "thiet-bi");
         try {
-            repository.insertImage(stored, actor.id());
-            if (!repository.setImage(authorizedBranch, id, stored.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
-            return repository.get(authorizedBranch, id);
+            equipmentAssetRepository.insertImage(stored, actor.id());
+            if (!equipmentAssetRepository.setImage(authorizedBranch, id, stored.id())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thiết bị trong phạm vi cơ sở");
+            return equipmentAssetRepository.get(authorizedBranch, id);
         } catch (RuntimeException error) {
-            fileStorage.deleteQuietly(stored.objectKey());
+            equipmentAssetFileStorageService.deleteQuietly(stored.objectKey());
             throw error;
         }
     }
 
     // UC-66: Chỉ đọc file đính kèm tài sản thuộc cơ sở được quyền xem.
     public ImageContent image(Identity actor, UUID branchId, UUID id) {
-        StoredImage metadata = repository.image(scope(actor, branchId), id);
+        StoredImage metadata = equipmentAssetRepository.image(scope(actor, branchId), id);
         if (metadata == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Thiết bị chưa có ảnh");
-        try { return new ImageContent(metadata.originalName(), metadata.mimeType(), fileStorage.read(metadata.objectKey())); }
+        try { return new ImageContent(metadata.originalName(), metadata.mimeType(), equipmentAssetFileStorageService.read(metadata.objectKey())); }
         catch (IOException e) { throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy file ảnh thiết bị"); }
     }
 

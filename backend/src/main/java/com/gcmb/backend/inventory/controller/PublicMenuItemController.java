@@ -14,19 +14,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/public/branches/{branchId}/menu-items")
 public class PublicMenuItemController {
-    private final MenuItemService service;
+    private final MenuItemService menuItemService;
 
-    public PublicMenuItemController(MenuItemService service) { this.service = service; }
+    public PublicMenuItemController(MenuItemService menuItemService) { this.menuItemService = menuItemService; }
 
     @GetMapping
     public List<PublicMenuItemView> list(@PathVariable UUID branchId,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String category) {
-        return service.publicList(branchId, q, category);
+        return menuItemService.publicList(branchId, q, category);
     }
 
     @GetMapping("/{id}/image")
     public ResponseEntity<byte[]> image(@PathVariable UUID branchId, @PathVariable UUID id) {
-        return MenuItemController.imageResponse(service.publicImage(branchId, id));
+        return MenuItemController.imageResponse(menuItemService.publicImage(branchId, id));
     }
 }

@@ -59,23 +59,23 @@ public class FinancialController {
         String financeRows="CASH".equals(basis)?CASH_FINANCE_EXPENSE_ROWS:ALLOCATED_FINANCE_EXPENSE_ROWS;
         return "WITH paid_expenses AS (\n"+LEGACY_PAID_EXPENSE_ROWS+"\nUNION ALL\n"+financeRows+"\n)\n";
     }
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
     private final MutationAudit mutationAudit;
-    private final EquipmentAssetFileStorageService files;
-    private final FinancialPeriodService periods;
-    private final MonthlyPerformanceService performance;
-    private final AccountingWorkbookService accountingWorkbook;
+    private final EquipmentAssetFileStorageService equipmentAssetFileStorageService;
+    private final FinancialPeriodService financialPeriodService;
+    private final MonthlyPerformanceService monthlyPerformanceService;
+    private final AccountingWorkbookService accountingWorkbookService;
     private final FinanceAccess financeAccess;
 
-    public FinancialController(JdbcTemplate db, MutationAudit mutationAudit, EquipmentAssetFileStorageService files,
-                               FinancialPeriodService periods, MonthlyPerformanceService performance,
-                               AccountingWorkbookService accountingWorkbook, FinanceAccess financeAccess) {
-        this.db = db;
+    public FinancialController(JdbcTemplate jdbcTemplate, MutationAudit mutationAudit, EquipmentAssetFileStorageService equipmentAssetFileStorageService,
+                               FinancialPeriodService financialPeriodService, MonthlyPerformanceService monthlyPerformanceService,
+                               AccountingWorkbookService accountingWorkbookService, FinanceAccess financeAccess) {
+        this.jdbcTemplate = jdbcTemplate;
         this.mutationAudit = mutationAudit;
-        this.files = files;
-        this.periods = periods;
-        this.performance = performance;
-        this.accountingWorkbook = accountingWorkbook;
+        this.equipmentAssetFileStorageService = equipmentAssetFileStorageService;
+        this.financialPeriodService = financialPeriodService;
+        this.monthlyPerformanceService = monthlyPerformanceService;
+        this.accountingWorkbookService = accountingWorkbookService;
         this.financeAccess = financeAccess;
     }
 
@@ -84,7 +84,7 @@ public class FinancialController {
     public Map<String, Object> monthlyReport(@AuthenticationPrincipal Identity actor, @RequestParam String month,
                                              @RequestParam(required = false) UUID branchId) {
         requireReportRole(actor);
-        return performance.report(actor,month(month),branchId);
+        return monthlyPerformanceService.report(actor,month(month),branchId);
     }
 
     @GetMapping("/reports/source-imports")
@@ -105,7 +105,7 @@ public class FinancialController {
             throw bad("Nguồn dữ liệu báo cáo không hợp lệ.");
         String syntheticFilter = "ALL".equals(selectedSource) ? "ALL"
             : "SYNTHETIC_DEMO".equals(selectedSource) ? "SYNTHETIC_DEMO" : "SOURCE_FILES";
-        List<Map<String, Object>> rows = db.queryForList("""
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             WITH imported AS (
               SELECT r.id,r.record_type "recordType",i.source_system "sourceSystem",r.business_date "businessDate",
                 r.source_sheet "sourceSheet",r.source_row "sourceRow",COALESCE(r.source_key,'') "sourceKey",
@@ -142,7 +142,7 @@ public class FinancialController {
             ORDER BY "businessDate" DESC,"branchName", "recordType", "sourceRow"
             """, start,end,branchId,branchId,syntheticFilter,syntheticFilter,syntheticFilter);
         if ("ALL".equals(selectedSource)) {
-            List<Map<String, Object>> operationalBills = db.queryForList("""
+            List<Map<String, Object>> operationalBills = jdbcTemplate.queryForList("""
                 WITH bill_payments AS (
                   SELECT bill_id,SUM(amount) paid_amount,
                     COUNT(DISTINCT method) method_count,BOOL_OR(method='CASH') has_cash,BOOL_OR(method='BANK_TRANSFER') has_bank,
@@ -176,7 +176,7 @@ public class FinancialController {
         }
         rows.sort(java.util.Comparator.comparing((Map<String, Object> row) -> String.valueOf(row.get("businessDate"))).reversed()
             .thenComparing(row -> String.valueOf(row.get("branchName"))));
-        List<Map<String, Object>> branches = db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
+        List<Map<String, Object>> branches = jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
         return Map.of("from", start.toString(), "to", end.toString(), "source", selectedSource,
             "branchOptions", branches, "rows", rows);
     }
@@ -189,7 +189,7 @@ public class FinancialController {
                                                   @RequestParam(defaultValue = "prev") String compare,
                                                   @RequestParam(defaultValue = "day") String granularity) {
         requireOverviewRole(actor);
-        return performance.overview(actor, date(from), date(to), branchIds, compare, granularity);
+        return monthlyPerformanceService.overview(actor, date(from), date(to), branchIds, compare, granularity);
     }
 
     @GetMapping("/reports/financial-overview/export")
@@ -203,9 +203,9 @@ public class FinancialController {
         requireOverviewRole(actor);
         if (!List.of("csv", "xlsx").contains(format.toLowerCase(java.util.Locale.ROOT))) throw bad("Định dạng xuất chỉ nhận csv hoặc xlsx.");
         LocalDate start = date(from), end = date(to);
-        Map<String, Object> data = performance.overview(actor, start, end, branchIds, compare, granularity);
+        Map<String, Object> data = monthlyPerformanceService.overview(actor, start, end, branchIds, compare, granularity);
         byte[] bytes = "xlsx".equalsIgnoreCase(format) ? MonthlyPerformanceExport.overviewXlsx(data) : MonthlyPerformanceExport.overviewCsv(data);
-        db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_FINANCIAL_OVERVIEW','REPORT',?::jsonb)",
+        jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_FINANCIAL_OVERVIEW','REPORT',?::jsonb)",
             actor.id(), String.format(java.util.Locale.ROOT,
               "{\"from\":\"%s\",\"to\":\"%s\",\"compare\":\"%s\",\"granularity\":\"%s\",\"format\":\"%s\"}",
               start, end, compare, granularity, format.toLowerCase(java.util.Locale.ROOT)));
@@ -223,7 +223,7 @@ public class FinancialController {
     public ResponseEntity<byte[]> exportMonthlyPerformance(@AuthenticationPrincipal Identity actor, @RequestParam String month,
                                                             @RequestParam(required = false) UUID branchId,
                                                             @RequestParam(defaultValue = "csv") String format) {
-        byte[] bytes=performance.export(actor,month(month),branchId,format);
+        byte[] bytes=monthlyPerformanceService.export(actor,month(month),branchId,format);
         String extension=format.toLowerCase(java.util.Locale.ROOT);
         MediaType type="xlsx".equals(extension)
             ? MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -253,8 +253,8 @@ public class FinancialController {
         if (!type.isEmpty() && !List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
         if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        List<UUID> selectedBranches = performance.validateReportBranchIds(branchIds);
-        if (selectedBranches.isEmpty() && branchId != null) performance.validateReportBranchIds(List.of(branchId));
+        List<UUID> selectedBranches = monthlyPerformanceService.validateReportBranchIds(branchIds);
+        if (selectedBranches.isEmpty() && branchId != null) monthlyPerformanceService.validateReportBranchIds(List.of(branchId));
         String branchFilter;
         List<Object> args = new java.util.ArrayList<>();
         args.add(start); args.add(endExclusive);
@@ -269,7 +269,7 @@ public class FinancialController {
             + " AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')";
         args.add(type); args.add(type); args.add(categoryId); args.add(categoryId); args.add(search); args.add(search);
         // BR-103/107: mặc định lấy lịch phân bổ, giữ OPEX và CAPEX riêng; CASH dùng ngày thanh toán.
-        List<Map<String, Object>> rows = db.queryForList(paidExpensesCte(selectedBasis) + """
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(paidExpensesCte(selectedBasis) + """
             SELECT cost_type "class",cost_type "costType",category_id "categoryId",category_name "categoryName",
               branch_id "branchId",branch_name "branchName",sum(amount) amount,count(*) "paymentCount"
             FROM paid_expenses
@@ -278,8 +278,8 @@ public class FinancialController {
             GROUP BY cost_type,category_id,category_name,branch_id,branch_name
             ORDER BY cost_type,category_name,branch_name
             """, args.toArray());
-        List<Map<String, Object>> branches = db.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name");
-        List<Map<String, Object>> categories = db.queryForList("""
+        List<Map<String, Object>> branches = jdbcTemplate.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name");
+        List<Map<String, Object>> categories = jdbcTemplate.queryForList("""
             SELECT id,name FROM gcmb.expense_category
             UNION SELECT id,name FROM gcmb.finance_expense_category
             ORDER BY name
@@ -311,7 +311,7 @@ public class FinancialController {
         if (!List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
         if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        List<Map<String, Object>> rows = db.queryForList(paidExpensesCte(selectedBasis) + """
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(paidExpensesCte(selectedBasis) + """
             SELECT source_type "sourceType",record_id "expenseId",expense_code "expenseCode",expense_kind kind,
               cost_type "costType",category_name "categoryName",branch_name "branchName",
               recognition_date "recognitionDate",(paid_at AT TIME ZONE timezone) "paidAt",amount,description,
@@ -329,7 +329,7 @@ public class FinancialController {
         Map<UUID, List<Map<String, Object>>> attachmentsByRequest = new java.util.HashMap<>();
         if (!requestIds.isEmpty()) {
             String placeholders = String.join(",", java.util.Collections.nCopies(requestIds.size(), "?"));
-            List<Map<String, Object>> attachments = db.queryForList("""
+            List<Map<String, Object>> attachments = jdbcTemplate.queryForList("""
                 SELECT id,owner_id "ownerId",kind,original_name name FROM gcmb.finance_attachment
                 WHERE owner_type='EXPENSE_REQUEST' AND kind IN ('INVOICE','PAYMENT_PROOF') AND owner_id IN (
                 """ + placeholders + ") ORDER BY created_at", requestIds.toArray());
@@ -362,7 +362,7 @@ public class FinancialController {
         } catch (java.time.format.DateTimeParseException invalidDate) {
             throw bad("Khoảng ngày không hợp lệ.");
         }
-        List<Map<String, Object>> methods = db.queryForList("""
+        List<Map<String, Object>> methods = jdbcTemplate.queryForList("""
             WITH bills AS (
               SELECT b.id,b.net_amount,
                 CASE WHEN COUNT(DISTINCT p.method)>1 THEN 'Kết hợp'
@@ -375,7 +375,7 @@ public class FinancialController {
               GROUP BY b.id,b.net_amount
             ) SELECT method AS label,SUM(net_amount) AS value FROM bills GROUP BY method ORDER BY method
             """, start, endExclusive, branchId, branchId);
-        List<Map<String, Object>> exceptions = db.queryForList("""
+        List<Map<String, Object>> exceptions = jdbcTemplate.queryForList("""
             SELECT bt.id,bt.external_id AS "externalId",bt.occurred_at AS "occurredAt",bt.amount,
               bt.match_status AS status,bt.exception_reason AS "exceptionReason",bt.transfer_content AS reason,
               bt.resolution_status AS "resolutionStatus",bt.resolved_at AS "resolvedAt",u.username AS "resolvedBy",
@@ -395,24 +395,24 @@ public class FinancialController {
     @PostMapping("/sepay-exceptions/{id}/resolve")
     public Map<String, Object> resolveSePayException(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
                                                       @RequestBody(required = false) ResolveSePayExceptionCommand command) {
-        return periods.resolveSePayException(actor, id, command == null ? null : command.resolutionNote());
+        return financialPeriodService.resolveSePayException(actor, id, command == null ? null : command.resolutionNote());
     }
 
     @GetMapping("/financial-periods")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> periods(@AuthenticationPrincipal Identity actor) {
-        return periods.list(actor);
+        return financialPeriodService.list(actor);
     }
 
     @GetMapping("/financial-periods/{month}/readiness")
     public Map<String, Object> periodReadiness(@AuthenticationPrincipal Identity actor, @PathVariable String month) {
-        return periods.readiness(actor, month(month));
+        return financialPeriodService.readiness(actor, month(month));
     }
 
     @PostMapping("/financial-periods/{month}/close")
     public Map<String, Object> closePeriod(@AuthenticationPrincipal Identity actor, @PathVariable String month,
                                            @RequestBody(required = false) ClosePeriodCommand command) {
-        return periods.close(actor, month(month), command != null && command.confirmed(), command == null ? "" : command.note());
+        return financialPeriodService.close(actor, month(month), command != null && command.confirmed(), command == null ? "" : command.note());
     }
 
     @GetMapping("/transactions")
@@ -426,7 +426,7 @@ public class FinancialController {
         if (!kind.isBlank() && !List.of("PAYMENT", "REFUND", "EXPENSE", "SALARY", "ADVANCE", "TRANSFER", "OPENING", "ADJUSTMENT").contains(kind))
             throw bad("Loại giao dịch không hợp lệ.");
         if (q.trim().length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             WITH transaction_rows AS (
               SELECT t.id,t.kind,t.booking_date "bookingDate",t.occurred_at "occurredAt",t.reason,
                 p."month"::text "periodMonth",p.status "periodStatus",scope.branch_id "branchId",scope.branch_name "branchName",
@@ -483,7 +483,7 @@ public class FinancialController {
         StoredFile[] stored = new StoredFile[1];
         try {
             UUID adjustment = mutationAudit.record("ADJUST_FINANCIAL_TRANSACTION", "FINANCIAL_TRANSACTION", null, () -> {
-                List<Map<String, Object>> locked = db.queryForList("""
+                List<Map<String, Object>> locked = jdbcTemplate.queryForList("""
                     SELECT t.kind,t.adjusts_transaction_id,t.booking_date,p.status period_status
                     FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
                     WHERE t.id=? FOR UPDATE OF t
@@ -492,12 +492,12 @@ public class FinancialController {
                 Map<String, Object> original = locked.get(0);
                 if ("ADJUSTMENT".equals(original.get("kind")) || original.get("adjusts_transaction_id") != null)
                     throw bad("Chỉ được điều chỉnh giao dịch gốc, không thể điều chỉnh một bút toán điều chỉnh.");
-                List<Map<String, Object>> entries = db.queryForList("SELECT account_id,branch_id,amount_signed FROM gcmb.financial_entry WHERE transaction_id=? ORDER BY id", id);
+                List<Map<String, Object>> entries = jdbcTemplate.queryForList("SELECT account_id,branch_id,amount_signed FROM gcmb.financial_entry WHERE transaction_id=? ORDER BY id", id);
                 if (List.of("TRANSFER", "OPENING").contains(original.get("kind")) || entries.size() != 1)
                     throw bad("Chỉ có thể điều chỉnh giao dịch gốc có một dòng sổ tiền.");
                 Map<String, Object> entry = entries.get(0);
                 BigDecimal originalAmount = (BigDecimal) entry.get("amount_signed");
-                BigDecimal previousAdjustments = db.queryForObject("""
+                BigDecimal previousAdjustments = jdbcTemplate.queryForObject("""
                     SELECT COALESCE(sum(e.amount_signed),0) FROM gcmb.financial_transaction t
                     JOIN gcmb.financial_entry e ON e.transaction_id=t.id WHERE t.adjusts_transaction_id=?
                     """, BigDecimal.class, id);
@@ -508,33 +508,33 @@ public class FinancialController {
 
                 LocalDate today = LocalDate.now(FinancialPeriodService.ZONE);
                 LocalDate periodMonth = today.withDayOfMonth(1);
-                db.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", periodMonth);
-                List<UUID> openPeriods = db.query("SELECT id FROM gcmb.financial_period WHERE \"month\"=? AND status='OPEN' FOR UPDATE", (rs, rowNum) -> rs.getObject(1, UUID.class), periodMonth);
+                jdbcTemplate.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", periodMonth);
+                List<UUID> openPeriods = jdbcTemplate.query("SELECT id FROM gcmb.financial_period WHERE \"month\"=? AND status='OPEN' FOR UPDATE", (rs, rowNum) -> rs.getObject(1, UUID.class), periodMonth);
                 if (openPeriods.isEmpty()) throw conflict("Kỳ hiện tại đã khóa. Không thể ghi điều chỉnh vào kỳ đã chốt.");
                 UUID newId = UUID.randomUUID();
-                db.update("""
+                jdbcTemplate.update("""
                     INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,adjusts_transaction_id,reason,created_by,idempotency_key)
                     VALUES (?,?,?,CURRENT_TIMESTAMP,'ADJUSTMENT',?,?,?,?)
                     """, newId, openPeriods.get(0), today, id, reason, actor.id(), newId.toString());
-                db.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
+                jdbcTemplate.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)",
                     newId, entry.get("account_id"), entry.get("branch_id"), amount);
                 if (evidence != null && !evidence.isEmpty()) {
-                    stored[0] = files.store(evidence, "thu-chi");
+                    stored[0] = equipmentAssetFileStorageService.store(evidence, "thu-chi");
                     StoredFile file = stored[0];
-                    db.update("""
+                    jdbcTemplate.update("""
                         INSERT INTO gcmb.finance_attachment(id,owner_type,owner_id,kind,object_key,original_name,mime_type,byte_size,sha256,created_by)
                         VALUES (?,'FINANCIAL_TRANSACTION',?,'ADJUSTMENT_EVIDENCE',?,?,?,?,?,?)
                         """, file.id(), newId, file.objectKey(), file.originalName(), file.mimeType(), file.byteSize(), file.sha256(), actor.id());
                 }
                 return newId;
             }, value -> value);
-            return db.queryForMap("""
+            return jdbcTemplate.queryForMap("""
                 SELECT t.id,t.kind,t.adjusts_transaction_id \"adjustsTransactionId\",t.reason,t.occurred_at \"occurredAt\",
                   p.\"month\"::text \"periodMonth\",p.status \"periodStatus\"
                 FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id WHERE t.id=?
                 """, adjustment);
         } catch (RuntimeException failure) {
-            if (stored[0] != null) files.deleteQuietly(stored[0].objectKey());
+            if (stored[0] != null) equipmentAssetFileStorageService.deleteQuietly(stored[0].objectKey());
             throw failure;
         }
     }
@@ -547,7 +547,7 @@ public class FinancialController {
         LocalDate start = month(month);
         if (!List.of("ALL", "INFLOW", "OUTFLOW").contains(scope)) throw bad("Phạm vi xuất dữ liệu không hợp lệ.");
         // UC-125: export the selected period and cash-flow scope without changing source transactions.
-        List<Map<String, Object>> rows = db.queryForList("""
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
             SELECT t.id,t.adjusts_transaction_id,t.booking_date,t.occurred_at,t.kind,t.reason,b.code branch_code,a.code account_code,e.amount_signed
             FROM gcmb.financial_transaction t JOIN gcmb.financial_period p ON p.id=t.period_id
             JOIN gcmb.financial_entry e ON e.transaction_id=t.id JOIN gcmb.financial_account a ON a.id=e.account_id
@@ -568,7 +568,7 @@ public class FinancialController {
     public Map<String, Object> previewMonthlyWorkbook(@AuthenticationPrincipal Identity actor,
                                                        @RequestParam String month,
                                                        @RequestParam(required = false) String branchIds) {
-        return accountingWorkbook.preview(actor, month(month), branchIds);
+        return accountingWorkbookService.preview(actor, month(month), branchIds);
     }
 
     @GetMapping("/reports/monthly-workbook.xlsx")
@@ -576,7 +576,7 @@ public class FinancialController {
     public ResponseEntity<byte[]> exportMonthlyWorkbook(@AuthenticationPrincipal Identity actor,
                                                          @RequestParam String month,
                                                          @RequestParam(required = false) String branchIds) {
-        byte[] bytes = accountingWorkbook.export(actor, month(month), branchIds);
+        byte[] bytes = accountingWorkbookService.export(actor, month(month), branchIds);
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=gcmb-bao-cao-thu-chi-" + month + ".xlsx")
             .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

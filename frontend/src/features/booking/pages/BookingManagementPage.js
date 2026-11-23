@@ -14,6 +14,7 @@ import { financeApi } from '../../finance/services/financeApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
+import ComboGiftPicker from '../components/ComboGiftPicker';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
@@ -458,17 +459,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const [giftRequirementsError, setGiftRequirementsError] = useState('');
   const [drinkSelections, setDrinkSelections] = useState([]);
   const [foodSelections, setFoodSelections] = useState([]);
-  const [giftPicker, setGiftPicker] = useState(null);
-  const [giftSearch, setGiftSearch] = useState('');
-  const [giftCategoryFilter, setGiftCategoryFilter] = useState('all');
-  const [giftStockFilter, setGiftStockFilter] = useState('all');
-  const giftPickerTriggerRef = useRef(null);
-  useEffect(() => {
-    if (!giftPicker) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [giftPicker]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
@@ -531,10 +521,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const selectedRoom = availableRooms.find((room) => room.id === selectedRoomId);
   const checkInRoom = selectedRoom ? { ...booking, roomCode: selectedRoom.code, roomName: selectedRoom.name, roomOperatingStatus: selectedRoom.operatingStatus } : booking;
   const roomReady = checkInRoom?.roomOperatingStatus === 'AVAILABLE' && Boolean(checkInRoom?.roomCode);
-  const plannedStartMs = booking ? new Date(booking.plannedStart).getTime() : NaN;
   const plannedEndMs = booking ? new Date(booking.plannedEnd).getTime() : NaN;
-  const earlyCheckIn = Boolean(booking) && now.getTime() < plannedStartMs;
-  const shiftedCheckout = earlyCheckIn ? new Date(now.getTime() + (plannedEndMs - plannedStartMs)) : null;
   const checkInTimeValid = booking && plannedEndMs > now.getTime();
   const giftMenuRequired = (giftRequirements?.drinkQuantity || 0) + (giftRequirements?.foodQuantity || 0) > 0;
   const giftSelectionsValid = giftRequirements && drinkSelections.length === giftRequirements.drinkQuantity
@@ -542,58 +529,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const giftSelectionBlocked = booking?.status === 'CONFIRMED'
     && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
       || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
-  const openGiftPicker = (event, label, prefix, index) => {
-    giftPickerTriggerRef.current = event.currentTarget;
-    setGiftSearch('');
-    setGiftCategoryFilter('all');
-    setGiftStockFilter('all');
-    setGiftPicker({ label, prefix, index });
-  };
-  const closeGiftPicker = () => {
-    setGiftPicker(null);
-    window.requestAnimationFrame(() => {
-      if (giftPickerTriggerRef.current?.isConnected) giftPickerTriggerRef.current.focus();
-    });
-  };
-  const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
-    const selectedItem = giftMenu.find((item) => item.id === selectedId);
-    return <div className="booking-gift-slot" key={`${prefix}-${index}`}>
-      <span>{label} {index + 1}</span>
-      <button className="booking-gift-picker-trigger" type="button" onClick={(event) => openGiftPicker(event, label, prefix, index)}>
-        <span>{selectedItem?.name || `Chọn ${label.toLowerCase()}`}</span>
-        <small>{selectedItem ? selectedItem.stockTracked ? `Tồn ${selectedItem.stockQuantity} ${selectedItem.unitName}` : 'Không theo dõi tồn kho' : 'Mở danh sách món'}</small>
-      </button>
-    </div>;
-  });
-  const pickerTypeKeyword = giftPicker?.prefix === 'drink' ? 'uống' : 'ăn';
-  const pickerItems = giftPicker
-    ? giftMenu.filter((item) => (item.category || '').toLocaleLowerCase('vi-VN').includes(pickerTypeKeyword))
-    : [];
-  const pickerSlots = giftPicker ? [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
-    ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))] : [];
-  const pickerUsedElsewhere = pickerSlots
-    .filter((slot) => slot.key !== `${giftPicker?.prefix}-${giftPicker?.index}` && slot.id)
-    .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
-  const pickerCategories = [...new Map(pickerItems.map((item) => [
-    (item.category || '').trim().toLocaleLowerCase('vi-VN'), item.category,
-  ]).filter(([key]) => key)).values()];
-  const normalizedGiftSearch = giftSearch.trim().toLocaleLowerCase('vi-VN');
-  const filteredPickerItems = pickerItems.filter((item) => {
-    const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-    const matchesSearch = !normalizedGiftSearch || `${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(normalizedGiftSearch);
-    const matchesCategory = giftCategoryFilter === 'all' || (item.category || '').toLocaleLowerCase('vi-VN') === giftCategoryFilter;
-    const matchesStock = giftStockFilter === 'all'
-      || (giftStockFilter === 'available' && selectable)
-      || (giftStockFilter === 'untracked' && !item.stockTracked)
-      || (giftStockFilter === 'out' && !selectable);
-    return matchesSearch && matchesCategory && matchesStock;
-  });
-  const chooseGift = (item) => {
-    const setter = giftPicker?.prefix === 'drink' ? setDrinkSelections : setFoodSelections;
-    const index = giftPicker?.index;
-    setter((current) => current.map((id, position) => position === index ? item.id : id));
-    closeGiftPicker();
-  };
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
   if (!booking) return <div className="booking-checkin-overlay"><button className="booking-overlay-dismiss" type="button" onClick={onClose} aria-label="Đóng" /><aside className="booking-checkin-panel"><button className="booking-panel-close" type="button" onClick={onClose}>×</button><p role="status">Đang tải thông tin booking…</p></aside></div>;
@@ -623,8 +558,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
           {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
-          {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
-          {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
+          <ComboGiftPicker drinkSelections={drinkSelections} setDrinkSelections={setDrinkSelections} foodSelections={foodSelections} setFoodSelections={setFoodSelections} giftMenu={giftMenu} disabled={busy} />
         </section>}
         <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
            <strong>{checkInRoomTitle(checkInRoom, roomReady)}</strong>
@@ -632,7 +566,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         </div></div>
         <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
         <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
-        {booking.status === 'CONFIRMED' && earlyCheckIn && roomReady && checkInTimeValid && <p className="booking-checkin-time-note is-info">Nhận phòng sớm sẽ giữ giờ hẹn {timeText(booking.plannedStart, timezone)} và dời giờ trả dự kiến đến {timeText(shiftedCheckout, timezone)} · {dateText(shiftedCheckout, timezone)}, để khách vẫn dùng đủ thời lượng đã đặt. Hệ thống sẽ kiểm tra khung giờ mới có trùng booking khác không.</p>}
         <section className="booking-checkin-receipt"><strong>Tóm tắt</strong><div><span>{detail?.charges?.[0]?.description || 'Dịch vụ phòng'}</span><b>{formatVnd(charge)}</b></div><p>Tiền cọc đang giữ {formatVnd(depositBalance)} sẽ được đối chiếu khi checkout.</p></section>
         {booking.status === 'CANCELLED' && <p className="booking-checkin-time-note">Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.</p>}
         {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && booking.status !== 'CANCELLED' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
@@ -643,43 +576,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
          <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { roomId: selectedRoomId || booking.roomId, drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
-    {giftPicker && <div className="booking-gift-picker-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGiftPicker(); }}>
-      <section className="booking-gift-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-gift-picker-title" onKeyDown={(event) => {
-        if (event.key === 'Escape') closeGiftPicker();
-        if (event.key === 'Tab') {
-          const focusable = event.currentTarget.querySelectorAll('button:not(:disabled),input,select');
-          const first = focusable[0], last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-        }
-      }}>
-        <header className="booking-gift-picker-heading">
-          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2></div>
-          <button type="button" aria-label="Đóng danh sách món" onClick={closeGiftPicker}>×</button>
-        </header>
-        <label className="booking-gift-picker-search"><span>Tìm món</span><input autoFocus value={giftSearch} onChange={(event) => setGiftSearch(event.target.value)} placeholder="Nhập tên món…" /></label>
-        <div className="booking-gift-picker-filters">
-          <label><span>Danh mục</span><select value={giftCategoryFilter} onChange={(event) => setGiftCategoryFilter(event.target.value)}>
-            <option value="all">Tất cả danh mục</option>
-            {pickerCategories.map((category) => <option key={category} value={(category || '').toLocaleLowerCase('vi-VN')}>{category}</option>)}
-          </select></label>
-          <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
-            {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
-          </div>
-        </div>
-        <div className="booking-gift-picker-list" aria-live="polite">
-          {filteredPickerItems.length ? filteredPickerItems.map((item) => {
-            const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-            const selected = (giftPicker.prefix === 'drink' ? drinkSelections : foodSelections)[giftPicker.index] === item.id;
-            return <button key={item.id} type="button" className={`booking-gift-picker-item${selected ? ' is-selected' : ''}`} disabled={!selectable} onClick={() => chooseGift(item)}>
-              <span><strong>{item.name}</strong><small>{item.category}</small></span>
-              <span className={`booking-gift-picker-stock${item.stockTracked ? '' : ' is-untracked'}`}>{item.stockTracked ? selectable ? `Tồn ${item.stockQuantity} ${item.unitName}` : 'Hết tồn' : 'Không theo dõi tồn'}</span>
-            </button>;
-          }) : <p className="booking-gift-picker-empty">Không tìm thấy món phù hợp với bộ lọc.</p>}
-        </div>
-        <footer className="booking-gift-picker-footer"><span>{filteredPickerItems.length} món</span><button type="button" onClick={closeGiftPicker}>Đóng</button></footer>
-      </section>
-    </div>}
   </div>;
 }
 

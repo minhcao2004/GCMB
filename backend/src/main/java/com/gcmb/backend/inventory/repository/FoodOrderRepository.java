@@ -20,12 +20,12 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class FoodOrderRepository {
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
-    public FoodOrderRepository(JdbcTemplate db) { this.db = db; }
+    public FoodOrderRepository(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
     public ActiveRoom activeRoomByMrCode(String mrCode) {
-        List<ActiveRoom> rows = db.query("""
+        List<ActiveRoom> rows = jdbcTemplate.query("""
             SELECT r.id AS room_id,r.code AS room_code,r.name AS room_name,
                    b.id AS branch_id,b.name AS branch_name,
                    bk.id AS booking_id,bk.code AS booking_code,a.id AS allocation_id
@@ -46,7 +46,7 @@ public class FoodOrderRepository {
     }
 
     public ActiveRoom lockActiveBooking(UUID bookingId, UUID branchId) {
-        List<ActiveRoom> rows = db.query("""
+        List<ActiveRoom> rows = jdbcTemplate.query("""
             SELECT r.id AS room_id,r.code AS room_code,r.name AS room_name,
                    b.id AS branch_id,b.name AS branch_name,
                    bk.id AS booking_id,bk.code AS booking_code,a.id AS allocation_id
@@ -66,7 +66,7 @@ public class FoodOrderRepository {
     }
 
     public ActiveRoom lockGiftBooking(UUID bookingId, UUID branchId) {
-        List<ActiveRoom> rows = db.query("""
+        List<ActiveRoom> rows = jdbcTemplate.query("""
             SELECT r.id AS room_id,r.code AS room_code,r.name AS room_name,
                    b.id AS branch_id,b.name AS branch_name,
                    bk.id AS booking_id,bk.code AS booking_code,a.id AS allocation_id
@@ -83,7 +83,7 @@ public class FoodOrderRepository {
     }
 
     public List<ComboGiftOption> comboGiftMenu(UUID branchId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT m.id,m.name,m.category,m.sale_price,
                    CASE WHEN m.kind='PACKAGED' THEN COALESCE(sb.quantity,0) END AS stock_quantity,
                    CASE WHEN m.kind='PACKAGED' THEN u.name END AS unit_name,
@@ -103,14 +103,14 @@ public class FoodOrderRepository {
     }
 
     public UUID insertGiftAllowance(UUID bookingId, UUID menuItemId, String name, BigDecimal quantity) {
-        return db.queryForObject("""
+        return jdbcTemplate.queryForObject("""
             INSERT INTO gcmb.booking_combo_item(booking_id,menu_item_id,item_name_snapshot,included_quantity)
             VALUES (?,?,?,?) RETURNING id
             """,UUID.class,bookingId,menuItemId,name,quantity);
     }
 
     public RoomQrSession validSession(String mrCode, String tokenHash) {
-        List<RoomQrSession> rows = db.query("""
+        List<RoomQrSession> rows = jdbcTemplate.query("""
             SELECT s.id AS session_id,s.booking_id,s.allocation_id,b.branch_id,b.code AS booking_code,
                    r.id AS room_id,r.code AS room_code,r.name AS room_name,br.name AS branch_name,s.expires_at
             FROM gcmb.room_qr_session s
@@ -129,14 +129,14 @@ public class FoodOrderRepository {
     }
 
     public UUID createSession(UUID bookingId, UUID allocationId, String tokenHash) {
-        return db.queryForObject("""
+        return jdbcTemplate.queryForObject("""
             INSERT INTO gcmb.room_qr_session(booking_id,allocation_id,token_hash,expires_at)
             VALUES (?,?,?,CURRENT_TIMESTAMP+interval '12 hours') RETURNING id
             """, UUID.class, bookingId, allocationId, tokenHash);
     }
 
     public List<ActiveBooking> activeBookings(UUID branchId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT bk.id,bk.code,r.code AS room_code,r.name AS room_name,bk.contact_name,
                    bk.actual_checkin
             FROM gcmb.booking bk
@@ -150,7 +150,7 @@ public class FoodOrderRepository {
     }
 
     public List<ServingEmployee> onShiftEmployees(UUID branchId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT e.id,e.full_name
             FROM gcmb.scheduled_shift s
             JOIN gcmb.shift_assignment sa ON sa.shift_id=s.id AND sa.status='CONFIRMED'
@@ -168,7 +168,7 @@ public class FoodOrderRepository {
     }
 
     public boolean eligibleOnShift(UUID employeeId, UUID branchId) {
-        Boolean eligible = db.queryForObject("""
+        Boolean eligible = jdbcTemplate.queryForObject("""
             SELECT EXISTS(
                 SELECT 1
                 FROM gcmb.scheduled_shift s
@@ -187,14 +187,14 @@ public class FoodOrderRepository {
     }
 
     public UUID servingUser(UUID employeeId) {
-        List<UUID> rows = db.query("SELECT user_id FROM gcmb.employee WHERE id=?", (rs, row) -> rs.getObject(1, UUID.class), employeeId);
+        List<UUID> rows = jdbcTemplate.query("SELECT user_id FROM gcmb.employee WHERE id=?", (rs, row) -> rs.getObject(1, UUID.class), employeeId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public UUID createOrder(UUID branchId, UUID bookingId, UUID allocationId, String channel,
                             UUID createdBy, UUID qrSessionId, String status, UUID acceptedBy,
                             UUID assignedEmployeeId, String idempotencyKey) {
-        List<UUID> rows = db.query("""
+        List<UUID> rows = jdbcTemplate.query("""
             INSERT INTO gcmb.fb_order(branch_id,booking_id,allocation_id,channel,created_by,qr_session_id,
                 status,accepted_by,accepted_at,assigned_employee_id,idempotency_key)
             VALUES (?,?,?,?,?,?,?,?,CASE WHEN ?::uuid IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END,?,?)
@@ -206,7 +206,7 @@ public class FoodOrderRepository {
     }
 
     public ExistingOrder existingByKey(String key) {
-        List<ExistingOrder> rows = db.query("""
+        List<ExistingOrder> rows = jdbcTemplate.query("""
             SELECT id,branch_id,booking_id,channel,qr_session_id
             FROM gcmb.fb_order WHERE idempotency_key=?
             """, (rs, row) -> new ExistingOrder(rs.getObject("id", UUID.class),
@@ -218,7 +218,7 @@ public class FoodOrderRepository {
     public UUID insertLine(UUID orderId, UUID branchId, UUID bookingId, UUID menuItemId, UUID comboItemId,
                            String name, BigDecimal quantity, BigDecimal unitPrice) {
         UUID id = UUID.randomUUID();
-        db.update("""
+        jdbcTemplate.update("""
             INSERT INTO gcmb.order_line(id,order_id,branch_id,booking_id,menu_item_id,booking_combo_item_id,
                 name_snapshot,quantity,unit_price)
             VALUES (?,?,?,?,?,?,?,?,?)
@@ -228,7 +228,7 @@ public class FoodOrderRepository {
     }
 
     public List<PendingLine> pendingLines(UUID orderId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT id,menu_item_id,name_snapshot,quantity,unit_price
             FROM gcmb.order_line WHERE order_id=? ORDER BY created_at,id
             """, (rs, row) -> new PendingLine(rs.getObject("id", UUID.class),
@@ -237,7 +237,7 @@ public class FoodOrderRepository {
     }
 
     public ComboAllowance comboAllowance(UUID bookingId, UUID menuItemId, UUID excludingOrderId) {
-        List<ComboAllowance> rows = db.query("""
+        List<ComboAllowance> rows = jdbcTemplate.query("""
             SELECT c.id,c.included_quantity,
                 COALESCE(SUM(CASE WHEN o.id IS NOT NULL AND o.id<>? AND o.status IN ('ACCEPTED','SERVED')
                     THEN l.quantity ELSE 0 END),0) AS used_quantity
@@ -253,16 +253,16 @@ public class FoodOrderRepository {
     }
 
     public void updateLine(UUID lineId, UUID comboItemId, BigDecimal quantity, BigDecimal unitPrice) {
-        db.update("UPDATE gcmb.order_line SET booking_combo_item_id=?,quantity=?,unit_price=? WHERE id=?",
+        jdbcTemplate.update("UPDATE gcmb.order_line SET booking_combo_item_id=?,quantity=?,unit_price=? WHERE id=?",
             comboItemId, quantity, unitPrice, lineId);
     }
 
-    public void deleteLine(UUID lineId) { db.update("DELETE FROM gcmb.order_line WHERE id=?", lineId); }
+    public void deleteLine(UUID lineId) { jdbcTemplate.update("DELETE FROM gcmb.order_line WHERE id=?", lineId); }
 
     public List<SellableItem> sellableItems(UUID branchId, List<UUID> itemIds) {
         if (itemIds.isEmpty()) return List.of();
         String placeholders = String.join(",", java.util.Collections.nCopies(itemIds.size(), "?"));
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT m.id,m.name,m.category,m.kind,m.inventory_item_id,m.sale_price,i.tracking_mode,u.name AS unit_name,
                    COALESCE(sb.quantity,0) AS stock_quantity
             FROM gcmb.menu_item m
@@ -278,7 +278,7 @@ public class FoodOrderRepository {
     }
 
     public BigDecimal lockStock(UUID inventoryItemId) {
-        List<BigDecimal> rows = db.query("""
+        List<BigDecimal> rows = jdbcTemplate.query("""
             SELECT quantity FROM gcmb.stock_balance WHERE inventory_item_id=? FOR UPDATE
             """, (rs, row) -> rs.getBigDecimal("quantity"), inventoryItemId);
         return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
@@ -287,7 +287,7 @@ public class FoodOrderRepository {
     public void insertSale(UUID inventoryItemId, UUID orderLineId, BigDecimal before,
                            BigDecimal quantity, UUID actorId, String reason) {
         BigDecimal after = before.subtract(quantity);
-        db.update("""
+        jdbcTemplate.update("""
             INSERT INTO gcmb.stock_movement(inventory_item_id,kind,quantity_delta,quantity_before,
                 quantity_after,order_line_id,reason,actor_id,idempotency_key)
             VALUES (?,'SALE',?,?,?,?,?,?,?)
@@ -296,12 +296,12 @@ public class FoodOrderRepository {
     }
 
     public List<SaleMovement> comboGiftSales(UUID branchId, UUID bookingId) {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT sm.id,sm.inventory_item_id,-sm.quantity_delta AS quantity
             FROM gcmb.stock_movement sm
             JOIN gcmb.order_line l ON l.id=sm.order_line_id
             JOIN gcmb.fb_order o ON o.id=l.order_id AND o.booking_id=? AND o.branch_id=?
-              AND o.idempotency_key='COMBO-GIFT-'||?::text
+              AND o.idempotency_key LIKE 'COMBO-GIFT-'||?::text||'%'
             WHERE sm.kind='SALE' AND NOT EXISTS (
               SELECT 1 FROM gcmb.stock_movement reversal WHERE reversal.kind='RETURN' AND reversal.reverses_id=sm.id)
             ORDER BY sm.inventory_item_id,sm.id FOR UPDATE OF sm
@@ -310,7 +310,7 @@ public class FoodOrderRepository {
     }
 
     public UUID comboGiftOrderId(UUID branchId, UUID bookingId) {
-        List<UUID> ids = db.query("""
+        List<UUID> ids = jdbcTemplate.query("""
             SELECT id FROM gcmb.fb_order
             WHERE branch_id=? AND booking_id=? AND idempotency_key='COMBO-GIFT-'||?::text
               AND status IN ('ACCEPTED','SERVED')
@@ -318,9 +318,18 @@ public class FoodOrderRepository {
         return ids.isEmpty()?null:ids.get(0);
     }
 
+    public List<UUID> comboGiftOrderIds(UUID branchId, UUID bookingId) {
+        return jdbcTemplate.query("""
+            SELECT id FROM gcmb.fb_order
+            WHERE branch_id=? AND booking_id=? AND idempotency_key LIKE 'COMBO-GIFT-'||?::text||'%'
+              AND status IN ('ACCEPTED','SERVED')
+            ORDER BY created_at,id
+            """,(rs,n)->rs.getObject("id",UUID.class),branchId,bookingId,bookingId);
+    }
+
     public void insertReturn(UUID inventoryItemId, UUID saleMovementId, BigDecimal quantity, BigDecimal before,
                              UUID actorId, String reason) {
-        db.update("""
+        jdbcTemplate.update("""
             INSERT INTO gcmb.stock_movement(inventory_item_id,kind,quantity_delta,quantity_before,quantity_after,
                 reverses_id,reason,actor_id,idempotency_key)
             VALUES (?,'RETURN',?,?,?,?,?,?,?) ON CONFLICT(idempotency_key) DO NOTHING
@@ -328,15 +337,15 @@ public class FoodOrderRepository {
     }
 
     public void cancelComboGiftOrder(UUID branchId, UUID bookingId) {
-        db.update("""
+        jdbcTemplate.update("""
             UPDATE gcmb.fb_order SET status='CANCELLED'
-            WHERE branch_id=? AND booking_id=? AND idempotency_key='COMBO-GIFT-'||?::text
+            WHERE branch_id=? AND booking_id=? AND idempotency_key LIKE 'COMBO-GIFT-'||?::text||'%'
               AND status IN ('ACCEPTED','SERVED')
             """,branchId,bookingId,bookingId);
     }
 
     public OrderLock lockOrder(UUID orderId, UUID branchId) {
-        List<OrderLock> rows = db.query("""
+        List<OrderLock> rows = jdbcTemplate.query("""
             SELECT o.id,o.branch_id,o.booking_id,o.allocation_id,o.channel,o.qr_session_id,o.status,
                    o.assigned_employee_id,e.user_id AS assigned_user_id
             FROM gcmb.fb_order o
@@ -353,7 +362,7 @@ public class FoodOrderRepository {
     }
 
     public int accept(UUID orderId, UUID branchId, UUID acceptedBy, UUID employeeId) {
-        return db.update("""
+        return jdbcTemplate.update("""
             UPDATE gcmb.fb_order SET status='ACCEPTED',accepted_by=?,accepted_at=CURRENT_TIMESTAMP,
                 assigned_employee_id=?
             WHERE id=? AND branch_id=? AND status='PENDING'
@@ -361,14 +370,14 @@ public class FoodOrderRepository {
     }
 
     public int reject(UUID orderId, UUID branchId) {
-        return db.update("""
+        return jdbcTemplate.update("""
             UPDATE gcmb.fb_order SET status='REJECTED'
             WHERE id=? AND branch_id=? AND status='PENDING'
             """, orderId, branchId);
     }
 
     public int serve(UUID orderId, UUID branchId) {
-        return db.update("""
+        return jdbcTemplate.update("""
             UPDATE gcmb.fb_order SET status='SERVED',served_at=CURRENT_TIMESTAMP
             WHERE id=? AND branch_id=? AND status='ACCEPTED'
             """, orderId, branchId);
@@ -397,7 +406,7 @@ public class FoodOrderRepository {
         String statusClause = status == null ? "" : " AND o.status=?";
         Object[] args = status == null ? predicateArgs : append(predicateArgs, status);
         args = append(args, limit);
-        List<OrderHeader> headers = db.query("""
+        List<OrderHeader> headers = jdbcTemplate.query("""
             SELECT o.id,o.booking_id,b.code AS booking_code,r.code AS room_code,r.name AS room_name,
                    b.contact_name,o.channel,o.status,o.assigned_employee_id,e.full_name AS assigned_employee_name,
                    o.created_at,o.accepted_at,o.served_at
@@ -417,7 +426,7 @@ public class FoodOrderRepository {
         List<UUID> ids = headers.stream().map(OrderHeader::id).toList();
         String linePlaceholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
         Map<UUID, List<OrderItem>> linesByOrder = new HashMap<>();
-        db.query("""
+        jdbcTemplate.query("""
             SELECT id,order_id,menu_item_id,name_snapshot,quantity,unit_price,booking_combo_item_id
             FROM gcmb.order_line WHERE order_id IN (""" + linePlaceholders + ") ORDER BY created_at,id",
             rs -> {

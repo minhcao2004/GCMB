@@ -20,12 +20,12 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class StaffRepository {
 
-    private final JdbcTemplate db;
-    private final ObjectMapper json;
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public StaffRepository(JdbcTemplate db, ObjectMapper json) {
-        this.db = db;
-        this.json = json;
+    public StaffRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     private static final String FROM = """
@@ -50,7 +50,7 @@ public class StaffRepository {
         """ + FROM;
 
     public Map<String, Object> find(UUID id) {
-        var rows = db.queryForList(SELECT + " WHERE e.id=?", id);
+        var rows = jdbcTemplate.queryForList(SELECT + " WHERE e.id=?", id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -74,7 +74,7 @@ public class StaffRepository {
             args.add(branch);
         }
         if (unassigned) where += " AND home.branch_id IS NULL";
-        long total = db.queryForObject(
+        long total = jdbcTemplate.queryForObject(
             "SELECT count(*) " + FROM + where,
             Long.class,
             args.toArray()
@@ -82,7 +82,7 @@ public class StaffRepository {
         args.add(size);
         args.add((long) page * size);
         // List results deliberately omit identification numbers, bank fields and account identifiers.
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT e.id,e.code,e.full_name AS \"fullName\",e.phone,e.position,e.status,b.name AS \"branchName\",home.branch_id AS \"branchId\" " +
                 FROM +
                 where +
@@ -94,17 +94,17 @@ public class StaffRepository {
 
     public List<Map<String, Object>> branches(UUID scope) {
         return scope == null
-            ? db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id")
-            : db.queryForList("SELECT id,code,name,status FROM gcmb.branch WHERE id=?", scope);
+            ? jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id")
+            : jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch WHERE id=?", scope);
     }
 
     public void serialize() {
-        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
     }
 
     public boolean actorActive(UUID id, String role) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 """
             SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
                 WHERE u.id=? AND u.status='ACTIVE' AND r.code=?)
@@ -117,13 +117,13 @@ public class StaffRepository {
     }
 
     public boolean lock(UUID id) {
-        return !db
+        return !jdbcTemplate
             .queryForList("SELECT id FROM gcmb.employee WHERE id=? FOR UPDATE", UUID.class, id)
             .isEmpty();
     }
 
     public boolean activeBranch(UUID id) {
-        return !db
+        return !jdbcTemplate
             .queryForList(
                 "SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",
                 UUID.class,
@@ -133,7 +133,7 @@ public class StaffRepository {
     }
 
     public String branchName(UUID id) {
-        var names = db.queryForList("SELECT name FROM gcmb.branch WHERE id=?", String.class, id);
+        var names = jdbcTemplate.queryForList("SELECT name FROM gcmb.branch WHERE id=?", String.class, id);
         return names.isEmpty() ? id.toString() : names.get(0);
     }
 
@@ -142,7 +142,7 @@ public class StaffRepository {
             !Set.of("code", "identity_number").contains(field)
         ) throw new IllegalArgumentException();
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.employee WHERE " +
                     field +
                     "=? AND id IS DISTINCT FROM CAST(? AS uuid))",
@@ -154,7 +154,7 @@ public class StaffRepository {
     }
 
     public void create(UUID id, StaffCommand c) {
-        db.update(
+        jdbcTemplate.update(
             """
             INSERT INTO gcmb.employee(id,code,full_name,phone,position,contact_email,identity_number,address,notes,hired_on,status)
             VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE')
@@ -173,7 +173,7 @@ public class StaffRepository {
     }
 
     public void update(UUID id, StaffCommand c) {
-        db.update(
+        jdbcTemplate.update(
             """
             UPDATE gcmb.employee SET code=?,full_name=?,phone=?,position=?,contact_email=?,identity_number=?,address=?,notes=?,
                 hired_on=?,resigned_on=?,version=version+1 WHERE id=?
@@ -193,7 +193,7 @@ public class StaffRepository {
     }
 
     public void status(UUID id, String status, java.time.LocalDate resigned) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.employee SET status=?,resigned_on=?,version=version+1 WHERE id=?",
             status,
             resigned,
@@ -203,7 +203,7 @@ public class StaffRepository {
 
     public void assignment(UUID employee, UUID branch, UUID actor, String reason) {
         // UC-81/82: close old interval and create new one atomically, preserving history.
-        Instant at = db.queryForObject(
+        Instant at = jdbcTemplate.queryForObject(
             """
             SELECT GREATEST(clock_timestamp(),COALESCE(max(valid_from)+interval '1 microsecond',clock_timestamp()))
             FROM gcmb.employee_assignment WHERE employee_id=?
@@ -211,12 +211,12 @@ public class StaffRepository {
             (rs, n) -> rs.getTimestamp(1).toInstant(),
             employee
         );
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.employee_assignment SET valid_to=? WHERE employee_id=? AND valid_to IS NULL",
             Timestamp.from(at),
             employee
         );
-        db.update(
+        jdbcTemplate.update(
             """
             INSERT INTO gcmb.employee_assignment(employee_id,branch_id,valid_from,is_branch_manager,assigned_by,reason)
             VALUES (?,?,?,false,?,?)
@@ -227,12 +227,12 @@ public class StaffRepository {
             actor,
             reason
         );
-        db.update("UPDATE gcmb.employee SET version=version+1 WHERE id=?", employee);
+        jdbcTemplate.update("UPDATE gcmb.employee SET version=version+1 WHERE id=?", employee);
     }
 
     public boolean futureAssignment(UUID employee) {
         return Boolean.TRUE.equals(
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM gcmb.employee_assignment WHERE employee_id=? AND (valid_from>clock_timestamp() OR valid_to>clock_timestamp()))",
                 Boolean.class,
                 employee
@@ -242,7 +242,7 @@ public class StaffRepository {
 
     public void moveReceptionAccess(UUID user, UUID branch) {
         // Home branch follows the receptionist; management responsibilities remain UC-12.
-        db.update(
+        jdbcTemplate.update(
             """
             UPDATE gcmb.user_account u SET branch_id=? FROM gcmb.role r
             WHERE u.id=? AND u.role_id=r.id AND r.code='RECEPTIONIST'
@@ -250,14 +250,14 @@ public class StaffRepository {
             branch,
             user
         );
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL",
             user
         );
     }
 
     public List<Map<String, Object>> history(UUID employee) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT h.id,h.valid_from AS "createdAt",h.valid_to AS "validTo",h.reason,b.name AS "branchName",b.code AS "branchCode",
               lag(b.name) OVER (ORDER BY h.valid_from,h.id) AS "previousBranchName",
@@ -278,14 +278,14 @@ public class StaffRepository {
         Map<String, Object> after,
         String reason
     ) {
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data,reason) VALUES (?,?,?,'EMPLOYEE',?,CAST(? AS jsonb),CAST(? AS jsonb),?)",
             actor,
             after.get("branchId"),
             action,
             employee,
-            before == null ? null : json.writeValueAsString(before),
-            json.writeValueAsString(after),
+            before == null ? null : objectMapper.writeValueAsString(before),
+            objectMapper.writeValueAsString(after),
             reason
         );
     }

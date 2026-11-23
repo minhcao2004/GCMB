@@ -17,16 +17,16 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AccountAccessRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
-    public AccountAccessRepository(JdbcTemplate db) {
-        this.db = db;
+    public AccountAccessRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public boolean lockManagement(UUID actor) {
         // Tuần tự hóa thay đổi quyền để hai quản lý không đồng thời thu hồi nhau.
-        db.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        return !db
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
+        return !jdbcTemplate
             .queryForList(
                 """
                 SELECT u.id FROM gcmb.user_account u
@@ -41,13 +41,13 @@ public class AccountAccessRepository {
     }
 
     public boolean lockAccount(UUID id) {
-        return !db
+        return !jdbcTemplate
             .queryForList("SELECT id FROM gcmb.user_account WHERE id=? FOR UPDATE", UUID.class, id)
             .isEmpty();
     }
 
     public void setRole(UUID id, UUID roleId, UUID branchId) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.user_account SET role_id=?,branch_id=? WHERE id=?",
             roleId,
             branchId,
@@ -57,19 +57,19 @@ public class AccountAccessRepository {
 
     public void deactivate(UUID id) {
         // Giữ hồ sơ nhân viên và tài khoản để truy xuất lịch sử.
-        db.update("UPDATE gcmb.user_account SET status='REVOKED' WHERE id=?", id);
+        jdbcTemplate.update("UPDATE gcmb.user_account SET status='REVOKED' WHERE id=?", id);
     }
 
     // UC-07, BR-131: mở lại có chủ đích, không khôi phục token đã thu hồi.
     public void reactivate(UUID id) {
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.user_account SET status='ACTIVE',failed_login_count=0,locked_until=NULL WHERE id=?",
             id
         );
     }
 
     public void revokeTokens(UUID id) {
-        db.update(
+        jdbcTemplate.update(
             """
                 UPDATE gcmb.auth_token SET revoked_at=CURRENT_TIMESTAMP
                 WHERE user_id=? AND revoked_at IS NULL
@@ -79,7 +79,7 @@ public class AccountAccessRepository {
     }
 
     public List<PermissionView> permissions(String role) {
-        return db.query(
+        return jdbcTemplate.query(
             """
                 SELECT p.code,p.name,rp.scope FROM gcmb.role_permission rp
                 JOIN gcmb.role r ON r.id=rp.role_id
@@ -104,7 +104,7 @@ public class AccountAccessRepository {
         String reason
     ) {
         // Chỉ ghi các trường được phép; tuyệt đối không đưa mật khẩu hoặc token vào audit.
-        db.update(
+        jdbcTemplate.update(
             """
                 INSERT INTO gcmb.audit_event(
                     actor_id,branch_id,action,entity_type,entity_id,before_data,after_data,reason

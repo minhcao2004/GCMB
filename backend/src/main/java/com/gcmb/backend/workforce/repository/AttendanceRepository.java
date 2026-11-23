@@ -18,16 +18,16 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class AttendanceRepository {
 
-    private final JdbcTemplate db;
-    private final ObjectMapper json;
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public AttendanceRepository(JdbcTemplate db, ObjectMapper json) {
-        this.db = db;
-        this.json = json;
+    public AttendanceRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public Map<String, Object> period(UUID branch, LocalDate month, boolean lock) {
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             """
             SELECT p.id,p.status,p.version,p.closed_at AS "closedAt",u.username AS "closedBy"
             FROM gcmb.attendance_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by
@@ -40,7 +40,7 @@ public class AttendanceRepository {
     }
 
     public Map<String, Object> ensurePeriod(UUID branch, LocalDate month) {
-        db.update(
+        jdbcTemplate.update(
             """
             INSERT INTO gcmb.attendance_period(branch_id,month,status) VALUES (?,?,'OPEN')
             ON CONFLICT(branch_id,month) DO NOTHING
@@ -63,7 +63,7 @@ public class AttendanceRepository {
 
     private List<Map<String, Object>> rows(UUID branch, LocalDate from, LocalDate until, UUID employee) {
         // UC-88: giữ cả công cũ của người đã điều chuyển/ngừng; không lọc theo hồ sơ hiện tại.
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT sa.id AS "assignmentId",sa.employee_id AS "employeeId",e.code,
               e.full_name AS "fullName",s.id AS "shiftId",s.work_date::text AS "workDate",
@@ -104,7 +104,7 @@ public class AttendanceRepository {
     }
 
     public Map<String, Object> row(UUID branch, UUID assignment) {
-        var keys = db.queryForList(
+        var keys = jdbcTemplate.queryForList(
             """
             SELECT s.work_date FROM gcmb.shift_assignment sa
             JOIN gcmb.scheduled_shift s ON s.id=sa.shift_id
@@ -124,7 +124,7 @@ public class AttendanceRepository {
     }
 
     public List<Map<String, Object>> issues(UUID branch, LocalDate from, LocalDate until) {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             """
             SELECT i.id,a.assignment_id AS "assignmentId",i.description,i.status,i.resolution
             FROM gcmb.attendance_issue i JOIN gcmb.attendance a ON a.id=i.attendance_id
@@ -149,7 +149,7 @@ public class AttendanceRepository {
         String note,
         UUID actor
     ) {
-        return db.queryForObject(
+        return jdbcTemplate.queryForObject(
             """
             INSERT INTO gcmb.attendance(assignment_id,period_id,status,actual_in,actual_out,
               break_minutes,worked_minutes,exception_note,recorded_by)
@@ -174,7 +174,7 @@ public class AttendanceRepository {
 
     public boolean resolve(UUID issue, UUID attendance, UUID actor, String resolution) {
         return (
-            db.update(
+            jdbcTemplate.update(
                 """
                 UPDATE gcmb.attendance_issue SET status='RESOLVED',resolved_by=?,resolved_at=CURRENT_TIMESTAMP,resolution=?
                 WHERE id=? AND attendance_id=? AND status='OPEN'
@@ -188,11 +188,11 @@ public class AttendanceRepository {
     }
 
     public void changed(UUID period) {
-        db.update("UPDATE gcmb.attendance_period SET version=version+1 WHERE id=?", period);
+        jdbcTemplate.update("UPDATE gcmb.attendance_period SET version=version+1 WHERE id=?", period);
     }
 
     public List<Map<String,Object>> employeeClosures(UUID branch,LocalDate month) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT c.employee_id AS "employeeId",c.closed_at AS "closedAt",u.username AS "closedBy"
             FROM gcmb.employee_attendance_closing c JOIN gcmb.attendance_period p ON p.id=c.period_id
             JOIN gcmb.user_account u ON u.id=c.closed_by WHERE p.branch_id=? AND p.month=?
@@ -200,12 +200,12 @@ public class AttendanceRepository {
     }
 
     public void closeEmployee(UUID period,UUID employee,UUID actor,Object snapshot) {
-        db.update("INSERT INTO gcmb.employee_attendance_closing(period_id,employee_id,closed_by,source_snapshot) VALUES (?,?,?,?::jsonb)",
-            period,employee,actor,json.writeValueAsString(snapshot));
+        jdbcTemplate.update("INSERT INTO gcmb.employee_attendance_closing(period_id,employee_id,closed_by,source_snapshot) VALUES (?,?,?,?::jsonb)",
+            period,employee,actor,objectMapper.writeValueAsString(snapshot));
     }
 
     public void close(UUID period, UUID actor) {
-        db.update(
+        jdbcTemplate.update(
             """
             UPDATE gcmb.attendance_period SET status='CLOSED',closed_by=?,closed_at=CURRENT_TIMESTAMP,version=version+1
             WHERE id=? AND status='OPEN'
@@ -223,7 +223,7 @@ public class AttendanceRepository {
         Object before,
         Object after
     ) {
-        db.update(
+        jdbcTemplate.update(
             """
             INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
             VALUES (?,?,?,'ATTENDANCE',?,CAST(? AS jsonb),CAST(? AS jsonb))
@@ -232,8 +232,8 @@ public class AttendanceRepository {
             branch,
             action,
             entity,
-            json.writeValueAsString(before),
-            json.writeValueAsString(after)
+            objectMapper.writeValueAsString(before),
+            objectMapper.writeValueAsString(after)
         );
     }
 

@@ -22,11 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class ShiftService {
 
-    private final ShiftRepository repo;
+    private final ShiftRepository shiftRepository;
     private final AccountRepository accountRepository;
 
-    public ShiftService(ShiftRepository repo, AccountRepository accountRepository) {
-        this.repo = repo;
+    public ShiftService(ShiftRepository shiftRepository, AccountRepository accountRepository) {
+        this.shiftRepository = shiftRepository;
         this.accountRepository = accountRepository;
     }
 
@@ -37,13 +37,13 @@ public class ShiftService {
             !Set.of("BRANCH_MANAGER", "RECEPTIONIST").contains(actor.role()) ||
             (manager && !"BRANCH_MANAGER".equals(actor.role()))
         ) throw denied();
-        if (write) repo.serialize(); // cùng thứ tự khóa với thay cơ sở / ngừng nhân viên.
-        if (!repo.actor(actor.id(), actor.role(), actor.branchId())) throw denied();
+        if (write) shiftRepository.serialize(); // cùng thứ tự khóa với thay cơ sở / ngừng nhân viên.
+        if (!shiftRepository.actor(actor.id(), actor.role(), actor.branchId())) throw denied();
         if (
             "BRANCH_MANAGER".equals(actor.role()) &&
             !accountRepository.manages(actor.id(), actor.branchId(), false)
         ) throw denied();
-        var branch = repo.branch(actor.branchId(), write);
+        var branch = shiftRepository.branch(actor.branchId(), write);
         if (branch == null) throw denied();
         // BR-177 / MSG43: vẫn cho xem, chặn mọi thay đổi tại cơ sở tạm ngừng.
         if (write && !"ACTIVE".equals(branch.get("status"))) throw new AuthFailure(
@@ -83,15 +83,15 @@ public class ShiftService {
     // HuyDV / UC-83–85: tự tạo đủ ca tuần tới khi lịch được mở lần đầu.
     private void ensureNextWeek(Identity actor, LocalDate week, Map<String, Object> branch) {
         ZoneId zone = ZoneId.of((String) branch.get("timezone"));
-        for (var template : repo.templates()) {
+        for (var template : shiftRepository.templates()) {
             UUID templateId = (UUID) template.get("id");
             int start = ((Number) template.get("startMinute")).intValue();
             int end = ((Number) template.get("endMinute")).intValue();
             for (int offset = 0; offset < 7; offset++) {
                 LocalDate day = week.plusDays(offset);
-                if (repo.slot(actor.branchId(), templateId, day) != null || repo.closedPeriod(actor.branchId(), day)) continue;
+                if (shiftRepository.slot(actor.branchId(), templateId, day) != null || shiftRepository.closedPeriod(actor.branchId(), day)) continue;
                 ZonedDateTime midnight = day.atStartOfDay(zone);
-                repo.publish(actor.branchId(), templateId, day, midnight.plusMinutes(start).toInstant(),
+                shiftRepository.publish(actor.branchId(), templateId, day, midnight.plusMinutes(start).toInstant(),
                     midnight.plusMinutes(end).toInstant(), 3, "OPEN", actor.id(), null);
             }
         }
@@ -106,7 +106,7 @@ public class ShiftService {
 
     private Map<String, Object> weekly(Identity actor, LocalDate week, Map<String, Object> branch) {
         boolean manager = "BRANCH_MANAGER".equals(actor.role());
-        UUID employee = manager ? null : repo.linkedEmployee(actor.id());
+        UUID employee = manager ? null : shiftRepository.linkedEmployee(actor.id());
         if (!manager && employee == null) throw denied();
         // BR-60: lễ tân chỉ nhận phân công của mình; các ô đăng ký chỉ lộ số chỗ, không lộ tên đồng nghiệp.
         var result = new LinkedHashMap<String, Object>();
@@ -115,8 +115,8 @@ public class ShiftService {
         result.put("nextWeek", currentWeek(branch).plusWeeks(1).toString());
         result.put("registrationOpen", registrationOpen(week, branch));
         result.put("branchName", branch.get("name"));
-        var templates = repo.templates();
-        var shifts = repo.shifts(actor.branchId(), week);
+        var templates = shiftRepository.templates();
+        var shifts = shiftRepository.shifts(actor.branchId(), week);
         result.put("templates", templates);
         result.put("shifts", shifts);
         // UC-85 mở rộng theo yêu cầu: quản lý chỉnh tuần hiện tại và tuần tới; dùng giờ server.
@@ -126,7 +126,7 @@ public class ShiftService {
             "ACTIVE".equals(branch.get("status")) &&
             week.equals(currentWeek(branch))
         ) {
-            var closed = repo.closedMonths(actor.branchId(), week);
+            var closed = shiftRepository.closedMonths(actor.branchId(), week);
             var zone = ZoneId.of((String) branch.get("timezone"));
             Instant now = Instant.now();
             for (int day = 0; day < 7; day++) {
@@ -152,10 +152,10 @@ public class ShiftService {
         }
         if (!manager) shifts.forEach(shift -> shift.remove("hasAttendance")); // BR-60: chỉ quản lý cần trạng thái khóa công của cả ca.
         result.put("editableSlots", editable);
-        result.put("assignments", repo.assignments(actor.branchId(), week, employee));
-        if(manager) result.put("employeeClosings",repo.employeeClosings(actor.branchId(),week));
-        result.put("history", manager ? repo.history(actor.branchId(), week) : List.of());
-        result.put("employees", manager ? repo.employees(actor.branchId()) : List.of());
+        result.put("assignments", shiftRepository.assignments(actor.branchId(), week, employee));
+        if(manager) result.put("employeeClosings",shiftRepository.employeeClosings(actor.branchId(),week));
+        result.put("history", manager ? shiftRepository.history(actor.branchId(), week) : List.of());
+        result.put("employees", manager ? shiftRepository.employees(actor.branchId()) : List.of());
         result.put("readOnly", !"ACTIVE".equals(branch.get("status")));
         return result;
     }
@@ -179,7 +179,7 @@ public class ShiftService {
             throw bad("slots", "Chỉ chỉnh ca trong tuần hiện tại.");
         }
         Map<UUID, Map<String, Object>> templates = new HashMap<>();
-        for (var t : repo.templates()) templates.put((UUID) t.get("id"), t);
+        for (var t : shiftRepository.templates()) templates.put((UUID) t.get("id"), t);
         var seen = new HashSet<String>();
         for (var slot : input.slots()) {
             // UC-85 mở rộng tuần hiện tại; BR-53/111/203, MSG02/44: ca cố định, sức chứa nguyên dương.
@@ -196,7 +196,7 @@ public class ShiftService {
                 "slots",
                 "Một ngày/ca không được xuất hiện hai lần."
             );
-            var old = repo.slot(actor.branchId(), slot.templateId(), slot.date());
+            var old = shiftRepository.slot(actor.branchId(), slot.templateId(), slot.date());
             if (old == null && !slot.open()) continue;
             if (slot.capacity() == null || slot.capacity() != 3) throw bad(
                 "capacity",
@@ -208,7 +208,7 @@ public class ShiftService {
                     : slot.version() == null ||
                           slot.version().longValue() != ((Number) old.get("version")).longValue()
             ) throw stale();
-            long registered = old == null ? 0 : repo.registered((UUID) old.get("id"));
+            long registered = old == null ? 0 : shiftRepository.registered((UUID) old.get("id"));
             // BR-192 / MSG85: kiểm tra lại dưới khóa, không giảm dưới số người đã có.
             if (slot.capacity() < registered) throw new AuthFailure(
                 409,
@@ -219,7 +219,7 @@ public class ShiftService {
                     registered +
                     "."
             );
-            if (repo.closedPeriod(actor.branchId(), slot.date())) throw locked();
+            if (shiftRepository.closedPeriod(actor.branchId(), slot.date())) throw locked();
             var t = templates.get(slot.templateId());
             int start = ((Number) t.get("startMinute")).intValue(),
                 end = ((Number) t.get("endMinute")).intValue();
@@ -233,14 +233,14 @@ public class ShiftService {
                 "slots",
                 "Ca đã kết thúc, không thể mở hoặc chỉnh ca."
             );
-            if (old != null && repo.hasAttendance((UUID) old.get("id"))) throw locked();
+            if (old != null && shiftRepository.hasAttendance((UUID) old.get("id"))) throw locked();
             String status = slot.open() ? "OPEN" : "CLOSED";
             if (
                 old != null &&
                 slot.capacity().intValue() == ((Number) old.get("capacity")).intValue() &&
                 status.equals(old.get("status"))
             ) continue;
-            UUID id = repo.publish(
+            UUID id = shiftRepository.publish(
                 actor.branchId(),
                 slot.templateId(),
                 slot.date(),
@@ -251,7 +251,7 @@ public class ShiftService {
                 actor.id(),
                 old
             );
-            repo.audit(
+            shiftRepository.audit(
                 actor.id(),
                 actor.branchId(),
                 id,
@@ -276,29 +276,29 @@ public class ShiftService {
     public Map<String, Object> register(Identity actor, UUID shift) {
         if (actor == null || !"RECEPTIONIST".equals(actor.role())) throw denied();
         var branch = scope(actor, true, false);
-        var row = repo.shift(shift, actor.branchId());
+        var row = shiftRepository.shift(shift, actor.branchId());
         // UC-83, BR-54, BR-57 (Business Rules.docx), BR-55 / MSG84.
         if (row == null || !"OPEN".equals(row.get("status"))) throw registration();
         LocalDate date = ((java.sql.Date) row.get("work_date")).toLocalDate();
         if (!registrationOpen(date.with(DayOfWeek.MONDAY), branch)) {
             throw bad("form", "Chỉ đăng ký ca tuần tới trước 22:00 Chủ nhật.");
         }
-        UUID employee = repo.linkedEmployee(actor.id());
+        UUID employee = shiftRepository.linkedEmployee(actor.id());
         Instant start = time(row, "starts_at"),
             end = time(row, "ends_at");
         if (
             employee == null ||
-            !repo.belongs(employee, actor.branchId(), start, end) ||
+            !shiftRepository.belongs(employee, actor.branchId(), start, end) ||
             !start.isAfter(Instant.now())
         ) throw registration();
-        if (repo.already(employee, shift)) return weekly(
+        if (shiftRepository.already(employee, shift)) return weekly(
             actor,
             date.with(DayOfWeek.MONDAY),
             branch
         );
-        if (repo.closedPeriod(actor.branchId(), date)) throw locked();
-        if (repo.employeeClosed(actor.branchId(),employee,date)) throw locked();
-        long registered = repo.registered(shift);
+        if (shiftRepository.closedPeriod(actor.branchId(), date)) throw locked();
+        if (shiftRepository.employeeClosed(actor.branchId(),employee,date)) throw locked();
+        long registered = shiftRepository.registered(shift);
         // BR-56 / MSG19: khóa ca trước khi kiểm tra chỗ; đăng ký đủ điều kiện tự xác nhận, không duyệt tay.
         if (registered >= Math.min(3, ((Number) row.get("capacity")).longValue())) throw new AuthFailure(
             409,
@@ -309,13 +309,13 @@ public class ShiftService {
                 date +
                 " đã đủ người đăng ký. Vui lòng chọn ca khác."
         );
-        if (repo.overlap(employee, shift, start, end)) throw bad(
+        if (shiftRepository.overlap(employee, shift, start, end)) throw bad(
             "form",
             "Nhân viên đã có ca trùng thời gian."
         );
         requireDailyLimit(employee, shift);
-        UUID assignment = repo.assign(shift, employee, actor.id(), "SELF", null);
-        repo.audit(
+        UUID assignment = shiftRepository.assign(shift, employee, actor.id(), "SELF", null);
+        shiftRepository.audit(
             actor.id(),
             actor.branchId(),
             shift,
@@ -328,28 +328,28 @@ public class ShiftService {
     // HuyDV / UC-86, BR-56: bổ sung người đến đủ ba chỗ, không chỉ ca chưa có ai.
     public Map<String, Object> assignEmpty(Identity actor, UUID shift, UUID employee) {
         var branch = scope(actor, true, true);
-        var row = repo.shift(shift, actor.branchId());
+        var row = shiftRepository.shift(shift, actor.branchId());
         if (row == null || "CANCELLED".equals(row.get("status"))) throw stale();
         LocalDate date = ((java.sql.Date) row.get("work_date")).toLocalDate();
         Instant start = time(row, "starts_at");
         Instant end = time(row, "ends_at");
         Instant now = Instant.now();
-        if (!end.isAfter(now) || repo.closedPeriod(actor.branchId(), date)) {
+        if (!end.isAfter(now) || shiftRepository.closedPeriod(actor.branchId(), date)) {
             throw locked();
         }
-        if (repo.registered(shift) >= Math.min(3,((Number)row.get("capacity")).longValue()))
+        if (shiftRepository.registered(shift) >= Math.min(3,((Number)row.get("capacity")).longValue()))
             throw bad("form","Ca đã đủ người. Không thể phân công thêm.");
-        if (employee == null || !repo.belongs(employee, actor.branchId(), start.isAfter(now) ? start : now, end)) {
+        if (employee == null || !shiftRepository.belongs(employee, actor.branchId(), start.isAfter(now) ? start : now, end)) {
             throw bad("employeeId", "Vui lòng chọn lễ tân đang hoạt động tại cơ sở của ca.");
         }
-        if (repo.employeeClosed(actor.branchId(),employee,date)) throw locked();
-        if (repo.already(employee,shift)) throw bad("employeeId","Nhân viên đã được phân công trong ca này.");
-        if (repo.overlap(employee, shift, start, end)) {
+        if (shiftRepository.employeeClosed(actor.branchId(),employee,date)) throw locked();
+        if (shiftRepository.already(employee,shift)) throw bad("employeeId","Nhân viên đã được phân công trong ca này.");
+        if (shiftRepository.overlap(employee, shift, start, end)) {
             throw bad("employeeId", "Nhân viên đã có ca trùng thời gian.");
         }
         requireDailyLimit(employee, shift);
-        UUID assignment = repo.assign(shift, employee, actor.id(), "MANAGER", "Bổ sung nhân viên cho ca còn chỗ");
-        repo.audit(actor.id(), actor.branchId(), shift, "ASSIGN_EMPTY_SHIFT",
+        UUID assignment = shiftRepository.assign(shift, employee, actor.id(), "MANAGER", "Bổ sung nhân viên cho ca còn chỗ");
+        shiftRepository.audit(actor.id(), actor.branchId(), shift, "ASSIGN_EMPTY_SHIFT",
             Map.of("assignmentId", assignment, "employeeId", employee));
         return weekly(actor, date.with(DayOfWeek.MONDAY), branch);
     }
@@ -367,10 +367,10 @@ public class ShiftService {
             1000,
             true
         );
-        var before = repo.assignment(assignment, actor.branchId());
+        var before = shiftRepository.assignment(assignment, actor.branchId());
         if (before == null || !"CONFIRMED".equals(before.get("status"))) throw stale();
         UUID shift = (UUID) before.get("shift_id");
-        var row = repo.shift(shift, actor.branchId());
+        var row = shiftRepository.shift(shift, actor.branchId());
         if (
             input.version() == null ||
             input.version().longValue() != ((Number) row.get("version")).longValue()
@@ -385,10 +385,10 @@ public class ShiftService {
             end = time(row, "ends_at"),
             now = Instant.now();
         if (!end.isAfter(now)) throw bad("form", "Ca đã kết thúc, không thể thay nhân viên.");
-        if (repo.closedPeriod(actor.branchId(), date) || repo.attended(assignment)) throw locked();
+        if (shiftRepository.closedPeriod(actor.branchId(), date) || shiftRepository.attended(assignment)) throw locked();
         if ("CANCELLED".equals(row.get("status"))) throw bad("form", "Ca đã bị hủy.");
         if (
-            !repo.belongs(
+            !shiftRepository.belongs(
                 input.employeeId(),
                 actor.branchId(),
                 start.isAfter(now) ? start : now,
@@ -398,19 +398,19 @@ public class ShiftService {
             "employeeId",
             "Vui lòng chọn lễ tân đang hoạt động và được phân công tại cơ sở của ca."
         );
-        if (repo.employeeClosed(actor.branchId(),input.employeeId(),date)) throw locked();
-        if (repo.overlap(input.employeeId(), shift, start, end)) throw bad(
+        if (shiftRepository.employeeClosed(actor.branchId(),input.employeeId(),date)) throw locked();
+        if (shiftRepository.overlap(input.employeeId(), shift, start, end)) throw bad(
             "employeeId",
             "Nhân viên làm thay đã có ca trùng thời gian."
         );
-        if (repo.registered(shift) > ((Number) row.get("capacity")).longValue()) throw bad(
+        if (shiftRepository.registered(shift) > ((Number) row.get("capacity")).longValue()) throw bad(
             "form",
             "Số người trong ca đang vượt sức chứa. Vui lòng kiểm tra lại."
         );
         requireDailyLimit(input.employeeId(), shift);
-        repo.cancel(assignment, reason);
-        UUID replacement = repo.assign(shift, input.employeeId(), actor.id(), "MANAGER", reason);
-        repo.audit(
+        shiftRepository.cancel(assignment, reason);
+        UUID replacement = shiftRepository.assign(shift, input.employeeId(), actor.id(), "MANAGER", reason);
+        shiftRepository.audit(
             actor.id(),
             actor.branchId(),
             shift,
@@ -432,7 +432,7 @@ public class ShiftService {
     }
 
     private void requireDailyLimit(UUID employee, UUID shift) {
-        if (!repo.withinDailyLimit(employee, shift)) {
+        if (!shiftRepository.withinDailyLimit(employee, shift)) {
             throw bad("employeeId",
                 "Mỗi ngày tối đa 3 ca. Nếu có ca 00:00–07:00 thì chỉ được làm tối đa 2 ca trong ngày.");
         }

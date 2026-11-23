@@ -19,12 +19,12 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class TaxInvoiceService {
 
-    private final JdbcTemplate db;
-    private final ObjectMapper json;
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public TaxInvoiceService(JdbcTemplate db, ObjectMapper json) {
-        this.db = db;
-        this.json = json;
+    public TaxInvoiceService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public record Request(
@@ -74,7 +74,7 @@ public class TaxInvoiceService {
         ) throw denied();
         if (
             !Boolean.TRUE.equals(
-                db.queryForObject(
+                jdbcTemplate.queryForObject(
                     "SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=? AND u.status='ACTIVE' AND r.code=? AND (r.code='ACCOUNTANT' OR u.branch_id=?))",
                     Boolean.class,
                     actor.id(),
@@ -87,7 +87,7 @@ public class TaxInvoiceService {
 
     private Map<String, Object> booking(Identity actor, UUID id, boolean writing) {
         authorize(actor, false);
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT b.id,b.code,b.branch_id,br.name,br.status FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id WHERE b.id=?" +
                 (writing ? " FOR UPDATE OF b FOR SHARE OF br" : ""),
             id
@@ -112,7 +112,7 @@ public class TaxInvoiceService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list(Identity actor) {
         authorize(actor, false);
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             SELECT +
                 " WHERE (?='ACCOUNTANT' OR b.branch_id=?) ORDER BY t.updated_at DESC,t.booking_id",
             actor.role(),
@@ -123,12 +123,12 @@ public class TaxInvoiceService {
     @Transactional(readOnly = true)
     public Map<String, Object> detail(Identity actor, UUID id) {
         var b = booking(actor, id, false);
-        var rows = db.queryForList(SELECT + " WHERE t.booking_id=?", id);
+        var rows = jdbcTemplate.queryForList(SELECT + " WHERE t.booking_id=?", id);
         var result = new LinkedHashMap<String, Object>();
         result.put("bookingId", id);
         result.put("bookingCode", b.get("code"));
         // UC-127: the booking already uniquely identifies its checkout bill.
-        var bills = db.queryForList("""
+        var bills = jdbcTemplate.queryForList("""
             SELECT b.id,b.number,b.status,b.net_amount AS amount,b.checkout_at AS "checkoutAt",
                 k.contact_name AS customer,k.actual_checkin AS checkin,
                 COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
@@ -141,7 +141,7 @@ public class TaxInvoiceService {
         result.put("bill", null);
         if (!bills.isEmpty()) {
             var bill = bills.get(0);
-            bill.put("lines", db.queryForList("""
+            bill.put("lines", jdbcTemplate.queryForList("""
                 SELECT l.description,l.quantity,l.amount,
                     CASE WHEN l.order_line_id IS NOT NULL THEN 'FNB'
                         WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category
@@ -153,7 +153,7 @@ public class TaxInvoiceService {
         result.put("request", rows.isEmpty() ? null : rows.get(0));
         result.put(
             "history",
-            db.queryForList(
+            jdbcTemplate.queryForList(
                 "SELECT action,after_data::text AS data,created_at AS \"createdAt\" FROM gcmb.audit_event WHERE entity_type='TAX_INVOICE_REQUEST' AND entity_id=? ORDER BY created_at,id",
                 id
             )
@@ -180,7 +180,7 @@ public class TaxInvoiceService {
         String email = optional(input.contactEmail(), "contactEmail", "Email", 254);
         if (!email.isEmpty()) email = AuthValidation.email(email);
         if (
-            !db
+            !jdbcTemplate
                 .queryForList(
                     "SELECT booking_id FROM gcmb.tax_invoice_request WHERE booking_id=?",
                     id
@@ -191,7 +191,7 @@ public class TaxInvoiceService {
             "form",
             "Booking đã có yêu cầu hóa đơn. Vui lòng xem yêu cầu hiện có."
         );
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.tax_invoice_request(booking_id,buyer_name,tax_code,buyer_address,contact_email,note,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?)",
             id,
             buyer,
@@ -211,7 +211,7 @@ public class TaxInvoiceService {
         authorize(actor, false);
         if (!"ACCOUNTANT".equals(actor.role())) throw denied(); // MSG24, áp dụng cả khi gọi trực tiếp service.
         var b = booking(actor, id, true);
-        var rows = db.queryForList(
+        var rows = jdbcTemplate.queryForList(
             "SELECT version,status,delivery_result FROM gcmb.tax_invoice_request WHERE booking_id=? FOR UPDATE",
             id
         );
@@ -257,7 +257,7 @@ public class TaxInvoiceService {
             "deliveryResult",
             "Vui lòng chọn kết quả giao hóa đơn phù hợp với trạng thái xử lý."
         );
-        db.update(
+        jdbcTemplate.update(
             "UPDATE gcmb.tax_invoice_request SET status=?,delivery_result=?,version=version+1,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE booking_id=?",
             input.status(),
             delivery,
@@ -274,7 +274,7 @@ public class TaxInvoiceService {
         if (!"ACCOUNTANT".equals(actor.role())) throw denied();
         return Map.of(
             "count",
-            db.queryForObject(
+            jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM gcmb.tax_invoice_request t WHERE NOT EXISTS(SELECT 1 FROM gcmb.tax_invoice_read r WHERE r.booking_id=t.booking_id AND r.user_id=?)",
                 Long.class,
                 actor.id()
@@ -286,14 +286,14 @@ public class TaxInvoiceService {
         authorize(actor, false);
         if (!"ACCOUNTANT".equals(actor.role())) throw denied();
         if (
-            db
+            jdbcTemplate
                 .queryForList(
                     "SELECT booking_id FROM gcmb.tax_invoice_request WHERE booking_id=?",
                     id
                 )
                 .isEmpty()
         ) throw new AuthFailure(404, "form", "Không tìm thấy yêu cầu hóa đơn.");
-        db.update(
+        jdbcTemplate.update(
             "INSERT INTO gcmb.tax_invoice_read(booking_id,user_id) VALUES (?,?) ON CONFLICT DO NOTHING",
             id,
             actor.id()
@@ -301,14 +301,14 @@ public class TaxInvoiceService {
     }
 
     private void audit(Identity actor, UUID id, Map<String, Object> b, String action) {
-        var after = db.queryForMap(SELECT + " WHERE t.booking_id=?", id);
-        db.update(
+        var after = jdbcTemplate.queryForMap(SELECT + " WHERE t.booking_id=?", id);
+        jdbcTemplate.update(
             "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data) VALUES (?,?,?,'TAX_INVOICE_REQUEST',?,CAST(? AS jsonb))",
             actor.id(),
             b.get("branch_id"),
             action,
             id,
-            json.writeValueAsString(after)
+            objectMapper.writeValueAsString(after)
         );
     }
 

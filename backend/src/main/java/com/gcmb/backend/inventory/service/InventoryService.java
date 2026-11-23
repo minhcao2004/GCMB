@@ -47,28 +47,28 @@ public class InventoryService {
     private static final Set<String> TRACKING_MODES = Set.of("AUTO_ON_SALE", "MANUAL");
     private static final Set<String> MOVEMENT_KINDS = Set.of("OPENING", "RECEIPT", "SALE", "ADJUSTMENT", "RETURN");
 
-    private final InventoryRepository repository;
-    private final RefundEvidenceStorageService evidenceStorage;
+    private final InventoryRepository inventoryRepository;
+    private final RefundEvidenceStorageService refundEvidenceStorageService;
 
-    public InventoryService(InventoryRepository repository, RefundEvidenceStorageService evidenceStorage) {
-        this.repository = repository;
-        this.evidenceStorage = evidenceStorage;
+    public InventoryService(InventoryRepository inventoryRepository, RefundEvidenceStorageService refundEvidenceStorageService) {
+        this.inventoryRepository = inventoryRepository;
+        this.refundEvidenceStorageService = refundEvidenceStorageService;
     }
 
     @Transactional(readOnly = true)
     public List<InventoryItemView> list(Identity actor) {
-        return repository.list(branch(actor));
+        return inventoryRepository.list(branch(actor));
     }
 
     @Transactional(readOnly = true)
     public InventoryMetadata metadata(Identity actor) {
         UUID branchId = branch(actor);
-        return new InventoryMetadata(repository.units(), repository.categories(branchId));
+        return new InventoryMetadata(inventoryRepository.units(), inventoryRepository.categories(branchId));
     }
 
     @Transactional(readOnly = true)
     public InventoryItemView item(Identity actor, UUID id) {
-        InventoryItemView item = repository.get(branch(actor), id);
+        InventoryItemView item = inventoryRepository.get(branch(actor), id);
         if (item == null) throw notFound();
         return item;
     }
@@ -78,10 +78,10 @@ public class InventoryService {
         UUID branchId = writableBranch(actor, "tạo", "mặt hàng kho");
         if (input == null) throw bad("Vui lòng bổ sung thông tin mặt hàng.");
         // Mã mặt hàng được cấp tự động trong phạm vi từng cơ sở.
-        InventoryItemCommand command = validate(new InventoryItemCommand(repository.nextInventorySku(branchId),
+        InventoryItemCommand command = validate(new InventoryItemCommand(inventoryRepository.nextInventorySku(branchId),
             input.name(), input.category(), input.unitId(), input.trackingMode(), input.minimumQuantity(), input.active()), branchId);
         try {
-            UUID id = repository.create(branchId, command.sku(), command.name(), command.category(), command.unitId(),
+            UUID id = inventoryRepository.create(branchId, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity());
             return required(branchId, id);
         } catch (DataIntegrityViolationException exception) {
@@ -92,17 +92,17 @@ public class InventoryService {
     @Transactional
     public InventoryItemView update(Identity actor, UUID id, InventoryItemCommand input) {
         UUID branchId = writableBranch(actor, "cập nhật", "mặt hàng kho");
-        LockedItem existing = repository.lockItem(branchId, id);
+        LockedItem existing = inventoryRepository.lockItem(branchId, id);
         if (existing == null) throw notFound();
         InventoryItemCommand command = validate(input, branchId);
-        if (existing.active() && !Boolean.TRUE.equals(command.active()) && repository.hasActiveMenuLink(id)) {
+        if (existing.active() && !Boolean.TRUE.equals(command.active()) && inventoryRepository.hasActiveMenuLink(id)) {
             throw conflict("Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi ngừng sử dụng.");
         }
-        if (!existing.unitId().equals(command.unitId()) && repository.hasMovements(id)) {
+        if (!existing.unitId().equals(command.unitId()) && inventoryRepository.hasMovements(id)) {
             throw conflict("Không thể đổi đơn vị vì mặt hàng đã có lịch sử kho. Hãy tạo mặt hàng mới nếu cần dùng đơn vị khác.");
         }
         try {
-            repository.update(branchId, id, command.sku(), command.name(), command.category(), command.unitId(),
+            inventoryRepository.update(branchId, id, command.sku(), command.name(), command.category(), command.unitId(),
                 command.trackingMode(), command.minimumQuantity(), Boolean.TRUE.equals(command.active()));
             return required(branchId, id);
         } catch (org.springframework.dao.DuplicateKeyException exception) {
@@ -116,20 +116,20 @@ public class InventoryService {
     @Transactional
     public void delete(Identity actor, UUID id) {
         UUID branchId = writableBranch(actor, "xóa", "mặt hàng kho");
-        LockedItem existing = repository.lockItem(branchId, id);
+        LockedItem existing = inventoryRepository.lockItem(branchId, id);
         if (existing == null) throw notFound();
         if (!existing.active()) return;
-        if (repository.hasActiveMenuLink(id)) {
+        if (inventoryRepository.hasActiveMenuLink(id)) {
             throw conflict("Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi xóa.");
         }
-        repository.archive(branchId, id);
+        inventoryRepository.archive(branchId, id);
     }
 
     @Transactional(readOnly = true)
     public List<StockMovementView> history(Identity actor, UUID itemId, java.time.Instant from,
                                           java.time.Instant to, String requestedKind, String search) {
         UUID branchId = branch(actor);
-        if (repository.get(branchId, itemId) == null) throw notFound();
+        if (inventoryRepository.get(branchId, itemId) == null) throw notFound();
         if (from != null && to != null && to.isBefore(from)) {
             throw bad("Thời điểm kết thúc phải bằng hoặc sau thời điểm bắt đầu.");
         }
@@ -140,7 +140,7 @@ public class InventoryService {
         if (normalizedSearch != null && normalizedSearch.length() > 100) {
             throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         }
-        return repository.history(branchId, itemId, from, to, kind, normalizedSearch);
+        return inventoryRepository.history(branchId, itemId, from, to, kind, normalizedSearch);
     }
 
     @Transactional
@@ -148,30 +148,30 @@ public class InventoryService {
     public StockReceiptResult receive(Identity actor, StockReceiptCommand input, MultipartFile evidence) {
         UUID branchId = writableBranch(actor, "tạo", "phiếu nhập kho");
         StockReceiptCommand command = validateReceipt(input, branchId);
-        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence, "kho-hang");
+        StoredEvidence stored = evidence == null ? null : refundEvidenceStorageService.store(evidence, "kho-hang");
         if (stored != null) cleanupIfRolledBack(stored.objectKey());
 
-        String code = repository.nextReceiptCode();
-        UUID receiptId = repository.insertReceipt(branchId, code, required(command.supplierName(), "Nhà cung cấp", 200),
+        String code = inventoryRepository.nextReceiptCode();
+        UUID receiptId = inventoryRepository.insertReceipt(branchId, code, required(command.supplierName(), "Nhà cung cấp", 200),
             optional(command.supplierInvoice(), 200, "Tham chiếu mua hàng"), command.receivedAt(), actor.id(),
             stored == null ? null : stored.objectKey(), stored == null ? null : stored.originalName(),
             stored == null ? null : stored.mimeType());
 
         List<UUID> lineIds = new ArrayList<>();
         for (ReceiptLineCommand line : command.items()) {
-            lineIds.add(repository.insertReceiptLine(receiptId, branchId, line));
+            lineIds.add(inventoryRepository.insertReceiptLine(receiptId, branchId, line));
         }
         List<UUID> itemIds = command.items().stream().map(ReceiptLineCommand::inventoryItemId)
             .sorted(Comparator.comparing(UUID::toString)).toList();
         Map<UUID, LockedItem> lockedItems = new HashMap<>();
         for (UUID itemId : itemIds) {
-            LockedItem item = repository.lockItem(branchId, itemId);
+            LockedItem item = inventoryRepository.lockItem(branchId, itemId);
             if (item == null || !item.active()) {
                 throw conflict("Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.");
             }
             lockedItems.put(itemId, item);
         }
-        repository.postReceipt(receiptId, actor.id());
+        inventoryRepository.postReceipt(receiptId, actor.id());
 
         List<ReceiptLineResult> results = new ArrayList<>();
         BigDecimal totalQuantity = ZERO;
@@ -180,7 +180,7 @@ public class InventoryService {
             ReceiptLineCommand line = command.items().get(index);
             InventoryItemView item = required(branchId, line.inventoryItemId());
             LockedItem lockedItem = lockedItems.get(line.inventoryItemId());
-            repository.insertReceiptMovement(line.inventoryItemId(), lineIds.get(index), line.quantity(),
+            inventoryRepository.insertReceiptMovement(line.inventoryItemId(), lineIds.get(index), line.quantity(),
                 lockedItem.quantity(), line.unitCost(), actor.id(), "Nhập hàng theo phiếu " + code);
             BigDecimal amount = line.quantity().multiply(line.unitCost()).setScale(0, RoundingMode.HALF_UP);
             results.add(new ReceiptLineResult(item.id(), item.sku(), item.name(), item.unitName(), line.quantity(),
@@ -202,7 +202,7 @@ public class InventoryService {
         }
         BigDecimal actual = quantity(input.actualQuantity(), "Tồn thực tế", true);
         String reason = required(input.reason(), "Lý do điều chỉnh", 1000);
-        LockedItem item = repository.lockItem(branchId, input.inventoryItemId());
+        LockedItem item = inventoryRepository.lockItem(branchId, input.inventoryItemId());
         if (item == null) throw notFound();
         if (!item.active()) throw conflict("Mặt hàng đã ngừng sử dụng nên không thể điều chỉnh tồn.");
         if (item.version() != input.expectedStockVersion() || item.quantity().compareTo(input.expectedQuantity()) != 0) {
@@ -212,21 +212,21 @@ public class InventoryService {
         }
         BigDecimal delta = actual.subtract(item.quantity());
         if (delta.signum() == 0) throw bad("Tồn thực tế không thay đổi. Không cần ghi nhận điều chỉnh.");
-        StoredEvidence stored = evidence == null ? null : evidenceStorage.store(evidence, "kho-hang");
+        StoredEvidence stored = evidence == null ? null : refundEvidenceStorageService.store(evidence, "kho-hang");
         if (stored != null) cleanupIfRolledBack(stored.objectKey());
-        UUID movementId = repository.insertAdjustment(item.id(), delta, item.quantity(), input.occurredAt(), actor.id(), reason,
+        UUID movementId = inventoryRepository.insertAdjustment(item.id(), delta, item.quantity(), input.occurredAt(), actor.id(), reason,
             stored == null ? null : stored.objectKey(), stored == null ? null : stored.originalName(),
             stored == null ? null : stored.mimeType());
-        return repository.movement(branchId, item.id(), movementId);
+        return inventoryRepository.movement(branchId, item.id(), movementId);
     }
 
     @Transactional(readOnly = true)
     public EvidenceContent evidence(Identity actor, UUID itemId, UUID movementId) {
         UUID branchId = branch(actor);
-        EvidenceRow row = repository.evidence(branchId, itemId, movementId);
+        EvidenceRow row = inventoryRepository.evidence(branchId, itemId, movementId);
         if (row == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy chứng từ kho.");
         try {
-            return new EvidenceContent(row.originalName(), row.mimeType(), evidenceStorage.read(row.objectKey()));
+            return new EvidenceContent(row.originalName(), row.mimeType(), refundEvidenceStorageService.read(row.objectKey()));
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Tệp chứng từ kho không còn khả dụng.", exception);
         }
@@ -244,7 +244,7 @@ public class InventoryService {
         for (ReceiptLineCommand line : input.items()) {
             if (line == null || line.inventoryItemId() == null) throw bad("Vui lòng chọn mặt hàng cho từng dòng nhập.");
             if (!unique.add(line.inventoryItemId())) throw bad("Mỗi mặt hàng chỉ xuất hiện một lần trong phiếu nhập.");
-            InventoryItemView item = repository.get(branchId, line.inventoryItemId());
+            InventoryItemView item = inventoryRepository.get(branchId, line.inventoryItemId());
             if (item == null || !item.active()) throw conflict("Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.");
             BigDecimal received = quantity(line.quantity(), "Số lượng nhận", false);
             BigDecimal unitCost = money(line.unitCost(), "Đơn giá");
@@ -264,9 +264,9 @@ public class InventoryService {
         if (!sku.matches("[A-Z0-9_-]+")) throw bad("Mã mặt hàng chỉ dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới.");
         String name = required(input.name(), "Tên mặt hàng", 200);
         String requestedCategory = required(input.category(), "Nhóm hàng", 100);
-        String category = repository.categories(branchId).stream().filter(option -> option.equalsIgnoreCase(requestedCategory))
+        String category = inventoryRepository.categories(branchId).stream().filter(option -> option.equalsIgnoreCase(requestedCategory))
             .findFirst().orElseThrow(() -> bad("Vui lòng chọn nhóm hàng trong danh sách."));
-        if (input.unitId() == null || repository.units().stream().noneMatch(unit -> unit.id().equals(input.unitId()))) {
+        if (input.unitId() == null || inventoryRepository.units().stream().noneMatch(unit -> unit.id().equals(input.unitId()))) {
             throw bad("Vui lòng chọn đơn vị tính hợp lệ.");
         }
         String tracking = input.trackingMode() == null ? "" : input.trackingMode().trim().toUpperCase(Locale.ROOT);
@@ -311,7 +311,7 @@ public class InventoryService {
     private String clean(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
     private InventoryItemView required(UUID branchId, UUID id) {
-        InventoryItemView item = repository.get(branchId, id);
+        InventoryItemView item = inventoryRepository.get(branchId, id);
         if (item == null) throw notFound();
         return item;
     }
@@ -319,8 +319,8 @@ public class InventoryService {
     // BR-177: cơ sở tạm ngừng chỉ được xem dữ liệu; thao tác ghi tồn kho bị từ chối.
     private UUID writableBranch(Identity actor, String action, String entity) {
         UUID branchId = branch(actor, action, entity);
-        if (!repository.activeBranch(branchId)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-            "Cơ sở " + repository.branchName(branchId)
+        if (!inventoryRepository.activeBranch(branchId)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+            "Cơ sở " + inventoryRepository.branchName(branchId)
                 + " đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
         return branchId;
     }
@@ -340,7 +340,7 @@ public class InventoryService {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override public void afterCompletion(int status) {
-                if (status != TransactionSynchronization.STATUS_COMMITTED) evidenceStorage.deleteQuietly(objectKey);
+                if (status != TransactionSynchronization.STATUS_COMMITTED) refundEvidenceStorageService.deleteQuietly(objectKey);
             }
         });
     }

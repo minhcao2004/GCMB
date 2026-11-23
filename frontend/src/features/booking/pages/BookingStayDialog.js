@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { checkoutApi } from '../services/checkoutApi';
 import { bookingApi } from '../services/bookingApi';
+import ComboGiftPicker from '../components/ComboGiftPicker';
 import { formatVnd } from '../data/bookingData';
 
 // Lấy thông báo lỗi API phù hợp để hiển thị trong hộp thoại.
@@ -62,6 +63,11 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const [comboId, setComboId] = useState('');
   const [hourlyHours, setHourlyHours] = useState('1');
   const [extensionQuote, setExtensionQuote] = useState(null);
+  const [giftMenu, setGiftMenu] = useState([]);
+  const [giftLoading, setGiftLoading] = useState(false);
+  const [giftError, setGiftError] = useState('');
+  const [drinkSelections, setDrinkSelections] = useState([]);
+  const [foodSelections, setFoodSelections] = useState([]);
   const [meter, setMeter] = useState(detail?.meter || null);
   const [meterQuote, setMeterQuote] = useState(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -172,7 +178,14 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
         }
       } else {
         operationKeys.current.extend ||= window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-        result = await onSave('extend', { ...extensionRequest, idempotencyKey: operationKeys.current.extend });
+        result = await onSave('extend', {
+          ...extensionRequest,
+          ...(pricingMode === 'COMBO' ? {
+            drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })),
+            foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })),
+          } : {}),
+          idempotencyKey: operationKeys.current.extend,
+        });
       }
       if (result?.ok) {
         if (mode === 'change') operationKeys.current.change = null;
@@ -206,11 +219,52 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   const comboChoices = options?.extensionCombos?.length ? options.extensionCombos : configuredRoomType?.combos || [];
   const extensionCombos = comboChoices.filter((combo) => comboCanStartAt(combo, options?.plannedEnd || booking.plannedEnd, timezone));
   const selectedCombo = extensionCombos.find((combo) => combo.id === comboId);
+  const giftDrinkQuantity = pricingMode === 'COMBO' ? Number(selectedCombo?.includedFnbQuantity || 0) : 0;
+  const giftFoodQuantity = pricingMode === 'COMBO' ? Number(selectedCombo?.includedFoodQuantity || 0) : 0;
+  const giftMenuRequired = giftDrinkQuantity + giftFoodQuantity > 0;
+  const giftSelectionsValid = drinkSelections.length === giftDrinkQuantity
+    && foodSelections.length === giftFoodQuantity && drinkSelections.every(Boolean) && foodSelections.every(Boolean);
+  const giftSelectionBlocked = giftMenuRequired
+    && (giftLoading || Boolean(giftError) || !giftMenu.length || !giftSelectionsValid);
   const running = meter?.status === 'RUNNING';
   const stopped = meter?.status === 'STOPPED';
   const elapsedSeconds = meter ? Math.max(0, Math.floor(((stopped ? new Date(meter.stoppedAt).getTime() : clockNow) - new Date(meter.billedFrom).getTime()) / 1000)) : 0;
   const clockText = `${String(Math.floor(elapsedSeconds / 3600)).padStart(2, '0')}:${String(Math.floor(elapsedSeconds % 3600 / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
   const estimatedAmount = meterQuote?.overtimeAmount ?? (stopped ? meter?.amount : null);
+
+  useEffect(() => {
+    setDrinkSelections(Array.from({ length: giftDrinkQuantity }, () => ''));
+    setFoodSelections(Array.from({ length: giftFoodQuantity }, () => ''));
+    setGiftMenu([]);
+    setGiftError('');
+    if (mode !== 'extend' || !giftMenuRequired) {
+      setGiftLoading(false);
+      return undefined;
+    }
+    let active = true;
+    setGiftLoading(true);
+    bookingApi.comboGiftMenu().then((menu) => {
+      if (active) setGiftMenu(menu || []);
+    }).catch((failure) => {
+      if (active) {
+        const errors = apiErrors(failure);
+        setGiftError(errors.form || Object.values(errors)[0] || 'Không tải được danh sách món F&B.');
+      }
+    }).finally(() => { if (active) setGiftLoading(false); });
+    return () => { active = false; };
+  }, [booking.id, mode, comboId, pricingMode, giftDrinkQuantity, giftFoodQuantity, giftMenuRequired]);
+
+  const changeCombo = (event) => {
+    const nextCombo = extensionCombos.find((combo) => combo.id === event.target.value);
+    const nextDrinkQuantity = Number(nextCombo?.includedFnbQuantity || 0);
+    const nextFoodQuantity = Number(nextCombo?.includedFoodQuantity || 0);
+    setComboId(event.target.value);
+    setDrinkSelections(Array.from({ length: nextDrinkQuantity }, () => ''));
+    setFoodSelections(Array.from({ length: nextFoodQuantity }, () => ''));
+    setGiftMenu([]);
+    setGiftError('');
+    setGiftLoading(nextDrinkQuantity + nextFoodQuantity > 0);
+  };
 
   return <div className="booking-stay-backdrop" role="presentation">
     <form className="booking-stay-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-stay-title" onSubmit={submit}>
@@ -280,12 +334,20 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
             <label><input type="radio" name="extension-mode" value="HOURLY" checked={pricingMode === 'HOURLY'} onChange={() => setPricingMode('HOURLY')} />Gia hạn giờ lẻ</label>
           </fieldset>}
           {!meter && !reservationExpired && pricingMode === 'COMBO' && extensionCombos.length > 0 ? <label className="booking-stay-field"><span>Combo áp dụng cho {options?.currentRoomTypeName || booking.roomTypeName}</span>
-            <select value={comboId} onChange={(event) => setComboId(event.target.value)} required>
+            <select value={comboId} onChange={changeCombo} required>
               <option value="">Chọn combo</option>
               {extensionCombos.map((combo) => <option key={combo.id} value={combo.id}>{combo.name} · {combo.durationMinutes / 60} giờ · {formatVnd(combo.price)}</option>)}
             </select>
           </label> : !meter && !reservationExpired && pricingMode === 'COMBO' ? <p className="booking-stay-empty-combos">Không có combo phù hợp với hạng phòng và giờ trả hiện tại.</p>
             : null}
+          {!meter && !reservationExpired && pricingMode === 'COMBO' && giftMenuRequired && <section className="booking-checkin-section booking-checkin-gifts">
+            <h3>Đồ ăn, đồ uống tặng theo combo</h3>
+            <p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
+            {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
+            {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
+            {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
+            <ComboGiftPicker drinkSelections={drinkSelections} setDrinkSelections={setDrinkSelections} foodSelections={foodSelections} setFoodSelections={setFoodSelections} giftMenu={giftMenu} disabled={active || giftLoading || Boolean(giftError)} />
+          </section>}
           {!meter && !reservationExpired && pricingMode === 'HOURLY' && <label className="booking-stay-field"><span>Số giờ lẻ muốn gia hạn</span>
             <select value={hourlyHours} onChange={(event) => setHourlyHours(event.target.value)}>
               {Array.from({ length: 12 }, (_, index) => index + 1).map((hours) => <option key={hours} value={hours}>{hours} giờ</option>)}
@@ -312,7 +374,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
       {error && <p className="booking-inline-error" role="alert">{error}</p>}
       <footer className="booking-stay-actions">
         <button type="button" className="booking-button booking-button-secondary" onClick={onClose} disabled={active}>Đóng</button>
-        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : meterAction ? false : !extensionQuote)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : meterAction === 'meterStop' ? 'Dừng tính giờ' : meterAction === 'meterStart' ? 'Bắt đầu theo dõi thời gian' : 'Xác nhận gia hạn'}</button>}
+        {!stopped && <button type="submit" className="booking-button booking-button-primary" disabled={active || loading || (mode === 'change' ? !targetRoomId || !roomQuote || Boolean(meter) : meterAction ? false : !extensionQuote || giftSelectionBlocked)}>{active ? 'Đang xử lý…' : mode === 'change' ? 'Xác nhận đổi phòng' : meterAction === 'meterStop' ? 'Dừng tính giờ' : meterAction === 'meterStart' ? 'Bắt đầu theo dõi thời gian' : 'Xác nhận gia hạn'}</button>}
       </footer>
     </form>
   </div>;

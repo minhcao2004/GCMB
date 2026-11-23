@@ -23,7 +23,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class AuditRepository {
 
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String FROM = """
             FROM gcmb.audit_event a
@@ -59,8 +59,8 @@ public class AuditRepository {
                 COALESCE(b.name,'Toàn chuỗi') AS branch_name
             """;
 
-    public AuditRepository(JdbcTemplate db) {
-        this.db = db;
+    public AuditRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     private static AuditEntry entry(ResultSet rs, int row) throws SQLException {
@@ -114,14 +114,14 @@ public class AuditRepository {
             where.append(" AND a.created_at<?");
             args.add(Timestamp.from(to.plusDays(1).atStartOfDay(ZONE).toInstant()));
         }
-        long total = db.queryForObject(
+        long total = jdbcTemplate.queryForObject(
             "SELECT count(*) " + FROM + where,
             Long.class,
             args.toArray()
         );
         args.add(size);
         args.add((long) page * size);
-        List<AuditEntry> items = db.query(
+        List<AuditEntry> items = jdbcTemplate.query(
             SELECT + FROM + where + " ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?",
             AuditRepository::entry,
             args.toArray()
@@ -130,7 +130,7 @@ public class AuditRepository {
     }
 
     public List<String> actions() {
-        return db.queryForList(
+        return jdbcTemplate.queryForList(
             "SELECT DISTINCT action FROM gcmb.audit_event ORDER BY action",
             String.class
         );
@@ -156,7 +156,7 @@ public class AuditRepository {
                 a.after_data->>'email' AS after_email,
                 a.after_data->>'phone' AS after_phone
                 """;
-        List<AuditDetail> result = db.query(
+        List<AuditDetail> result = jdbcTemplate.query(
             SELECT + snapshots + FROM + " WHERE a.id=?",
             (rs, row) ->
                 new AuditDetail(

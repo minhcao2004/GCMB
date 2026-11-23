@@ -27,19 +27,19 @@ public class CloudinaryStorageService {
     private final String cloudName;
     private final String apiKey;
     private final String apiSecret;
-    private final ObjectMapper json;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     public CloudinaryStorageService(
             @Value("${gcmb.cloudinary.enabled:false}") boolean enabled,
             @Value("${gcmb.cloudinary.cloud-name:}") String cloudName,
             @Value("${gcmb.cloudinary.api-key:}") String apiKey,
-            @Value("${gcmb.cloudinary.api-secret:}") String apiSecret, ObjectMapper json) {
+            @Value("${gcmb.cloudinary.api-secret:}") String apiSecret, ObjectMapper objectMapper) {
         this.enabled = enabled;
         this.cloudName = cloudName.trim();
         this.apiKey = apiKey.trim();
         this.apiSecret = apiSecret.trim();
-        this.json = json;
+        this.objectMapper = objectMapper;
     }
 
     public boolean enabled() { return enabled; }
@@ -86,7 +86,7 @@ public class CloudinaryStorageService {
             byte[] response = send(HttpRequest.newBuilder(api(resourceType, "upload"))
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())));
-            var result = json.readTree(response);
+            var result = objectMapper.readTree(response);
             if (!id.equals(result.path("public_id").asText())
                 || !"authenticated".equals(result.path("type").asText())
                 || !resourceType.equals(result.path("resource_type").asText())) throw new IOException("Invalid upload response");
@@ -115,7 +115,7 @@ public class CloudinaryStorageService {
         parameters.put("api_key", apiKey);
         String body = parameters.entrySet().stream()
             .map(e -> encode(e.getKey()) + "=" + encode(e.getValue())).reduce((a,b) -> a + "&" + b).orElse("");
-        var result = json.readTree(send(HttpRequest.newBuilder(api(resourceType(key), "destroy"))
+        var result = objectMapper.readTree(send(HttpRequest.newBuilder(api(resourceType(key), "destroy"))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .POST(HttpRequest.BodyPublishers.ofString(body))));
         if (!Set.of("ok", "not found").contains(result.path("result").asText())) throw new IOException("Delete failed");
@@ -154,7 +154,7 @@ public class CloudinaryStorageService {
 
     private byte[] send(HttpRequest.Builder request) throws IOException {
         try {
-            var response = client.send(request.timeout(Duration.ofSeconds(60)).build(), HttpResponse.BodyHandlers.ofByteArray());
+            var response = httpClient.send(request.timeout(Duration.ofSeconds(60)).build(), HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() == 404) throw new IOException("Attachment not found");
             if (response.statusCode() < 200 || response.statusCode() >= 300) throw unavailable();
             return response.body();

@@ -17,15 +17,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/account/profile")
 public class AccountProfileController {
 
-    private final AccountProfileService service;
+    private final AccountProfileService accountProfileService;
 
-    public AccountProfileController(AccountProfileService service) {
-        this.service = service;
+    public AccountProfileController(AccountProfileService accountProfileService) {
+        this.accountProfileService = accountProfileService;
     }
 
     @GetMapping
     public Profile view(@AuthenticationPrincipal Identity actor) {
-        return service.view(actor.id());
+        return accountProfileService.view(actor.id());
     }
 
     @PostMapping
@@ -33,6 +33,6 @@ public class AccountProfileController {
         @AuthenticationPrincipal Identity actor,
         @RequestBody UpdateProfile input
     ) {
-        return service.update(actor.id(), input);
+        return accountProfileService.update(actor.id(), input);
     }
 }

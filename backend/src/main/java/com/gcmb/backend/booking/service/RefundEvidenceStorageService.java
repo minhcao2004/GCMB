@@ -40,7 +40,7 @@ public class RefundEvidenceStorageService {
     private final String endpoint;
     private final boolean pathStyle;
     private volatile S3Client client;
-    private final CloudinaryStorageService cloudinary;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     public RefundEvidenceStorageService(
             @Value("${gcmb.attachments.storage-dir:./data/attachments}") String storageDirectory,
@@ -58,13 +58,13 @@ public class RefundEvidenceStorageService {
             @Value("${gcmb.attachments.s3.region:us-east-1}") String region,
             @Value("${gcmb.attachments.s3.endpoint:}") String endpoint,
             @Value("${gcmb.attachments.s3.path-style:false}") boolean pathStyle,
-            CloudinaryStorageService cloudinary) {
+            CloudinaryStorageService cloudinaryStorageService) {
         storageRoot = Path.of(storageDirectory).toAbsolutePath().normalize();
         this.bucket = bucket.trim();
         this.region = region.trim();
         this.endpoint = endpoint.trim();
         this.pathStyle = pathStyle;
-        this.cloudinary = cloudinary;
+        this.cloudinaryStorageService = cloudinaryStorageService;
     }
 
     public StoredEvidence store(MultipartFile file) {
@@ -103,8 +103,8 @@ public class RefundEvidenceStorageService {
         String objectKey = CLOUD_PREFIX + id + "." + type.extension();
         String originalName = originalName(file.getOriginalFilename());
         // HuyDV / BR-115/116: kiểm tra nội dung trước khi gửi lên Cloudinary; giữ cách đọc tệp S3/local cũ.
-        if (cloudinary != null && cloudinary.enabled()) {
-            String cloudKey = cloudinary.store(type.mimeType(), bytes, area);
+        if (cloudinaryStorageService != null && cloudinaryStorageService.enabled()) {
+            String cloudKey = cloudinaryStorageService.store(type.mimeType(), bytes, area);
             return new StoredEvidence(id, cloudKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
         }
         try {
@@ -117,7 +117,7 @@ public class RefundEvidenceStorageService {
     }
 
     public byte[] read(String objectKey) throws IOException {
-        if (cloudinary != null && cloudinary.owns(objectKey)) return cloudinary.read(objectKey);
+        if (cloudinaryStorageService != null && cloudinaryStorageService.owns(objectKey)) return cloudinaryStorageService.read(objectKey);
         if (!objectKey.startsWith(CLOUD_PREFIX)) return Files.readAllBytes(resolve(objectKey));
         try {
             return s3().getObjectAsBytes(request -> request.bucket(bucket).key(objectKey)).asByteArray();
@@ -133,8 +133,8 @@ public class RefundEvidenceStorageService {
 
     public void deleteQuietly(String objectKey) {
         try {
-            if (cloudinary != null && cloudinary.owns(objectKey)) {
-                cloudinary.delete(objectKey);
+            if (cloudinaryStorageService != null && cloudinaryStorageService.owns(objectKey)) {
+                cloudinaryStorageService.delete(objectKey);
             } else if (objectKey.startsWith(CLOUD_PREFIX)) {
                 s3().deleteObject(request -> request.bucket(bucket).key(objectKey));
             } else {

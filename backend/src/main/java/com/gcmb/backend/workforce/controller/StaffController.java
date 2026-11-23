@@ -21,10 +21,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping({ "/api/v1/head-office/staff", "/api/v1/branch-management/staff" })
 public class StaffController {
 
-    private final StaffService service;
+    private final StaffService staffService;
 
-    public StaffController(StaffService service) {
-        this.service = service;
+    public StaffController(StaffService staffService) {
+        this.staffService = staffService;
     }
 
     @GetMapping
@@ -38,12 +38,12 @@ public class StaffController {
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "10") int size
     ) {
-        return service.list(actor, q, position, status, branchId, unassigned, page, size);
+        return staffService.list(actor, q, position, status, branchId, unassigned, page, size);
     }
 
     @GetMapping("/options")
     public Map<String, Object> options(@AuthenticationPrincipal Identity actor) {
-        return service.options(actor);
+        return staffService.options(actor);
     }
 
     @GetMapping("/{id}")
@@ -51,7 +51,7 @@ public class StaffController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.detail(actor, id);
+        return staffService.detail(actor, id);
     }
 
     @PostMapping
@@ -60,7 +60,7 @@ public class StaffController {
         @AuthenticationPrincipal Identity actor,
         @RequestBody StaffCommand input
     ) {
-        return service.create(actor, input);
+        return staffService.create(actor, input);
     }
 
     @PutMapping("/{id}")
@@ -69,7 +69,7 @@ public class StaffController {
         @PathVariable UUID id,
         @RequestBody StaffCommand input
     ) {
-        return service.update(actor, id, input);
+        return staffService.update(actor, id, input);
     }
 
     @PostMapping("/{id}/status")
@@ -78,7 +78,7 @@ public class StaffController {
         @PathVariable UUID id,
         @RequestBody StatusCommand input
     ) {
-        return service.status(actor, id, input);
+        return staffService.status(actor, id, input);
     }
 
     @PostMapping("/{id}/branch")
@@ -87,7 +87,7 @@ public class StaffController {
         @PathVariable UUID id,
         @RequestBody AssignmentCommand input
     ) {
-        return service.assign(actor, id, input, false);
+        return staffService.assign(actor, id, input, false);
     }
 
     @PostMapping("/{id}/transfers")
@@ -96,6 +96,6 @@ public class StaffController {
         @PathVariable UUID id,
         @RequestBody AssignmentCommand input
     ) {
-        return service.assign(actor, id, input, true);
+        return staffService.assign(actor, id, input, true);
     }
 }

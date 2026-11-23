@@ -24,17 +24,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccountService {
 
-    private final AccountRepository repository;
-    private final AuthCrypto crypto;
+    private final AccountRepository accountRepository;
+    private final AuthCrypto authCrypto;
     private final BranchAdministrationService branchAdministrationService;
 
     public AccountService(
-        AccountRepository repository,
-        AuthCrypto crypto,
+        AccountRepository accountRepository,
+        AuthCrypto authCrypto,
         BranchAdministrationService branchAdministrationService
     ) {
-        this.repository = repository;
-        this.crypto = crypto;
+        this.accountRepository = accountRepository;
+        this.authCrypto = authCrypto;
         this.branchAdministrationService = branchAdministrationService;
     }
 
@@ -43,12 +43,12 @@ public class AccountService {
         if (page < 0 || size < 1 || size > 100 || q.length() > 200) {
             throw new AuthFailure(400, "form", "Bộ lọc hoặc phân trang không hợp lệ");
         }
-        return repository.list(q.trim(), role, branch, status, page, size);
+        return accountRepository.list(q.trim(), role, branch, status, page, size);
     }
 
     @Transactional(readOnly = true)
     public Options options() {
-        return repository.options();
+        return accountRepository.options();
     }
 
     public UUID managerScope(Identity actor, boolean writing) {
@@ -56,7 +56,7 @@ public class AccountService {
             actor == null ||
             !"BRANCH_MANAGER".equals(actor.role()) ||
             actor.branchId() == null ||
-            !repository.manages(actor.id(), actor.branchId(), writing)
+            !accountRepository.manages(actor.id(), actor.branchId(), writing)
         ) throw new AuthFailure(
             403,
             "form",
@@ -102,7 +102,7 @@ public class AccountService {
     public Options options(Identity actor) {
         return "HEAD_OFFICE_MANAGER".equals(actor.role())
             ? options()
-            : repository.branchOptions(managerScope(actor, false));
+            : accountRepository.branchOptions(managerScope(actor, false));
     }
 
     @Transactional
@@ -114,7 +114,7 @@ public class AccountService {
                 input == null ||
                 !"RECEPTIONIST".equals(input.role()) ||
                 !scope.equals(input.branchId()) ||
-                !repository.employeeInBranch(input.employeeId(), scope)
+                !accountRepository.employeeInBranch(input.employeeId(), scope)
             ) throw new AuthFailure(
                 403,
                 "form",
@@ -148,10 +148,10 @@ public class AccountService {
         if (input.employeeId() == null) {
             throw new AuthFailure(400, "employeeId", "Vui lòng bổ sung hồ sơ nhân viên.");
         }
-        if ("HEAD_OFFICE_MANAGER".equals(input.role()) && !repository.headOfficeAvailable(input.role(), null)) throw new AuthFailure(
+        if ("HEAD_OFFICE_MANAGER".equals(input.role()) && !accountRepository.headOfficeAvailable(input.role(), null)) throw new AuthFailure(
             409, "role", "Hệ thống đã có tài khoản Quản lý cấp cao. Không thể tạo thêm."
         );
-        if (!repository.lockAvailableEmployee(input.employeeId())) {
+        if (!accountRepository.lockAvailableEmployee(input.employeeId())) {
             throw new AuthFailure(
                 409,
                 "employeeId",
@@ -159,7 +159,7 @@ public class AccountService {
             );
         }
         String requestedRole = AuthValidation.required(input.role(), "role", "Vai trò", 100, false);
-        UUID role = repository.roleId(requestedRole);
+        UUID role = accountRepository.roleId(requestedRole);
         if (role == null) {
             throw new AuthFailure(400, "role", "Vui lòng chọn vai trò hợp lệ");
         }
@@ -168,15 +168,15 @@ public class AccountService {
             throw new AuthFailure(400, "branchId", "Vai trò này có phạm vi toàn chuỗi");
         }
         if (!chain && input.branchId() == null) throw new AuthFailure(400, "branchId", "Vui lòng bổ sung Cơ sở.");
-        if (!chain && !repository.activeBranch(input.branchId())) throw new AuthFailure(
-            400, "branchId", "Cơ sở " + repository.branchName(input.branchId()) +
+        if (!chain && !accountRepository.activeBranch(input.branchId())) throw new AuthFailure(
+            400, "branchId", "Cơ sở " + accountRepository.branchName(input.branchId()) +
                 " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công."
         );
         for (String field : List.of("username", "email")) {
             if (
                 field.equals("email")
-                    ? repository.emailReserved(email, input.employeeId(), null)
-                    : repository.exists(field, username)
+                    ? accountRepository.emailReserved(email, input.employeeId(), null)
+                    : accountRepository.exists(field, username)
             ) {
                 throw new AuthFailure(
                     409,
@@ -188,16 +188,16 @@ public class AccountService {
             }
         }
         try {
-            UUID id = repository.insert(
+            UUID id = accountRepository.insert(
                 input,
                 username,
                 email,
-                crypto.encode(input.password()),
+                authCrypto.encode(input.password()),
                 role,
                 actor
             );
             if ("BRANCH_MANAGER".equals(input.role())) branchAdministrationService.syncAccountManager(id, actor);
-            return repository.find(id);
+            return accountRepository.find(id);
         } catch (DuplicateKeyException ex) {
             throw new AuthFailure(
                 409,

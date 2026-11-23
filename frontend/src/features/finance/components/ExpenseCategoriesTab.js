@@ -129,7 +129,7 @@ export default function ExpenseCategoriesTab({ categories, busy, onSave, onSetAc
       <label className="finance-category-checkbox"><input type="checkbox" checked={draft.invoiceRequired} onChange={(event) => setDraft({ ...draft, invoiceRequired: event.target.checked })} />Bắt buộc có hóa đơn</label>
       <label className="finance-category-checkbox"><input type="checkbox" checked={draft.reimbursementAllowed} onChange={(event) => setDraft({ ...draft, reimbursementAllowed: event.target.checked })} />Cho phép hoàn ứng</label>
       {draft.categoryGroup === 'RENT' && <p className="finance-category-hint">Tiền đặt cọc thuê nhà không phải chi phí; không dùng hạng mục này để ghi nhận tiền cọc.</p>}
-      <div className="finance-category-form-actions"><button disabled={busy}>{draft.id ? 'Cập nhật hạng mục' : 'Tạo hạng mục'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(emptyDraft())}>Hủy sửa</button>}{editingCategory && Number(editingCategory.request_count || 0) + Number(editingCategory.recurring_count || 0) === 0 && <button type="button" disabled={busy} onClick={() => confirmDelete(editingCategory)}>Xóa hạng mục</button>}</div>
+      <div className="finance-category-form-actions"><button type="submit" className="finance-submit-action" disabled={busy}>{draft.id ? 'Cập nhật hạng mục' : 'Tạo hạng mục'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(emptyDraft())}>Hủy sửa</button>}{editingCategory && Number(editingCategory.request_count || 0) + Number(editingCategory.recurring_count || 0) === 0 && <button type="button" disabled={busy} onClick={() => confirmDelete(editingCategory)}>Xóa hạng mục</button>}</div>
     </form>
         </div>
       </div>

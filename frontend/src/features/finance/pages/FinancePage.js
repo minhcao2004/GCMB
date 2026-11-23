@@ -83,9 +83,9 @@ const kindLabel=(item)=>item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_
   </>;
 }
 
-function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile }) {
+function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile, historyLabel }) {
   const [expandedAllocation, setExpandedAllocation] = useState(null);
-  return <div className="finance-table-wrap"><table><thead><tr><th>Mã · Cơ sở</th><th>Ngày · Hạng mục</th><th>Nội dung · Lịch sử</th><th>Số tiền</th><th>Người nhận · Cách chi</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead><tbody>
+  return <div className={`finance-table-wrap${historyLabel ? ' finance-history-table' : ''}`} role={historyLabel ? 'region' : undefined} aria-label={historyLabel} tabIndex={historyLabel ? 0 : undefined}><table><thead><tr><th scope="col">Mã · Cơ sở</th><th scope="col">Ngày · Hạng mục</th><th scope="col">Nội dung · Lịch sử</th><th scope="col">Số tiền</th><th scope="col">Người nhận · Cách chi</th><th scope="col">Trạng thái</th><th scope="col">Chứng từ / thao tác</th></tr></thead><tbody>
     {rows.map((row)=>{
       const form = paymentForms[row.id] || {};
       const months = form.allocationMonths ?? row.allocation_months ?? '';
@@ -93,16 +93,17 @@ function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaym
       const allocated = row.recognition_mode === 'ALLOCATED';
       const selectedPaymentMethod = form.paymentMethod ?? row.payment_method ?? '';
       const allocationValid = !allocated || !calculateExpenseAllocation(row.amount, months, startMonth).error;
+      const historyEvents = row.history?.map((event)=><small className="finance-history" key={event.id}>{historyName[event.action]||event.action} · {event.actor_name} · {localDateTime(event.created_at)}{event.note?` · ${event.note}`:''}</small>) || [];
       return <tr key={row.id}>
-      <td><strong>{row.code}</strong><small>{row.branch_name} · {row.kind==='REIMBURSEMENT'?'Hoàn ứng':'Thanh toán'}{row.origin==='ACCOUNTANT_DIRECT'?' · Chi trực tiếp':''}</small></td>
-      <td>{localDate(row.expense_on)}<small>{row.category_name}</small>{allocated&&<small><button type="button" className="finance-allocation-toggle" aria-expanded={expandedAllocation===row.id} onClick={()=>setExpandedAllocation(expandedAllocation===row.id?null:row.id)}>Phân bổ {row.allocation_months} tháng</button></small>}
+      <td data-label="Mã · Cơ sở"><strong>{row.code}</strong><small>{row.branch_name} · {row.kind==='REIMBURSEMENT'?'Hoàn ứng':'Thanh toán'}{row.origin==='ACCOUNTANT_DIRECT'?' · Chi trực tiếp':''}</small></td>
+      <td data-label="Ngày · Hạng mục">{localDate(row.expense_on)}<small>{row.category_name}</small>{allocated&&<small><button type="button" className="finance-allocation-toggle" aria-expanded={expandedAllocation===row.id} onClick={()=>setExpandedAllocation(expandedAllocation===row.id?null:row.id)}>Phân bổ {row.allocation_months} tháng</button></small>}
         {allocated&&expandedAllocation===row.id&&<div className="finance-allocation-detail"><table><thead><tr><th>Tháng</th><th>Số tiền</th></tr></thead><tbody>{(row.allocations||[]).map((line)=><tr key={line.id}><td>{monthLabel(line.period_month)}</td><td>{money(line.amount)}</td></tr>)}</tbody></table></div>}
       </td>
-      <td>{row.description}<small>Gửi bởi {row.requested_by_name}</small>{row.stockReceipts?.map((receipt)=><small key={receipt.code}>Phiếu nhập {receipt.code} · {receipt.supplier_name} · {money(receipt.amount)}</small>)}{row.history?.map((event)=><small className="finance-history" key={event.id}>{historyName[event.action]||event.action} · {event.actor_name} · {localDateTime(event.created_at)}{event.note?` · ${event.note}`:''}</small>)}</td>
-      <td><strong>{money(row.amount)}</strong></td>
-      <td>{row.beneficiary_name}<small>{row.status === 'PAID' ? `Đã chi: ${paymentMethodName[row.paid_payment_method] || 'Chưa khai báo'}` : `Dự kiến: ${paymentMethodName[row.payment_method] || 'Chưa khai báo'}`}</small>{(row.status === 'PAID' ? row.paid_payment_method : row.payment_method) === 'BANK' && <small>{row.bank_name} · {row.bank_account}</small>}</td>
-      <td><span className={`finance-status ${row.status.toLowerCase()}`}>{statusName[row.status]}</span>{row.paid_at&&<small>{localDateTime(row.paid_at)}</small>}</td>
-      <td><Attachments rows={row.attachments}/>
+      <td data-label="Nội dung · Lịch sử">{row.description}<small>Gửi bởi {row.requested_by_name}</small>{row.stockReceipts?.map((receipt)=><small key={receipt.code}>Phiếu nhập {receipt.code} · {receipt.supplier_name} · {money(receipt.amount)}</small>)}{historyLabel && historyEvents.length ? <details className="finance-history-details"><summary>Lịch sử xử lý ({historyEvents.length} bước)</summary>{historyEvents}</details> : historyEvents}</td>
+      <td data-label="Số tiền"><strong>{money(row.amount)}</strong></td>
+      <td data-label="Người nhận · Cách chi">{row.beneficiary_name}<small>{row.status === 'PAID' ? `Đã chi: ${paymentMethodName[row.paid_payment_method] || 'Chưa khai báo'}` : `Dự kiến: ${paymentMethodName[row.payment_method] || 'Chưa khai báo'}`}</small>{(row.status === 'PAID' ? row.paid_payment_method : row.payment_method) === 'BANK' && <small>{row.bank_name} · {row.bank_account}</small>}</td>
+      <td data-label="Trạng thái"><span className={`finance-status ${row.status.toLowerCase()}`}>{statusName[row.status]}</span>{row.paid_at&&<small>{localDateTime(row.paid_at)}</small>}</td>
+      <td data-label="Chứng từ / thao tác">{historyLabel && row.attachments?.length ? <details className="finance-history-details"><summary>Chứng từ ({row.attachments.length})</summary><Attachments rows={row.attachments}/></details> : <Attachments rows={row.attachments}/>}
         {role==='BRANCH_MANAGER'&&!['PAID','REJECTED'].includes(row.status)&&<div className="finance-missing-docs">
           {['INVOICE',...(row.kind==='PAYMENT'?['TRANSFER_PROOF']:[])].filter((kind)=>!row.attachments?.some((item)=>item.kind===kind)).map((kind)=><form key={kind} className="finance-pay-form" onSubmit={(event)=>onUploadRequestFile(event,row.id,kind)}>
             <small>Thiếu {kind==='INVOICE'?'hóa đơn':'chứng từ/báo giá'}</small>
@@ -254,7 +255,7 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
   const accountantExpenseTabs=[['requests','Đề nghị thanh toán và hoàn ứng'],['recurring','Chi định kỳ'],['drawer','Cấp tiền két'],['history','Lịch sử thanh toán và hoàn ứng'],['categories','Hạng mục chi phí']];
   const headOfficeTabs=[['fund','Cấp quỹ'],['expense_requests','Đề nghị thanh toán và hoàn ứng']];
 
-  return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}`}>
+  return <main className={`finance-page${role==='HEAD_OFFICE_MANAGER'?' finance-page-head-office':''}${role==='BRANCH_MANAGER'?' finance-page-branch-expenses':''}`}>
     <header className="finance-heading"><div><h1>{role==='HEAD_OFFICE_MANAGER'?'Quỹ & duyệt chi toàn chuỗi':role==='ACCOUNTANT'?accountantSection==='payments'?'Quản lý thu và cấp quỹ':'Chi và hoàn ứng':'Chi phí cơ sở'}</h1></div><div className="finance-heading-actions">{role==='ACCOUNTANT'&&accountantSection==='plus'&&<button type="button" className="finance-primary-action" onClick={()=>{setRecurringPayPeriod(null);setDirectDialogOpen(true);}}>＋ Ghi nhận chi trực tiếp</button>}<button type="button" onClick={()=>{reload();setRecurringRevision((value)=>value+1);}} disabled={loading}>Làm mới</button></div></header>
     {notice&&<p className="finance-notice" role="status">{notice}</p>}{error&&<p className="finance-error" role="alert">{error}</p>}
 
@@ -271,8 +272,8 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
       </section>}
       {accountTab==='recurring'&&<RecurringExpensesTab branches={branches} categories={categories} busy={busy} revision={recurringRevision} onSave={saveRecurringExpense} onTerminate={terminateRecurringExpense} onSkip={skipRecurringPeriod} onPay={(period)=>{setRecurringPayPeriod(period);setDirectDialogOpen(true);}}/>}
       {accountTab==='drawer'&&<DrawerFundingPanel user={user} onChange={reload}/>}
-      {accountTab==='history'&&<section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Lịch sử thanh toán và hoàn ứng</h2></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
-        <RequestTable rows={branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
+      {accountTab==='history'&&<section className="finance-panel finance-workspace-panel finance-history-panel"><div className="finance-section-heading"><div><h2>Lịch sử thanh toán và hoàn ứng</h2></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status)).length} đề nghị</strong></div></div><BranchFilter branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
+        <RequestTable rows={branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status))} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc} historyLabel="Lịch sử thanh toán và hoàn ứng"/>
       </section>}
       {accountTab==='categories'&&<ExpenseCategoriesTab categories={categories} busy={busy} onSave={saveCategory} onSetActive={setCategoryActive} onDelete={deleteCategory}/>}
     </>}
@@ -327,7 +328,7 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
           <label>Hóa đơn/ảnh chứng minh<input required={Boolean(selectedRequestCategory?.invoice_required)} type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,invoice:event.target.files?.[0]||null})}/><small>{selectedRequestCategory?.invoice_required?'Hạng mục này bắt buộc hóa đơn.':'Có thể bổ sung sau'} · tối đa 20 MB.</small></label>{requestKind==='PAYMENT'&&<label>Chứng từ/báo giá<input type="file" accept={fileAccept} onChange={(event)=>setRequest({...request,transferProof:event.target.files?.[0]||null})}/><small>Có thể bổ sung sau · tối đa 20 MB.</small></label>}
           <button disabled={busy}>Gửi {requestKind==='PAYMENT'?'đề nghị thanh toán':'đề nghị hoàn ứng'}</button>
         </form></section>}
-      <section className="finance-panel finance-workspace-panel"><div className="finance-section-heading"><div><h2>Lịch sử đề nghị và khoản chi</h2></div><div className="finance-mini-total"><span>Tổng đề nghị</span><strong>{requests.length}</strong></div><div className="finance-mini-total pending"><span>Đang xử lý</span><strong>{openRequests.length}</strong></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{closedRequests.length}</strong></div></div><RequestTable rows={requests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/></section>
+      <section className="finance-panel finance-workspace-panel finance-history-panel"><div className="finance-section-heading"><div><h2>Lịch sử đề nghị và khoản chi</h2></div><div className="finance-mini-total"><span>Tổng đề nghị</span><strong>{requests.length}</strong></div><div className="finance-mini-total pending"><span>Đang xử lý</span><strong>{openRequests.length}</strong></div><div className="finance-mini-total"><span>Đã đóng</span><strong>{closedRequests.length}</strong></div></div><RequestTable rows={requests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc} historyLabel="Lịch sử đề nghị và khoản chi"/></section>
     </>}
     {reviewDialog&&<div className="finance-confirm-backdrop" role="presentation" onMouseDown={(event)=>{if(event.target===event.currentTarget&&!busy)setReviewDialog(null);}}>
       <section className="finance-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-confirm-title">

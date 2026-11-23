@@ -103,7 +103,7 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
       <label>Tháng bắt đầu *<input required type="month" value={draft.startMonth} onChange={(event) => setDraft({ ...draft, startMonth: event.target.value })} /></label>
       <label>Tháng kết thúc<input type="month" value={draft.endMonth} onChange={(event) => setDraft({ ...draft, endMonth: event.target.value })} /></label>
       <label>Nhắc trước (ngày)<input required type="number" min="0" max="31" step="1" value={draft.reminderDays} onChange={(event) => setDraft({ ...draft, reminderDays: event.target.value })} /></label>
-      <div className="finance-category-form-actions wide"><button disabled={busy}>{draft.id ? 'Lưu thay đổi' : 'Tạo khoản định kỳ'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(blankDraft())}>Hủy sửa</button>}</div>
+      <div className="finance-category-form-actions wide"><button type="submit" className="finance-submit-action" disabled={busy}>{draft.id ? 'Lưu thay đổi' : 'Tạo khoản định kỳ'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(blankDraft())}>Hủy sửa</button>}</div>
     </form>
 
     <div className="finance-section-heading finance-list-heading"><div><h3>Mẫu chi định kỳ</h3><p>{templates.length} khoản</p></div></div>
