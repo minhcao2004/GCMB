@@ -105,7 +105,10 @@ public class FoodOrderRepository {
     public UUID insertGiftAllowance(UUID bookingId, UUID menuItemId, String name, BigDecimal quantity) {
         return jdbcTemplate.queryForObject("""
             INSERT INTO gcmb.booking_combo_item(booking_id,menu_item_id,item_name_snapshot,included_quantity)
-            VALUES (?,?,?,?) RETURNING id
+            VALUES (?,?,?,?)
+            ON CONFLICT (booking_id,menu_item_id) DO UPDATE
+            SET included_quantity=booking_combo_item.included_quantity+EXCLUDED.included_quantity
+            RETURNING id
             """,UUID.class,bookingId,menuItemId,name,quantity);
     }
 

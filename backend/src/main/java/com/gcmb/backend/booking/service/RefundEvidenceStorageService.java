@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -72,6 +73,14 @@ public class RefundEvidenceStorageService {
     }
 
     public StoredEvidence store(MultipartFile file, String area) {
+        return store(file, area, false);
+    }
+
+    public StoredEvidence storeMenuImage(MultipartFile file) {
+        return store(file, "thuc-don", true);
+    }
+
+    private StoredEvidence store(MultipartFile file, String area, boolean localFallback) {
         if (file == null || file.isEmpty()) {
             throw new BookingFailure(400, "image", "Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB.");
         }
@@ -106,6 +115,17 @@ public class RefundEvidenceStorageService {
         if (cloudinaryStorageService != null && cloudinaryStorageService.enabled()) {
             String cloudKey = cloudinaryStorageService.store(type.mimeType(), bytes, area);
             return new StoredEvidence(id, cloudKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
+        }
+        if (localFallback && bucket.isEmpty()) {
+            String localKey = id + "." + type.extension();
+            try {
+                Files.createDirectories(storageRoot);
+                Files.write(resolve(localKey), bytes, StandardOpenOption.CREATE_NEW);
+            } catch (IOException exception) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Không thể lưu ảnh món. Vui lòng thử lại sau.", exception);
+            }
+            return new StoredEvidence(id, localKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
         }
         try {
             s3().putObject(request -> request.bucket(bucket).key(objectKey).contentType(type.mimeType()),

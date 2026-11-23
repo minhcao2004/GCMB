@@ -9,11 +9,14 @@ import com.gcmb.backend.inventory.dto.InventoryDtos.*;
 import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemCommand;
 import com.gcmb.backend.inventory.repository.*;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -77,6 +80,19 @@ class InventorySystemMessagesTest {
         error(403, "Bạn không có quyền thêm món đối với booking.",
             () -> new FoodOrderService(orders, menu, null).addItems(actor("ACCOUNTANT"), null));
         verifyNoInteractions(orders);
+    }
+
+    @Test void menuImageUsesLocalStorageWithoutCloud(@TempDir Path directory) throws Exception {
+        var storage = new RefundEvidenceStorageService(directory.toString(), "", "us-east-1", "", false);
+        byte[] png = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/KZkAAAAASUVORK5CYII=");
+        var image = new MockMultipartFile("image", "menu.png", "image/png", png);
+        var stored = storage.storeMenuImage(image);
+        assertArrayEquals(png, storage.read(stored.objectKey()));
+        storage.deleteQuietly(stored.objectKey());
+        assertFalse(java.nio.file.Files.exists(directory.resolve(stored.objectKey())));
+        error(503, "Chưa cấu hình dịch vụ lưu trữ tệp. Vui lòng liên hệ quản trị viên.",
+            () -> storage.store(image, "kho-hang"));
     }
 
     @Test void stockAdjustmentRequiresReasonBeforeWriting() {

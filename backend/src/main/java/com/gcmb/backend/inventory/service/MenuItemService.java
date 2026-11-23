@@ -187,7 +187,7 @@ public class MenuItemService {
 
     private StoredImage store(MultipartFile image) {
         if (image == null) return null;
-        StoredEvidence stored = refundEvidenceStorageService.store(image, "thuc-don");
+        StoredEvidence stored = refundEvidenceStorageService.storeMenuImage(image);
         return new StoredImage(stored.objectKey(), stored.originalName(), stored.mimeType());
     }
 
