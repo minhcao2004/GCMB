@@ -28,6 +28,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   const branch = accounting ? undefined : user.branchId;
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [amount, setAmount] = useState('500000');
   const [reason, setReason] = useState('Cấp tiền lẻ cho két cơ sở sau khi nộp hết tiền.');
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -125,6 +126,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   };
 
   const rows = data?.requests || [];
+  const visibleRows = rows.filter((row) => !statusFilter || row.status === statusFilter);
   const pending = rows.some((row) => row.status === 'REQUESTED' && row.account_id === data?.accountId);
   const validAmount = /^\d+$/.test(amount) && Number(amount) >= 500000 && Number(amount) <= 1000000;
   return <section className="finance-card">
@@ -136,6 +138,10 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
         <label>Cơ sở<select value={filter} onChange={(e) => { setFilter(e.target.value); setSelected(null); }}>
           <option value="">Tất cả cơ sở</option>
           {data.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select></label>
+        <label>Trạng thái<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">Tất cả trạng thái</option>
+          {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         <button disabled={busy} onClick={() => { setSelected(null); setProof(null); setVersion((n) => n + 1); }}>Tải lại yêu cầu</button>
       </div> : <>
@@ -155,7 +161,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
             </form>}
       </>}
       {selected && <form className="finance-info" onSubmit={(e) => { e.preventDefault(); settle(false); }}>
-        <h3>{selected.code} · {selected.branchName}</h3>
+        <h3>{selected.branchName}</h3>
         <p>Thanh toán cấp két: <strong>{vnd(selected.amount)}</strong></p>
         <RecipientDetails recipient={selected} />
         {!hasRecipient(selected) && <p className="finance-warning">Yêu cầu cũ chưa lưu thông tin nhận tiền. Quản lý cơ sở gửi yêu cầu cần bổ sung thông tin tại phần lịch sử yêu cầu cấp két trước khi thanh toán.</p>}
@@ -185,9 +191,9 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
       </form>}
       <h3>Lịch sử yêu cầu cấp két</h3>
       <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
-        <thead><tr><th>Yêu cầu / cơ sở</th><th>Số tiền</th><th>Người nhận / ngân hàng</th><th>Nội dung</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.id}>
-          <td>{row.code}<small>{row.branchName} · {new Date(row.requested_at).toLocaleString('vi-VN')}</small></td>
+        <thead><tr><th>Cơ sở / thời điểm</th><th>Số tiền</th><th>Người nhận / ngân hàng</th><th>Nội dung</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead>
+        <tbody>{visibleRows.map((row) => <tr key={row.id}>
+          <td>{row.branchName}<small>{new Date(row.requested_at).toLocaleString('vi-VN')}</small></td>
           <td>{vnd(row.amount)}</td>
           <td>{row.recipient_name || 'Chưa lưu thông tin nhận tiền'}
             {row.recipient_bank_name && <small>{row.recipient_bank_name} · {row.recipient_bank_account}</small>}
@@ -204,7 +210,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
             {accounting && row.status === 'REQUESTED' && <button disabled={busy} onClick={() => openPayment(row)}>Thanh toán cấp két</button>}
           </td>
         </tr>)}</tbody>
-      </PaginatedTable>{!rows.length && <p>Chưa có yêu cầu cấp tiền két.</p>}</div>
+      </PaginatedTable>{!visibleRows.length && <p>Không có yêu cầu cấp tiền két phù hợp với bộ lọc.</p>}</div>
     </>}
   </section>;
 }

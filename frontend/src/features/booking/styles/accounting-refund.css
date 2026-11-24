@@ -166,7 +166,7 @@
   .accounting-refund-mobile-card:hover { border-color: #c8d5dd; background: #fbfdfe; }
   .accounting-refund-mobile-card.is-selected { border-color: var(--booking-cyan); background: #f1fbfd; box-shadow: 0 0 0 1px var(--booking-cyan); }
   .accounting-refund-mobile-card:focus-visible { outline: 3px solid var(--booking-cyan); outline-offset: 2px; }
-  .accounting-refund-mobile-card-heading { min-width: 0; grid-area: heading; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .accounting-refund-mobile-card-heading { min-width: 0; grid-area: heading; display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px; }
   .accounting-refund-mobile-card-heading > strong { min-width: 0; flex: 1 1 auto; padding-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
   .accounting-refund-mobile-card-heading .deposit-status { flex: 0 0 auto; }
   .accounting-refund-mobile-customer { min-width: 0; grid-area: customer; display: flex; flex-direction: column; gap: 3px; }
