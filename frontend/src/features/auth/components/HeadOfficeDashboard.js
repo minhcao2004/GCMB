@@ -13,6 +13,7 @@ import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
 import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AppShell from '../../../shared/components/AppShell';
+import SidebarNavigationGroup from '../../../shared/components/SidebarNavigationGroup';
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
@@ -29,6 +30,12 @@ import FinancePage from '../../finance/pages/FinancePage';
 
 
 const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const navigationGroups = [
+  { label: 'Tổng quan', items: ['Tổng quan'] },
+  { label: 'Quản trị hệ thống', items: ['Cơ sở', 'Tài khoản & phân quyền', 'Nhật ký hệ thống'] },
+  { label: 'Vận hành', items: ['Nhân sự', 'Phòng & bảng giá', 'Thiết bị'] },
+  { label: 'Kiểm soát & báo cáo', items: ['Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi'] },
+];
 const catalogPath = '/quan-ly-he-thong/phong-bang-gia';
 const dashboardPath = '/quan-ly-he-thong';
 const icons = [
@@ -92,14 +99,19 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
     sidebarLabel="Quản lý cấp cao"
     brand={<div className="manager-brand"><BrandWordmark to={dashboardPath} /></div>}
     roleLabel="QUẢN LÝ CẤP CAO"
-    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cấp cao">
-        {tabs.map((tab, index) => tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          <span>{tab}</span>
-        </NavLink> : <button key={tab} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
-          <span>{tab}</span>
-        </button>)}
+    navigation={<nav className="manager-navigation manager-navigation--grouped" aria-label="Chức năng quản lý cấp cao">
+        {navigationGroups.map((group) => <SidebarNavigationGroup key={group.label} label={group.label} isActive={group.items.includes(activeTab)}>
+          {group.items.map((tab) => {
+            const index = tabs.indexOf(tab);
+            return tab === 'Phòng & bảng giá' ? <NavLink key={tab} to={catalogPath} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
+              <span>{tab}</span>
+            </NavLink> : <button key={tab} aria-label={tab} title={tab} aria-current={activeTab === tab ? 'page' : undefined} onClick={() => selectTab(tab)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[index]} /></svg>
+              <span>{tab}</span>
+            </button>;
+          })}
+        </SidebarNavigationGroup>)}
       </nav>}
     footer={<div className="manager-sidebar-footer"><strong>GenZ Cinema &amp; Music Box</strong><p>Phạm vi: toàn hệ thống</p></div>}
     renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (

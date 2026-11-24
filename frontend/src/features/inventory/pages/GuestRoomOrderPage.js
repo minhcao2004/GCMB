@@ -144,7 +144,7 @@ export default function GuestRoomOrderPage() {
       });
       pendingKey.current = newKey();
       setCart({});
-      setMessage(`Đã gửi yêu cầu ${result.code}. Lễ tân sẽ xác nhận món và số lượng.`);
+      setMessage('Đã gửi yêu cầu. Lễ tân sẽ xác nhận món và số lượng.');
       await refreshOrders();
     } catch (sendError) {
       setError(errorText(sendError));

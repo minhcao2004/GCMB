@@ -1,7 +1,7 @@
 import { PaginatedList } from '../../../shared/components/Pagination';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import { apiErrors, authApi } from '../../auth/services/authApi';
 import { AppShell } from '../../booking/pages/BookingManagementPage';
@@ -17,8 +17,10 @@ const orderPollInterval = 5000;
 
 export default function ReceptionOrdersPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const checkoutBookingId = searchParams.get('bookingId');
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState('PENDING');
+  const [status, setStatus] = useState(() => checkoutBookingId ? 'ALL' : 'PENDING');
   const [orders, setOrders] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -81,7 +83,7 @@ export default function ReceptionOrdersPage() {
       setBookings(activeBookings);
       setEmployees(servingEmployees);
       setMenu(menuItems);
-      setBookingId((current) => current || activeBookings[0]?.id || '');
+      setBookingId((current) => current || checkoutBookingId || activeBookings[0]?.id || '');
       setEmployeeId((current) => current || servingEmployees[0]?.id || '');
       setMenuItemId((current) => current || menuItems.find((item) => item.available)?.id || '');
     } catch (loadError) {
@@ -90,7 +92,7 @@ export default function ReceptionOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [applyOrderRows, navigate, status]);
+  }, [applyOrderRows, checkoutBookingId, navigate, status]);
 
   useEffect(() => { loadPage(); }, [loadPage]);
 
@@ -234,6 +236,10 @@ export default function ReceptionOrdersPage() {
   if (loading) return <div className="booking-auth-state" role="status">Đang tải yêu cầu món…</div>;
   if (!user) return <div className="booking-auth-state" role="alert">{error || 'Không thể tải màn hình order.'}</div>;
 
+  const visibleOrders = checkoutBookingId
+    ? orders.filter((order) => order.bookingId === checkoutBookingId)
+    : orders;
+
   return <AppShell user={user} branchName={user.branchName} busy={busy} onLogout={logout} breadcrumb="Order & yêu cầu món" activeTab="orders" hideSearch>
     <div className="food-orders-staff">
       <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
@@ -256,8 +262,8 @@ export default function ReceptionOrdersPage() {
       </section>
 
       <section className="food-staff-queue" id="food-staff-order-queue">
-        <div className="food-section-title"><div><h2>Danh sách order</h2><p>{orders.length} order trong bộ lọc</p></div><div className="food-filter-tabs" role="group" aria-label="Lọc trạng thái order">{filters.map(([value, label]) => <button key={value} className={status === value ? 'is-active' : ''} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
-        {orders.length === 0 ? <div className="food-empty"><h3>Không có order trong mục này</h3><p>Yêu cầu mới từ mã MR sẽ xuất hiện ở đây.</p></div> : <PaginatedList as="div" pageSize={5} className="food-staff-order-list">{orders.map((order) => <article className="food-staff-order" key={order.id}>
+        <div className="food-section-title"><div><h2>Danh sách order</h2><p>{checkoutBookingId ? `${visibleOrders.length} order của booking đang checkout` : `${visibleOrders.length} order trong bộ lọc`}</p></div><div className="food-filter-tabs" role="group" aria-label="Lọc trạng thái order">{filters.map(([value, label]) => <button key={value} className={status === value ? 'is-active' : ''} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
+        {visibleOrders.length === 0 ? <div className="food-empty"><h3>Không có order trong mục này</h3><p>Yêu cầu mới từ mã MR sẽ xuất hiện ở đây.</p></div> : <PaginatedList as="div" pageSize={5} className="food-staff-order-list">{visibleOrders.map((order) => <article className="food-staff-order" key={order.id}>
           <header><div><h3>{order.code} <span>· {order.roomCode}</span></h3><p>{order.bookingCode} · {order.customerName} · {new Date(order.createdAt).toLocaleString('vi-VN')}</p></div><span className={`food-order-status status-${order.status.toLowerCase()}`}>{statusLabel[order.status] || order.status}</span></header>
           <div className="food-staff-lines">{order.items.map((item) => {
             const quantity = quantities[order.id]?.[item.menuItemId] ?? Number(item.quantity);

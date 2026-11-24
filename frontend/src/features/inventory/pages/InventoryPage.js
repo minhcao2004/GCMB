@@ -84,11 +84,6 @@ export default function InventoryPage({ user }) {
 
   useEffect(() => { reload(); }, []);
   useEffect(() => {
-    if (!toast) return undefined;
-    const timer = window.setTimeout(() => setToast(''), 3600);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-  useEffect(() => {
     if (!evidence) { setEvidenceUrl(''); return undefined; }
     const url = URL.createObjectURL(evidence);
     setEvidenceUrl(url);
@@ -259,7 +254,7 @@ export default function InventoryPage({ user }) {
       updateReceiptLine(receiptCreateLineId, 'inventoryItemId', item.id);
       setReceiptCreateLineId(null);
       setReceiptItemDraft(null);
-      setToastMessage(`Đã tạo ${item.name} · mã ${item.sku}. Chọn đơn vị nhận để tiếp tục.`);
+      setToastMessage(`Đã tạo mặt hàng ${item.name}. Chọn đơn vị nhận để tiếp tục.`);
     } catch (saveError) {
       setError(displayError(saveError));
     } finally {
@@ -335,12 +330,12 @@ export default function InventoryPage({ user }) {
           inventoryItemId: line.inventoryItemId, quantity: receiptQuantity(line).value, unitCost: line.unitCost, expiryDate: line.expiryDate,
         })),
       };
-      const result = await inventoryApi.receive(command, evidence);
+      await inventoryApi.receive(command, evidence);
       await reload();
       setEvidence(null);
       setScreen('stock');
       // MSG10: thông báo tạo phiếu nhập thành công.
-      setToastMessage(`Đã tạo phiếu nhập ${result.code}.`);
+      setToastMessage('Đã tạo phiếu nhập.');
     } catch (submitError) {
       setError(displayError(submitError));
     } finally {

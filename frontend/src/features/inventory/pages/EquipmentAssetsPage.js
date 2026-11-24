@@ -126,7 +126,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
         try { await equipmentAssetApi.uploadImage(scopedHeadOffice, branchId, asset.id, imageFile); }
         catch (imageError) { setError(`Hồ sơ đã lưu nhưng ảnh chưa tải lên: ${errorText(imageError)}`); await load(); setEditing(asset); return; }
       }
-      if (!editing) setNotice(`Đã thêm thiết bị ${asset.code}.`);
+      if (!editing) setNotice('Đã thêm thiết bị.');
       setDrawer(false); setImageFile(null); setImagePreview(''); await load();
     } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }

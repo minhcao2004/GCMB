@@ -337,13 +337,35 @@ public class FinanceService {
         return recordApprovedPayment(who,id,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart,true);
     }
 
+    @Transactional
+    public Map<String,Object> approveAndPay(Identity who, UUID id, String note, String reference, MultipartFile proof,
+            String paymentMethod, String bankAccount, String bankName,
+            Integer allocationMonths, LocalDate allocationStart) {
+        requireRole(who,"ACCOUNTANT");
+        Map<String,Object> item=request(id);
+        financialPeriodService.requireOpen(day(item.get("expense_on")), "xét duyệt và thanh toán đề nghị chi hoặc hoàn ứng");
+        // BR-90, BR-91: only a request in the accountant queue may be approved and paid with its evidence in one transaction.
+        if(!"WAITING_ACCOUNTANT".equals(item.get("status"))) conflict("Đề nghị này không chờ kế toán xét duyệt.");
+        int approved=jdbcTemplate.update("UPDATE gcmb.finance_expense_request SET status='APPROVED_TO_PAY',accountant_reviewed_by=?,accountant_reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='WAITING_ACCOUNTANT'",who.id(),id);
+        if(approved==0) conflict("Đề nghị vừa được xử lý ở phiên khác. Vui lòng tải lại.");
+        jdbcTemplate.update("INSERT INTO gcmb.finance_request_history(request_id,actor_id,action,note) VALUES(?,?,?,?)",id,who.id(),"APPROVED",clean(note,1000));
+        // BR-90: evidence remains available, but is optional in the combined accountant approval-and-payment flow.
+        return recordApprovedPayment(who,id,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart,true,false);
+    }
+
     private Map<String,Object> recordApprovedPayment(Identity who, UUID id, String reference, MultipartFile proof,
             String paidPaymentMethod, String bankAccount, String bankName,
             Integer requestedMonths, LocalDate requestedStart, boolean requireCategoryInvoice) {
+        return recordApprovedPayment(who,id,reference,proof,paidPaymentMethod,bankAccount,bankName,requestedMonths,requestedStart,requireCategoryInvoice,true);
+    }
+
+    private Map<String,Object> recordApprovedPayment(Identity who, UUID id, String reference, MultipartFile proof,
+            String paidPaymentMethod, String bankAccount, String bankName,
+            Integer requestedMonths, LocalDate requestedStart, boolean requireCategoryInvoice, boolean requirePaymentProof) {
         Map<String,Object> item=request(id);
         financialPeriodService.requireOpen(day(item.get("expense_on")), "ghi nhận thanh toán đề nghị chi hoặc hoàn ứng");
         if(!"APPROVED_TO_PAY".equals(item.get("status"))) conflict("Chỉ có thể ghi nhận đã thanh toán khi đề nghị đã được phê duyệt và việc thanh toán đã được xác nhận."); // MSG97 / BR-207.
-        if(proof==null||proof.isEmpty()) bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90.
+        if(requirePaymentProof&&(proof==null||proof.isEmpty())) bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90.
         if(requireCategoryInvoice&&Boolean.TRUE.equals(item.get("invoice_required"))&&attachments(id).stream().noneMatch(a->"INVOICE".equals(a.get("kind"))))
             bad("Hạng mục này bắt buộc có hóa đơn. Vui lòng tải hóa đơn trước khi thanh toán.");
         // BR-90, BR-207: chỉ ghi cách chi thực tế sau khi kế toán xác nhận thanh toán.
@@ -383,7 +405,7 @@ public class FinanceService {
                     id,item.get("branch_id"),item.get("category_id"),firstMonth.plusMonths(line.sequence()-1L),line.sequence(),line.amount());
             }
         }
-        attach("EXPENSE_REQUEST",id,"PAYMENT_PROOF",proof,who.id());
+        if(proof!=null&&!proof.isEmpty()) attach("EXPENSE_REQUEST",id,"PAYMENT_PROOF",proof,who.id());
         jdbcTemplate.update("INSERT INTO gcmb.finance_request_history(request_id,actor_id,action,note) VALUES(?,?,?,?)",id,who.id(),"PAID",clean(reference,1000));
         return request(id);
     }
