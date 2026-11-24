@@ -22,24 +22,24 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional
 public class RecurringExpenseService {
     private static final ZoneId ZONE = FinancialPeriodService.ZONE;
-    private final JdbcTemplate db;
-    private final FinanceAccess access;
-    private final FinanceService finance;
+    private final JdbcTemplate jdbcTemplate;
+    private final FinanceAccess financeAccess;
+    private final FinanceService financeService;
 
-    public RecurringExpenseService(JdbcTemplate db, FinanceAccess access, FinanceService finance) {
-        this.db = db;
-        this.access = access;
-        this.finance = finance;
+    public RecurringExpenseService(JdbcTemplate jdbcTemplate, FinanceAccess financeAccess, FinanceService financeService) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.financeAccess = financeAccess;
+        this.financeService = financeService;
     }
 
     @Transactional(readOnly = true)
     public Map<String,Object> list(Identity actor, UUID branchId, String dueMonthText, String statusText) {
-        access.accountant(actor);
+        financeAccess.accountant(actor);
         YearMonth dueMonth = parseMonth(dueMonthText);
         String status = normalizePeriodStatus(statusText);
         LocalDate dueStart = dueMonth.atDay(1);
         LocalDate dueEnd = dueMonth.plusMonths(1).atDay(1);
-        List<Map<String,Object>> recurring = db.queryForList("""
+        List<Map<String,Object>> recurring = jdbcTemplate.queryForList("""
             SELECT r.id,r.branch_id,b.name AS branch_name,r.category_id,c.code AS category_code,c.name AS category_name,
               c.invoice_required,r.beneficiary_name,r.bank_account,r.bank_name,r.due_day,r.monthly_amount,r.expected_amount,
               r.expense_belongs_to,r.start_month,r.end_month,r.reminder_days,r.status,r.created_at,r.updated_at,r.terminated_at,
@@ -54,7 +54,7 @@ public class RecurringExpenseService {
         LocalDate today = LocalDate.now(ZONE);
         recurring.forEach(row -> row.put("next_due_date", nextDueDate(row,today)));
 
-        List<Map<String,Object>> periods = db.queryForList("""
+        List<Map<String,Object>> periods = jdbcTemplate.queryForList("""
             SELECT p.id,p.recurring_id,p.period_month,p.due_date,p.branch_id,b.name AS branch_name,
               p.category_id,c.code AS category_code,c.name AS category_name,c.invoice_required,
               p.beneficiary_name,p.bank_account,p.bank_name,p.amount,p.default_amount,p.expected_amount,
@@ -82,19 +82,19 @@ public class RecurringExpenseService {
 
     @Transactional(readOnly = true)
     public int reminderCount(Identity actor) {
-        access.accountant(actor);
+        financeAccess.accountant(actor);
         return reminderCount(LocalDate.now(ZONE));
     }
 
     public Map<String,Object> save(Identity actor, UUID id, Command input) {
-        access.accountant(actor);
+        financeAccess.accountant(actor);
         if(input==null) bad("Dữ liệu khoản chi định kỳ không hợp lệ.");
         String beneficiary=required(input.beneficiaryName(),160,"Vui lòng nhập người nhận.");
         String account=required(input.bankAccount(),80,"Vui lòng nhập số tài khoản.");
         String bank=required(input.bankName(),120,"Vui lòng nhập ngân hàng.");
-        if(input.branchId()==null||db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",UUID.class,input.branchId()).isEmpty())
+        if(input.branchId()==null||jdbcTemplate.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",UUID.class,input.branchId()).isEmpty())
             bad("Vui lòng chọn cơ sở đang hoạt động.");
-        if(input.categoryId()==null||db.queryForList("SELECT id FROM gcmb.finance_expense_category WHERE id=? AND active=true FOR SHARE",UUID.class,input.categoryId()).isEmpty())
+        if(input.categoryId()==null||jdbcTemplate.queryForList("SELECT id FROM gcmb.finance_expense_category WHERE id=? AND active=true FOR SHARE",UUID.class,input.categoryId()).isEmpty())
             bad("Vui lòng chọn hạng mục chi phí đang hoạt động."); // BR-209.
         if(input.dueDay()==null||input.dueDay()<1||input.dueDay()>31) bad("Ngày trả cố định phải từ 1 đến 31.");
         if(input.reminderDays()!=null&&(input.reminderDays()<0||input.reminderDays()>31)) bad("Số ngày nhắc trước hạn phải từ 0 đến 31.");
@@ -108,7 +108,7 @@ public class RecurringExpenseService {
         int reminderDays=input.reminderDays()==null?3:input.reminderDays();
         String identityKey=input.branchId()+":"+input.categoryId()+":"+beneficiary.toLowerCase(Locale.ROOT);
         lockIdentity(identityKey);
-        Long duplicates=db.queryForObject("""
+        Long duplicates=jdbcTemplate.queryForObject("""
             SELECT count(*) FROM gcmb.finance_recurring_expense
             WHERE status='ACTIVE' AND branch_id=? AND category_id=? AND lower(btrim(beneficiary_name))=lower(btrim(?))
               AND (?::uuid IS NULL OR id<>?)
@@ -118,17 +118,17 @@ public class RecurringExpenseService {
         UUID savedId;
         if(id==null) {
             savedId=UUID.randomUUID();
-            db.update("""
+            jdbcTemplate.update("""
                 INSERT INTO gcmb.finance_recurring_expense(id,branch_id,category_id,beneficiary_name,bank_account,bank_name,
                   due_day,monthly_amount,expected_amount,expense_belongs_to,start_month,end_month,reminder_days,status,created_by,updated_by)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?)
                 """,savedId,input.branchId(),input.categoryId(),beneficiary,account,bank,input.dueDay(),monthlyAmount,
                 expectedAmount,belongs,startMonth,endMonth,reminderDays,actor.id(),actor.id());
         } else {
-            String currentStatus=db.query("SELECT status FROM gcmb.finance_recurring_expense WHERE id=? FOR UPDATE",
+            String currentStatus=jdbcTemplate.query("SELECT status FROM gcmb.finance_recurring_expense WHERE id=? FOR UPDATE",
                 (rs,n)->rs.getString(1),id).stream().findFirst().orElseThrow(()->notFound("Không tìm thấy khoản chi định kỳ."));
             if(!"ACTIVE".equals(currentStatus)) conflict("Chỉ sửa được khoản chi định kỳ đang hoạt động.");
-            db.update("""
+            jdbcTemplate.update("""
                 UPDATE gcmb.finance_recurring_expense SET branch_id=?,category_id=?,beneficiary_name=?,bank_account=?,bank_name=?,
                   due_day=?,monthly_amount=?,expected_amount=?,expense_belongs_to=?,start_month=?,end_month=?,reminder_days=?,
                   updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ACTIVE'
@@ -143,13 +143,13 @@ public class RecurringExpenseService {
     }
 
     public Map<String,Object> terminate(Identity actor, UUID id) {
-        access.accountant(actor);
-        int updated=db.update("""
+        financeAccess.accountant(actor);
+        int updated=jdbcTemplate.update("""
             UPDATE gcmb.finance_recurring_expense SET status='TERMINATED',terminated_at=CURRENT_TIMESTAMP,
               updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ACTIVE'
             """,actor.id(),id);
         if(updated==0) {
-            if(db.queryForList("SELECT id FROM gcmb.finance_recurring_expense WHERE id=?",UUID.class,id).isEmpty())
+            if(jdbcTemplate.queryForList("SELECT id FROM gcmb.finance_recurring_expense WHERE id=?",UUID.class,id).isEmpty())
                 throw notFound("Không tìm thấy khoản chi định kỳ.");
             conflict("Khoản chi định kỳ này đã chấm dứt.");
         }
@@ -158,20 +158,20 @@ public class RecurringExpenseService {
     }
 
     public Map<String,Object> skipPeriod(Identity actor, UUID id, String reason) {
-        access.accountant(actor);
+        financeAccess.accountant(actor);
         String note=required(reason,1000,"Vui lòng nhập lý do bỏ qua kỳ chi.");
-        String status=db.query("SELECT status FROM gcmb.finance_recurring_expense_period WHERE id=? FOR UPDATE",
+        String status=jdbcTemplate.query("SELECT status FROM gcmb.finance_recurring_expense_period WHERE id=? FOR UPDATE",
             (rs,n)->rs.getString(1),id).stream().findFirst().orElseThrow(()->notFound("Không tìm thấy kỳ chi định kỳ."));
         if(!"PENDING".equals(status)) conflict("Chỉ bỏ qua được kỳ chi đang chờ thanh toán.");
-        db.update("UPDATE gcmb.finance_recurring_expense_period SET status='SKIPPED',skip_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='PENDING'",
+        jdbcTemplate.update("UPDATE gcmb.finance_recurring_expense_period SET status='SKIPPED',skip_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='PENDING'",
             note,id);
         return period(id);
     }
 
     public Map<String,Object> payPeriod(Identity actor, UUID id, BigDecimal amount, String reason,
             MultipartFile proof, MultipartFile invoice) {
-        access.accountant(actor);
-        Map<String,Object> row=db.queryForList("""
+        financeAccess.accountant(actor);
+        Map<String,Object> row=jdbcTemplate.queryForList("""
             SELECT p.*,r.status AS recurring_status,c.name AS category_name
             FROM gcmb.finance_recurring_expense_period p
             JOIN gcmb.finance_recurring_expense r ON r.id=p.recurring_id
@@ -182,12 +182,12 @@ public class RecurringExpenseService {
         if(!"PENDING".equals(row.get("status"))) conflict("Kỳ chi này đã được bỏ qua.");
         LocalDate dueDate=day(row.get("due_date"));
         UUID branchId=(UUID)row.get("branch_id");
-        if(db.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",UUID.class,branchId).isEmpty())
+        if(jdbcTemplate.queryForList("SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",UUID.class,branchId).isEmpty())
             conflict("Cơ sở của kỳ chi đang tạm ngừng hoạt động.");
-        Map<String,Object> request=finance.recordRecurringExpensePayment(actor,id,branchId,(UUID)row.get("category_id"),
+        Map<String,Object> request=financeService.recordRecurringExpensePayment(actor,id,branchId,(UUID)row.get("category_id"),
             dueDate,day(row.get("period_month")),amount,(BigDecimal)row.get("default_amount"),
             (String)row.get("beneficiary_name"),(String)row.get("bank_account"),(String)row.get("bank_name"),reason,proof,invoice);
-        int updated=db.update("""
+        int updated=jdbcTemplate.update("""
             UPDATE gcmb.finance_recurring_expense_period
             SET amount=?,status='PAID',request_id=?,updated_at=CURRENT_TIMESTAMP
             WHERE id=? AND status='PENDING'
@@ -202,19 +202,19 @@ public class RecurringExpenseService {
     public void processDaily() {
         LocalDate today=LocalDate.now(ZONE);
         YearMonth dueMonth=YearMonth.from(today);
-        List<Map<String,Object>> active=db.queryForList("""
+        List<Map<String,Object>> active=jdbcTemplate.queryForList("""
             SELECT id,branch_id,category_id,beneficiary_name,bank_account,bank_name,due_day,monthly_amount,expected_amount,
               expense_belongs_to,start_month,end_month,reminder_days
             FROM gcmb.finance_recurring_expense WHERE status='ACTIVE' ORDER BY id
             """);
         for(Map<String,Object> row:active) generateForTemplate(row,dueMonth);
 
-        List<UUID> accountants=db.query("""
+        List<UUID> accountants=jdbcTemplate.query("""
             SELECT u.id FROM gcmb.user_account u JOIN gcmb.role ro ON ro.id=u.role_id
             WHERE u.status='ACTIVE' AND ro.code='ACCOUNTANT' ORDER BY u.id
             """,(rs,n)->rs.getObject(1,UUID.class));
         if(accountants.isEmpty()) return;
-        List<Map<String,Object>> pending=db.queryForList("""
+        List<Map<String,Object>> pending=jdbcTemplate.queryForList("""
             SELECT p.id,p.due_date,p.period_month,p.amount,p.reminder_days,b.name AS branch_name,c.name AS category_name
             FROM gcmb.finance_recurring_expense_period p
             JOIN gcmb.branch b ON b.id=p.branch_id
@@ -226,7 +226,7 @@ public class RecurringExpenseService {
     }
 
     private void generateForTemplate(UUID id,YearMonth dueMonth) {
-        Map<String,Object> row=db.queryForList("""
+        Map<String,Object> row=jdbcTemplate.queryForList("""
             SELECT id,branch_id,category_id,beneficiary_name,bank_account,bank_name,due_day,monthly_amount,expected_amount,
               expense_belongs_to,start_month,end_month,reminder_days
             FROM gcmb.finance_recurring_expense WHERE id=? AND status='ACTIVE' FOR UPDATE
@@ -248,7 +248,7 @@ public class RecurringExpenseService {
         LocalDate periodMonth=RecurringExpenseCalendar.periodMonth(dueMonth,belongs);
         if(!RecurringExpenseCalendar.withinTerm(periodMonth,day(row.get("start_month")),row.get("end_month")==null?null:day(row.get("end_month")))) return;
         LocalDate dueDate=RecurringExpenseCalendar.dueDate(dueMonth,((Number)row.get("due_day")).intValue());
-        db.update("""
+        jdbcTemplate.update("""
             INSERT INTO gcmb.finance_recurring_expense_period(id,recurring_id,period_month,due_date,branch_id,category_id,
               beneficiary_name,bank_account,bank_name,amount,default_amount,expected_amount,reminder_days)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -260,12 +260,12 @@ public class RecurringExpenseService {
 
     private void updatePendingSnapshots(UUID id,UUID branchId,UUID categoryId,String beneficiary,String account,String bank,
             int dueDay,BigDecimal monthlyAmount,BigDecimal expectedAmount,String belongs,int reminderDays) {
-        List<Map<String,Object>> pending=db.queryForList("SELECT id,period_month FROM gcmb.finance_recurring_expense_period WHERE recurring_id=? AND status='PENDING' FOR UPDATE",id);
+        List<Map<String,Object>> pending=jdbcTemplate.queryForList("SELECT id,period_month FROM gcmb.finance_recurring_expense_period WHERE recurring_id=? AND status='PENDING' FOR UPDATE",id);
         for(Map<String,Object> row:pending) {
             LocalDate periodMonth=day(row.get("period_month"));
             YearMonth dueMonth=YearMonth.from(periodMonth).plusMonths("PREVIOUS_MONTH".equals(belongs)?1:0);
             LocalDate dueDate=RecurringExpenseCalendar.dueDate(dueMonth,dueDay);
-            db.update("""
+            jdbcTemplate.update("""
                 UPDATE gcmb.finance_recurring_expense_period SET due_date=?,branch_id=?,category_id=?,beneficiary_name=?,
                   bank_account=?,bank_name=?,amount=?,default_amount=?,expected_amount=?,reminder_days=?,updated_at=CURRENT_TIMESTAMP
                 WHERE id=? AND status='PENDING'
@@ -289,14 +289,14 @@ public class RecurringExpenseService {
     }
 
     private void insertNotice(Object periodId,List<UUID> recipients,String type,LocalDate date,String message) {
-        for(UUID recipient:recipients) db.update("""
+        for(UUID recipient:recipients) jdbcTemplate.update("""
             INSERT INTO gcmb.finance_recurring_expense_notice(period_id,recipient_id,reminder_type,reminder_date,message)
             VALUES(?,?,?,?,?) ON CONFLICT(period_id,recipient_id,reminder_type,reminder_date) DO NOTHING
             """,periodId,recipient,type,date,message);
     }
 
     private List<Map<String,Object>> notices(UUID actorId) {
-        return db.queryForList("""
+        return jdbcTemplate.queryForList("""
             SELECT n.id,n.period_id,n.reminder_type,n.reminder_date,n.message,n.created_at,
               p.period_month,p.due_date,p.status AS period_status,b.name AS branch_name,c.name AS category_name
             FROM gcmb.finance_recurring_expense_notice n
@@ -307,12 +307,12 @@ public class RecurringExpenseService {
     }
 
     private int reminderCount(LocalDate today) {
-        return db.queryForObject("SELECT count(*) FROM gcmb.finance_recurring_expense_period WHERE status='PENDING' AND due_date<=?::date+reminder_days",
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM gcmb.finance_recurring_expense_period WHERE status='PENDING' AND due_date<=?::date+reminder_days",
             Integer.class,today);
     }
 
     private Map<String,Object> template(UUID id) {
-        return db.queryForMap("""
+        return jdbcTemplate.queryForMap("""
             SELECT r.*,b.name AS branch_name,c.code AS category_code,c.name AS category_name,c.invoice_required,
               (SELECT min(p.due_date) FROM gcmb.finance_recurring_expense_period p
                 WHERE p.recurring_id=r.id AND p.status='PENDING') AS next_pending_due_date
@@ -322,7 +322,7 @@ public class RecurringExpenseService {
     }
 
     private Map<String,Object> period(UUID id) {
-        return db.queryForMap("""
+        return jdbcTemplate.queryForMap("""
             SELECT p.*,b.name AS branch_name,c.name AS category_name,c.invoice_required
             FROM gcmb.finance_recurring_expense_period p JOIN gcmb.branch b ON b.id=p.branch_id
             JOIN gcmb.finance_expense_category c ON c.id=p.category_id WHERE p.id=?
@@ -349,7 +349,7 @@ public class RecurringExpenseService {
     }
 
     private void lockIdentity(String identityKey) {
-        db.query("SELECT pg_advisory_xact_lock(1300261105,hashtext(?))",
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(1300261105,hashtext(?))",
             (ResultSet rs)->{rs.next();rs.getObject(1);return null;},identityKey);
     }
 

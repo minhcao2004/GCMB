@@ -1,4 +1,6 @@
+import { Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BankNameInput from '../../../shared/components/BankNameInput';
@@ -14,10 +16,12 @@ import { financeApi } from '../../finance/services/financeApi';
 import { clearBookingDraft, readBookingDraft } from '../services/bookingDraft';
 import BookingCreatePage from './BookingCreatePage';
 import BookingEditDialog from './BookingEditDialog';
+import ComboGiftPicker from '../components/ComboGiftPicker';
 import { formatVnd, isLocalDateInput, toLocalDateInput } from '../data/bookingData';
 import '../styles/booking.css';
 import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage';
 
+const receptionBookingPath = '/le-tan/bookings';
 const navigation = [
   ['Ca làm việc', 'shifts'],
   ['Bàn giao tiền mặt', 'handover'],
@@ -34,6 +38,7 @@ const accountingNavigation = [
 const cancellationReasons = [
   'Khách thay đổi kế hoạch',
   'Khách đổi thời gian nhận phòng',
+  'Khách không đến',
   'Khách không còn nhu cầu',
   'Khách đặt nhầm booking',
   'Khách không đồng ý giá hoặc phụ phí',
@@ -205,7 +210,7 @@ export function AppShell({
           audience={audience}
           className={`booking-app reception-dashboard${fitViewport ? ' booking-app--fit' : ''} booking-app--accountant`}
           sidebarLabel="Kế toán thu chi"
-          brand={<div className="manager-brand"><BrandWordmark /></div>}
+          brand={<div className="manager-brand"><BrandWordmark to="/ke-toan" /></div>}
           roleLabel="KẾ TOÁN THU CHI"
           navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
                 {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
@@ -280,7 +285,7 @@ export function AppShell({
     if (icon === 'shifts') navigate('/le-tan/ca-lam');
     if (icon === 'tax') navigate('/le-tan/hoa-don-thue');
     if (icon === 'booking') {
-      navigate(readBookingDraft(user) ? '/le-tan/bookings/new' : '/le-tan/bookings');
+      navigate(readBookingDraft(user) ? `${receptionBookingPath}/new` : receptionBookingPath);
     } else if (icon === 'rooms') {
       navigate('/le-tan/phong');
     } else if (icon === 'orders') {
@@ -300,7 +305,7 @@ export function AppShell({
         audience={audience}
         className={`booking-app reception-dashboard booking-app--reception${fitViewport ? ' booking-app--fit' : ''}`}
         sidebarLabel="Lễ tân"
-        brand={<div className="manager-brand"><BrandWordmark /></div>}
+        brand={<div className="manager-brand"><BrandWordmark to={receptionBookingPath} destinationLabel="Booking" /></div>}
         roleLabel="LỄ TÂN"
         navigation={<nav id="booking-navigation" className="manager-navigation" aria-label="Điều hướng lễ tân">
               {navigation.map(([label, icon]) => (
@@ -458,17 +463,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const [giftRequirementsError, setGiftRequirementsError] = useState('');
   const [drinkSelections, setDrinkSelections] = useState([]);
   const [foodSelections, setFoodSelections] = useState([]);
-  const [giftPicker, setGiftPicker] = useState(null);
-  const [giftSearch, setGiftSearch] = useState('');
-  const [giftCategoryFilter, setGiftCategoryFilter] = useState('all');
-  const [giftStockFilter, setGiftStockFilter] = useState('all');
-  const giftPickerTriggerRef = useRef(null);
-  useEffect(() => {
-    if (!giftPicker) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [giftPicker]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(timer);
@@ -519,7 +513,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const savedCheckInTime = recordedCheckIn
     ? displayPart(recordedCheckIn, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false }, timezone)
     : 'Chưa có dữ liệu';
-  const charge = Number(booking?.expectedAmount || 0);
   const depositReceived = Number(detailMatchesBooking
     ? detail.deposit?.receivedAmount ?? booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0
     : booking?.depositReceivedAmount ?? booking?.depositBalance ?? 0);
@@ -531,10 +524,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const selectedRoom = availableRooms.find((room) => room.id === selectedRoomId);
   const checkInRoom = selectedRoom ? { ...booking, roomCode: selectedRoom.code, roomName: selectedRoom.name, roomOperatingStatus: selectedRoom.operatingStatus } : booking;
   const roomReady = checkInRoom?.roomOperatingStatus === 'AVAILABLE' && Boolean(checkInRoom?.roomCode);
-  const plannedStartMs = booking ? new Date(booking.plannedStart).getTime() : NaN;
   const plannedEndMs = booking ? new Date(booking.plannedEnd).getTime() : NaN;
-  const earlyCheckIn = Boolean(booking) && now.getTime() < plannedStartMs;
-  const shiftedCheckout = earlyCheckIn ? new Date(now.getTime() + (plannedEndMs - plannedStartMs)) : null;
   const checkInTimeValid = booking && plannedEndMs > now.getTime();
   const giftMenuRequired = (giftRequirements?.drinkQuantity || 0) + (giftRequirements?.foodQuantity || 0) > 0;
   const giftSelectionsValid = giftRequirements && drinkSelections.length === giftRequirements.drinkQuantity
@@ -542,58 +532,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const giftSelectionBlocked = booking?.status === 'CONFIRMED'
     && (giftLoading || !giftRequirements || Boolean(giftRequirementsError)
       || (giftMenuRequired && (Boolean(giftError) || !giftMenu.length || !giftSelectionsValid)));
-  const openGiftPicker = (event, label, prefix, index) => {
-    giftPickerTriggerRef.current = event.currentTarget;
-    setGiftSearch('');
-    setGiftCategoryFilter('all');
-    setGiftStockFilter('all');
-    setGiftPicker({ label, prefix, index });
-  };
-  const closeGiftPicker = () => {
-    setGiftPicker(null);
-    window.requestAnimationFrame(() => {
-      if (giftPickerTriggerRef.current?.isConnected) giftPickerTriggerRef.current.focus();
-    });
-  };
-  const renderGiftSelectors = (label, selections, setSelections, prefix) => selections.map((selectedId, index) => {
-    const selectedItem = giftMenu.find((item) => item.id === selectedId);
-    return <div className="booking-gift-slot" key={`${prefix}-${index}`}>
-      <span>{label} {index + 1}</span>
-      <button className="booking-gift-picker-trigger" type="button" onClick={(event) => openGiftPicker(event, label, prefix, index)}>
-        <span>{selectedItem?.name || `Chọn ${label.toLowerCase()}`}</span>
-        <small>{selectedItem ? selectedItem.stockTracked ? `Tồn ${selectedItem.stockQuantity} ${selectedItem.unitName}` : 'Không theo dõi tồn kho' : 'Mở danh sách món'}</small>
-      </button>
-    </div>;
-  });
-  const pickerTypeKeyword = giftPicker?.prefix === 'drink' ? 'uống' : 'ăn';
-  const pickerItems = giftPicker
-    ? giftMenu.filter((item) => (item.category || '').toLocaleLowerCase('vi-VN').includes(pickerTypeKeyword))
-    : [];
-  const pickerSlots = giftPicker ? [...drinkSelections.map((id, i) => ({ id, key: `drink-${i}` })),
-    ...foodSelections.map((id, i) => ({ id, key: `food-${i}` }))] : [];
-  const pickerUsedElsewhere = pickerSlots
-    .filter((slot) => slot.key !== `${giftPicker?.prefix}-${giftPicker?.index}` && slot.id)
-    .reduce((counts, slot) => ({ ...counts, [slot.id]: (counts[slot.id] || 0) + 1 }), {});
-  const pickerCategories = [...new Map(pickerItems.map((item) => [
-    (item.category || '').trim().toLocaleLowerCase('vi-VN'), item.category,
-  ]).filter(([key]) => key)).values()];
-  const normalizedGiftSearch = giftSearch.trim().toLocaleLowerCase('vi-VN');
-  const filteredPickerItems = pickerItems.filter((item) => {
-    const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-    const matchesSearch = !normalizedGiftSearch || `${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(normalizedGiftSearch);
-    const matchesCategory = giftCategoryFilter === 'all' || (item.category || '').toLocaleLowerCase('vi-VN') === giftCategoryFilter;
-    const matchesStock = giftStockFilter === 'all'
-      || (giftStockFilter === 'available' && selectable)
-      || (giftStockFilter === 'untracked' && !item.stockTracked)
-      || (giftStockFilter === 'out' && !selectable);
-    return matchesSearch && matchesCategory && matchesStock;
-  });
-  const chooseGift = (item) => {
-    const setter = giftPicker?.prefix === 'drink' ? setDrinkSelections : setFoodSelections;
-    const index = giftPicker?.index;
-    setter((current) => current.map((id, position) => position === index ? item.id : id));
-    closeGiftPicker();
-  };
   let checkInButtonLabel = booking?.status === 'IN_HOUSE' ? 'Đã check-in' : 'Xác nhận check-in';
   if (busy) checkInButtonLabel = 'Đang xác nhận…';
   if (!booking) return <div className="booking-checkin-overlay"><button className="booking-overlay-dismiss" type="button" onClick={onClose} aria-label="Đóng" /><aside className="booking-checkin-panel"><button className="booking-panel-close" type="button" onClick={onClose}>×</button><p role="status">Đang tải thông tin booking…</p></aside></div>;
@@ -618,13 +556,12 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
           {!roomLoading && !roomError && !availableRooms.length && <p className="booking-checkin-time-note">Chưa có phòng phù hợp để nhận khách. Vui lòng kiểm tra lịch phòng hoặc sắp xếp lại booking.</p>}
         </section>}
-        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3><p>Món có liên kết kho sẽ trừ tồn khi thanh toán bill; món chế biến không theo dõi tồn sẽ không trừ kho.</p>
+        {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
           {giftRequirementsError && <small className="booking-field-error" role="alert">{giftRequirementsError}</small>}
           {giftError && <small className="booking-field-error" role="alert">{giftError}</small>}
           {!giftLoading && !giftError && !giftMenu.length && <small className="booking-field-error">Cơ sở chưa có mặt hàng liên kết kho tự trừ hoặc món chế biến để chọn làm quà.</small>}
-          {giftRequirements?.drinkQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ uống ({giftRequirements.drinkQuantity})</strong>{renderGiftSelectors('Đồ uống', drinkSelections, setDrinkSelections, 'drink')}</div>}
-          {giftRequirements?.foodQuantity > 0 && <div className="booking-checkin-gift-group"><strong>Đồ ăn ({giftRequirements.foodQuantity})</strong>{renderGiftSelectors('Đồ ăn', foodSelections, setFoodSelections, 'food')}</div>}
+          <ComboGiftPicker drinkSelections={drinkSelections} setDrinkSelections={setDrinkSelections} foodSelections={foodSelections} setFoodSelections={setFoodSelections} giftMenu={giftMenu} disabled={busy} />
         </section>}
         <div className={`booking-checkin-ready${roomReady ? '' : ' is-unavailable'}`}><i /><div>
            <strong>{checkInRoomTitle(checkInRoom, roomReady)}</strong>
@@ -632,8 +569,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         </div></div>
         <section className="booking-checkin-deposit"><div><strong>Tiền cọc đã nhận</strong><b>{formatVnd(depositReceived)}</b></div><div className="booking-checkin-deposit-meta"><span className={`booking-deposit-status${depositOutcome === 'NON_REFUNDABLE' ? ' is-danger' : depositOutcome === 'REFUND_ELIGIBLE' ? ' is-refund' : ''}`}>{depositStatus}</span>{depositReceived > 0 && <small>{paymentMethodLabel(depositDetail?.paymentMethod)} · {depositDisposition}</small>}</div></section>
         <label className="booking-checkin-time"><span>{booking.status === 'IN_HOUSE' ? 'Giờ check-in đã ghi nhận' : 'Giờ check-in thực tế'}</span><div><input value={booking.status === 'IN_HOUSE' ? savedCheckInTime : actualTime} readOnly /><small>{booking.status === 'IN_HOUSE' ? 'Đã lưu theo giờ hệ thống' : 'Sẽ ghi nhận khi xác nhận'}</small></div></label>
-        {booking.status === 'CONFIRMED' && earlyCheckIn && roomReady && checkInTimeValid && <p className="booking-checkin-time-note is-info">Nhận phòng sớm sẽ giữ giờ hẹn {timeText(booking.plannedStart, timezone)} và dời giờ trả dự kiến đến {timeText(shiftedCheckout, timezone)} · {dateText(shiftedCheckout, timezone)}, để khách vẫn dùng đủ thời lượng đã đặt. Hệ thống sẽ kiểm tra khung giờ mới có trùng booking khác không.</p>}
-        <section className="booking-checkin-receipt"><strong>Tóm tắt</strong><div><span>{detail?.charges?.[0]?.description || 'Dịch vụ phòng'}</span><b>{formatVnd(charge)}</b></div><p>Tiền cọc đang giữ {formatVnd(depositBalance)} sẽ được đối chiếu khi checkout.</p></section>
         {booking.status === 'CANCELLED' && <p className="booking-checkin-time-note">Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.</p>}
         {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && booking.status !== 'CANCELLED' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
         {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note">Đã quá giờ kết thúc booking, không thể check-in.</p>}
@@ -643,43 +578,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
          <button type="button" className="booking-button booking-button-primary booking-confirm-checkin" onClick={() => onConfirm(booking, { roomId: selectedRoomId || booking.roomId, drinkItems: drinkSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })), foodItems: foodSelections.map((menuItemId) => ({ menuItemId, quantity: 1 })) })} disabled={booking.status !== 'CONFIRMED' || !roomReady || !checkInTimeValid || giftSelectionBlocked || busy}>{checkInButtonLabel}</button>
       </div>
     </aside>
-    {giftPicker && <div className="booking-gift-picker-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGiftPicker(); }}>
-      <section className="booking-gift-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-gift-picker-title" onKeyDown={(event) => {
-        if (event.key === 'Escape') closeGiftPicker();
-        if (event.key === 'Tab') {
-          const focusable = event.currentTarget.querySelectorAll('button:not(:disabled),input,select');
-          const first = focusable[0], last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-        }
-      }}>
-        <header className="booking-gift-picker-heading">
-          <div><h2 id="booking-gift-picker-title">Chọn {giftPicker.label.toLowerCase()}</h2></div>
-          <button type="button" aria-label="Đóng danh sách món" onClick={closeGiftPicker}>×</button>
-        </header>
-        <label className="booking-gift-picker-search"><span>Tìm món</span><input autoFocus value={giftSearch} onChange={(event) => setGiftSearch(event.target.value)} placeholder="Nhập tên món…" /></label>
-        <div className="booking-gift-picker-filters">
-          <label><span>Danh mục</span><select value={giftCategoryFilter} onChange={(event) => setGiftCategoryFilter(event.target.value)}>
-            <option value="all">Tất cả danh mục</option>
-            {pickerCategories.map((category) => <option key={category} value={(category || '').toLocaleLowerCase('vi-VN')}>{category}</option>)}
-          </select></label>
-          <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
-            {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
-          </div>
-        </div>
-        <div className="booking-gift-picker-list" aria-live="polite">
-          {filteredPickerItems.length ? filteredPickerItems.map((item) => {
-            const selectable = !item.stockTracked || Number(item.stockQuantity || 0) > (pickerUsedElsewhere[item.id] || 0);
-            const selected = (giftPicker.prefix === 'drink' ? drinkSelections : foodSelections)[giftPicker.index] === item.id;
-            return <button key={item.id} type="button" className={`booking-gift-picker-item${selected ? ' is-selected' : ''}`} disabled={!selectable} onClick={() => chooseGift(item)}>
-              <span><strong>{item.name}</strong><small>{item.category}</small></span>
-              <span className={`booking-gift-picker-stock${item.stockTracked ? '' : ' is-untracked'}`}>{item.stockTracked ? selectable ? `Tồn ${item.stockQuantity} ${item.unitName}` : 'Hết tồn' : 'Không theo dõi tồn'}</span>
-            </button>;
-          }) : <p className="booking-gift-picker-empty">Không tìm thấy món phù hợp với bộ lọc.</p>}
-        </div>
-        <footer className="booking-gift-picker-footer"><span>{filteredPickerItems.length} món</span><button type="button" onClick={closeGiftPicker}>Đóng</button></footer>
-      </section>
-    </div>}
   </div>;
 }
 
@@ -724,8 +622,10 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
   const hasDeposit = depositAmount !== null && depositAmount > 0;
   const cutoffMinutes = Number(currentDetail?.deposit?.refundCutoffMinutes || 40);
   const millisecondsUntilStart = new Date(currentBooking.plannedStart).getTime() - now.getTime();
-  const refundEligible = hasDeposit && millisecondsUntilStart >= cutoffMinutes * 60000;
-  const cancellationAllowed = millisecondsUntilStart > 0 && ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
+  // BR-14, BR-15, BR-16: quá giờ hẹn vẫn hủy được nếu chưa check-in; khách không đến không hoàn cọc.
+  const noShow = reasonOption === 'Khách không đến';
+  const refundEligible = hasDeposit && !noShow && millisecondsUntilStart >= cutoffMinutes * 60000;
+  const cancellationAllowed = ['CONFIRMED', 'DRAFT'].includes(currentBooking.status);
   const remainingMinutes = Math.max(0, Math.floor(millisecondsUntilStart / 60000));
   let remainingLabel;
   if (millisecondsUntilStart <= 0) remainingLabel = 'Đã đến giờ nhận phòng';
@@ -748,15 +648,19 @@ function CancelDialog({ booking, onClose, onConfirm, busy, error, timezone }) {
     outcomeTitle = 'Không tải được thông tin tiền cọc';
     outcomeDescription = 'Vui lòng thử mở lại hộp thoại trước khi hủy booking.';
   } else if (!cancellationAllowed) {
-    outcomeTitle = 'Đã đến giờ sử dụng';
-    outcomeDescription = 'Booking đã đến giờ sử dụng; hãy xử lý theo luồng check-in.';
+    outcomeTitle = 'Không thể hủy booking';
+    outcomeDescription = 'Không thể hủy booking này vì khách đã nhận phòng hoặc lượt sử dụng đã kết thúc.';
   } else if (refundEligible) {
     outcomeTitle = '✓ Đủ điều kiện hoàn cọc';
     outcomeDescription = `${remainingLabel} · điều kiện hoàn: hủy trước ít nhất ${cutoffMinutes} phút`;
   } else if (hasDeposit) {
     outcomeTitle = '! Không đủ điều kiện hoàn cọc';
-    // MSG16: giải thích việc giữ cọc và yêu cầu lễ tân xác nhận tiếp tục hủy.
-    outcomeDescription = `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
+    // MSG16, MSG65: nêu đúng nguyên nhân không hoàn cọc trước khi xác nhận.
+    outcomeDescription = noShow
+      ? `Hủy booking ${currentBooking.code} với lý do khách không đến sẽ không hoàn lại tiền cọc. Bạn có muốn tiếp tục?`
+      : millisecondsUntilStart <= 0
+        ? `Booking đã quá giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`
+        : `Booking được hủy khi còn dưới ${cutoffMinutes} phút đến giờ nhận phòng nên tiền cọc không được hoàn. Bạn có muốn tiếp tục hủy booking ${currentBooking.code}?`;
   } else {
     outcomeTitle = 'Không có tiền cọc';
     outcomeDescription = 'Booking sẽ được hủy và phòng được giải phóng.';
@@ -891,10 +795,9 @@ export default function BookingManagementPage() {
     setListLoading(true);
     const params = { search: search.trim() || undefined, page: 0, size: 100 };
     if (isLocalDateInput(selectedDate)) { params.dateFrom = selectedDate; params.dateTo = selectedDate; }
-    bookingApi.list(params)
-      .then((result) => {
+    bookingApi.listAll(params)
+      .then((items) => {
         if (!active) return;
-        const items = result.items || [];
         const pendingId = pendingSelectionRef.current;
         const pendingFound = pendingId && items.some((item) => item.id === pendingId);
         if (pendingId) pendingSelectionRef.current = '';
@@ -946,7 +849,7 @@ export default function BookingManagementPage() {
     if (roomTier !== 'all' && !(item.roomTypeName || item.roomName || '').toLocaleLowerCase('vi-VN').includes(roomTier.toLocaleLowerCase('vi-VN'))) return false;
     return true;
   }), [rows, activeFilter, roomTier]);
-  const bookingPageSize = 4;
+  const bookingPageSize = 5;
   const bookingPageCount = Math.max(1, Math.ceil(visibleRows.length / bookingPageSize));
   const currentBookingPage = Math.min(bookingPage, bookingPageCount - 1);
   const pageRows = visibleRows.slice(currentBookingPage * bookingPageSize, (currentBookingPage + 1) * bookingPageSize);
@@ -1114,7 +1017,7 @@ export default function BookingManagementPage() {
       <div><h1>Booking</h1></div>
       <button className="booking-button booking-button-primary booking-create-button" type="button" onClick={() => navigate('/le-tan/bookings/new')}><Icon name="plus" /> Tạo booking</button>
     </div>
-    {notice && <div className={`booking-live-notice${noticeKind === 'warning' ? ' is-warning' : ''}`} role={noticeKind === 'warning' ? 'alert' : 'status'}><span>{noticeKind === 'warning' ? '!' : '✓'}</span>{notice}<button type="button" aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+    <ToastStack notice={notice} noticeVariant={noticeKind === 'warning' ? 'warning' : 'success'} onCloseNotice={() => setNotice('')} />
     {listError && <div className="booking-inline-error" role="alert">{listError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
     <section className="booking-filters" aria-label="Bộ lọc booking">
       <div className="booking-filter-date-group"><span className="booking-filter-label">Ngày nhận phòng</span><div className="booking-date-buttons">
@@ -1149,11 +1052,7 @@ export default function BookingManagementPage() {
         {listLoading && <div className="booking-table-message" role="status">Đang tải booking…</div>}
         {!listLoading && !visibleRows.length && <EmptyState className="booking-table-message" description="Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc." />}
         </div>
-        {bookingPageCount > 1 && <nav className="booking-pagination" aria-label="Trang danh sách booking">
-          <button type="button" disabled={currentBookingPage === 0} onClick={() => setBookingPage(currentBookingPage - 1)}>Trang trước</button>
-          <span>Trang {currentBookingPage + 1}/{bookingPageCount} · {visibleRows.length} booking</span>
-          <button type="button" disabled={currentBookingPage + 1 >= bookingPageCount} onClick={() => setBookingPage(currentBookingPage + 1)}>Trang sau</button>
-        </nav>}
+        {bookingPageCount > 1 && <Pagination page={currentBookingPage} pageSize={bookingPageSize} total={visibleRows.length} onPageChange={setBookingPage} label="Phân trang booking" />}
       </section>
       {detailsOpen && <div className={`booking-details-host${modalDetails ? ' is-modal' : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBookingDetails(); }}>
         <BookingDetails booking={selected} detail={detail} timezone={timezone} modal={modalDetails} onClose={closeBookingDetails}

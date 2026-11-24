@@ -19,22 +19,22 @@ import org.springframework.stereotype.Service;
 public class RecoveryMailer {
 
     private final ObjectProvider<JavaMailSender> senders;
-    private final AuthSettings policy;
+    private final AuthSettings authSettings;
 
     // Cho phép ứng dụng đăng nhập khởi động dù SMTP chưa được cấu hình.
-    public RecoveryMailer(ObjectProvider<JavaMailSender> senders, AuthSettings policy) {
+    public RecoveryMailer(ObjectProvider<JavaMailSender> senders, AuthSettings authSettings) {
         this.senders = senders;
-        this.policy = policy;
+        this.authSettings = authSettings;
     }
 
     // Gửi mã khôi phục; che thông tin lỗi SMTP khỏi phản hồi người dùng.
     public void send(String email, String code) {
         JavaMailSender sender = senders.getIfAvailable();
         if (
-            sender == null || policy.mailFrom() == null || policy.mailFrom().isBlank()
+            sender == null || authSettings.mailFrom() == null || authSettings.mailFrom().isBlank()
         ) throw new MailUnavailable();
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(policy.mailFrom());
+        message.setFrom(authSettings.mailFrom());
         message.setTo(email);
         message.setSubject("GenZ Cinema & Music Box — Mã xác nhận đặt lại mật khẩu");
         message.setText(

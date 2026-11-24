@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/branch-management/attendance")
 public class AttendanceController {
 
-    private final AttendanceService service;
+    private final AttendanceService attendanceService;
 
-    public AttendanceController(AttendanceService service) {
-        this.service = service;
+    public AttendanceController(AttendanceService attendanceService) {
+        this.attendanceService = attendanceService;
     }
 
     @GetMapping
@@ -29,7 +29,7 @@ public class AttendanceController {
         @AuthenticationPrincipal Identity actor,
         @RequestParam(required = false) LocalDate date
     ) {
-        return service.daily(actor, date);
+        return attendanceService.daily(actor, date);
     }
 
     @GetMapping("/month")
@@ -37,7 +37,7 @@ public class AttendanceController {
         @AuthenticationPrincipal Identity actor,
         @RequestParam(required = false) String month
     ) {
-        return service.monthly(actor, month);
+        return attendanceService.monthly(actor, month);
     }
 
     @PostMapping("/{assignmentId}/record")
@@ -46,7 +46,7 @@ public class AttendanceController {
         @PathVariable UUID assignmentId,
         @RequestBody RecordCommand input
     ) {
-        return service.record(actor, assignmentId, input);
+        return attendanceService.record(actor, assignmentId, input);
     }
 
     @PostMapping("/month/{month}/close")
@@ -55,6 +55,6 @@ public class AttendanceController {
         @PathVariable String month,
         @RequestBody CloseCommand input
     ) {
-        return service.close(actor, month, input);
+        return attendanceService.close(actor, month, input);
     }
 }

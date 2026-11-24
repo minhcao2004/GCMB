@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -216,17 +217,17 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
               {errors.roomId && <p className="booking-inline-error" role="alert">{errors.roomId}</p>}
               {!availableRooms.length && <div className="booking-empty-rooms">Không có phòng phù hợp còn trống trong khung giờ này. Hãy đổi thời gian hoặc số khách.</div>}
               <div className="booking-room-options">
-                {availableRooms.map((item) => <label key={item.id} className={form.roomId === item.id ? 'booking-room-option is-selected' : 'booking-room-option'}>
+                {<PaginatedList pageSize={10}>{availableRooms.map((item) => <label key={item.id} className={form.roomId === item.id ? 'booking-room-option is-selected' : 'booking-room-option'}>
                   <input type="radio" name="roomId" value={item.id} checked={form.roomId === item.id} onChange={updateField} />
                   <img src={item.image} alt={`Không gian ${item.theme}`} />
                   <span className="booking-room-option-copy"><strong>{item.name}</strong><small>{item.theme} · tối đa {item.capacity} khách</small></span>
                   <span className="booking-room-check" aria-hidden="true">✓</span>
-                </label>)}
-                {bookingRooms.filter((item) => !item.operational).map((item) => <div key={item.id} className="booking-room-option is-disabled" aria-disabled="true">
+                </label>)}</PaginatedList>}
+                {<PaginatedList pageSize={10}>{bookingRooms.filter((item) => !item.operational).map((item) => <div key={item.id} className="booking-room-option is-disabled" aria-disabled="true">
                   <img src={item.image} alt="" />
                   <span className="booking-room-option-copy"><strong>{item.name}</strong><small>{item.theme} · chưa thể nhận booking</small></span>
                   <span className="booking-maintenance-label">Bảo trì</span>
-                </div>)}
+                </div>)}</PaginatedList>}
               </div>
             </fieldset>
 

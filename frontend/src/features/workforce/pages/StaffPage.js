@@ -1,3 +1,4 @@
+import { PaginatedTable, Pagination } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -8,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { staffApi, positions, staffStatuses, dateLabel, timeLabel } from '../services/staffApi';
 import StaffDialog from '../components/StaffDialog';
@@ -48,11 +50,13 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
         ...filters,
         branchId: filters.branchId && filters.branchId !== 'NONE' ? filters.branchId : undefined,
         unassigned: filters.branchId === 'NONE',
-        size: 10,
+        size: 5,
       };
       Promise.all([staffApi.list(params, branchScope), staffApi.options(branchScope)])
         .then(([page, options]) => {
           if (active) {
+            const lastPage = Math.max(0, Math.ceil(page.total / 5) - 1);
+            if (filters.page > lastPage) setFilters((old) => ({ ...old, page: lastPage }));
             setData(page);
             setBranches(options.branches);
           }
@@ -113,11 +117,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
   }
   return (
     <section className="staff-page" aria-labelledby="staff-page-title">
-      {notice && (
-        <p className="staff-banner success" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {error && (
         <div className="staff-banner error" role="alert">
           {error}{' '}
@@ -282,7 +282,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
             <section className="staff-card staff-history">
               <h2>Lịch sử cơ sở · {employee.fullName}</h2>
               <div className="staff-table-wrap">
-                <table>
+                <PaginatedTable pageSize={5}>
                   <thead>
                     <tr>
                       <th>Thời điểm</th>
@@ -306,7 +306,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
               {!employee.history.length && (
                 <p className="staff-empty">Nhân viên chưa có lần phân công cơ sở.</p>
@@ -443,32 +443,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                     Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.
                   </p>
                 )}
-                <footer className="staff-pagination">
-                  <span>
-                    Hiển thị {data.items.length ? filters.page * 10 + 1 : 0}–
-                    {data.items.length ? filters.page * 10 + data.items.length : 0} / {data.total}
-                  </span>
-                  <span>10 dòng / trang</span>
-                  <nav aria-label="Phân trang nhân viên">
-                    <button
-                      type="button"
-                      aria-label="Trang trước"
-                      disabled={!filters.page}
-                      onClick={() => setFilters((old) => ({ ...old, page: old.page - 1 }))}
-                    >
-                      ‹
-                    </button>
-                    <span>{filters.page + 1}</span>
-                    <button
-                      type="button"
-                      aria-label="Trang sau"
-                      disabled={(filters.page + 1) * 10 >= data.total}
-                      onClick={() => setFilters((old) => ({ ...old, page: old.page + 1 }))}
-                    >
-                      ›
-                    </button>
-                  </nav>
-                </footer>
+                <Pagination page={filters.page} pageSize={5} total={data.total} disabled={loading} onPageChange={(page) => setFilters((old) => ({ ...old, page }))} label="Phân trang nhân viên" />
               </>
             )}
             {detailLoading && (

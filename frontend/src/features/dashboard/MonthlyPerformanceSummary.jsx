@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './monthly-performance-summary.css';
@@ -22,11 +23,10 @@ const reportHasData = (report) => {
 };
 const reportParams = (month, branchId) => ({month, ...(branchId ? {branchId} : {})});
 
-// BR-103/104/105/107/108: so sánh thu nhập, chi phí, lợi nhuận và cọc tách riêng theo kỳ.
+// BR-103/104/105/107/108/211: compare operating income, paid operating costs, operating profit and margin; CAPEX remains separate.
 const metrics = [
   {key:'revenue', label:'Thu nhập vận hành', kind:'money', direction:'good'},
   {key:'billRevenue', label:'Doanh thu hóa đơn hoàn tất', kind:'money', direction:'good'},
-  {key:'heldDeposits', label:'Cọc đang giữ cuối kỳ', kind:'money'},
   {key:'forfeitedDeposits', label:'Cọc bị tịch thu', kind:'money', direction:'good'},
   {key:'expenses', label:'Chi phí vận hành (gồm lương/ứng lương)', kind:'money', direction:'cost'},
   {key:'operatingExpense', label:'Chi phí vận hành đã thanh toán', kind:'money', direction:'cost'},
@@ -139,7 +139,7 @@ export default function MonthlyPerformanceSummary({ report, month, branchId = ''
     setBusy(format); setError('');
     try {
       const {data}=await api.get('/accounting/reports/monthly-performance/export',{params:{month,...(branchId?{branchId}:{}),format},responseType:'blob'});
-      const url=URL.createObjectURL(data); const a=document.createElement('a'); a.href=url; a.download=`gcmb-monthly-performance-${month}-${branchId || 'toan-chuoi'}.${format}`; a.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      const url=URL.createObjectURL(data); const a=document.createElement('a'); a.href=url; a.download=`gcmb-monthly-performance-${month}.${format}`; a.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000);
     } catch(e) { setError(requestError(e)); }
     finally { setBusy(''); }
   }
@@ -162,12 +162,11 @@ export default function MonthlyPerformanceSummary({ report, month, branchId = ''
   const aTotals = aState.data?.totals || {};
   const bTotals = bState.data?.totals || {};
   const hasCompareMonth = Boolean(monthB);
-  const branchScope = branchId ? report?.results?.[0]?.name || '1 cơ sở' : 'toàn chuỗi';
 
   return <section className="monthly-performance" aria-label="Bảng so sánh hiệu quả kinh doanh">
-    <header><div><span className={`monthly-period-badge ${report?.periodStatus==='CLOSED'?'is-closed':'is-open'}`}>Tháng {month} theo bộ lọc · {report?.periodStatus==='CLOSED'?'Đã khóa':'Đang mở'}</span><h2>So sánh hiệu quả kinh doanh</h2><p>Tháng A {monthA || '—'} · Tháng B {monthB || '—'} · {branchScope} · VND, trừ chỉ tiêu tỷ lệ</p></div><div className="monthly-export-actions"><button type="button" disabled={!!busy} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Đang xuất…':'Xuất Excel (tháng bộ lọc)'}</button><button type="button" disabled={!!busy} onClick={()=>download('csv')}>{busy==='csv'?'Đang xuất…':'Xuất CSV (tháng bộ lọc)'}</button></div></header>
+    <header><div><span className={`monthly-period-badge ${report?.periodStatus==='CLOSED'?'is-closed':'is-open'}`}>Tháng {month} theo bộ lọc · {report?.periodStatus==='CLOSED'?'Đã khóa':'Đang mở'}</span><h2>So sánh hiệu quả kinh doanh</h2></div><div className="monthly-export-actions"><button type="button" disabled={!!busy} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Đang xuất…':'Xuất Excel (tháng bộ lọc)'}</button><button type="button" disabled={!!busy} onClick={()=>download('csv')}>{busy==='csv'?'Đang xuất…':'Xuất CSV (tháng bộ lọc)'}</button></div></header>
     {error&&<p role="alert" className="monthly-error">{error}</p>}
-    <p className="monthly-note">Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất; cọc đang giữ và cọc bị tịch thu được trình bày riêng. Chi phí vận hành chỉ gồm khoản đã thanh toán, không gồm chuyển quỹ nội bộ. Chi đầu tư được trình bày riêng, không trừ vào lợi nhuận vận hành.</p>
+    <p className="monthly-note">Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu; cọc đang giữ không được tính. Chi phí vận hành chỉ gồm khoản đã thanh toán, không gồm chuyển quỹ nội bộ. Chi đầu tư được trình bày riêng, không trừ vào lợi nhuận vận hành.</p>
     <div className="monthly-compare-controls">
       <label>Tháng A<input type="month" value={monthA} max={vnMonth()} onChange={(event)=>setSelectedMonth('A',event.target.value)} aria-label="Chọn tháng A" /></label>
       <label>Tháng B<input type="month" value={monthB} max={vnMonth()} onChange={(event)=>setSelectedMonth('B',event.target.value)} aria-label="Chọn tháng B" /></label>
@@ -181,7 +180,7 @@ export default function MonthlyPerformanceSummary({ report, month, branchId = ''
       <ColumnStatus label="Tháng A" month={monthA} state={aState} />
       <ColumnStatus label="Tháng B" month={monthB} state={bState} isMissingDefault={autoMissingB} />
     </div>
-    <div className="monthly-table-wrap"><table><caption>Chênh lệch tháng {monthA || '—'} − {monthB || '—'} · {branchScope} · VND, trừ chỉ tiêu tỷ lệ</caption><thead><tr><th>Chỉ tiêu</th><th>Tháng A · {monthA || '—'}</th><th>Tháng B · {monthB || '—'}</th><th>Chênh lệch</th><th>% thay đổi</th></tr></thead><tbody>{metrics.map((metric)=>{
+    <div className="monthly-table-wrap"><table><caption>Chênh lệch tính theo Tháng A − Tháng B</caption><thead><tr><th>Chỉ tiêu</th><th>Tháng A · {monthA || '—'}</th><th>Tháng B · {monthB || '—'}</th><th>Chênh lệch</th><th>% thay đổi</th></tr></thead><tbody>{metrics.map((metric)=>{
       const a=aState.status==='ready'?aTotals[metric.key]:null;
       const b=bState.status==='ready'?bTotals[metric.key]:null;
       const change=hasCompareMonth&&a!=null&&b!=null?delta(a,b,metric.kind):null;
@@ -189,6 +188,6 @@ export default function MonthlyPerformanceSummary({ report, month, branchId = ''
       return <tr key={metric.key}><th scope="row">{metric.label}</th><td>{aState.status==='loading'?'Đang tải…':shown(a,metric.kind)}</td><td>{bState.status==='loading'?'Đang tải…':shown(b,metric.kind)}</td><td className={tone(metric,change?.value)}>{change?change.absolute:'—'}</td><td className={tone(metric,pct)}>{fmtChange(pct)}</td></tr>;
     })}</tbody></table></div>
     <p className="monthly-compare-footnote">Biên lợi nhuận: chênh lệch hiển thị theo điểm phần trăm; % thay đổi dùng giá trị Tháng B làm mẫu số. Khi Tháng B bằng 0, % thay đổi hiển thị “—”.</p>
-    <div className="monthly-groups"><section><h3>Cơ cấu hóa đơn và cọc tịch thu · tháng A {monthA || '—'}</h3>{aState.status==='loading'?<p>Đang tải dữ liệu…</p>:aState.status==='error'?<p>Không tải được dữ liệu tháng A.</p>:(aState.data?.revenueGroups||[]).length?<ul>{aState.data.revenueGroups.map((item,i)=><li key={`${item.branchName}-${item.label}-${i}`}><span>{item.branchName} · {item.label}</span><strong>{fmtMoney(item.amount)}</strong></li>)}</ul>:<p>Chưa có dữ liệu hóa đơn hoặc cọc tịch thu trong tháng A.</p>}</section><section><h3>Chi phí theo danh mục · tháng A {monthA || '—'}</h3>{aState.status==='loading'?<p>Đang tải chi phí…</p>:aState.status==='error'?<p>Không tải được dữ liệu tháng A.</p>:(aState.data?.expenseGroups||[]).length?<ul>{aState.data.expenseGroups.map((item)=><li key={item.category}><span>{item.category} · {fmtCount(item.count)} khoản</span><strong>{fmtMoney(item.amount)}</strong></li>)}</ul>:<p>Chưa có chi phí đã thanh toán trong tháng A.</p>}</section></div>
+    <div className="monthly-groups"><section><h3>Cơ cấu doanh thu · tháng A {monthA || '—'}</h3>{aState.status==='loading'?<p>Đang tải doanh thu…</p>:aState.status==='error'?<p>Không tải được dữ liệu tháng A.</p>:(aState.data?.revenueGroups||[]).length?<PaginatedList as="ul" pageSize={10}>{aState.data.revenueGroups.map((item,i)=><li key={`${item.branchName}-${item.label}-${i}`}><span>{item.branchName} · {item.label}</span><strong>{fmtMoney(item.amount)}</strong></li>)}</PaginatedList>:<p>Chưa có dữ liệu doanh thu trong tháng A.</p>}</section><section><h3>Chi phí theo danh mục · tháng A {monthA || '—'}</h3>{aState.status==='loading'?<p>Đang tải chi phí…</p>:aState.status==='error'?<p>Không tải được dữ liệu tháng A.</p>:(aState.data?.expenseGroups||[]).length?<PaginatedList as="ul" pageSize={10}>{aState.data.expenseGroups.map((item)=><li key={item.category}><span>{item.category} · {fmtCount(item.count)} khoản</span><strong>{fmtMoney(item.amount)}</strong></li>)}</PaginatedList>:<p>Chưa có chi phí đã thanh toán trong tháng A.</p>}</section></div>
   </section>;
 }

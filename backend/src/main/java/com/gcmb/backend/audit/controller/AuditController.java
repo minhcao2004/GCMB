@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/head-office/audit-logs")
 public class AuditController {
 
-    private final AuditService service;
+    private final AuditService auditService;
 
-    public AuditController(AuditService service) {
-        this.service = service;
+    public AuditController(AuditService auditService) {
+        this.auditService = auditService;
     }
 
     @GetMapping
@@ -34,16 +34,16 @@ public class AuditController {
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "10") int size
     ) {
-        return service.list(q, action, branchId, from, to, page, size);
+        return auditService.list(q, action, branchId, from, to, page, size);
     }
 
     @GetMapping("/actions")
     public List<String> actions() {
-        return service.actions();
+        return auditService.actions();
     }
 
     @GetMapping("/{id}")
     public AuditDetail detail(@PathVariable UUID id) {
-        return service.detail(id);
+        return auditService.detail(id);
     }
 }

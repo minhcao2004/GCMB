@@ -22,18 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccountProfileService {
 
-    private final AccountProfileRepository repository;
-    private final AuthCrypto crypto;
+    private final AccountProfileRepository accountProfileRepository;
+    private final AuthCrypto authCrypto;
 
-    public AccountProfileService(AccountProfileRepository repository, AuthCrypto crypto) {
-        this.repository = repository;
-        this.crypto = crypto;
+    public AccountProfileService(AccountProfileRepository accountProfileRepository, AuthCrypto authCrypto) {
+        this.accountProfileRepository = accountProfileRepository;
+        this.authCrypto = authCrypto;
     }
 
     @Transactional(readOnly = true)
     public Profile view(UUID actor) {
         try {
-            Profile profile = repository.find(actor);
+            Profile profile = accountProfileRepository.find(actor);
             if (!"ACTIVE".equals(profile.account().status())) {
                 throw new AuthFailure(403, "form", "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
             }
@@ -48,12 +48,12 @@ public class AccountProfileService {
     public Profile update(UUID actor, UpdateProfile input) {
         String email = AuthValidation.email(input.email());
         boolean bankProvided = input.bankName() != null || input.bankAccount() != null || input.bankHolder() != null;
-        if (bankProvided) repository.lockPayroll();
-        String hash = repository.lockActiveAccount(actor);
+        if (bankProvided) accountProfileRepository.lockPayroll();
+        String hash = accountProfileRepository.lockActiveAccount(actor);
         if (hash == null) {
             throw new AuthFailure(403, "form", "Tài khoản không còn hoạt động");
         }
-        Profile before = repository.find(actor);
+        Profile before = accountProfileRepository.find(actor);
         String bankName = before.bankName();
         String bankAccount = before.bankAccount();
         String bankHolder = before.bankHolder();
@@ -85,7 +85,7 @@ public class AccountProfileService {
             fullName = AuthValidation.required(input.fullName(), "fullName", "họ tên", 200, true);
             // BR-119; MSG04.
             phone = AuthValidation.phone(input.phone());
-            if (phone != null && repository.phoneTaken(actor, phone)) throw new AuthFailure(
+            if (phone != null && accountProfileRepository.phoneTaken(actor, phone)) throw new AuthFailure(
                 409,
                 "phone",
                 "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
@@ -105,14 +105,14 @@ public class AccountProfileService {
                 128,
                 false
             );
-            if (!crypto.matches(password, hash)) {
+            if (!authCrypto.matches(password, hash)) {
                 throw new AuthFailure(
                     400,
                     "currentPassword",
                     "Mật khẩu hiện tại không đúng. Vui lòng nhập lại."
                 );
             }
-            if (repository.emailTaken(actor, email)) {
+            if (accountProfileRepository.emailTaken(actor, email)) {
                 throw new AuthFailure(
                     409,
                     "email",
@@ -128,13 +128,13 @@ public class AccountProfileService {
             return before;
         }
         try {
-            repository.update(actor, fullName, phone, email, emailChanged);
-            if (bankChanged) repository.updateBank(actor, bankName, bankAccount, bankHolder);
+            accountProfileRepository.update(actor, fullName, phone, email, emailChanged);
+            if (bankChanged) accountProfileRepository.updateBank(actor, bankName, bankAccount, bankHolder);
         } catch (DuplicateKeyException exception) {
             throw new AuthFailure(409, "email", "Email này đã được sử dụng cho tài khoản khác. Vui lòng nhập email khác.");
         }
-        Profile after = repository.find(actor);
-        repository.audit(before, after);
+        Profile after = accountProfileRepository.find(actor);
+        accountProfileRepository.audit(before, after);
         return after;
     }
 }

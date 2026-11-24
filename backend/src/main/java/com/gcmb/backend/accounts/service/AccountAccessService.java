@@ -25,16 +25,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountAccessService {
 
     private final AccountRepository accountRepository;
-    private final AccountAccessRepository access;
+    private final AccountAccessRepository accountAccessRepository;
     private final BranchAdministrationService branchAdministrationService;
 
     public AccountAccessService(
         AccountRepository accountRepository,
-        AccountAccessRepository access,
+        AccountAccessRepository accountAccessRepository,
         BranchAdministrationService branchAdministrationService
     ) {
         this.accountRepository = accountRepository;
-        this.access = access;
+        this.accountAccessRepository = accountAccessRepository;
         this.branchAdministrationService = branchAdministrationService;
     }
 
@@ -46,10 +46,10 @@ public class AccountAccessService {
                 "Không thể thay đổi quyền hoặc thu hồi chính tài khoản đang đăng nhập"
             );
         }
-        if (!access.lockManagement(actor)) {
+        if (!accountAccessRepository.lockManagement(actor)) {
             throw new AuthFailure(403, "form", "Bạn không có quyền " + action + " đối với tài khoản.");
         }
-        if (!access.lockAccount(id)) {
+        if (!accountAccessRepository.lockAccount(id)) {
             throw new AuthFailure(404, "form", "Tài khoản không tồn tại");
         }
         AccountView account = accountRepository.find(id);
@@ -106,13 +106,13 @@ public class AccountAccessService {
         ) {
             return before;
         }
-        access.setRole(id, roleId, primaryBranch);
+        accountAccessRepository.setRole(id, roleId, primaryBranch);
         if (managed == null) branchAdministrationService.syncAccountManager(id, actor);
         else branchAdministrationService.replaceAccountManagers(id, managed, actor);
         // Buộc đăng nhập lại để phiên cũ không tiếp tục sử dụng phạm vi quyền trước đó.
-        access.revokeTokens(id);
+        accountAccessRepository.revokeTokens(id);
         AccountView after = accountRepository.find(id);
-        access.audit(actor, "SET_ACCOUNT_ROLE", before, after, null);
+        accountAccessRepository.audit(actor, "SET_ACCOUNT_ROLE", before, after, null);
         return after;
     }
 
@@ -126,11 +126,11 @@ public class AccountAccessService {
             true
         );
         AccountView before = editable(id, actor, "đổi trạng thái");
-        access.deactivate(id);
+        accountAccessRepository.deactivate(id);
         branchAdministrationService.syncAccountManager(id, actor);
-        access.revokeTokens(id);
+        accountAccessRepository.revokeTokens(id);
         AccountView after = accountRepository.find(id);
-        access.audit(actor, "DEACTIVATE_USER_ACCOUNT", before, after, reason);
+        accountAccessRepository.audit(actor, "DEACTIVATE_USER_ACCOUNT", before, after, reason);
         return after;
     }
 
@@ -143,7 +143,7 @@ public class AccountAccessService {
             "Không thể thay đổi trạng thái chính tài khoản đang đăng nhập."
         );
         if ("HEAD_OFFICE_MANAGER".equals(actor.role())) {
-            if (!access.lockManagement(actor.id())) throw new AuthFailure(
+            if (!accountAccessRepository.lockManagement(actor.id())) throw new AuthFailure(
                 403,
                 "form",
                 "Bạn không có quyền đổi trạng thái đối với tài khoản."
@@ -159,7 +159,7 @@ public class AccountAccessService {
                 "Bạn không có quyền đổi trạng thái đối với tài khoản."
             );
         }
-        if (!access.lockAccount(id)) throw new AuthFailure(404, "form", "Tài khoản không tồn tại.");
+        if (!accountAccessRepository.lockAccount(id)) throw new AuthFailure(404, "form", "Tài khoản không tồn tại.");
         AccountView before = accountRepository.find(id);
         if (
             "BRANCH_MANAGER".equals(actor.role()) &&
@@ -199,13 +199,13 @@ public class AccountAccessService {
                 "branchId",
                 "Cơ sở hiện không hoạt động. Vui lòng kiểm tra phân công trước khi kích hoạt."
             );
-            access.reactivate(id);
+            accountAccessRepository.reactivate(id);
             if ("BRANCH_MANAGER".equals(before.role())) branchAdministrationService.syncAccountManager(id, actor.id());
-        } else access.deactivate(id);
+        } else accountAccessRepository.deactivate(id);
         // Giữ phân công khi tạm vô hiệu hóa để có thể mở lại; auth luôn kiểm tra trạng thái tài khoản.
-        access.revokeTokens(id);
+        accountAccessRepository.revokeTokens(id);
         AccountView after = accountRepository.find(id);
-        access.audit(
+        accountAccessRepository.audit(
             actor.id(),
             activate ? "REACTIVATE_USER_ACCOUNT" : "DEACTIVATE_USER_ACCOUNT",
             before,
@@ -220,6 +220,6 @@ public class AccountAccessService {
         if (accountRepository.roleId(role) == null) {
             throw new AuthFailure(400, "role", "Vai trò không hợp lệ");
         }
-        return access.permissions(role);
+        return accountAccessRepository.permissions(role);
     }
 }

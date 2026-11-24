@@ -2,11 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
+import { checkoutApi } from '../services/checkoutApi';
 import RoomOverviewPage from './RoomOverviewPage';
 import WalkInDialog from './WalkInDialog';
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
+  Link: ({ to, ...props }) => <a href={to} {...props} />,
   useNavigate: () => mockNavigate,
   useLocation: () => ({ state: null }),
   useParams: () => ({}),
@@ -18,6 +20,7 @@ jest.mock('../../auth/services/authApi', () => ({
 jest.mock('../services/bookingApi', () => ({
   bookingApi: { options: jest.fn(), rooms: jest.fn(), listAll: jest.fn(), availability: jest.fn(), detail: jest.fn(), openWalkIn: jest.fn() },
 }));
+jest.mock('../services/checkoutApi', () => ({ checkoutApi: { preview: jest.fn() } }));
 
 test.each([
   [{ walkInBeforeSubmit: true }, /Chưa gửi yêu cầu mở phòng/, false],
@@ -52,6 +55,11 @@ test('renders the room page while data is loading and when no room is returned',
 
   expect(screen.getByText('Đang kiểm tra phiên đăng nhập…')).toBeInTheDocument();
   expect(await screen.findByRole('heading', { name: 'Phòng', level: 1 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'GenZ · Về Booking' })).toHaveAttribute('href', '/le-tan/bookings');
+  expect(screen.queryByRole('button', { name: 'Tổng quan' })).not.toBeInTheDocument();
+  expect(screen.queryByText('reception')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Thông tin tài khoản' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeEnabled();
   expect(await screen.findByText(/Không có phòng phù hợp với bộ lọc này/)).toBeInTheDocument();
 });
 
@@ -69,6 +77,7 @@ test('keeps an in-house room occupied after its planned end', async () => {
   bookingApi.availability.mockResolvedValue({ rooms: [{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4 }] });
   bookingApi.rooms.mockResolvedValue([{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4, roomTypeName: 'Music Box demo', operatingStatus: 'AVAILABLE' }]);
   bookingApi.detail.mockResolvedValue({ booking, charges: [], meter: null });
+  checkoutApi.preview.mockResolvedValue({ amount: 5701740, depositBalance: 60000, payableAmount: 5642000 });
 
   render(<RoomOverviewPage />);
 
@@ -77,4 +86,6 @@ test('keeps an in-house room occupied after its planned end', async () => {
   expect(screen.getByRole('button', { name: /Đang sử dụng 1/ })).toBeInTheDocument();
   expect(await screen.findByText('01:51:00')).toBeInTheDocument();
   expect(screen.getByText('Đã dừng tại giờ trả dự kiến')).toBeInTheDocument();
+  expect(await screen.findByText('5.642.000đ')).toBeInTheDocument();
+  expect(checkoutApi.preview).toHaveBeenCalledWith('booking-1');
 });

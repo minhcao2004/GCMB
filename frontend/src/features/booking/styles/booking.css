@@ -304,7 +304,6 @@
 .booking-summary-total { margin: 13px 0 15px; padding-top: 12px; border-top: 1px solid var(--booking-line); }
 .booking-summary-total strong { font-size: 12px; }
 .booking-summary-total b { font-size: 18px; }
-.booking-summary-hint { margin: 15px 0 20px; padding: 12px 14px; border-radius: 9px; color: #677384; background: #f5f7fa; font-size: 9px; line-height: 1.8; }
 .booking-submit-button { width: 100%; min-height: 48px; border-radius: 10px; font-size: 13px; }
 .booking-summary-cancel { display: block; margin: 10px auto 0; border: 0; color: #798392; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
 .booking-empty-state { padding: 70px 20px; border-radius: 12px; color: #8190a0; background: #fff; text-align: center; }
@@ -346,11 +345,6 @@
 .booking-checkin-time > div { display: flex; align-items: center; gap: 10px; }
 .booking-checkin-time input { width: min(250px, 65%); height: 42px; border: 1px solid #e3e7eb; border-radius: 8px; padding: 0 12px; color: #282c40; background: #fafbfd; font: inherit; font-size: 12px; font-weight: 700; }
 .booking-checkin-time small { color: #929dad; font-size: 9px; }
-.booking-checkin-receipt { margin: 16px 0; padding: 13px 15px; border-radius: 10px; background: #f5f7fa; }
-.booking-checkin-receipt > strong { display: block; margin-bottom: 8px; color: #687485; font-size: 11px; }
-.booking-checkin-receipt div { display: flex; justify-content: space-between; gap: 10px; color: #505d6d; font-size: 10px; }
-.booking-checkin-receipt b { color: #282c40; }
-.booking-checkin-receipt p { margin: 8px 0 0; color: #8a94a2; font-size: 9px; }
 .booking-confirm-checkin { width: 100%; min-height: 50px; border-radius: 10px; font-size: 13px; }
 
 .booking-cancel-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(30, 39, 52, .43); }
@@ -567,6 +561,7 @@
   .booking-app--fit .booking-content-grid.has-details { grid-template-columns: minmax(0, 2fr) minmax(280px, .94fr); }
   .booking-app--fit .booking-table-card { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .booking-app--fit .booking-table-scroll { flex: 1 1 auto; height: auto; min-height: 0; max-height: none; }
+  .booking-app--fit .booking-table-card > .gcmb-pagination { flex: 0 0 auto; }
   .booking-app--fit .booking-table th { height: 38px; }
   .booking-app--fit .booking-table td { height: 48px; padding-top: 5px; padding-bottom: 5px; }
   .booking-app--fit .booking-details-scroll { padding-top: 8px; padding-bottom: 4px; }

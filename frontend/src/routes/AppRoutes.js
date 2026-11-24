@@ -51,6 +51,7 @@ export default function AppRoutes() {
     <Route path="/le-tan/thanh-toan" element={<CheckoutPage />} />
     <Route path="/le-tan/deposits" element={<DepositManagementPage />} />
     <Route path="/le-tan/don-mon" element={<ReceptionOrdersPage />} />
+    <Route path="/le-tan/tong-quan" element={<Navigate to="/le-tan/bookings" replace />} />
     <Route path="/le-tan" element={<BookingManagementPage />} />
     <Route path="/le-tan/bookings" element={<BookingManagementPage />} />
     <Route path="/le-tan/su-co" element={<BookingManagementPage />} />

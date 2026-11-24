@@ -31,7 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class EquipmentAssetFileStorageService {
     private static final long MAX_BYTES = 20_000_000L;
     private final Path storageRoot;
-    private final CloudinaryStorageService cloudinary;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     // BR-116: Tất cả chứng từ tài sản dùng cùng thư mục quản lý file đã cấu hình cho ứng dụng.
     public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory) {
@@ -40,9 +40,9 @@ public class EquipmentAssetFileStorageService {
 
     @Autowired
     public EquipmentAssetFileStorageService(@Value("${gcmb.attachments.storage-dir:./data/attachments}") String directory,
-                                           CloudinaryStorageService cloudinary) {
+                                           CloudinaryStorageService cloudinaryStorageService) {
         storageRoot = Path.of(directory).toAbsolutePath().normalize();
-        this.cloudinary = cloudinary;
+        this.cloudinaryStorageService = cloudinaryStorageService;
     }
 
     // HuyDV / BR-115/116: file mới dùng Cloudinary khi bật; API vẫn kiểm tra quyền trước khi đọc.
@@ -71,8 +71,8 @@ public class EquipmentAssetFileStorageService {
         UUID id = UUID.randomUUID();
         String sourceName = sourceName(file);
         String objectKey = id + "." + type.extension;
-        if (cloudinary != null && cloudinary.enabled()) {
-            objectKey = cloudinary.store(type.mime, bytes, area);
+        if (cloudinaryStorageService != null && cloudinaryStorageService.enabled()) {
+            objectKey = cloudinaryStorageService.store(type.mime, bytes, area);
             return new StoredFile(id, objectKey, sourceName, type.mime, bytes.length, sha256(bytes), bytes);
         }
         try {
@@ -90,7 +90,7 @@ public class EquipmentAssetFileStorageService {
 
     // BR-115: Chỉ đọc file theo khóa lưu nội bộ, không nhận đường dẫn tùy ý từ request.
     public byte[] read(String objectKey) throws IOException {
-        if (cloudinary != null && cloudinary.owns(objectKey)) return cloudinary.read(objectKey);
+        if (cloudinaryStorageService != null && cloudinaryStorageService.owns(objectKey)) return cloudinaryStorageService.read(objectKey);
         if (objectKey != null && objectKey.startsWith("gdrive:"))
             throw new IOException("Chứng từ cũ chưa có bản lưu local. Vui lòng tải lại chứng từ lên hệ thống.");
         return Files.readAllBytes(resolve(objectKey));
@@ -100,7 +100,7 @@ public class EquipmentAssetFileStorageService {
     public void deleteQuietly(String objectKey) {
         if (objectKey != null && objectKey.startsWith("gdrive:")) return;
         try {
-            if (cloudinary != null && cloudinary.owns(objectKey)) cloudinary.delete(objectKey);
+            if (cloudinaryStorageService != null && cloudinaryStorageService.owns(objectKey)) cloudinaryStorageService.delete(objectKey);
             else Files.deleteIfExists(resolve(objectKey));
         } catch (IOException | RuntimeException ignored) { /* cleanup best effort */ }
     }

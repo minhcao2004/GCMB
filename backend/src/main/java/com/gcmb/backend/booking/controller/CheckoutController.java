@@ -17,14 +17,14 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class CheckoutController {
 
-    private final CheckoutService service;
-    public CheckoutController(CheckoutService service) {
-        this.service = service;
+    private final CheckoutService checkoutService;
+    public CheckoutController(CheckoutService checkoutService) {
+        this.checkoutService = checkoutService;
     }
 
     @GetMapping("/api/v1/reception/bills")
     public java.util.List<Map<String, Object>> list(@AuthenticationPrincipal Identity actor) {
-        return service.list(actor);
+        return checkoutService.list(actor);
     }
 
     @GetMapping("/api/v1/reception/bookings/{id}/checkout")
@@ -32,7 +32,7 @@ public class CheckoutController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.preview(actor, id);
+        return checkoutService.preview(actor, id);
     }
 
     @PostMapping("/api/v1/reception/bookings/{id}/checkout")
@@ -41,7 +41,7 @@ public class CheckoutController {
         @PathVariable UUID id,
         @RequestBody Issue input
     ) {
-        return service.issue(actor, id, input);
+        return checkoutService.issue(actor, id, input);
     }
 
     @GetMapping("/api/v1/reception/bills/{id}")
@@ -49,7 +49,7 @@ public class CheckoutController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.bill(actor, id);
+        return checkoutService.bill(actor, id);
     }
 
     @PostMapping("/api/v1/reception/bills/{id}/payment-plan")
@@ -58,7 +58,7 @@ public class CheckoutController {
         @PathVariable UUID id,
         @RequestBody PaymentPlan input
     ) {
-        return service.plan(actor, id, input);
+        return checkoutService.plan(actor, id, input);
     }
 
     @PostMapping("/api/v1/reception/bills/{id}/complete")
@@ -66,7 +66,7 @@ public class CheckoutController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.complete(actor, id);
+        return checkoutService.complete(actor, id);
     }
 
     @PostMapping("/api/v1/reception/bills/{id}/renew-qr")
@@ -74,7 +74,7 @@ public class CheckoutController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.renew(actor, id);
+        return checkoutService.renew(actor, id);
     }
 
     /** Đặt lại phân bổ tạm khi chưa có khoản thanh toán thực tế. */
@@ -83,7 +83,7 @@ public class CheckoutController {
         @AuthenticationPrincipal Identity actor,
         @PathVariable UUID id
     ) {
-        return service.changeMethod(actor, id);
+        return checkoutService.changeMethod(actor, id);
     }
 
     @PostMapping("/api/v1/payments/sepay/webhook")
@@ -91,7 +91,7 @@ public class CheckoutController {
         @RequestHeader(value = "Authorization", required = false) String authorization,
         @RequestBody Webhook payload
     ) {
-        service.webhook(authorization, payload);
+        checkoutService.webhook(authorization, payload);
         return Map.of("success", true);
     }
 }

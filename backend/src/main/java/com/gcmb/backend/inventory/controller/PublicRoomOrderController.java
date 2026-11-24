@@ -17,31 +17,31 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/public/mr/{mrCode}")
 public class PublicRoomOrderController {
-    private final FoodOrderService service;
+    private final FoodOrderService foodOrderService;
 
-    public PublicRoomOrderController(FoodOrderService service) { this.service = service; }
+    public PublicRoomOrderController(FoodOrderService foodOrderService) { this.foodOrderService = foodOrderService; }
 
     @PostMapping("/session")
     public GuestSession openSession(@PathVariable String mrCode) {
-        return service.openRoomSession(mrCode);
+        return foodOrderService.openRoomSession(mrCode);
     }
 
     @GetMapping("/menu")
     public RoomMenu menu(@PathVariable String mrCode,
             @RequestHeader(name = "X-GCMB-QR-SESSION", required = false) String token) {
-        return service.roomMenu(mrCode, token);
+        return foodOrderService.roomMenu(mrCode, token);
     }
 
     @GetMapping("/orders")
     public List<GuestOrderView> orders(@PathVariable String mrCode,
             @RequestHeader(name = "X-GCMB-QR-SESSION", required = false) String token) {
-        return service.roomOrders(mrCode, token);
+        return foodOrderService.roomOrders(mrCode, token);
     }
 
     @PostMapping("/orders")
     public GuestOrderView submit(@PathVariable String mrCode,
             @RequestHeader(name = "X-GCMB-QR-SESSION", required = false) String token,
             @RequestBody RoomRequest request) {
-        return service.submitRoomRequest(mrCode, token, request);
+        return foodOrderService.submitRoomRequest(mrCode, token, request);
     }
 }

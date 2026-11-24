@@ -1,4 +1,6 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -236,8 +238,7 @@ export default function ReceptionOrdersPage() {
     <div className="food-orders-staff">
       <header className="food-staff-heading"><div><h1>Order &amp; yêu cầu món</h1></div><div className="food-staff-heading-actions"><button type="button" className={`food-secondary food-sound-toggle${soundEnabled ? ' is-enabled' : ''}`} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? 'Tắt âm báo' : 'Bật âm báo'}</button><button type="button" className="food-secondary" disabled={busy} onClick={() => loadPage()}>Làm mới danh sách</button></div></header>
       {soundError && <div className="food-sound-note" role="status">{soundError}</div>}
-      {error && <div className="food-alert" role="alert">{error}</div>}
-      {notice && <div className="food-alert food-alert--success" role="status">{notice}</div>}
+    <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       {incomingOrderAlert && <div className="food-alert food-alert--incoming" role="alert" aria-live="assertive"><div><strong>Khách vừa gửi {incomingOrderAlert.count} yêu cầu món mới.</strong><span>{incomingOrderAlert.roomCodes.length > 0 ? `Phòng ${incomingOrderAlert.roomCodes.slice(0, 3).join(', ')}${incomingOrderAlert.roomCodes.length > 3 ? ` và ${incomingOrderAlert.roomCodes.length - 3} phòng khác` : ''}.` : 'Vui lòng kiểm tra danh sách chờ xác nhận.'}</span></div><button type="button" onClick={() => { setIncomingOrderAlert(null); setStatus('PENDING'); document.getElementById('food-staff-order-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem yêu cầu</button></div>}
 
       <section className="food-staff-add">
@@ -256,7 +257,7 @@ export default function ReceptionOrdersPage() {
 
       <section className="food-staff-queue" id="food-staff-order-queue">
         <div className="food-section-title"><div><h2>Danh sách order</h2><p>{orders.length} order trong bộ lọc</p></div><div className="food-filter-tabs" role="group" aria-label="Lọc trạng thái order">{filters.map(([value, label]) => <button key={value} className={status === value ? 'is-active' : ''} onClick={() => setStatus(value)}>{label}</button>)}</div></div>
-        {orders.length === 0 ? <div className="food-empty"><h3>Không có order trong mục này</h3><p>Yêu cầu mới từ mã MR sẽ xuất hiện ở đây.</p></div> : <div className="food-staff-order-list">{orders.map((order) => <article className="food-staff-order" key={order.id}>
+        {orders.length === 0 ? <div className="food-empty"><h3>Không có order trong mục này</h3><p>Yêu cầu mới từ mã MR sẽ xuất hiện ở đây.</p></div> : <PaginatedList as="div" pageSize={5} className="food-staff-order-list">{orders.map((order) => <article className="food-staff-order" key={order.id}>
           <header><div><h3>{order.code} <span>· {order.roomCode}</span></h3><p>{order.bookingCode} · {order.customerName} · {new Date(order.createdAt).toLocaleString('vi-VN')}</p></div><span className={`food-order-status status-${order.status.toLowerCase()}`}>{statusLabel[order.status] || order.status}</span></header>
           <div className="food-staff-lines">{order.items.map((item) => {
             const quantity = quantities[order.id]?.[item.menuItemId] ?? Number(item.quantity);
@@ -271,7 +272,7 @@ export default function ReceptionOrdersPage() {
             {order.status === 'PENDING' && <div className="food-order-actions"><label>Phân công<select value={assignments[order.id] || ''} onChange={(event) => setAssignments((current) => ({ ...current, [order.id]: event.target.value }))}><option value="">Chọn lễ tân đang trong ca</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label><button className="food-primary" disabled={busy || !assignments[order.id]} onClick={() => withAction(() => foodOrderApi.confirmRoomOrder(order.id, { assignedEmployeeId: assignments[order.id], items: order.items.map((item) => ({ menuItemId: item.menuItemId, quantity: quantities[order.id]?.[item.menuItemId] ?? Number(item.quantity) })) }), 'Đã xác nhận order, ghi nhận phí và xử lý tồn kho.')}>Xác nhận</button><button className="food-danger-button" disabled={busy} onClick={() => withAction(() => foodOrderApi.rejectRoomOrder(order.id), 'Đã từ chối yêu cầu món.')}>Từ chối</button></div>}
             {order.status === 'ACCEPTED' && <button className="food-primary" disabled={busy} onClick={() => withAction(() => foodOrderApi.markServed(order.id), 'Đã cập nhật order thành đã phục vụ.')}>Đánh dấu đã phục vụ</button>}
           </footer>
-        </article>)}</div>}
+        </article>)}</PaginatedList>}
       </section>
     </div>
   </AppShell>;

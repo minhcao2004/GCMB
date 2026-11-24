@@ -1,9 +1,11 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Author: HuyDV
  * Created: 27/10/2026
  * Description: UC-87..89, chấm công theo ngày/ca, tổng hợp và chốt công tháng theo mockup.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { today } from '../services/shiftApi';
 import { attendanceApi, hoursLabel, dateTimeLabel } from '../services/attendanceApi';
@@ -141,11 +143,7 @@ export default function AttendancePage({
           </span>
         )}
       </header>
-      {notice && (
-        <p className="shift-message success" role="status">
-          {notice}
-        </p>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {monthly && payrollError && (
         <p className="shift-message error" role="alert">
           Không tải được tiền lương: {payrollError}
@@ -251,7 +249,7 @@ export default function AttendancePage({
             )}
             <div className="attendance-table-scroll">
               {monthly ? (
-                <table className="attendance-table monthly-payroll-table">
+                <PaginatedTable pageSize={5} className="attendance-table monthly-payroll-table">
                   <thead>
                     <tr>
                       <th>Chọn</th>
@@ -341,9 +339,9 @@ export default function AttendancePage({
                       );
                     })}
                   </tbody>
-                </table>
+                </PaginatedTable>
               ) : (
-                <table className="attendance-table">
+                <PaginatedTable pageSize={10} className="attendance-table">
                   <thead>
                     <tr>
                       <th>Nhân viên</th>
@@ -386,7 +384,7 @@ export default function AttendancePage({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               )}
               {!(monthly ? employees.length : rows.length) && (
                 <p className="attendance-empty" role="status">

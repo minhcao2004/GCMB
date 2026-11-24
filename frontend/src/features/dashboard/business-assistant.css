@@ -6,6 +6,8 @@
 .business-assistant :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid #087f93; outline-offset: 3px; }
 .business-assistant-launcher { position: fixed; bottom: 22px; right: 24px; z-index: 1050; display: flex; align-items: center; gap: 8px; padding: 8px 16px 8px 10px; border: 1px solid #f4bfdb; border-radius: 28px; background: #fff; color: #af0763; font-weight: 700; box-shadow: 0 6px 20px #41263824; min-height: 52px; }
 .business-assistant .business-assistant-launcher { font-weight: 700; }
+.business-assistant .business-assistant-launcher { touch-action: none; user-select: none; cursor: grab; }
+.business-assistant .business-assistant-launcher:active { cursor: grabbing; }
 .business-assistant-launcher svg { width: 38px; height: 38px; }
 .business-assistant-launcher:hover, .business-assistant-launcher.is-open { background: #fdecf5; border-color: #ed188d; }
 .business-assistant-panel { position: fixed; bottom: 90px; right: 24px; z-index: 1050; display: flex; flex-direction: column; width: min(var(--assistant-width, 470px), calc(100vw - 32px)); height: min(var(--assistant-height, 760px), calc(100dvh - 112px)); min-height: 240px; overflow: hidden; border: 1px solid #dce3ed; border-radius: 16px; background: white; box-shadow: 0 16px 48px #2732482e; }

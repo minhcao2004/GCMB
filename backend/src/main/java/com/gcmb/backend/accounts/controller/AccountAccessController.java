@@ -20,15 +20,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping({ "/api/v1/head-office/accounts", "/api/v1/branch-management/accounts" })
 public class AccountAccessController {
 
-    private final AccountAccessService service;
+    private final AccountAccessService accountAccessService;
 
-    public AccountAccessController(AccountAccessService service) {
-        this.service = service;
+    public AccountAccessController(AccountAccessService accountAccessService) {
+        this.accountAccessService = accountAccessService;
     }
 
     @GetMapping("/permissions")
     public List<PermissionView> permissions(@RequestParam String role) {
-        return service.permissions(role);
+        return accountAccessService.permissions(role);
     }
 
     @PostMapping("/{id}/role")
@@ -37,7 +37,7 @@ public class AccountAccessController {
         @RequestBody SetRole input,
         @AuthenticationPrincipal Identity actor
     ) {
-        return service.setRole(id, input, actor.id());
+        return accountAccessService.setRole(id, input, actor.id());
     }
 
     @PostMapping("/{id}/deactivate")
@@ -46,11 +46,11 @@ public class AccountAccessController {
         @RequestBody Deactivate input,
         @AuthenticationPrincipal Identity actor
     ) {
-        return service.changeStatus(id, input, actor, false);
+        return accountAccessService.changeStatus(id, input, actor, false);
     }
 
     @PostMapping("/{id}/reactivate")
     public AccountView reactivate(@PathVariable UUID id, @AuthenticationPrincipal Identity actor) {
-        return service.changeStatus(id, null, actor, true);
+        return accountAccessService.changeStatus(id, null, actor, true);
     }
 }

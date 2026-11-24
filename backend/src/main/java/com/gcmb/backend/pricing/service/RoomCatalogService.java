@@ -34,14 +34,14 @@ public class RoomCatalogService {
     private static final Pattern ROOM_CODE = Pattern.compile("[A-Z0-9_-]{2,60}");
     private static final Pattern COMBO_CODE = Pattern.compile("[A-Z0-9_-]{2,60}");
     private static final Pattern PRICE_RULE_CODE = Pattern.compile("[A-Z0-9_-]{2,60}");
-    private final JdbcTemplate db;
+    private final JdbcTemplate jdbcTemplate;
 
-    public RoomCatalogService(JdbcTemplate db) {
-        this.db = db;
+    public RoomCatalogService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public List<RoomTypeView> roomTypes() {
-        return db.query("""
+        return jdbcTemplate.query("""
             SELECT id, code, name, mode, capacity, description, active
             FROM gcmb.room_type ORDER BY code
             """, (rs, n) -> new RoomTypeView(
@@ -55,7 +55,7 @@ public class RoomCatalogService {
     public RoomTypeView createRoomType(RoomTypeCommand command) {
         validateRoomType(command);
         String code = command.code().trim().toUpperCase(java.util.Locale.ROOT);
-        Long duplicate = db.queryForObject(
+        Long duplicate = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM gcmb.room_type WHERE upper(code)=?", Long.class, code);
         if (duplicate != null && duplicate > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -63,7 +63,7 @@ public class RoomCatalogService {
         }
         UUID id = UUID.randomUUID();
         try {
-            db.update("""
+            jdbcTemplate.update("""
                 INSERT INTO gcmb.room_type(id, code, name, mode, capacity, description, active)
                 VALUES (?, ?, ?, ?, ?, ?, true)
                 """, id, code, command.name().trim(), command.serviceType(), command.capacity(),
@@ -84,7 +84,7 @@ public class RoomCatalogService {
         if (!current.code().equals(command.code().trim().toUpperCase(java.util.Locale.ROOT))) {
             throw bad("Không được thay đổi mã hạng phòng khi chỉnh sửa.");
         }
-        int updated = db.update("""
+        int updated = jdbcTemplate.update("""
             UPDATE gcmb.room_type SET name=?, mode=?, capacity=?, description=? WHERE id=?
             """, command.name().trim(), command.serviceType(), command.capacity(),
             command.description() == null ? "" : command.description().trim(), id);
@@ -97,7 +97,7 @@ public class RoomCatalogService {
     // Chỉ ngừng chọn cho phòng mới, giữ nguyên các tham chiếu lịch sử.
     @Transactional
     public RoomTypeView deactivateRoomType(UUID id) {
-        int updated = db.update("UPDATE gcmb.room_type SET active=false WHERE id=?", id);
+        int updated = jdbcTemplate.update("UPDATE gcmb.room_type SET active=false WHERE id=?", id);
         if (updated == 0) {
             throw missing("Không tìm thấy hạng phòng.");
         }
@@ -108,12 +108,12 @@ public class RoomCatalogService {
     // BR-118: không xóa hạng phòng đang được lịch sử booking, giá hoặc combo tham chiếu.
     public void deleteRoomType(UUID id) {
         // Khóa bản ghi trước khi kiểm tra; FK RESTRICT bảo vệ cả trường hợp ghi đồng thời.
-        List<UUID> found = db.queryForList(
+        List<UUID> found = jdbcTemplate.queryForList(
             "SELECT id FROM gcmb.room_type WHERE id=? FOR UPDATE", UUID.class, id);
         if (found.isEmpty()) {
             throw missing("Không tìm thấy hạng phòng.");
         }
-        Boolean used = db.queryForObject("""
+        Boolean used = jdbcTemplate.queryForObject("""
             SELECT EXISTS(SELECT 1 FROM gcmb.room WHERE room_type_id=?)
                 OR EXISTS(SELECT 1 FROM gcmb.price_rule WHERE room_type_id=?)
                 OR EXISTS(SELECT 1 FROM gcmb.combo WHERE room_type_id=?)
@@ -123,7 +123,7 @@ public class RoomCatalogService {
                 "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
         }
         try {
-            db.update("DELETE FROM gcmb.room_type WHERE id=?", id);
+            jdbcTemplate.update("DELETE FROM gcmb.room_type WHERE id=?", id);
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
@@ -139,7 +139,7 @@ public class RoomCatalogService {
           FROM gcmb.price_rule p JOIN gcmb.room_type rt ON rt.id=p.room_type_id
           WHERE p.branch_id IS NULL
           """+roomFilter+activeFilter+" ORDER BY rt.name,p.code,p.version DESC";
-        return roomTypeId==null?db.query(sql,(rs,n)->mapPriceRule(rs.getObject("id",UUID.class),rs.getString("code"),rs.getInt("version"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getArray("weekdays"),rs.getObject("valid_from",LocalDate.class),rs.getObject("valid_to",LocalDate.class),rs.getInt("minute_from"),rs.getInt("minute_to"),rs.getBigDecimal("hourly_price"),rs.getBoolean("active"))):db.query(sql,(rs,n)->mapPriceRule(rs.getObject("id",UUID.class),rs.getString("code"),rs.getInt("version"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getArray("weekdays"),rs.getObject("valid_from",LocalDate.class),rs.getObject("valid_to",LocalDate.class),rs.getInt("minute_from"),rs.getInt("minute_to"),rs.getBigDecimal("hourly_price"),rs.getBoolean("active")),roomTypeId);
+        return roomTypeId==null?jdbcTemplate.query(sql,(rs,n)->mapPriceRule(rs.getObject("id",UUID.class),rs.getString("code"),rs.getInt("version"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getArray("weekdays"),rs.getObject("valid_from",LocalDate.class),rs.getObject("valid_to",LocalDate.class),rs.getInt("minute_from"),rs.getInt("minute_to"),rs.getBigDecimal("hourly_price"),rs.getBoolean("active"))):jdbcTemplate.query(sql,(rs,n)->mapPriceRule(rs.getObject("id",UUID.class),rs.getString("code"),rs.getInt("version"),rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getArray("weekdays"),rs.getObject("valid_from",LocalDate.class),rs.getObject("valid_to",LocalDate.class),rs.getInt("minute_from"),rs.getInt("minute_to"),rs.getBigDecimal("hourly_price"),rs.getBoolean("active")),roomTypeId);
     }
 
     @Transactional
@@ -147,9 +147,9 @@ public class RoomCatalogService {
         validatePriceRule(c);
         roomType(c.roomTypeId());
         String code=c.code().trim().toUpperCase();
-        Long exists=db.queryForObject("SELECT COUNT(*) FROM gcmb.price_rule WHERE code=? AND active=true",Long.class,code);
+        Long exists=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM gcmb.price_rule WHERE code=? AND active=true",Long.class,code);
         if(exists!=null&&exists>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã quy tắc giá đang được sử dụng.");
-        Long version=db.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.price_rule WHERE code=?",Long.class,code);
+        Long version=jdbcTemplate.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.price_rule WHERE code=?",Long.class,code);
         UUID id=UUID.randomUUID();
         insertPriceRule(id,code,version==null?1:version.intValue(),c);
         return priceRule(id);
@@ -160,8 +160,8 @@ public class RoomCatalogService {
         validatePriceRule(c);
         PriceRuleView old=priceRule(id);
         if(!old.code().equalsIgnoreCase(c.code().trim())) throw bad("Không thể đổi mã quy tắc khi đang sửa.");
-        db.update("UPDATE gcmb.price_rule SET active=false WHERE id=?",id);
-        Long version=db.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.price_rule WHERE code=?",Long.class,old.code());
+        jdbcTemplate.update("UPDATE gcmb.price_rule SET active=false WHERE id=?",id);
+        Long version=jdbcTemplate.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.price_rule WHERE code=?",Long.class,old.code());
         UUID nextId=UUID.randomUUID();
         insertPriceRule(nextId,old.code(),version==null?1:version.intValue(),c);
         return priceRule(nextId);
@@ -170,7 +170,7 @@ public class RoomCatalogService {
     @Transactional
     public void deletePriceRule(UUID id) {
         try {
-            int deleted=db.update("DELETE FROM gcmb.price_rule WHERE id=? AND branch_id IS NULL",id);
+            int deleted=jdbcTemplate.update("DELETE FROM gcmb.price_rule WHERE id=? AND branch_id IS NULL",id);
             if(deleted==0) throw missing("Không tìm thấy quy tắc giá.");
         } catch(DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể xóa quy tắc giá vì đã được dùng trong hóa đơn.");
@@ -179,7 +179,7 @@ public class RoomCatalogService {
 
     private void insertPriceRule(UUID id,String code,int version,PriceRuleCommand c) {
         // JdbcTemplate exposes the connection through a callback so PostgreSQL receives a smallint[] value.
-        db.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+        jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
             Short[] dayValues=c.weekdays().stream().map(Integer::shortValue).toArray(Short[]::new);
             java.sql.Array weekdays=connection.createArrayOf("smallint",dayValues);
             try(var statement=connection.prepareStatement("""
@@ -197,7 +197,7 @@ public class RoomCatalogService {
     }
 
     private PriceRuleView priceRule(UUID id) {
-        List<PriceRuleView> found=db.query("""
+        List<PriceRuleView> found=jdbcTemplate.query("""
           SELECT p.id,p.code,p.version,rt.id AS room_type_id,rt.name AS room_type_name,p.name,p.weekdays,
                  p.valid_from,p.valid_to,p.minute_from,p.minute_to,p.hourly_price,p.active
           FROM gcmb.price_rule p JOIN gcmb.room_type rt ON rt.id=p.room_type_id WHERE p.id=?
@@ -246,10 +246,10 @@ public class RoomCatalogService {
                 c.minute_from,c.minute_to,c.price,c.active,c.included_fnb_quantity,c.included_food_quantity
               FROM gcmb.combo c JOIN gcmb.room_type rt ON rt.id=c.room_type_id
             ) catalogue WHERE (CAST(? AS varchar) IS NULL OR kind=?)"""+filter+roomFilter+" ORDER BY room_type_name,kind,code";
-        if(roomTypeId==null) return db.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
+        if(roomTypeId==null) return jdbcTemplate.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
             rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),
             (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active"),rs.getObject("branch_id",UUID.class),(Integer)rs.getObject("included_fnb_quantity"),(Integer)rs.getObject("included_food_quantity")),kind,kind);
-        return db.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
+        return jdbcTemplate.query(sql,(rs,n)->priceItem(rs.getObject("id",UUID.class),rs.getString("kind"),rs.getString("code"),
             rs.getObject("room_type_id",UUID.class),rs.getString("room_type_name"),rs.getString("name"),rs.getString("description"),
             (Integer)rs.getObject("duration_minutes"),(Integer)rs.getObject("minute_from"),(Integer)rs.getObject("minute_to"),rs.getBigDecimal("price"),rs.getBoolean("active"),rs.getObject("branch_id",UUID.class),(Integer)rs.getObject("included_fnb_quantity"),(Integer)rs.getObject("included_food_quantity")),kind,kind,roomTypeId);
     }
@@ -262,10 +262,10 @@ public class RoomCatalogService {
         RoomTypeView room=roomType(roomTypeId);
         if("HOURLY".equals(kind)) {
             String name=room.name()+" · Giờ lẻ";
-            Integer active=db.queryForObject("SELECT COUNT(*) FROM gcmb.price_rule WHERE room_type_id=? AND name=? AND branch_id IS NULL AND active=true",Integer.class,roomTypeId,name);
+            Integer active=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM gcmb.price_rule WHERE room_type_id=? AND name=? AND branch_id IS NULL AND active=true",Integer.class,roomTypeId,name);
             if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Hạng phòng đã có giá giờ lẻ đang áp dụng.");
             UUID id=UUID.randomUUID();
-            db.update("""
+            jdbcTemplate.update("""
               INSERT INTO gcmb.price_rule(id,room_type_id,branch_id,name,valid_from,day_kind,minute_from,minute_to,
                 hourly_price,overtime_hourly_price,billing_step_minutes,priority,active)
               VALUES(?,?,NULL,?,CURRENT_DATE,'ALL',0,1440,?,?,60,100,true)
@@ -273,12 +273,12 @@ public class RoomCatalogService {
             return price(id,"HOURLY");
         }
         // BR-176: mã combo chỉ được dùng một lần trong các combo đang hoạt động.
-        Integer active=db.queryForObject("SELECT COUNT(*) FROM gcmb.combo WHERE code=? AND active=true",Integer.class,c.code());
+        Integer active=jdbcTemplate.queryForObject("SELECT COUNT(*) FROM gcmb.combo WHERE code=? AND active=true",Integer.class,c.code());
         if(active!=null&&active>0) throw new ResponseStatusException(HttpStatus.CONFLICT,
             "Mã combo “" + c.code().trim().toUpperCase(java.util.Locale.ROOT) + "” đã tồn tại trong danh sách combo đang hoạt động. Vui lòng nhập mã khác.");
-        Long version=db.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.combo WHERE code=?",Long.class,c.code());
+        Long version=jdbcTemplate.queryForObject("SELECT COALESCE(MAX(version),0)+1 FROM gcmb.combo WHERE code=?",Long.class,c.code());
         UUID id=UUID.randomUUID();
-        db.update("""
+        jdbcTemplate.update("""
           INSERT INTO gcmb.combo(id,code,version,room_type_id,mode,name,duration_minutes,price,deposit_required,
             overtime_hourly_price,valid_from,active,branch_id,day_group,minute_from,minute_to,min_guests,included_fnb_quantity,included_food_quantity,
             included_description,priority)
@@ -292,11 +292,11 @@ public class RoomCatalogService {
         validatePrice(kind,c);
         if("HOURLY".equals(kind)) {
             PriceCatalogItem old=price(id,"HOURLY");
-            db.update("UPDATE gcmb.price_rule SET active=false WHERE id=?",id);
+            jdbcTemplate.update("UPDATE gcmb.price_rule SET active=false WHERE id=?",id);
             return createPrice("HOURLY",old.roomTypeId(),c);
         }
         PriceCatalogItem old=price(id,"COMBO");
-        db.update("UPDATE gcmb.combo SET active=false,valid_to=GREATEST(CURRENT_TIMESTAMP+interval '1 microsecond',valid_from+interval '1 microsecond') WHERE id=?",id);
+        jdbcTemplate.update("UPDATE gcmb.combo SET active=false,valid_to=GREATEST(CURRENT_TIMESTAMP+interval '1 microsecond',valid_from+interval '1 microsecond') WHERE id=?",id);
         UUID targetRoomTypeId=c.roomTypeId()==null?old.roomTypeId():c.roomTypeId();
         PriceCommand next=new PriceCommand(targetRoomTypeId,old.code(),c.name(),c.description(),c.durationMinutes(),c.minuteFrom(),c.minuteTo(),c.price(),c.includedFnbQuantity(),c.includedFoodQuantity());
         return createPrice("COMBO",targetRoomTypeId,next);
@@ -307,8 +307,8 @@ public class RoomCatalogService {
         if(!"COMBO".equals(kind)) throw bad("Chỉ hỗ trợ xóa combo tại chức năng này.");
         price(id,kind);
         try {
-            db.update("DELETE FROM gcmb.combo_item ci WHERE ci.combo_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.booking_combo_item bci WHERE bci.combo_item_id=ci.id)",id);
-            int deleted=db.update("DELETE FROM gcmb.combo WHERE id=?",id);
+            jdbcTemplate.update("DELETE FROM gcmb.combo_item ci WHERE ci.combo_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.booking_combo_item bci WHERE bci.combo_item_id=ci.id)",id);
+            int deleted=jdbcTemplate.update("DELETE FROM gcmb.combo WHERE id=?",id);
             if(deleted==0) throw missing("Không tìm thấy combo.");
         } catch(DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -317,7 +317,7 @@ public class RoomCatalogService {
     }
 
     private PriceCatalogItem price(UUID id,String kind) {
-        List<PriceCatalogItem> found=db.query("""
+        List<PriceCatalogItem> found=jdbcTemplate.query("""
           SELECT * FROM (
             SELECT p.id,'HOURLY' AS kind,'HOURLY_'||rt.code AS code,rt.id AS room_type_id,rt.name AS room_type_name,p.name,
               '' AS description,NULL::integer AS duration_minutes,p.minute_from,p.minute_to,p.hourly_price AS price,p.active,NULL::uuid AS branch_id,NULL::integer AS included_fnb_quantity,NULL::integer AS included_food_quantity
@@ -332,7 +332,7 @@ public class RoomCatalogService {
     }
 
     private RoomTypeView roomType(UUID id) {
-        List<RoomTypeView> found=db.query("SELECT id,code,name,mode,capacity,description,active FROM gcmb.room_type WHERE id=?",(rs,n)->new RoomTypeView(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("mode"),rs.getInt("capacity"),rs.getString("description"),rs.getBoolean("active")),id);
+        List<RoomTypeView> found=jdbcTemplate.query("SELECT id,code,name,mode,capacity,description,active FROM gcmb.room_type WHERE id=?",(rs,n)->new RoomTypeView(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("mode"),rs.getInt("capacity"),rs.getString("description"),rs.getBoolean("active")),id);
         if(found.isEmpty()) throw missing("Không tìm thấy hạng phòng.");
         return found.get(0);
     }

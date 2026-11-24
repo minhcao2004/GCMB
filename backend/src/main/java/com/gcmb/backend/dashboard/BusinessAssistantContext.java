@@ -186,4 +186,93 @@ public class BusinessAssistantContext {
         "monthlyHistory", periods, "branchSummary", new ArrayList<>(summaries.values()), "hasData", !periods.isEmpty(),
         "notes", "Chỉ liệt kê tháng có hoạt động ghi nhận trong phạm vi; tháng không xuất hiện không có nghĩa database chưa được lưu. Không coi tháng dở dang tương đương tháng đầy đủ. Danh mục phòng và tỷ lệ lấp đầy dùng năng lực phòng hiện tại, không phải ảnh chụp lịch sử cấu hình phòng."));
   }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
+  public Map<String, Object> popularity(Identity actor, String kind, String start, String end, UUID branchId, int limit) {
+    authorize(actor);
+    if (!Set.of("ROOM_COMBO", "FNB_ITEM").contains(kind))
+      throw new AuthFailure(400, "kind", "Chọn thống kê combo phòng hoặc món ăn, đồ uống.");
+    if (limit < 1 || limit > 20) throw new AuthFailure(400, "limit", "Chỉ lấy từ 1 đến 20 mục đứng đầu.");
+    var today = LocalDate.now(FinancialPeriodService.ZONE);
+    YearMonth from, to;
+    try {
+      from = start == null || start.isBlank() ? YearMonth.from(today) : YearMonth.parse(start);
+      to = end == null || end.isBlank() ? YearMonth.from(today) : YearMonth.parse(end);
+    } catch (RuntimeException failure) { throw new AuthFailure(400, "month", "Tháng tra cứu phải có định dạng YYYY-MM."); }
+    if (from.getYear() < 2000 || from.isAfter(to) || to.isAfter(YearMonth.from(today)))
+      throw new AuthFailure(400, "month", "Khoảng tháng tra cứu không hợp lệ hoặc thuộc tương lai.");
+    if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
+      throw new AuthFailure(400, "branchId", "Không tìm thấy cơ sở cần tra cứu.");
+    LocalDate until = to.plusMonths(1).atDay(1).isAfter(today.plusDays(1)) ? today.plusDays(1) : to.plusMonths(1).atDay(1);
+    Object[] args = { from.atDay(1), until, branchId, branchId };
+    Object[] rankedArgs = { from.atDay(1), until, branchId, branchId, limit };
+    Map<String, Object> coverage;
+    List<Map<String, Object>> ranking;
+    String notes;
+    if ("ROOM_COMBO".equals(kind)) {
+      String scoped = """
+        WITH scoped AS (
+          SELECT b.id,b.status,b.room_type_id FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id
+          WHERE b.status IN ('CONFIRMED','IN_HOUSE','COMPLETED')
+            AND (b.planned_start AT TIME ZONE br.timezone)::date>=? AND (b.planned_start AT TIME ZONE br.timezone)::date<?
+            AND (?::uuid IS NULL OR b.branch_id=?)
+        )
+        """;
+      coverage = db.queryForMap(scoped + """
+        SELECT count(*) AS "eligibleBookings",count(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM gcmb.booking_charge c WHERE c.booking_id=scoped.id AND c.status='ACTIVE' AND c.kind='COMBO'
+        )) AS "bookingsWithCombo" FROM scoped
+        """, args);
+      ranking = db.queryForList(scoped + """
+        , grouped AS (
+          SELECT COALESCE(NULLIF(c.pricing_snapshot->>'name',''),c.description,p.name,'Combo chưa rõ tên') AS "comboName",
+            rt.name AS "roomTypeName",rt.mode,count(DISTINCT b.id) AS "bookingCount",
+            count(DISTINCT b.id) FILTER (WHERE b.status='COMPLETED') AS "completedBookingCount",
+            COALESCE(sum(l.amount) FILTER (WHERE bill.status='SETTLED'),0) AS "settledLineAmount"
+          FROM scoped b JOIN gcmb.booking_charge c ON c.booking_id=b.id AND c.status='ACTIVE' AND c.kind='COMBO'
+          LEFT JOIN gcmb.combo p ON p.id=c.combo_id
+          LEFT JOIN gcmb.room_type rt ON rt.id=COALESCE(p.room_type_id,b.room_type_id)
+          LEFT JOIN gcmb.bill_line l ON l.booking_charge_id=c.id LEFT JOIN gcmb.bill bill ON bill.id=l.bill_id
+          GROUP BY COALESCE(NULLIF(c.pricing_snapshot->>'code',''),p.code,c.combo_id::text,c.description),
+            COALESCE(NULLIF(c.pricing_snapshot->>'name',''),c.description,p.name,'Combo chưa rõ tên'),rt.id,rt.name,rt.mode
+        )
+        SELECT *,round("bookingCount"*100.0/nullif(sum("bookingCount") OVER (),0),2) AS "selectionSharePercent"
+        FROM grouped ORDER BY "bookingCount" DESC,"comboName","roomTypeName",mode LIMIT ?
+        """, rankedArgs);
+      notes = "Xếp theo số booking khác nhau có dòng combo còn hiệu lực, theo ngày dự kiến sử dụng đã đến; loại bản nháp, hủy và không đến. Một booking có nhiều combo khác nhau có thể được tính ở mỗi combo. Tỷ trọng là tỷ trọng lượt chọn combo, không phải toàn bộ booking. Gộp phiên bản cùng mã, tên và hạng phòng; đổi tên tách riêng. Tiền dòng combo đã tất toán chưa phân bổ giảm giá hoặc hoàn tiền, không phải doanh thu thuần. Không có dữ liệu đánh giá sở thích khách; chỉ đo mức độ được đặt. Hạng phòng/loại hình tham chiếu danh mục hiện tại.";
+    } else {
+      String scoped = """
+        WITH scoped AS (
+          SELECT l.menu_item_id,l.name_snapshot,l.booking_combo_item_id,l.unit_price,
+            line.quantity,line.amount,bill.id AS bill_id,o.booking_id,m.category
+          FROM gcmb.bill_line line JOIN gcmb.bill bill ON bill.id=line.bill_id AND bill.status='SETTLED'
+          JOIN gcmb.branch br ON br.id=bill.branch_id JOIN gcmb.order_line l ON l.id=line.order_line_id AND l.branch_id=bill.branch_id
+          JOIN gcmb.fb_order o ON o.id=l.order_id AND o.branch_id=bill.branch_id AND o.booking_id=l.booking_id AND o.status IN ('ACCEPTED','SERVED')
+          JOIN gcmb.booking b ON b.id=o.booking_id AND b.id=bill.booking_id AND b.branch_id=bill.branch_id AND b.status IN ('CONFIRMED','IN_HOUSE','COMPLETED')
+          JOIN gcmb.menu_item m ON m.id=l.menu_item_id AND m.branch_id=bill.branch_id AND m.kind IN ('PACKAGED','PREPARED')
+          WHERE (bill.completed_at AT TIME ZONE br.timezone)::date>=? AND (bill.completed_at AT TIME ZONE br.timezone)::date<?
+            AND (?::uuid IS NULL OR bill.branch_id=?)
+        )
+        """;
+      coverage = db.queryForMap(scoped + """
+        SELECT count(*) FILTER (WHERE booking_combo_item_id IS NULL AND unit_price>0) AS "paidItemLines",
+          COALESCE(sum(quantity) FILTER (WHERE booking_combo_item_id IS NOT NULL OR unit_price=0),0) AS "excludedGiftQuantity"
+        FROM scoped
+        """, args);
+      ranking = db.queryForList(scoped + """
+        , grouped AS (
+          SELECT min(name_snapshot) AS "productName",min(category) AS category,sum(quantity) AS "soldQuantity",
+            count(DISTINCT bill_id) AS "billCount",count(DISTINCT booking_id) AS "bookingCount",sum(amount) AS "settledLineAmount"
+          FROM scoped WHERE booking_combo_item_id IS NULL AND unit_price>0
+          GROUP BY lower(trim(name_snapshot)),lower(trim(category))
+        )
+        SELECT *,round("soldQuantity"*100.0/nullif(sum("soldQuantity") OVER (),0),2) AS "selectionSharePercent"
+        FROM grouped ORDER BY "soldQuantity" DESC,"productName",category LIMIT ?
+        """, rankedArgs);
+      notes = "Xếp món ăn/đồ uống theo số lượng trên hóa đơn đã tất toán, theo ngày tất toán; chỉ đơn đã xác nhận hoặc phục vụ. Loại món tặng/miễn phí hoặc đã gồm trong combo và đơn bị hủy/từ chối/chờ xác nhận. Gộp theo tên món đã lưu và danh mục hiện tại; không gộp thành combo F&B nếu hệ thống chỉ lưu từng món. Giá trị dòng hóa đơn chưa phân bổ giảm giá hoặc hoàn tiền. Bán nhiều không đồng nghĩa khách đánh giá yêu thích nhất.";
+    }
+    return Map.ofEntries(Map.entry("kind", kind), Map.entry("startMonth", from.toString()), Map.entry("endMonth", to.toString()),
+        Map.entry("asOfDate", until.minusDays(1).toString()), Map.entry("coverage", coverage), Map.entry("ranking", ranking),
+        Map.entry("hasData", !ranking.isEmpty()), Map.entry("notes", notes + " Chỉ đọc booking, đơn hàng và hóa đơn vận hành; chưa hợp nhất các dòng nhập file chưa liên kết vào nghiệp vụ để tránh đếm trùng. Kết quả rỗng chỉ là chưa ghi nhận giao dịch phù hợp trong phạm vi tra cứu, không có nghĩa hệ thống không lưu chi tiết."));
+  }
 }

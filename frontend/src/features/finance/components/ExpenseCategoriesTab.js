@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GROUPS = [
@@ -86,7 +87,7 @@ export default function ExpenseCategoriesTab({ categories, busy, onSave, onSetAc
       <label>Nhóm<select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)}><option value="">Tất cả nhóm</option>{GROUPS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Trạng thái<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ACTIVE">Đang dùng</option><option value="INACTIVE">Đã ngừng</option><option value="ALL">Tất cả</option></select></label>
     </div>
-    <div className="finance-table-wrap finance-category-table-wrap"><table className="finance-category-table">
+    <div className="finance-table-wrap finance-category-table-wrap"><PaginatedTable pageSize={10} className="finance-category-table">
       <thead><tr><th>Hạng mục</th><th>Nhóm</th><th>Loại</th><th>Ghi nhận</th><th>Hóa đơn</th><th>Hoàn ứng</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
       <tbody>{visible.map((item) => {
         return <tr key={item.id}>
@@ -102,7 +103,7 @@ export default function ExpenseCategoriesTab({ categories, busy, onSave, onSetAc
           </div></td>
         </tr>;
       })}{!visible.length && <tr><td colSpan="8" className="finance-empty">Không có hạng mục phù hợp. Thử đổi bộ lọc hoặc thêm từ mẫu.</td></tr>}</tbody>
-    </table></div>
+    </PaginatedTable></div>
     <details className="finance-category-settings" open={settingsOpen} onToggle={(event) => setSettingsOpen(event.currentTarget.open)}>
       <summary>Thiết lập hạng mục · dành cho kế toán</summary>
       <div className="finance-category-settings-content">
@@ -129,7 +130,7 @@ export default function ExpenseCategoriesTab({ categories, busy, onSave, onSetAc
       <label className="finance-category-checkbox"><input type="checkbox" checked={draft.invoiceRequired} onChange={(event) => setDraft({ ...draft, invoiceRequired: event.target.checked })} />Bắt buộc có hóa đơn</label>
       <label className="finance-category-checkbox"><input type="checkbox" checked={draft.reimbursementAllowed} onChange={(event) => setDraft({ ...draft, reimbursementAllowed: event.target.checked })} />Cho phép hoàn ứng</label>
       {draft.categoryGroup === 'RENT' && <p className="finance-category-hint">Tiền đặt cọc thuê nhà không phải chi phí; không dùng hạng mục này để ghi nhận tiền cọc.</p>}
-      <div className="finance-category-form-actions"><button disabled={busy}>{draft.id ? 'Cập nhật hạng mục' : 'Tạo hạng mục'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(emptyDraft())}>Hủy sửa</button>}{editingCategory && Number(editingCategory.request_count || 0) + Number(editingCategory.recurring_count || 0) === 0 && <button type="button" disabled={busy} onClick={() => confirmDelete(editingCategory)}>Xóa hạng mục</button>}</div>
+      <div className="finance-category-form-actions"><button type="submit" className="finance-submit-action" disabled={busy}>{draft.id ? 'Cập nhật hạng mục' : 'Tạo hạng mục'}</button>{draft.id && <button type="button" disabled={busy} onClick={() => setDraft(emptyDraft())}>Hủy sửa</button>}{editingCategory && Number(editingCategory.request_count || 0) + Number(editingCategory.recurring_count || 0) === 0 && <button type="button" disabled={busy} onClick={() => confirmDelete(editingCategory)}>Xóa hạng mục</button>}</div>
     </form>
         </div>
       </div>

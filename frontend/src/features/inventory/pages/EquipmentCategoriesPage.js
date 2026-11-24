@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  * Author: TrongNV
@@ -79,10 +80,10 @@ export default function EquipmentCategoriesPage({ headOffice = false }) {
       <small>Toàn chuỗi · {rows.length} nhóm</small>
     </section>
     {error && <p className="ec-error" role="alert">{error}</p>}
-    <div className="ec-table-wrap"><table><thead><tr><th>Mã</th><th>Tên nhóm</th><th>Mô tả</th><th>Thiết bị</th><th>Trạng thái</th>{headOffice&&<th>Thao tác</th>}</tr></thead>
+    <div className="ec-table-wrap"><PaginatedTable pageSize={10}><thead><tr><th>Mã</th><th>Tên nhóm</th><th>Mô tả</th><th>Thiết bị</th><th>Trạng thái</th>{headOffice&&<th>Thao tác</th>}</tr></thead>
       <tbody>{rows.map((item) => <tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.name}</td><td>{item.description || '—'}</td><td>{item.assetCount}</td><td><span className={`ec-status ${item.active ? 'is-active' : ''}`}>{item.active ? 'Đang sử dụng' : 'Ngừng hoạt động'}</span></td>
         {headOffice&&<td className="ec-actions"><button onClick={() => openForm(item)} disabled={busy}>Sửa</button><button onClick={() => toggle(item)} disabled={busy}>{item.active ? 'Ngừng' : 'Kích hoạt'}</button><button onClick={() => remove(item)} disabled={busy}>Xóa</button></td>}</tr>)}
-        {!rows.length && <tr><td colSpan={headOffice?6:5} className="ec-empty">Chưa có nhóm thiết bị phù hợp.</td></tr>}</tbody></table></div>
+        {!rows.length && <tr><td colSpan={headOffice?6:5} className="ec-empty">Chưa có nhóm thiết bị phù hợp.</td></tr>}</tbody></PaginatedTable></div>
     <p className="ec-footnote">Nhóm thiết bị được dùng chung tại tất cả cơ sở</p>
     {dialog && <div className="ec-overlay" role="presentation"><form className="ec-dialog" onSubmit={save} aria-labelledby="ec-dialog-title">
       <h2 id="ec-dialog-title">{editing ? 'Cập nhật nhóm thiết bị' : 'Thêm nhóm thiết bị'}</h2><p>Danh mục này dùng chung cho toàn chuỗi; không cần chọn cơ sở.</p><label>Mã nhóm<input maxLength="60" placeholder="Ví dụ: EQ-AUDIO" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} required /></label>

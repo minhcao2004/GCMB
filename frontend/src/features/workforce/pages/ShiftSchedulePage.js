@@ -4,6 +4,7 @@
  * Description: Lịch tuần 7 ngày × 4 ca; UC-83–86, BR-53, BR-60, BR-177.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import {
   shiftApi,
@@ -164,11 +165,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           <h1 id="shift-title">{manager ? 'Lịch ca tuần' : 'Đăng ký ca làm'}</h1>
         </div>
       </header>
-      {notice && (
-        <div className="shift-message success" role="status">
-          {notice}
-        </div>
-      )}
+      <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
       {error && (
         <div className="shift-message error" role="alert">
           {error}
@@ -432,12 +429,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           </>
         )
       )}
-      {attendanceWarning && (
-        <div className="attendance-warning-toast" role="status">
-          <span>{attendanceWarning.message}</span>
-          <button type="button" aria-label="Đóng thông báo" onClick={() => setAttendanceWarning(null)}>×</button>
-        </div>
-      )}
+      <ToastStack notice={attendanceWarning?.message} noticeVariant="warning" onCloseNotice={() => setAttendanceWarning(null)} />
       {dialog?.type === 'attendanceLoading' && (
         <p className="shift-message" role="status">Đang tải chấm công của ca…</p>
       )}

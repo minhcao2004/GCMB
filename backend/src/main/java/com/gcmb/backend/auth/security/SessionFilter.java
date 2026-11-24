@@ -26,11 +26,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 public class SessionFilter extends OncePerRequestFilter {
 
-    private final AuthService auth;
+    private final AuthService authService;
 
     // Dùng service để xác thực token trên từng request được bảo vệ.
-    public SessionFilter(AuthService auth) {
-        this.auth = auth;
+    public SessionFilter(AuthService authService) {
+        this.authService = authService;
     }
 
     // Lấy token phiên từ cookie mà không đưa token vào URL hoặc log.
@@ -48,7 +48,7 @@ public class SessionFilter extends OncePerRequestFilter {
         FilterChain chain
     ) throws ServletException, IOException {
         try {
-            Identity identity = auth.authenticate(token(request));
+            Identity identity = authService.authenticate(token(request));
             String branch = request.getHeader("X-GCMB-Branch-Id");
             if (
                 identity != null &&
@@ -56,7 +56,7 @@ public class SessionFilter extends OncePerRequestFilter {
                 branch != null &&
                 request.getServletPath().startsWith("/api/v1/branch-management/")
             ) {
-                identity = auth.forBranch(identity, branch);
+                identity = authService.forBranch(identity, branch);
             }
             // BR-177; MSG43: cho đọc và đổi cơ sở/đăng xuất, chặn mọi ghi nghiệp vụ tại cơ sở tạm ngừng.
             boolean writing = !List.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());

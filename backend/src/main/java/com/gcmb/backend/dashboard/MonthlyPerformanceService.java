@@ -18,9 +18,9 @@ public class MonthlyPerformanceService {
   static final int MAX_REPORT_BRANCH_IDS = 50;
   private static final List<String> MONEY_METRICS = List.of("revenue", "billRevenue", "roomRevenue", "fnbRevenue", "overtimeRevenue", "otherRevenue", "expenses", "operatingExpense", "salary", "investment", "profit", "netCashFlow", "forfeitedDeposits");
   private static final List<String> COUNT_METRICS = List.of("billCount", "bookingCount", "completedBookings", "cancelledNoShowBookings", "expenseCount");
-  private final JdbcTemplate db;
+  private final JdbcTemplate jdbcTemplate;
 
-  public MonthlyPerformanceService(JdbcTemplate db) { this.db = db; }
+  public MonthlyPerformanceService(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
   @Transactional(readOnly = true)
   public Map<String, Object> report(Identity actor, LocalDate month, UUID branchId) {
@@ -53,7 +53,7 @@ public class MonthlyPerformanceService {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ quản lý cấp cao được tra cứu lịch sử kinh doanh.");
     if (month == null || month.getDayOfMonth() != 1 || month.getYear() < 2000 || YearMonth.from(month).isAfter(YearMonth.now(FinancialPeriodService.ZONE)))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tháng tra cứu không hợp lệ.");
-    if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
+    if (branchId != null && !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy cơ sở cần tra cứu.");
     var current = rows(month, branchId);
     return Map.of("month", YearMonth.from(month).toString(), "results", current, "totals", totals(current),
@@ -99,7 +99,7 @@ public class MonthlyPerformanceService {
 
     Map<String, Object> currentTotals = totalsForOverview(currentBranches);
     Map<String, Object> previousTotals = totalsForOverview(previousBranches);
-    List<Map<String, Object>> branchOptions = db.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
+    List<Map<String, Object>> branchOptions = jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
     return Map.ofEntries(
       Map.entry("from", from.toString()), Map.entry("to", to.toString()),
       Map.entry("comparison", comparison), Map.entry("comparisonFrom", comparisonFrom.toString()),
@@ -119,7 +119,7 @@ public class MonthlyPerformanceService {
     if (branchIds.size() > MAX_REPORT_BRANCH_IDS)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Báo cáo chỉ hỗ trợ tối đa 50 cơ sở cùng lúc.");
     if (!branchIds.isEmpty()) {
-      Set<UUID> existingBranchIds = new HashSet<>(db.queryForList("SELECT id FROM gcmb.branch", UUID.class));
+      Set<UUID> existingBranchIds = new HashSet<>(jdbcTemplate.queryForList("SELECT id FROM gcmb.branch", UUID.class));
       if (!existingBranchIds.containsAll(branchIds))
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Một hoặc nhiều cơ sở không tồn tại hoặc bạn không có quyền xem báo cáo.");
     }
@@ -145,12 +145,12 @@ public class MonthlyPerformanceService {
       LEFT JOIN expenses e ON e.branch_id=br.id LEFT JOIN payroll p ON p.branch_id=br.id
       ORDER BY br.name,br.id
       """;
-    List<Map<String, Object>> branchRows = db.queryForList(branchSql, branchArgs.toArray());
+    List<Map<String, Object>> branchRows = jdbcTemplate.queryForList(branchSql, branchArgs.toArray());
     branchRows.forEach(MonthlyPerformanceService::decorateOverviewBranch);
 
     List<Object> categoryArgs = new ArrayList<>();
     String categoryCtes = overviewCtes(from, to, branchIds, categoryArgs);
-    List<Map<String, Object>> categories = db.queryForList(categoryCtes + """
+    List<Map<String, Object>> categories = jdbcTemplate.queryForList(categoryCtes + """
       , items AS (
         SELECT category_id::text "categoryKey",category_name "categoryName",cost_type "costType",amount
         FROM paid_expenses WHERE cost_type='OPEX'
@@ -163,7 +163,7 @@ public class MonthlyPerformanceService {
     List<Object> seriesArgs = new ArrayList<>();
     String seriesCtes = overviewCtes(from, to, branchIds, seriesArgs);
     seriesArgs.add(from); seriesArgs.add(to); seriesArgs.add(granularity);
-    List<Map<String, Object>> series = db.queryForList(seriesCtes + """
+    List<Map<String, Object>> series = jdbcTemplate.queryForList(seriesCtes + """
       , calendar AS (SELECT generate_series(?::date,?::date,interval '1 day')::date report_date)
       , expenses_daily AS (SELECT branch_id,report_date,
           sum(amount) FILTER (WHERE cost_type='OPEX') opex,
@@ -190,7 +190,7 @@ public class MonthlyPerformanceService {
     List<Object> categorySeriesArgs = new ArrayList<>();
     String categorySeriesCtes = overviewCtes(from, to, branchIds, categorySeriesArgs);
     categorySeriesArgs.add(granularity); categorySeriesArgs.add(granularity);
-    List<Map<String, Object>> categorySeries = db.queryForList(categorySeriesCtes + """
+    List<Map<String, Object>> categorySeries = jdbcTemplate.queryForList(categorySeriesCtes + """
       , items AS (
         SELECT date_trunc(?,report_date::timestamp)::date bucket,category_id::text "categoryKey",category_name "categoryName",sum(amount) amount
         FROM paid_expenses WHERE cost_type='OPEX' GROUP BY bucket,category_id,category_name
@@ -384,7 +384,7 @@ public class MonthlyPerformanceService {
       @SuppressWarnings("unchecked") var total=(Map<String,Object>)data.get("totals");
       var summary=new LinkedHashMap<String,Object>(total); summary.put("name","Toàn chuỗi"); summary.put("periodStatus",data.get("periodStatus")); rows.add(summary);
     }
-    db.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,?,?,'REPORT',?::jsonb)",
+    jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,?,?,'REPORT',?::jsonb)",
       actor.id(),branchId,"EXPORT_MONTHLY_PERFORMANCE",String.format(Locale.ROOT,"{\"month\":\"%s\",\"format\":\"%s\"}",YearMonth.from(month),format));
     if (!"xlsx".equals(format)) return MonthlyPerformanceExport.csv(rows);
     List<Map<String, Object>> details = "ACCOUNTANT".equals(actor.role())
@@ -399,7 +399,7 @@ public class MonthlyPerformanceService {
     String branchFilter = branchIds == null || branchIds.isEmpty() ? "" : " AND e.branch_id IN (" + String.join(",", Collections.nCopies(branchIds.size(), "?")) + ")";
     var args = new ArrayList<Object>(List.of(month.atDay(1), month.plusMonths(1).atDay(1)));
     if (branchIds != null) args.addAll(branchIds);
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT t.id transaction_id,e.id entry_id,t.payment_id,t.refund_id,t.expense_payment_id,
         t.salary_payment_id,t.salary_advance_id,t.fund_transfer_id,t.adjusts_transaction_id,
         COALESCE(t.payment_id,t.refund_id,t.expense_payment_id,t.salary_payment_id,
@@ -445,7 +445,7 @@ public class MonthlyPerformanceService {
   }
 
   public List<Map<String,Object>> dailyRevenue(LocalDate start, LocalDate end, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS report_date,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb,
@@ -474,7 +474,7 @@ public class MonthlyPerformanceService {
   }
 
   private List<Map<String, Object>> rows(LocalDate start, UUID selected) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH bill_lines AS (
         SELECT b.id,b.branch_id,b.net_amount,
           COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room_revenue,
@@ -593,7 +593,7 @@ public class MonthlyPerformanceService {
   }
 
   private List<Map<String,Object>> revenueGroups(LocalDate start, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       WITH lines AS (SELECT b.id,b.branch_id,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb,
@@ -618,7 +618,7 @@ public class MonthlyPerformanceService {
   }
 
   private List<Map<String,Object>> expenseGroups(LocalDate start, UUID branchId) {
-    return db.queryForList("""
+    return jdbcTemplate.queryForList("""
       SELECT category,sum(amount) amount,count(*) count FROM (
         SELECT e.branch_id,c.name category,p.amount FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id
         JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
@@ -664,9 +664,9 @@ public class MonthlyPerformanceService {
   private void requireScope(Identity actor, UUID branchId) {
     if (actor == null || !List.of("ACCOUNTANT","HEAD_OFFICE_MANAGER","BRANCH_MANAGER").contains(actor.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền xem báo cáo hiệu quả kinh doanh.");
     if ("BRANCH_MANAGER".equals(actor.role()) && (actor.branchId()==null || !actor.branchId().equals(branchId)
-      || !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)",Boolean.class,actor.id(),actor.branchId()))))
+      || !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?)",Boolean.class,actor.id(),actor.branchId()))))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền xem đối với cơ sở này.");
-    if (branchId!=null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')",Boolean.class,branchId))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cơ sở đang chọn không hoạt động hoặc không tồn tại.");
+    if (branchId!=null && !Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=? AND status='ACTIVE')",Boolean.class,branchId))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cơ sở đang chọn không hoạt động hoặc không tồn tại.");
   }
 
   private static String cap(String key) { return Character.toUpperCase(key.charAt(0))+key.substring(1); }

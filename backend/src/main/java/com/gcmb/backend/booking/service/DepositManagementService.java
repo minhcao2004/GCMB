@@ -33,14 +33,14 @@ public class DepositManagementService {
 
     private final BookingRepository bookingRepository;
     private final DepositRepository depositRepository;
-    private final RefundEvidenceStorageService evidenceStorage;
+    private final RefundEvidenceStorageService refundEvidenceStorageService;
     private final FinancialPeriodService financialPeriodService;
 
     public DepositManagementService(BookingRepository bookingRepository, DepositRepository depositRepository,
-                                    RefundEvidenceStorageService evidenceStorage, FinancialPeriodService financialPeriodService) {
+                                    RefundEvidenceStorageService refundEvidenceStorageService, FinancialPeriodService financialPeriodService) {
         this.bookingRepository = bookingRepository;
         this.depositRepository = depositRepository;
-        this.evidenceStorage = evidenceStorage;
+        this.refundEvidenceStorageService = refundEvidenceStorageService;
         this.financialPeriodService = financialPeriodService;
     }
 
@@ -158,11 +158,11 @@ public class DepositManagementService {
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
 
-        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? evidenceStorage.store(image, "tien-coc") : null;
+        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? refundEvidenceStorageService.store(image, "tien-coc") : null;
         if (evidence != null && TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) {
-                    if (status != STATUS_COMMITTED) evidenceStorage.deleteQuietly(evidence.objectKey());
+                    if (status != STATUS_COMMITTED) refundEvidenceStorageService.deleteQuietly(evidence.objectKey());
                 }
             });
         }
@@ -176,7 +176,7 @@ public class DepositManagementService {
                 throw refundAlreadyProcessed();
         } catch (RuntimeException exception) {
             if (evidence != null && !TransactionSynchronizationManager.isSynchronizationActive()) {
-                evidenceStorage.deleteQuietly(evidence.objectKey());
+                refundEvidenceStorageService.deleteQuietly(evidence.objectKey());
             }
             throw exception;
         }
@@ -202,7 +202,7 @@ public class DepositManagementService {
         if (evidence == null) throw new BookingFailure(404, "requestId", "Không tìm thấy chứng từ hoàn cọc");
         try {
             return new DepositDtos.RefundEvidenceContent(evidence.originalName(), evidence.mimeType(),
-                evidenceStorage.read(evidence.objectKey()));
+                refundEvidenceStorageService.read(evidence.objectKey()));
         } catch (IOException exception) {
             throw new BookingFailure(404, "requestId", "Không thể đọc ảnh chứng minh hoàn cọc");
         }

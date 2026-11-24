@@ -32,13 +32,13 @@ import java.util.Map;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-    private final AuthService auth;
-    private final AuthSettings policy;
+    private final AuthService authService;
+    private final AuthSettings authSettings;
 
     // Tách nghiệp vụ xác thực và chính sách cookie khỏi lớp điều khiển HTTP.
-    public AuthController(AuthService auth, AuthSettings policy) {
-        this.auth = auth;
-        this.policy = policy;
+    public AuthController(AuthService authService, AuthSettings authSettings) {
+        this.authService = authService;
+        this.authSettings = authSettings;
     }
 
     // Cấp token CSRF cho các thao tác ghi từ trình duyệt.
@@ -60,7 +60,7 @@ public class AuthController {
         HttpServletRequest request,
         HttpServletResponse response
     ) {
-        LoginResult result = auth.login(body.username, body.password, body.remember);
+        LoginResult result = authService.login(body.username, body.password, body.remember);
         cookie(response, result.token(), body.remember ? result.seconds() : -1);
         return result.user();
     }
@@ -68,7 +68,7 @@ public class AuthController {
     // Phát challenge và gửi mã khôi phục qua email đã đăng ký.
     @PostMapping("/forgot-password")
     public Recovery forgot(@RequestBody EmailRequest body, HttpServletRequest request) {
-        return auth.sendCode(body.email);
+        return authService.sendCode(body.email);
     }
 
     // Đổi mật khẩu thành công sẽ xóa cookie phiên hiện tại.
@@ -78,7 +78,7 @@ public class AuthController {
         HttpServletRequest request,
         HttpServletResponse response
     ) {
-        auth.reset(body.email, body.challenge, body.code, body.password, body.confirmation);
+        authService.reset(body.email, body.challenge, body.code, body.password, body.confirmation);
         cookie(response, "", 0);
         return Map.of("message", "Đặt lại mật khẩu thành công");
     }
@@ -94,7 +94,7 @@ public class AuthController {
         @AuthenticationPrincipal Identity identity,
         @RequestBody ChangePasswordRequest body
     ) {
-        auth.changePassword(identity, body.currentPassword(), body.password(), body.confirmation());
+        authService.changePassword(identity, body.currentPassword(), body.password(), body.confirmation());
         return Map.of("message", "Đổi mật khẩu thành công.");
     }
 
@@ -108,7 +108,7 @@ public class AuthController {
     public java.util.List<Map<String, Object>> branches(
         @AuthenticationPrincipal Identity identity
     ) {
-        return auth.managedBranches(identity);
+        return authService.managedBranches(identity);
     }
 
     public record SelectBranch(java.util.UUID branchId) {}
@@ -119,7 +119,7 @@ public class AuthController {
         @RequestBody SelectBranch body,
         HttpServletRequest request
     ) {
-        return auth.switchBranch(
+        return authService.switchBranch(
             identity,
             SessionFilter.token(request),
             body == null ? null : body.branchId()
@@ -129,7 +129,7 @@ public class AuthController {
     // Thu hồi token phía server và xóa cookie phía trình duyệt.
     @PostMapping("/logout")
     public Map<String, String> logout(HttpServletRequest request, HttpServletResponse response) {
-        auth.logout(SessionFilter.token(request));
+        authService.logout(SessionFilter.token(request));
         cookie(response, "", 0);
         return Map.of("message", "Đã đăng xuất");
     }
@@ -140,7 +140,7 @@ public class AuthController {
             HttpHeaders.SET_COOKIE,
             ResponseCookie.from("GCMB_SESSION", value)
                 .httpOnly(true)
-                .secure(policy.secureCookie())
+                .secure(authSettings.secureCookie())
                 .sameSite("Lax")
                 .path("/api")
                 .maxAge(seconds)

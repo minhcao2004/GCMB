@@ -1,5 +1,6 @@
 /** HuyDV: QLCS đặt đơn giá; chốt lương tại bảng công và lương tháng. */
 import { useEffect, useState } from 'react';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi, today } from '../../finance/services/financeApi';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -62,8 +63,7 @@ export default function BranchPayrollPage({ branchScope, readOnly }) {
   return (
     <section className="finance-page branch-payroll-page">
       <h2>Đơn giá giờ cơ sở</h2>
-      {error && <p className="finance-error" role="alert">{error}</p>}
-      {notice && <p className="finance-info" role="status">{notice}</p>}
+      <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       <label className="finance-check">
         <input type="checkbox" checked={historicalRates} disabled={busy || loading}
           onChange={(event) => {

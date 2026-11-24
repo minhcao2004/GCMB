@@ -79,17 +79,8 @@ public class BusinessAssistantService {
           .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build();
       lastRequestAt = System.currentTimeMillis();
       long deadline = System.nanoTime() + Duration.ofSeconds(45).toNanos();
-      var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-      // Retry a transient provider failure once; quota/auth failures must not trigger extra requests.
-      if (Set.of(500, 502, 503, 504).contains(response.statusCode())) {
-        log.warn("Gemini temporary failure (HTTP {}); retrying once", response.statusCode());
-        Thread.sleep(1500);
-        long remaining = deadline - System.nanoTime();
-        if (remaining <= 0) throw new HttpTimeoutException("Gemini request deadline exceeded");
-        var retry = HttpRequest.newBuilder(request, (name, value) -> true).timeout(Duration.ofNanos(remaining)).build();
-        response = client.send(retry, HttpResponse.BodyHandlers.ofString());
-      }
-      checkStatus(response.statusCode());
+      int[] retries = { 1 };
+      var response = send(request, deadline, retries);
       int toolCalls = 0;
       for (int round = 0; round < 4; round++) {
         var content = json.readTree(response.body()).path("candidates").path(0).path("content");
@@ -121,8 +112,7 @@ public class BusinessAssistantService {
         if (nextBody.length() > 180000) throw new AuthFailure(400, "form", "Dữ liệu tra cứu quá lớn cho một câu trả lời. Hãy phân tích từng cơ sở hoặc từng giai đoạn.");
         var next = HttpRequest.newBuilder(request, (name, value) -> true).timeout(Duration.ofNanos(remaining))
             .POST(HttpRequest.BodyPublishers.ofString(nextBody)).build();
-        response = client.send(next, HttpResponse.BodyHandlers.ofString());
-        checkStatus(response.statusCode());
+        response = send(next, deadline, retries);
       }
       String answer = answerText(response.body());
       // A generic greeting is not a completed answer to a business question. Repair once within the same deadline.
@@ -134,9 +124,7 @@ public class BusinessAssistantService {
             "\nPhản hồi trước chỉ chào hỏi và chưa trả lời. Hãy trả lời trực tiếp CÂU HỎI HIỆN TẠI bằng dữ liệu kèm theo, không chào lại hoặc hỏi người dùng cần hỗ trợ gì."))));
         var repair = HttpRequest.newBuilder(request, (name, value) -> true).timeout(Duration.ofNanos(remaining))
             .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(repairBody))).build();
-        response = client.send(repair, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() == 429) throw new AuthFailure(429, "form", "Gemini đang giới hạn yêu cầu hoặc đã hết hạn mức. Vui lòng thử lại sau.");
-        if (response.statusCode() != 200) throw new AuthFailure(502, "form", "Gemini chưa hoàn tất phân tích câu hỏi. Vui lòng thử lại sau.");
+        response = send(repair, deadline, retries);
         answer = answerText(response.body());
         if (genericGreeting(answer)) throw new AuthFailure(502, "form", "Gemini chưa trả lời đúng câu hỏi. Vui lòng thử lại sau.");
       }
@@ -153,6 +141,24 @@ public class BusinessAssistantService {
     } finally { running.release(); }
   }
 
+  private HttpResponse<String> send(HttpRequest request, long deadline, int[] retries) throws java.io.IOException, InterruptedException {
+    while (true) {
+      long remaining = deadline - System.nanoTime();
+      if (remaining <= 0) throw new HttpTimeoutException("Gemini request deadline exceeded");
+      var bounded = HttpRequest.newBuilder(request, (name, value) -> true).timeout(Duration.ofNanos(remaining)).build();
+      var response = client.send(bounded, HttpResponse.BodyHandlers.ofString());
+      // One shared retry budget covers both the initial answer and analysis after a tool result.
+      if (Set.of(500, 502, 503, 504).contains(response.statusCode()) && retries[0] > 0) {
+        retries[0]--;
+        log.warn("Gemini temporary failure (HTTP {}); retrying once", response.statusCode());
+        Thread.sleep(1500);
+        continue;
+      }
+      checkStatus(response.statusCode());
+      return response;
+    }
+  }
+
   private void checkStatus(int status) {
     if (status == 200) return;
     log.warn("Gemini request failed (HTTP {})", status);
@@ -164,7 +170,7 @@ public class BusinessAssistantService {
 
   private Map<String, Object> readTool(Identity actor, String name, tools.jackson.databind.JsonNode args) {
     context.authorize(actor);
-    if (!Set.of("read_business_reports", "read_business_snapshot").contains(name))
+    if (!Set.of("read_business_reports", "read_business_snapshot", "read_popularity").contains(name))
       throw new AuthFailure(400, "form", "Trợ lý chỉ được tra cứu báo cáo kinh doanh đã cho phép.");
     UUID branchId = null;
     if (!args.path("branch_id").asText().isBlank()) {
@@ -172,7 +178,10 @@ public class BusinessAssistantService {
       catch (IllegalArgumentException failure) { throw new AuthFailure(400, "branchId", "Mã cơ sở tra cứu không hợp lệ."); }
     }
     Map<String, Object> result;
-    if ("read_business_snapshot".equals(name)) {
+    if ("read_popularity".equals(name)) {
+      result = context.popularity(actor, args.path("kind").asText(), args.path("start_month").asText(),
+          args.path("end_month").asText(), branchId, args.has("limit") ? args.path("limit").asInt() : 10);
+    } else if ("read_business_snapshot".equals(name)) {
       result = context.snapshot(actor, args.path("month").asText(), branchId);
       result.remove("branches"); result.remove("branchId"); result.remove("sources"); result.remove("configured");
     } else {
@@ -197,7 +206,13 @@ public class BusinessAssistantService {
               "branch_id", BRANCH_ARGUMENT,
               "include_branch_months", Map.of("type", "BOOLEAN", "description", "Lấy từng cơ sở trong từng tháng khi cần so sánh nhiều cơ sở; mặc định chỉ tổng tháng và tổng từng cơ sở cả giai đoạn.")))),
       Map.of("name", "read_business_snapshot", "description", "Tra cứu chỉ đọc chi tiết một tháng: kết quả kinh doanh, nhóm chi phí, giờ sử dụng và tiền phòng Cinema/Music Box. Danh mục phòng và sự cố là hiện tại. Cơ sở cụ thể phải còn hoạt động.",
-          "parameters", Map.of("type", "OBJECT", "properties", Map.of("month", Map.of("type", "STRING", "description", "Tháng YYYY-MM không thuộc tương lai."), "branch_id", BRANCH_ARGUMENT), "required", List.of("month"))));
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of("month", Map.of("type", "STRING", "description", "Tháng YYYY-MM không thuộc tương lai."), "branch_id", BRANCH_ARGUMENT), "required", List.of("month"))),
+      Map.of("name", "read_popularity", "description", "Tra cứu chi tiết combo phòng được đặt nhiều nhất hoặc món F&B bán chạy: số lượt, số lượng, tỷ trọng và giá trị dòng hóa đơn. PHẢI gọi khi hỏi combo được yêu thích, combo phòng được book nhiều, món bán chạy. Combo trong hệ thống là gói phòng; món F&B là từng món, không tự suy ra combo F&B. Bỏ tháng sẽ lấy tháng hiện tại; hỏi toàn bộ lịch sử thì dùng tháng đầu trong danh mục.",
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of(
+              "kind", Map.of("type", "STRING", "enum", List.of("ROOM_COMBO", "FNB_ITEM"), "description", "ROOM_COMBO cho combo/gói phòng; FNB_ITEM cho từng món ăn, đồ uống bán chạy."),
+              "start_month", Map.of("type", "STRING", "description", "Tháng bắt đầu YYYY-MM; mặc định tháng hiện tại."),
+              "end_month", Map.of("type", "STRING", "description", "Tháng cuối YYYY-MM; mặc định tháng hiện tại."),
+              "branch_id", BRANCH_ARGUMENT, "limit", Map.of("type", "INTEGER", "description", "Số mục đứng đầu từ 1 đến 20; mặc định 10.")), "required", List.of("kind"))));
 
   private String answerText(String body) {
       var payload = json.readTree(body);
@@ -244,7 +259,15 @@ public class BusinessAssistantService {
       Map.entry("forfeitedDeposits", "Thu từ cọc tịch thu"), Map.entry("billCount", "Số hóa đơn"),
       Map.entry("completedBookings", "Số đặt phòng hoàn thành"), Map.entry("cancelledNoShowBookings", "Số đặt phòng hủy hoặc không đến"),
       Map.entry("expenseCount", "Số khoản chi"), Map.entry("branchCount", "Số cơ sở"), Map.entry("lossBranches", "Số cơ sở lỗ"),
-      Map.entry("category", "Nhóm chi phí"), Map.entry("amount", "Số tiền"), Map.entry("count", "Số khoản"));
+      Map.entry("category", "Danh mục"), Map.entry("amount", "Số tiền"), Map.entry("count", "Số khoản"),
+      Map.entry("kind", "Loại thống kê"), Map.entry("asOfDate", "Số liệu đến ngày"),
+      Map.entry("coverage", "Phạm vi giao dịch đã kiểm tra"), Map.entry("ranking", "Xếp hạng theo giao dịch"),
+      Map.entry("eligibleBookings", "Lượt đặt hợp lệ"), Map.entry("bookingsWithCombo", "Lượt đặt có combo"),
+      Map.entry("comboName", "Tên combo phòng"), Map.entry("roomTypeName", "Hạng phòng"),
+      Map.entry("completedBookingCount", "Lượt đặt đã hoàn thành"), Map.entry("settledLineAmount", "Giá trị dòng hóa đơn đã tất toán trước giảm giá hoặc hoàn tiền"),
+      Map.entry("selectionSharePercent", "Tỷ trọng trong lượt chọn hoặc lượng bán (%)"),
+      Map.entry("productName", "Tên món"), Map.entry("soldQuantity", "Số lượng bán thu tiền"),
+      Map.entry("paidItemLines", "Số dòng món bán thu tiền"), Map.entry("excludedGiftQuantity", "Số lượng món tặng hoặc miễn phí đã loại"));
 
   private static Object businessData(Object value) {
     if (value instanceof Map<?, ?> map) {
@@ -257,6 +280,7 @@ public class BusinessAssistantService {
       case "OPEN" -> "Chưa chốt"; case "CLOSED" -> "Đã chốt";
       case "ACTIVE" -> "Đang hoạt động"; case "INACTIVE" -> "Ngừng hoạt động";
       case "CINEMA" -> "Cinema"; case "MUSIC_BOX" -> "Music Box";
+      case "ROOM_COMBO" -> "Combo phòng theo lượt đặt"; case "FNB_ITEM" -> "Món ăn, đồ uống theo số lượng bán";
       default -> businessText(text);
     };
     return value;
@@ -328,13 +352,21 @@ public class BusinessAssistantService {
     phân biệt đầy đủ tên; chưa xác định được thì hỏi lại một lần, không tự gộp Nguyễn Lương Bằng với Nguyễn Lương Bằng 86-88.
     Nếu chưa tra cứu đủ thì dùng công cụ để tra cứu tiếp; nếu sau tra cứu vẫn thiếu thì nêu đúng phạm vi đã kiểm tra,
     tuyệt đối không khẳng định hệ thống/database chưa lưu, không có lịch sử hay cần tích hợp dữ liệu khi chưa kiểm chứng.
+    Hỏi 'combo nào được yêu thích nhất', 'combo phòng được book nhiều nhất' phải gọi công cụ xếp hạng ROOM_COMBO.
+    Combo ở đây là gói phòng có thể kèm đồ ăn/đồ uống; không tự hiểu thành combo F&B riêng.
+    Hỏi món ăn, đồ uống bán chạy thì gọi công cụ xếp hạng FNB_ITEM và nói rõ là món, không gọi thành combo phòng.
+    Nêu tên đứng đầu, số lượt đặt hoặc số lượng bán và kỳ/cơ sở, có thể thêm 2–3 mục theo sau khi hữu ích.
+    Chỉ gọi là 'được đặt nhiều nhất' hoặc 'bán nhiều nhất', không khẳng định sở thích/đánh giá khách từ doanh số.
+    Nêu ngắn phạm vi nếu chỉ bao phủ giao dịch vận hành; không suy ra số liệu từ danh mục combo hay tổng doanh thu F&B.
+    Kết quả truy vấn rỗng thì nêu 'chưa ghi nhận giao dịch phù hợp trong kỳ/cơ sở đã tra cứu';
+    không bảo người dùng xuất POS, không nói hệ thống không lưu chi tiết khi chưa gọi công cụ.
     Không tự biến số liệu tháng hiện tại thành tháng người dùng hỏi. Chỉ hỏi lại 1 thông tin quan trọng nhất khi cần.
     Không tự tạo số liệu, nhu cầu, dự báo chắc chắn hoặc ROI. Không so sánh tháng dở dang với tháng trước đầy đủ
     như hai kỳ tương đương. Nếu suy luận, ghi là giả thuyết cần kiểm chứng. Không nhầm tiền cọc/cấp quỹ với doanh thu.
     Với kết hợp Cinema/Music Box: so giờ sử dụng và dòng tiền phòng theo mode nếu có; không có dữ liệu một mode
     không có nghĩa khách không muốn mode đó. Thiếu chi phí đầu tư, diện tích, cách âm, khảo sát nhu cầu thì nêu
     các đầu vào cần bổ sung, đề xuất thử nghiệm có tiêu chí đo lường; không khẳng định nên đầu tư ngay.
-    Chỉ được dùng hai công cụ báo cáo chỉ đọc được cung cấp. Không chạy SQL tự do, không có truy cập Internet,
+    Chỉ được dùng các công cụ báo cáo và xếp hạng chỉ đọc được cung cấp. Không chạy SQL tự do, không có truy cập Internet,
     không có công cụ thay đổi dữ liệu, không tuyên bố đã thêm/sửa/xóa/duyệt hoặc chuyển tiền.
     Không nói có nút mở màn hình hoặc đã chuyển trang vì khung chat không cung cấp thao tác đó.
     Không yêu cầu API key, mật khẩu, dữ liệu khách/nhân viên hay tài khoản ngân hàng trong chat. Không trả HTML.

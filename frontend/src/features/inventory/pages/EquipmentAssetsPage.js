@@ -1,4 +1,6 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { ToastStack } from '../../../shared/components/Feedback';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -6,13 +8,14 @@ import MoneyInput from '../../../shared/components/MoneyInput';
  * Created: 28/10
  * Description: Danh sách và hồ sơ tài sản thiết bị theo use case UC65–UC69.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import apiClient from '../../../api/client';
 import { equipmentAssetApi } from '../services/equipmentAssetApi';
 import './equipment-assets.css';
 import './equipment-harmony.css';
 
 const blank = { code: '', name: '', categoryId: '', roomId: '', locationNote: '', serialNumber: '', purchaseDate: '', purchaseValue: '', warrantyExpiry: '', status: 'IN_USE' };
+const emptyOptions = { categories: [], rooms: [], codePrefix: null, nextCode: null };
 const statuses = [ ['IN_USE', 'Đang sử dụng'], ['BROKEN', 'Bị hỏng'], ['REPAIRING', 'Đang sửa'], ['IN_TRANSIT', 'Đang chuyển'], ['RETIRED', 'Đã thanh lý'] ];
 // UC-66: Hiển thị trạng thái vận hành theo nhãn tiếng Việt.
 const statusName = (value) => statuses.find(([key]) => key === value)?.[1] || value || '—';
@@ -25,11 +28,14 @@ const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDate
 
 export default function EquipmentAssetsPage({ user, headOffice = false }) {
   const [branches, setBranches] = useState([]), [branchId, setBranchId] = useState(user?.branchId || '');
-  const [rows, setRows] = useState([]), [options, setOptions] = useState({ categories: [], rooms: [] });
+  const [rows, setRows] = useState([]), [options, setOptions] = useState(emptyOptions);
   const [search, setSearch] = useState(''), [roomId, setRoomId] = useState(''), [status, setStatus] = useState(''), [activeFilter, setActiveFilter] = useState('true');
   const [drawer, setDrawer] = useState(false), [editing, setEditing] = useState(null), [form, setForm] = useState(blank);
   const [imageFile, setImageFile] = useState(null), [imagePreview, setImagePreview] = useState(''), [imageMime, setImageMime] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const optionsRequest = useRef(0);
+  const codeHintId = useId();
   const scopedHeadOffice = useMemo(() => headOffice, [headOffice]);
 
   // UC-66: Quản lý cấp cao chọn chi nhánh; quản lý cơ sở nhận phạm vi từ phiên đăng nhập.
@@ -55,24 +61,38 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   }, [scopedHeadOffice, branchId, search, roomId, status, activeFilter, headOffice]);
   useEffect(() => { load(); }, [load]);
 
-  // UC-65/67: Tải lựa chọn nhóm và phòng đúng cơ sở trước khi mở biểu mẫu.
+  // UC-65/67: Dùng phản hồi mới nhất để hiển thị nhóm, phòng và mã dự kiến đúng cơ sở.
   const loadOptions = useCallback(async (assetId = null) => {
-    try { setOptions(await equipmentAssetApi.options(scopedHeadOffice, branchId, assetId)); }
-    catch (e) { setError(errorText(e)); }
+    const request = ++optionsRequest.current;
+    try {
+      const result = await equipmentAssetApi.options(scopedHeadOffice, branchId, assetId);
+      if (request === optionsRequest.current) setOptions(result);
+    } catch (e) {
+      if (request === optionsRequest.current) setError(errorText(e));
+    }
   }, [scopedHeadOffice, branchId]);
 
   // UC-66: Nạp phòng làm bộ lọc vị trí và nhóm hiện hành khi người dùng đổi cơ sở.
   useEffect(() => { if (branchId) loadOptions(null); }, [branchId, loadOptions]);
 
+  const changeBranch = (event) => {
+    optionsRequest.current += 1;
+    setOptions(emptyOptions);
+    setDrawer(false);
+    setRoomId('');
+    setBranchId(event.target.value);
+  };
+
   // UC-65/67: Mở hồ sơ mới hoặc nạp đầy đủ dữ liệu hiện có để người dùng rà soát.
   const openDrawer = async (item = null) => {
     setEditing(item); setError(''); setImageFile(null); setImagePreview(''); setImageMime('');
     setForm(item ? {
-      code: item.code, name: item.name, categoryId: item.categoryId || '', roomId: item.roomId || '',
+      name: item.name, categoryId: item.categoryId || '', roomId: item.roomId || '',
       locationNote: item.locationNote || '', serialNumber: item.serialNumber || '',
       purchaseDate: dateValue(item.purchaseDate), purchaseValue: item.purchaseValue ?? '',
       warrantyExpiry: dateValue(item.warrantyExpiry), status: item.status || 'IN_USE',
     } : blank);
+    if (!item) setOptions((current) => ({ ...current, codePrefix: null, nextCode: null }));
     setDrawer(true);
     await loadOptions(item?.id || null);
   };
@@ -88,13 +108,15 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   // BR-202/BR-111: Kiểm tra trường bắt buộc ở form trước khi gửi; server vẫn xác thực cuối cùng.
   const save = async (event) => {
     event.preventDefault(); setError('');
-    if (!form.code.trim()) { setError('Vui lòng bổ sung mã thiết bị.'); return; }
+    if (!editing && !options.codePrefix) return;
+    if (requiresFirstCode && !form.code.trim()) { setError('Vui lòng nhập mã thiết bị đầu tiên của cơ sở.'); return; }
     if (!form.name.trim()) { setError('Vui lòng bổ sung tên thiết bị.'); return; }
     if (!form.categoryId) { setError('Vui lòng bổ sung nhóm thiết bị.'); return; }
     if (!form.roomId && !form.locationNote.trim()) { setError('Vui lòng bổ sung vị trí thiết bị.'); return; }
     setBusy(true);
     try {
-      const payload = { ...form, categoryId: form.categoryId, roomId: form.roomId || null,
+      const { code, ...fields } = form;
+      const payload = { ...fields, ...(requiresFirstCode ? { code: code.trim() } : {}), roomId: form.roomId || null,
         purchaseDate: form.purchaseDate || null, purchaseValue: form.purchaseValue === '' ? null : Number(form.purchaseValue),
         warrantyExpiry: form.warrantyExpiry || null };
       const asset = editing
@@ -104,6 +126,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
         try { await equipmentAssetApi.uploadImage(scopedHeadOffice, branchId, asset.id, imageFile); }
         catch (imageError) { setError(`Hồ sơ đã lưu nhưng ảnh chưa tải lên: ${errorText(imageError)}`); await load(); setEditing(asset); return; }
       }
+      if (!editing) setNotice(`Đã thêm thiết bị ${asset.code}.`);
       setDrawer(false); setImageFile(null); setImagePreview(''); await load();
     } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
@@ -149,30 +172,45 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   const branchName = branches.find((item) => (item.branchId || item.id) === branchId)?.branchName
     || branches.find((item) => (item.branchId || item.id) === branchId)?.name || user?.branchName || 'Cơ sở được phân quyền';
   const lockedInTransit = editing?.status === 'IN_TRANSIT';
+  const requiresFirstCode = !editing && Boolean(options.codePrefix) && !options.nextCode;
+  const codeValue = editing?.code ?? (requiresFirstCode ? form.code : options.nextCode ?? '');
+  let codeHint = 'Đang tải quy tắc cấp mã…';
+  if (requiresFirstCode) codeHint = 'Nhập mã đầu tiên hoặc số bắt đầu. Các thiết bị sau sẽ tự tăng số.';
+  else if (options.nextCode) codeHint = 'Mã dự kiến theo cơ sở. Hệ thống chốt mã khi lưu.';
+  else if (options.codePrefix === undefined) codeHint = 'Khởi động lại backend để tải quy tắc cấp mã thiết bị.';
   return <main className="equipment-assets">
     <div className="ea-heading"><div><h1>Danh sách thiết bị</h1></div>
       <button className="ea-primary" onClick={() => openDrawer()} disabled={busy || (headOffice && !branchId)}>＋ Thêm thiết bị</button></div>
     <section className="ea-filters" aria-label="Tìm kiếm và lọc thiết bị">
       <label className="ea-search">Tìm theo mã, tên hoặc nội dung<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo mã, tên hoặc nội dung..." /></label>
-      {headOffice && <label>Cơ sở<select value={branchId} onChange={(e) => { setBranchId(e.target.value); setRoomId(''); }}><option value="">Chọn cơ sở</option>{branches.map((item) => <option key={item.branchId || item.id} value={item.branchId || item.id}>{item.branchName || item.name}</option>)}</select></label>}
+      {headOffice && <label>Cơ sở<select value={branchId} onChange={changeBranch} disabled={busy}><option value="">Chọn cơ sở</option>{branches.map((item) => <option key={item.branchId || item.id} value={item.branchId || item.id}>{item.branchName || item.name}</option>)}</select></label>}
       <label>Vị trí<select value={roomId} onChange={(e) => setRoomId(e.target.value)}><option value="">Tất cả vị trí</option>{options.rooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name}</option>)}</select></label>
       <label>Trạng thái<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Tất cả trạng thái</option>{statuses.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>Sử dụng<select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)}><option value="true">Đang sử dụng</option><option value="false">Ngừng sử dụng</option><option value="all">Tất cả</option></select></label>
       <small>Phạm vi: {branchName} · {rows.length} thiết bị</small>
     </section>
     {error && !drawer && <p className="ea-error" role="alert">{error}</p>}
-    <div className="ea-table-wrap"><table><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
+    <div className="ea-table-wrap"><PaginatedTable pageSize={5}><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
       <tbody>{rows.map((item) => <tr key={item.id} onClick={() => openDrawer(item)} tabIndex="0" onKeyDown={(e) => e.key === 'Enter' && openDrawer(item)}>
         <td><strong>{item.code} · {item.name}</strong></td><td>{item.categoryName}</td><td>{item.roomCode ? `${item.roomCode}${item.roomName ? ` · ${item.roomName}` : ''}` : item.locationNote || '—'}</td><td>{formatDate(item.warrantyExpiry)}</td>
         <td>{statusName(item.status)}</td><td>{item.active ? 'Đang sử dụng' : 'Ngừng sử dụng'}</td>
-      </tr>)}{!rows.length && <tr><td colSpan="6" className="ea-empty">Chưa có thiết bị phù hợp.</td></tr>}</tbody></table></div>
+      </tr>)}{!rows.length && <tr><td colSpan="6" className="ea-empty">Chưa có thiết bị phù hợp.</td></tr>}</tbody></PaginatedTable></div>
     <p className="ea-footnote">Dữ liệu thiết bị · Chỉ thao tác trong cơ sở được phân quyền</p>
+    <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
     {drawer && <div className="ea-overlay" onMouseDown={(e) => e.target === e.currentTarget && setDrawer(false)}>
       <aside className="ea-drawer" aria-label="Hồ sơ thiết bị">
         <header><div><h2>{editing ? 'Hồ sơ thiết bị' : 'Thêm thiết bị'}</h2><p>{branchName}</p></div><button className="ea-close" onClick={() => setDrawer(false)} aria-label="Đóng">×</button></header>
         <form onSubmit={save}>
           <div className="ea-fields">
-            <label>Mã thiết bị *<input maxLength="60" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required /></label>
+            <div className="ea-code-field">
+              <label>Mã thiết bị{requiresFirstCode ? ' *' : ''}
+                <input readOnly={!requiresFirstCode} required={requiresFirstCode} value={codeValue} maxLength={120}
+                  placeholder={requiresFirstCode ? `${options.codePrefix}0001` : undefined}
+                  onChange={requiresFirstCode ? (e) => setForm({ ...form, code: e.target.value }) : undefined}
+                  aria-describedby={editing ? undefined : codeHintId} />
+              </label>
+              {!editing && <small id={codeHintId}>{codeHint}</small>}
+            </div>
             <label>Tên thiết bị *<input maxLength="200" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
             <label>Nhóm *<select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required><option value="">Chọn nhóm</option>{options.categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? '' : ' (ngừng hoạt động)'}</option>)}</select></label>
             <label>Phòng / vị trí<select value={form.roomId} onChange={(e) => setForm({ ...form, roomId: e.target.value })}><option value="">Khu vực chung / vị trí khác</option>{options.rooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name}</option>)}</select></label>
@@ -195,7 +233,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
           <p className="ea-note">Cơ sở của thiết bị chỉ thay đổi qua quy trình điều chuyển đã xác nhận. Lịch sử sự cố và chi phí được lưu riêng.</p>
           {error && <p className="ea-error" role="alert">{error}</p>}
           <footer>{editing && <><button type="button" className="ea-danger" onClick={() => remove(editing)} disabled={busy || lockedInTransit}>Xóa</button><button type="button" onClick={() => toggleActive(editing)} disabled={busy || lockedInTransit}>{editing.active ? 'Ngừng sử dụng' : 'Kích hoạt'}</button></>}
-            <span className="ea-spacer" /><button type="button" onClick={() => setDrawer(false)} disabled={busy}>Quay lại</button><button className="ea-primary" disabled={busy}>{busy ? 'Đang lưu…' : editing ? 'Lưu hồ sơ' : 'Thêm thiết bị'}</button></footer>
+            <span className="ea-spacer" /><button type="button" onClick={() => setDrawer(false)} disabled={busy}>Quay lại</button><button className="ea-primary" disabled={busy || (!editing && !options.codePrefix)}>{busy ? 'Đang lưu…' : editing ? 'Lưu hồ sơ' : 'Thêm thiết bị'}</button></footer>
         </form>
       </aside>
     </div>}

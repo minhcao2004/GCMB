@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { ToastStack } from '../../../shared/components/Feedback';
 import AuthShell from '../components/AuthShell';
 import AuthField from '../components/AuthField';
 import { authApi, apiErrors } from '../services/authApi';
@@ -126,13 +127,9 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
   if (mode === 'reset' && !recovery) return <Navigate to="/dang-nhap" replace />;
   return (
     <AuthShell title={login ? 'Đăng nhập' : forgot ? 'Quên mật khẩu' : 'Đặt lại mật khẩu'}>
+      <ToastStack notice={notice || location.state?.message} onCloseNotice={() => { setNotice(''); if (location.state?.message) navigate(location.pathname, { replace: true, state: null }); }} />
       <form noValidate onSubmit={submit} aria-busy={Boolean(busy)}>
         <div className="auth-form-body">
-          {location.state?.message && (
-            <p className="auth-success" role="status">
-              {location.state.message}
-            </p>
-          )}
           {mode === 'reset' && (
             <p className="auth-intro">
               Mã xác nhận đã được gửi đến <strong>{recovery.email}</strong>. Vui lòng kiểm tra cả
@@ -222,11 +219,6 @@ export default function AuthPage({ mode, recovery, onRecovery }) {
                 Quên mật khẩu?
               </Link>
             </div>
-          )}
-          {notice && (
-            <p className="auth-success" role="status">
-              {notice}
-            </p>
           )}
           {errors.form && (
             <p className="auth-error auth-form-error" role="alert">

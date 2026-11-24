@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList, Pagination } from '../../shared/components/Pagination';
 import MoneyInput from '../finance/components/MoneyInput';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -25,9 +26,21 @@ const formatMonth = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
 const formatDate = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
 const label = { report: 'Tổng quan', periods: 'Chốt kỳ', transactions: 'Giao dịch', export: 'Xuất dữ liệu' };
 const transactionKindLabels = { PAYMENT: 'Thu thanh toán', REFUND: 'Hoàn cọc', EXPENSE: 'Chi phí', SALARY: 'Trả lương', ADVANCE: 'Ứng lương', TRANSFER: 'Chuyển quỹ', OPENING: 'Số dư đầu kỳ', ADJUSTMENT: 'Điều chỉnh' };
+const exceptionReasonLabels = {
+  REFERENCE_NOT_FOUND: 'Không tìm thấy mã tham chiếu thanh toán',
+  PERIOD_CLOSED: 'Kỳ tài chính đã khóa',
+  DIRECTION_MISMATCH: 'Giao dịch là tiền chuyển đi, không phải tiền nhận vào',
+  REQUEST_NOT_PENDING: 'Yêu cầu thanh toán không còn chờ nhận tiền',
+  ACCOUNT_MISMATCH: 'Tài khoản nhận không khớp yêu cầu thanh toán',
+  AMOUNT_MISMATCH: 'Số tiền chuyển không khớp yêu cầu thanh toán',
+  PAYMENT_BEFORE_REQUEST: 'Giao dịch phát sinh trước khi tạo yêu cầu thanh toán',
+  PAYMENT_EXPIRED: 'Giao dịch phát sinh sau khi mã thanh toán hết hạn',
+  DEPOSIT_MANUAL_CONFIRMATION_REQUIRED: 'Tiền cọc chuyển khoản cần lễ tân xác nhận',
+};
 const errorText = (error) => error.response?.data?.detail || error.response?.data?.message || 'Không thể tải dữ liệu. Vui lòng thử lại.';
 const parseAdjustments = (value) => { try { return JSON.parse(value || '[]'); } catch { return []; } };
 const EARLY_CLOSE_WARNING = 'Chế độ demo: đang cho phép chốt kỳ trước khi tháng kết thúc. Khóa kỳ không thể hoàn tác.';
+const TRANSACTIONS_PER_PAGE = 5;
 
 export default function AccountantFinancePage({ reportsOnly = false }) {
   const navigate = useNavigate();
@@ -60,6 +73,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [exceptionFilter, setExceptionFilter] = useState('UNRESOLVED');
   const [resolutionTarget, setResolutionTarget] = useState(null);
   const [resolutionNote, setResolutionNote] = useState('');
+  const [transactionPage, setTransactionPage] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -165,6 +179,10 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       .catch(() => { if (live) setSepayExceptions([]); });
     return () => { live = false; };
   }, [tab, month, branchId, reportsOnly]);
+
+  useEffect(() => {
+    setTransactionPage(1);
+  }, [tab, month, branchId, transactionKind, transactionQuery]);
 
   useEffect(() => {
     if (tab !== 'export') { setRevenueSummary(null); return undefined; }
@@ -284,6 +302,9 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const selectedBranchName = branchId
     ? branchOptions.find((branch) => String(branch.id) === String(branchId))?.name || 'Cơ sở đã chọn'
     : 'Toàn chuỗi';
+  const transactionPageCount = Math.max(1, Math.ceil(rows.length / TRANSACTIONS_PER_PAGE));
+  const currentTransactionPage = Math.min(transactionPage, transactionPageCount);
+  const transactionRows = rows.slice((currentTransactionPage - 1) * TRANSACTIONS_PER_PAGE, currentTransactionPage * TRANSACTIONS_PER_PAGE);
 
   const content = <section className="performance-dashboard accountant-finance" aria-labelledby="finance-title">
     <header className={`finance-heading${tab === 'report' ? ' finance-heading--report' : ''}`}>
@@ -338,7 +359,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         {periodReadiness?.earlyCloseEnabled && <p className="finance-period-early-close-warning" role="status">{EARLY_CLOSE_WARNING}</p>}
         {readinessLoading && <p role="status">Đang kiểm tra điều kiện…</p>}
         {periodReadiness && <>
-          <ul className="finance-period-checks">{periodReadiness.checks.map((item) => <li key={item.key} className={item.passed ? 'is-passed' : 'is-pending'}><span className="finance-check-status">{item.passed ? 'Đạt' : 'Cần xử lý'}</span><div className="finance-check-copy"><strong>{item.label}</strong><small>{item.detail}</small></div><span className="finance-check-count">Còn {item.pendingCount}</span></li>)}</ul>
+          <PaginatedList as="ul" pageSize={5} className="finance-period-checks">{periodReadiness.checks.map((item) => <li key={item.key} className={item.passed ? 'is-passed' : 'is-pending'}><span className="finance-check-status">{item.passed ? 'Đạt' : 'Cần xử lý'}</span><div className="finance-check-copy"><strong>{item.label}</strong><small>{item.detail}</small></div><span className="finance-check-count">Còn {item.pendingCount}</span></li>)}</PaginatedList>
           <p className="finance-period-limitation">Lưu ý: {periodReadiness.cashCalendarLimitation}</p>
         </>}
       </section>
@@ -348,7 +369,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     {!reportsOnly && tab === 'transactions' && !loading && !error && <>
       <section className="accountant-dash-panel accountant-table-panel finance-sepay-panel" aria-labelledby="finance-sepay-title">
         <div className="accountant-panel-heading"><div><h2 id="finance-sepay-title">Giao dịch SePay ngoại lệ</h2><p>Kiểm tra và ghi nhận kết quả xử lý giao dịch ngân hàng chưa khớp.</p></div><label>Trạng thái<select value={exceptionFilter} onChange={(event) => setExceptionFilter(event.target.value)}><option value="UNRESOLVED">Chưa xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="ALL">Tất cả</option></select></label></div>
-        {sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Lý do ngoại lệ', 'Nội dung chuyển khoản', 'Người xử lý', 'Thời điểm xử lý', 'Ghi chú xử lý', 'Thao tác'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).map((row) => <tr key={row.id}><td>{row.externalId}</td><td>{row.branchName}</td><td>{formatDate(String(row.occurredAt || '').slice(0, 10))}</td><td>{money(row.amount)}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? 'Chưa xử lý' : 'Đã xử lý'}</td><td>{row.exceptionReason || '—'}</td><td>{row.reason || '—'}</td><td>{row.resolvedBy || '—'}</td><td>{row.resolvedAt ? new Date(row.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—'}</td><td>{row.resolutionNote || '—'}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? <button type="button" onClick={() => { setResolutionTarget(row); setResolutionNote(''); }}>Đánh dấu đã xử lý</button> : 'Đã xử lý'}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch ngoại lệ theo bộ lọc.</p>}
+        {sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).length ? <div className="accountant-table-scroll"><PaginatedTable pageSize={5}><thead><tr>{['Mã giao dịch', 'Cơ sở', 'Ngày', 'Số tiền', 'Trạng thái', 'Lý do ngoại lệ', 'Nội dung chuyển khoản', 'Người xử lý', 'Thời điểm xử lý', 'Ghi chú xử lý', 'Thao tác'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{sepayExceptions.filter((row) => exceptionFilter === 'ALL' || row.resolutionStatus === exceptionFilter).map((row) => <tr key={row.id}><td>{row.externalId}</td><td>{row.branchName}</td><td>{formatDate(String(row.occurredAt || '').slice(0, 10))}</td><td>{money(row.amount)}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? 'Chưa xử lý' : 'Đã xử lý'}</td><td>{exceptionReasonLabels[row.exceptionReason] || row.exceptionReason || 'Chưa xác định lý do; cần đối chiếu giao dịch'}</td><td>{row.reason || '—'}</td><td>{row.resolvedBy || '—'}</td><td>{row.resolvedAt ? new Date(row.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—'}</td><td>{row.resolutionNote || '—'}</td><td>{row.resolutionStatus === 'UNRESOLVED' ? <button type="button" onClick={() => { setResolutionTarget(row); setResolutionNote(''); }}>Đánh dấu đã xử lý</button> : 'Đã xử lý'}</td></tr>)}</tbody></PaginatedTable></div> : <p className="accountant-dash-empty">Không có giao dịch ngoại lệ theo bộ lọc.</p>}
       </section>
       {resolutionTarget && <div className="accountant-exception-backdrop" role="presentation"><section className="accountant-exception-dialog" role="dialog" aria-modal="true" aria-labelledby="resolve-sepay-title"><h2 id="resolve-sepay-title">Đánh dấu ngoại lệ đã xử lý</h2><p>Giao dịch {resolutionTarget.externalId} · {money(resolutionTarget.amount)}. Thao tác chỉ ghi nhận trạng thái và ghi chú, không tạo bút toán tiền.</p><label>Ghi chú xử lý<textarea value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} maxLength={1000} required /></label><div><button type="button" disabled={busy} onClick={() => setResolutionTarget(null)}>Hủy</button><button type="button" disabled={busy || !resolutionNote.trim()} onClick={resolveSePayException}>{busy ? 'Đang lưu…' : 'Xác nhận đã xử lý'}</button></div></section></div>}
       <div className="finance-filters">
@@ -356,7 +377,8 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         <label className="finance-month">Loại giao dịch<select value={transactionKind} onChange={(e) => setTransactionKind(e.target.value)}><option value="">Tất cả</option>{Object.entries(transactionKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
         <label className="finance-month">Tìm giao dịch<input value={transactionQuery} onChange={(e) => setTransactionQuery(e.target.value)} placeholder="Lý do, mã giao dịch, cơ sở" /></label>
       </div>
-      <DataTable caption={`Giao dịch tháng ${formatMonth(month)}`} columns={['Ngày ghi sổ', 'Kỳ gốc', 'Cơ sở', 'Loại', 'Lý do', 'Tiền gốc', 'Tổng điều chỉnh', 'Sau điều chỉnh', 'Chi tiết điều chỉnh', 'Thao tác']} numericColumns={[5, 6, 7]} rows={rows} values={(r) => [formatDate(r.bookingDate), formatMonth(String(r.periodMonth).slice(0, 7)), r.branchName || 'Toàn chuỗi', transactionKindLabels[r.kind] || 'Khác', r.reason, money(r.originalAmount), money(r.adjustmentAmount), money(r.amount), r.adjustmentCount ? <details><summary>{r.adjustmentCount} lần</summary><ul>{parseAdjustments(r.adjustments).map((item, i) => <li key={`${r.id}-${i}`}><strong>{money(item.amount)}</strong> · {item.reason}<br />Người ghi: {item.createdBy || 'Hệ thống'} · {formatDate(item.createdAt?.slice(0, 10))}<br />Ghi vào kỳ {formatMonth(String(item.periodMonth).slice(0, 7))}{r.periodStatus === 'CLOSED' ? ` · Kỳ gốc ${formatMonth(String(r.periodMonth).slice(0, 7))} đã khóa` : ''}{item.attachments?.map((file) => <div key={file.id}><button type="button" disabled={busy} onClick={() => downloadEvidence(file)}>Chứng từ: {file.name}</button></div>)}</li>)}</ul></details> : '—', r.kind !== 'TRANSFER' && r.kind !== 'OPENING' && r.kind !== 'ADJUSTMENT' && Number(r.entryCount) === 1 ? <button type="button" aria-expanded={adjusting?.id === r.id} onClick={() => { setAdjusting(r); setAmount(''); setReason(''); setEvidence(null); setAdjustmentConfirmed(false); }}>Điều chỉnh</button> : '—']} />
+      <DataTable className="finance-transactions-panel" caption={`Giao dịch tháng ${formatMonth(month)}`} columns={['Ngày ghi sổ', 'Kỳ gốc', 'Cơ sở', 'Loại', 'Lý do', 'Tiền gốc', 'Tổng điều chỉnh', 'Sau điều chỉnh', 'Chi tiết điều chỉnh', 'Thao tác']} numericColumns={[5, 6, 7]} rows={transactionRows} values={(r) => [formatDate(r.bookingDate), formatMonth(String(r.periodMonth).slice(0, 7)), r.branchName || 'Toàn chuỗi', transactionKindLabels[r.kind] || 'Khác', r.reason, money(r.originalAmount), money(r.adjustmentAmount), money(r.amount), r.adjustmentCount ? <details><summary>{r.adjustmentCount} lần</summary><PaginatedList as="ul" pageSize={5}>{parseAdjustments(r.adjustments).map((item, i) => <li key={`${r.id}-${i}`}><strong>{money(item.amount)}</strong> · {item.reason}<br />Người ghi: {item.createdBy || 'Hệ thống'} · {formatDate(item.createdAt?.slice(0, 10))}<br />Ghi vào kỳ {formatMonth(String(item.periodMonth).slice(0, 7))}{r.periodStatus === 'CLOSED' ? ` · Kỳ gốc ${formatMonth(String(r.periodMonth).slice(0, 7))} đã khóa` : ''}{item.attachments?.map((file) => <div key={file.id}><button type="button" disabled={busy} onClick={() => downloadEvidence(file)}>Chứng từ: {file.name}</button></div>)}</li>)}</PaginatedList></details> : '—', r.kind !== 'TRANSFER' && r.kind !== 'OPENING' && r.kind !== 'ADJUSTMENT' && Number(r.entryCount) === 1 ? <button type="button" aria-expanded={adjusting?.id === r.id} onClick={() => { setAdjusting(r); setAmount(''); setReason(''); setEvidence(null); setAdjustmentConfirmed(false); }}>Điều chỉnh</button> : '—']} />
+      {rows.length > 0 && <Pagination page={currentTransactionPage - 1} pageSize={TRANSACTIONS_PER_PAGE} total={rows.length} onPageChange={(page) => setTransactionPage(page + 1)} label="Phân trang giao dịch" />}
       {adjusting && <form ref={adjustmentFormRef} className="finance-adjust-form" onSubmit={submitAdjustment}><h2>Điều chỉnh giao dịch gốc</h2><p>{adjusting.reason} · {formatDate(adjusting.bookingDate)} · kỳ gốc {formatMonth(String(adjusting.periodMonth).slice(0, 7))}{adjusting.periodStatus === 'CLOSED' ? ' (đã khóa)' : ''}</p><p>Giá trị hiện tại sau các điều chỉnh: {money(adjusting.amount)}. Số dương ghi tăng quỹ, số âm ghi giảm quỹ. Tổng sau điều chỉnh được về 0 nhưng không đổi chiều thu/chi.</p><label>Số tiền điều chỉnh (VND)<MoneyInput name="adjustmentAmount" allowNegative   value={amount} onValueChange={value => setAmount(value)} required /></label><label>Lý do<textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required /></label><label>Chứng từ minh chứng (không bắt buộc)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" onChange={(e) => setEvidence(e.target.files?.[0] || null)} /></label><p>Sau điều chỉnh: {amount ? money(Number(adjusting.amount) + Number(amount)) : money(adjusting.amount)} · {reason || 'Chưa có lý do'}</p><label className="finance-confirm"><input type="checkbox" checked={adjustmentConfirmed} onChange={(e) => setAdjustmentConfirmed(e.target.checked)} /> Tôi xác nhận ghi điều chỉnh riêng cho giao dịch gốc.</label><button type="submit" disabled={busy || !adjustmentConfirmed}>Xác nhận ghi điều chỉnh</button><button type="button" disabled={busy} onClick={() => setAdjusting(null)}>Hủy</button></form>}
     </>}
     {!reportsOnly && tab === 'export' && <><RevenueSummary totals={revenueSummary} /><section className="finance-export"><h2>Xuất dữ liệu kế toán</h2><p>Tệp CSV gồm các dòng sổ tiền và một dòng tổng hợp doanh thu vận hành được đánh dấu riêng. Việc xuất không thay đổi giao dịch.</p><label>Phạm vi dữ liệu<select value={scope} onChange={(e) => setScope(e.target.value)}><option value="ALL">Tất cả dòng tiền</option><option value="INFLOW">Tiền vào</option><option value="OUTFLOW">Tiền ra</option></select></label><button type="button" disabled={busy} onClick={download}>{busy ? 'Đang tạo tệp…' : 'Tải tệp CSV'}</button></section></>}
@@ -365,8 +387,8 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     breadcrumb="Báo cáo chi tiết" activeTab="report" audience="accountant" hideSearch showCurrentMonth={false}>{content}</AppShell>;
 }
 
-function DataTable({ caption, columns = [], numericColumns = [], rows = [], values }) {
-  return <div className="finance-table-panel"><div className="finance-table-wrap"><table className="finance-table"><caption>{caption}</caption><thead><tr>{columns.map((column, cell) => <th scope="col" className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || `${index}-${row.categoryName || row.month || ''}`}>{values(row).map((value, cell) => <td className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={cell}>{value}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 && <p className="finance-empty">Chưa có dữ liệu trong phạm vi đã chọn.</p>}</div>;
+function DataTable({ caption, columns = [], numericColumns = [], rows = [], values, className = '' }) {
+  return <div className={`finance-table-panel${className ? ` ${className}` : ''}`}><div className="finance-table-wrap" role={className ? 'region' : undefined} aria-label={className ? caption : undefined} tabIndex={className ? 0 : undefined}><PaginatedTable pageSize={columns.length > 6 ? 5 : 10} className="finance-table"><caption>{caption}</caption><thead><tr>{columns.map((column, cell) => <th scope="col" className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || `${index}-${row.categoryName || row.month || ''}`}>{values(row).map((value, cell) => <td data-label={columns[cell]} className={numericColumns.includes(cell) ? 'is-numeric' : undefined} key={cell}>{value}</td>)}</tr>)}</tbody></PaginatedTable></div>{rows.length === 0 && <p className="finance-empty">Chưa có dữ liệu trong phạm vi đã chọn.</p>}</div>;
 }
 
 function RevenueSummary({ totals }) {

@@ -43,12 +43,12 @@ public class MutationAudit {
         Map.entry("FINANCE_RECURRING_EXPENSE", "finance_recurring_expense"),
         Map.entry("FINANCE_RECURRING_EXPENSE_PERIOD", "finance_recurring_expense_period"));
 
-    private final JdbcTemplate db;
-    private final TransactionTemplate transaction;
+    private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
 
-    public MutationAudit(JdbcTemplate db, PlatformTransactionManager manager) {
-        this.db = db;
-        this.transaction = new TransactionTemplate(manager);
+    public MutationAudit(JdbcTemplate jdbcTemplate, PlatformTransactionManager manager) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(manager);
     }
 
     // resultId xác định ID mới khi tạo đối tượng hoặc tạo phiên bản giá mới.
@@ -64,13 +64,13 @@ public class MutationAudit {
         if (authentication == null || !(authentication.getPrincipal() instanceof Identity actor)) {
             throw new IllegalStateException("Business audit requires an authenticated actor");
         }
-        return transaction.execute(status -> {
+        return transactionTemplate.execute(status -> {
             String before = snapshot(type, id);
             T result = operation.get();
             UUID afterId = resultId == null ? id : resultId.apply(result);
             String after = snapshot(type, afterId);
             if (!java.util.Objects.equals(before, after)) {
-                db.update("""
+                jdbcTemplate.update("""
                     INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
                     VALUES (?,COALESCE(CAST(CAST(? AS jsonb)->>'branch_id' AS uuid),
                         CAST(CAST(? AS jsonb)->>'branch_id' AS uuid)),?,?,?,CAST(? AS jsonb),
@@ -87,7 +87,7 @@ public class MutationAudit {
         if (id == null) return null;
         // Table identifiers only come from TABLES; snapshot columns are an explicit allowlist.
         String table = TABLES.get(type);
-        db.queryForList("SELECT id FROM gcmb." + table + " WHERE id=? FOR UPDATE", UUID.class, id);
+        jdbcTemplate.queryForList("SELECT id FROM gcmb." + table + " WHERE id=? FOR UPDATE", UUID.class, id);
         String extra = "BRANCH".equals(type) ? " || jsonb_build_object('branch_id',t.id,'managerNames',"
             + "(SELECT string_agg(COALESCE(e.full_name,u.username), ', ' ORDER BY u.username)"
             + " FROM gcmb.branch_manager_assignment a JOIN gcmb.user_account u ON u.id=a.user_id"
@@ -123,7 +123,7 @@ public class MutationAudit {
             + " FROM gcmb.finance_attachment a WHERE a.owner_type='EXPENSE_REQUEST' AND a.owner_id=t.id),"
             + "'allocations',(SELECT jsonb_agg(jsonb_build_object('period_month',a.period_month,'seq',a.seq,'amount',a.amount) ORDER BY a.seq,a.id)"
             + " FROM gcmb.finance_expense_allocation a WHERE a.request_id=t.id))";
-        List<String> snapshots = db.queryForList("""
+        List<String> snapshots = jdbcTemplate.queryForList("""
             SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
                 WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description','category_id','room_id','location_note','serial_number','purchase_date','purchase_value','warranty_expiry','image_attachment_id',
                     'address','phone','notes','updated_at','closed_on','floor_number','operating_status','status_reason','expected_ready_at','active','version',

@@ -22,19 +22,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuthCrypto {
 
-    private final SecureRandom random = new SecureRandom();
+    private final SecureRandom secureRandom = new SecureRandom();
     private final PasswordEncoder encoder = new Pbkdf2PasswordEncoder("", 16, 600_000, 256);
     private final PasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
     // Sinh mã xác nhận 6 chữ số, kể cả số 0 ở đầu.
     public String code() {
-        return String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
+        return String.format(Locale.ROOT, "%06d", secureRandom.nextInt(1_000_000));
     }
 
     // Sinh token ngẫu nhiên dùng cho phiên hoặc challenge.
     public String token() {
         byte[] bytes = new byte[32];
-        random.nextBytes(bytes);
+        secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 

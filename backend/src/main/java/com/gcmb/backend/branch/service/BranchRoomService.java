@@ -24,13 +24,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional
 public class BranchRoomService {
-    private final BranchRoomRepository repo;
-    public BranchRoomService(BranchRoomRepository repo) { this.repo=repo; }
+    private final BranchRoomRepository branchRoomRepository;
+    public BranchRoomService(BranchRoomRepository branchRoomRepository) { this.branchRoomRepository=branchRoomRepository; }
     private UUID branch(Identity who, String action) {
         if(who==null||who.branchId()==null) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền "+action+".");
         return who.branchId();
     }
-    private void requireWritable(UUID branch) { repo.requireActive(branch); } // BR-177, kiểm tra lại trong transaction.
+    private void requireWritable(UUID branch) { branchRoomRepository.requireActive(branch); } // BR-177, kiểm tra lại trong transaction.
     private RoomCommand validate(RoomCommand c) {
         if(c==null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Vui lòng bổ sung Thông tin phòng.");
         if(c.code()==null||c.code().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Vui lòng bổ sung Mã phòng.");
@@ -42,16 +42,16 @@ public class BranchRoomService {
         if(c.capacity()<1) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Sức chứa phải là số nguyên lớn hơn 0.");
         return c;
     }
-    public List<RoomView> list(Identity who){return repo.list(branch(who, "xem đối với phòng"));}
-    public List<RoomView> types(Identity who){branch(who, "xem đối với danh mục loại phòng");return repo.types();}
+    public List<RoomView> list(Identity who){return branchRoomRepository.list(branch(who, "xem đối với phòng"));}
+    public List<RoomView> types(Identity who){branch(who, "xem đối với danh mục loại phòng");return branchRoomRepository.types();}
     private ResponseStatusException duplicateCode(UUID branch, String code, Identity who) {
         String branchName=who==null?null:who.branchName();
-        if(branchName==null||branchName.isBlank()) branchName=repo.branchName(branch);
+        if(branchName==null||branchName.isBlank()) branchName=branchRoomRepository.branchName(branch);
         return new ResponseStatusException(HttpStatus.CONFLICT,"Mã phòng “"+code.trim().toUpperCase(java.util.Locale.ROOT)+"” đã tồn tại trong cơ sở "+branchName+". Vui lòng nhập mã khác.");
     }
-    public RoomView create(Identity who,RoomCommand c){UUID branch=branch(who,"tạo đối với phòng");RoomCommand valid=validate(c);requireWritable(branch);if(repo.codeExists(branch,valid.code(),null))throw duplicateCode(branch,valid.code(),who);String duplicateReason=duplicateCode(branch,valid.code(),who).getReason();try{return repo.create(branch,valid);}catch(DataIntegrityViolationException e){throw new ResponseStatusException(HttpStatus.CONFLICT,duplicateReason,e);}}
-    public RoomView update(Identity who,UUID id,RoomCommand c){UUID branch=branch(who,"cập nhật đối với phòng");RoomCommand valid=validate(c);requireWritable(branch);if(repo.codeExists(branch,valid.code(),id))throw duplicateCode(branch,valid.code(),who);String duplicateReason=duplicateCode(branch,valid.code(),who).getReason();try{RoomView v=repo.update(branch,id,valid);if(v==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy phòng");return v;}catch(DataIntegrityViolationException e){throw new ResponseStatusException(HttpStatus.CONFLICT,duplicateReason,e);}}
-    public void delete(Identity who,UUID id){UUID branch=branch(who,"xóa đối với phòng");requireWritable(branch);if(!repo.delete(branch,id))throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");}
+    public RoomView create(Identity who,RoomCommand c){UUID branch=branch(who,"tạo đối với phòng");RoomCommand valid=validate(c);requireWritable(branch);if(branchRoomRepository.codeExists(branch,valid.code(),null))throw duplicateCode(branch,valid.code(),who);String duplicateReason=duplicateCode(branch,valid.code(),who).getReason();try{return branchRoomRepository.create(branch,valid);}catch(DataIntegrityViolationException e){throw new ResponseStatusException(HttpStatus.CONFLICT,duplicateReason,e);}}
+    public RoomView update(Identity who,UUID id,RoomCommand c){UUID branch=branch(who,"cập nhật đối với phòng");RoomCommand valid=validate(c);requireWritable(branch);if(branchRoomRepository.codeExists(branch,valid.code(),id))throw duplicateCode(branch,valid.code(),who);String duplicateReason=duplicateCode(branch,valid.code(),who).getReason();try{RoomView v=branchRoomRepository.update(branch,id,valid);if(v==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy phòng");return v;}catch(DataIntegrityViolationException e){throw new ResponseStatusException(HttpStatus.CONFLICT,duplicateReason,e);}}
+    public void delete(Identity who,UUID id){UUID branch=branch(who,"xóa đối với phòng");requireWritable(branch);if(!branchRoomRepository.delete(branch,id))throw new ResponseStatusException(HttpStatus.CONFLICT,"Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");}
     @Transactional
     public RoomView status(Identity who,UUID id,RoomStatusCommand c){
         UUID branch=branch(who,"thay đổi trạng thái đối với phòng");
@@ -59,6 +59,6 @@ public class BranchRoomService {
         if(!List.of("AVAILABLE","UNDER_MAINTENANCE","INACTIVE").contains(c.status())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Trạng thái phòng không hợp lệ.");
         if(c.reason()==null||c.reason().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Vui lòng bổ sung Lý do thay đổi.");
         requireWritable(branch);
-        RoomView v=repo.changeStatus(branch,id,who.id(),c);if(v==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy phòng trong cơ sở được phân quyền");return v;
+        RoomView v=branchRoomRepository.changeStatus(branch,id,who.id(),c);if(v==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy phòng trong cơ sở được phân quyền");return v;
     }
 }

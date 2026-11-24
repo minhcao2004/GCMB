@@ -1,0 +1,95 @@
+.customer-sources-chart {
+  min-width: 0;
+}
+
+.customer-sources-chart__heading h2 {
+  margin: 0;
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-lg);
+  line-height: 1.4;
+}
+
+.customer-sources-chart__heading p,
+.customer-sources-chart__message,
+.customer-sources-chart__total {
+  margin: var(--gcmb-space-1) 0 0;
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-base);
+}
+
+.customer-sources-chart__filters {
+  display: grid;
+  gap: var(--gcmb-space-2);
+  margin: var(--gcmb-space-3) 0;
+}
+
+.customer-sources-chart__period {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gcmb-space-2);
+}
+
+.customer-sources-chart__field {
+  display: grid;
+  gap: var(--gcmb-space-1);
+  min-width: 0;
+  color: var(--gcmb-color-text);
+  font-size: var(--gcmb-font-size-sm);
+  font-weight: 600;
+}
+
+.customer-sources-chart__field :is(select, input) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--gcmb-space-2);
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-panel);
+  color: var(--gcmb-color-ink);
+  font: inherit;
+}
+
+.customer-sources-chart__field :is(select, input):focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: 2px;
+}
+
+.customer-sources-chart__result {
+  min-height: 140px;
+}
+
+.customer-sources-chart__bars {
+  display: grid;
+  gap: var(--gcmb-space-2);
+  margin: var(--gcmb-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.customer-sources-chart__bars li {
+  display: grid;
+  grid-template-columns: 9ch minmax(0, 1fr) minmax(3ch, auto);
+  align-items: center;
+  gap: var(--gcmb-space-2);
+  color: var(--gcmb-color-ink);
+  font-size: var(--gcmb-font-size-base);
+}
+
+.customer-sources-chart__bars strong {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.customer-sources-chart__track {
+  height: 8px;
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-bg);
+}
+
+.customer-sources-chart__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}

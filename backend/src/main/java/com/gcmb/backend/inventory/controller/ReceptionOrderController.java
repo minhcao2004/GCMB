@@ -26,63 +26,63 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/reception/orders")
 public class ReceptionOrderController {
-    private final FoodOrderService service;
-    private final MutationAudit audit;
+    private final FoodOrderService foodOrderService;
+    private final MutationAudit mutationAudit;
 
-    public ReceptionOrderController(FoodOrderService service, MutationAudit audit) {
-        this.service = service;
-        this.audit = audit;
+    public ReceptionOrderController(FoodOrderService foodOrderService, MutationAudit mutationAudit) {
+        this.foodOrderService = foodOrderService;
+        this.mutationAudit = mutationAudit;
     }
 
     @GetMapping
     public List<OrderView> list(@AuthenticationPrincipal Identity actor,
             @RequestParam(required = false) String status) {
-        return service.list(actor, status);
+        return foodOrderService.list(actor, status);
     }
 
     @GetMapping("/active-bookings")
     public List<ActiveBooking> activeBookings(@AuthenticationPrincipal Identity actor) {
-        return service.activeBookings(actor);
+        return foodOrderService.activeBookings(actor);
     }
 
     @GetMapping("/serving-employees")
     public List<ServingEmployee> servingEmployees(@AuthenticationPrincipal Identity actor) {
-        return service.servingEmployees(actor);
+        return foodOrderService.servingEmployees(actor);
     }
 
     @GetMapping("/menu")
     public List<PublicMenuItemView> menu(@AuthenticationPrincipal Identity actor) {
-        return service.receptionMenu(actor);
+        return foodOrderService.receptionMenu(actor);
     }
 
     @GetMapping("/combo-gift-menu")
     public List<ComboGiftOption> comboGiftMenu(@AuthenticationPrincipal Identity actor) {
-        return service.comboGiftMenu(actor);
+        return foodOrderService.comboGiftMenu(actor);
     }
 
     @PostMapping
     public OrderView addItems(@AuthenticationPrincipal Identity actor, @RequestBody StaffOrderRequest request) {
-        return audit.record("ADD_FB_ORDER_ITEMS", "FB_ORDER", null,
-            () -> service.addItems(actor, request), OrderView::id);
+        return mutationAudit.record("ADD_FB_ORDER_ITEMS", "FB_ORDER", null,
+            () -> foodOrderService.addItems(actor, request), OrderView::id);
     }
 
     @PostMapping("/{orderId}/confirm")
     public OrderView confirm(@AuthenticationPrincipal Identity actor, @PathVariable UUID orderId,
             @RequestBody ConfirmRequest request) {
-        return audit.record("CONFIRM_FB_ORDER", "FB_ORDER", orderId,
-            () -> service.confirmRequest(actor, orderId, request), null);
+        return mutationAudit.record("CONFIRM_FB_ORDER", "FB_ORDER", orderId,
+            () -> foodOrderService.confirmRequest(actor, orderId, request), null);
     }
 
     @PostMapping("/{orderId}/reject")
     public OrderView reject(@AuthenticationPrincipal Identity actor, @PathVariable UUID orderId) {
-        return audit.record("REJECT_FB_ORDER", "FB_ORDER", orderId,
-            () -> service.rejectRequest(actor, orderId), null);
+        return mutationAudit.record("REJECT_FB_ORDER", "FB_ORDER", orderId,
+            () -> foodOrderService.rejectRequest(actor, orderId), null);
     }
 
     @PutMapping("/{orderId}/service-status")
     public OrderView serviceStatus(@AuthenticationPrincipal Identity actor, @PathVariable UUID orderId,
             @RequestBody ServiceStatusCommand command) {
-        return audit.record("UPDATE_FB_ORDER_SERVICE_STATUS", "FB_ORDER", orderId,
-            () -> service.updateServiceStatus(actor, orderId, command), null);
+        return mutationAudit.record("UPDATE_FB_ORDER_SERVICE_STATUS", "FB_ORDER", orderId,
+            () -> foodOrderService.updateServiceStatus(actor, orderId, command), null);
     }
 }

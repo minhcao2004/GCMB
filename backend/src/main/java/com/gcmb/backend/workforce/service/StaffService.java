@@ -24,11 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class StaffService {
 
-    private final StaffRepository staff;
+    private final StaffRepository staffRepository;
     private final AccountRepository accountRepository;
 
-    public StaffService(StaffRepository staff, AccountRepository accountRepository) {
-        this.staff = staff;
+    public StaffService(StaffRepository staffRepository, AccountRepository accountRepository) {
+        this.staffRepository = staffRepository;
         this.accountRepository = accountRepository;
     }
 
@@ -45,8 +45,8 @@ public class StaffService {
         if (
             actor == null || !Set.of("HEAD_OFFICE_MANAGER", "BRANCH_MANAGER").contains(actor.role())
         ) throw denied();
-        if (writing) staff.serialize();
-        if (!staff.actorActive(actor.id(), actor.role())) throw denied();
+        if (writing) staffRepository.serialize();
+        if (!staffRepository.actorActive(actor.id(), actor.role())) throw denied();
         if ("HEAD_OFFICE_MANAGER".equals(actor.role())) return null;
         if (
             actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
@@ -62,8 +62,8 @@ public class StaffService {
     }
 
     private Map<String, Object> record(UUID id, UUID scope, boolean lock) {
-        if (lock && !staff.lock(id)) throw missing();
-        var row = staff.find(id);
+        if (lock && !staffRepository.lock(id)) throw missing();
+        var row = staffRepository.find(id);
         if (row == null) throw missing();
         if (scope != null && !scope.equals(row.get("branchId"))) throw denied();
         // HuyDV / UC-79, BR-52 / MSG24: BM không sửa hồ sơ kế toán/QLCC qua màn nhân sự.
@@ -109,7 +109,7 @@ public class StaffService {
         if (
             scope != null && ((branch != null && !scope.equals(branch)) || unassigned)
         ) throw denied();
-        return staff.list(
+        return staffRepository.list(
             q.trim(),
             position,
             status,
@@ -123,7 +123,7 @@ public class StaffService {
     @Transactional(readOnly = true)
     public Map<String, Object> options(Identity actor) {
         UUID scope = scope(actor, false);
-        return Map.of("branches", staff.branches(scope));
+        return Map.of("branches", staffRepository.branches(scope));
     }
 
     @Transactional(readOnly = true)
@@ -133,7 +133,7 @@ public class StaffService {
 
     private Map<String, Object> detailRow(Map<String, Object> row) {
         var result = new LinkedHashMap<>(row);
-        result.put("history", staff.history((UUID) row.get("id")));
+        result.put("history", staffRepository.history((UUID) row.get("id")));
         return result;
     }
 
@@ -143,16 +143,16 @@ public class StaffService {
         // HuyDV / UC-77: QLCS chỉ tạo lễ tân; kiểm tra cả khi gọi API trực tiếp.
         if (scope != null && !"RECEPTIONIST".equals(c.position())) throw denied();
         UUID id = UUID.randomUUID();
-        staff.create(id, c);
+        staffRepository.create(id, c);
         // UC-77/BR-52: BM creates inside the current assigned branch. UC-81/82 remain HOM-only.
-        if (scope != null) staff.assignment(
+        if (scope != null) staffRepository.assignment(
             id,
             scope,
             actor.id(),
             "Phân công khi tạo hồ sơ tại cơ sở."
         );
-        var after = staff.find(id);
-        staff.audit(actor.id(), id, "CREATE_STAFF", null, after, null);
+        var after = staffRepository.find(id);
+        staffRepository.audit(actor.id(), id, "CREATE_STAFF", null, after, null);
         return detailRow(after);
     }
 
@@ -163,9 +163,9 @@ public class StaffService {
         // HuyDV: không cho đổi vị trí sau khi tạo để vượt quyền của QLCS.
         if ("BRANCH_MANAGER".equals(actor.role()) &&
             (protectedPosition(c.position()) || !Objects.equals(before.get("position"), c.position()))) throw denied();
-        staff.update(id, c);
-        var after = staff.find(id);
-        staff.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);
+        staffRepository.update(id, c);
+        var after = staffRepository.find(id);
+        staffRepository.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);
         return detailRow(after);
     }
 
@@ -193,9 +193,9 @@ public class StaffService {
             status.equals(before.get("status")) &&
             Objects.equals(resigned == null ? null : resigned.toString(), before.get("resignedOn"))
         ) return detailRow(before);
-        staff.status(id, status, resigned);
-        var after = staff.find(id);
-        staff.audit(
+        staffRepository.status(id, status, resigned);
+        var after = staffRepository.find(id);
+        staffRepository.audit(
             actor.id(),
             id,
             input.active() ? "REACTIVATE_STAFF" : "DEACTIVATE_STAFF",
@@ -241,25 +241,25 @@ public class StaffService {
             "Cơ sở mới phải khác cơ sở hiện tại."
         );
         // MSG40: báo rõ cơ sở không còn hoạt động nếu trạng thái đổi sau khi mở form.
-        if (!staff.activeBranch(input.branchId())) throw new AuthFailure(
+        if (!staffRepository.activeBranch(input.branchId())) throw new AuthFailure(
             409,
             "branchId",
             "Cơ sở " +
-                staff.branchName(input.branchId()) +
+                staffRepository.branchName(input.branchId()) +
                 " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công."
         );
-        if (staff.futureAssignment(id)) throw new AuthFailure(
+        if (staffRepository.futureAssignment(id)) throw new AuthFailure(
             409,
             "form",
             "Nhân viên có lịch phân công chưa kết thúc. Vui lòng kiểm tra lịch sử cơ sở."
         );
         String reason = optional(input.reason(), "reason", "Lý do", 1000);
-        staff.assignment(id, input.branchId(), actor.id(), reason);
+        staffRepository.assignment(id, input.branchId(), actor.id(), reason);
         if (
             before.get("userId") != null && "RECEPTIONIST".equals(before.get("accountRole"))
-        ) staff.moveReceptionAccess((UUID) before.get("userId"), input.branchId());
-        var after = staff.find(id);
-        staff.audit(
+        ) staffRepository.moveReceptionAccess((UUID) before.get("userId"), input.branchId());
+        var after = staffRepository.find(id);
+        staffRepository.audit(
             actor.id(),
             id,
             transfer ? "TRANSFER_EMPLOYEE" : "SET_EMPLOYEE_BRANCH",
@@ -299,14 +299,19 @@ public class StaffService {
             "phone",
             "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
         );
-        String identity = optional(c.identityNumber(), "identityNumber", "Số định danh", 30);
-        if (staff.duplicate("code", code, id)) throw new AuthFailure(
+        String identity = optional(c.identityNumber(), "identityNumber", "Số định danh", 12);
+        if (identity != null && !identity.matches("[0-9]{12}")) throw new AuthFailure(
+            400,
+            "identityNumber",
+            "Số định danh phải gồm đúng 12 chữ số."
+        );
+        if (staffRepository.duplicate("code", code, id)) throw new AuthFailure(
             409,
             "code",
             "Mã nhân viên này đã được sử dụng. Vui lòng nhập mã khác."
         );
         if (
-            identity != null && staff.duplicate("identity_number", identity, id)
+            identity != null && staffRepository.duplicate("identity_number", identity, id)
         ) throw new AuthFailure(
             409,
             "identityNumber",

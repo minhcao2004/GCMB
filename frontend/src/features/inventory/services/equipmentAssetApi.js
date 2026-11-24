@@ -27,11 +27,11 @@ export const equipmentAssetApi = {
   list: (headOffice, branchId, filters) => apiClient.get(root(headOffice), {
     params: scopeParams(headOffice, branchId, filters), headers: scopeHeaders(headOffice, branchId),
   }).then((r) => r.data),
-  // UC-65/67: Lấy danh mục và phòng phù hợp để tạo hoặc sửa hồ sơ.
+  // UC-65/67: Lấy danh mục, phòng và mã dự kiến khi thêm hồ sơ.
   options: (headOffice, branchId, assetId) => apiClient.get(`${root(headOffice)}/options`, {
     params: scopeParams(headOffice, branchId, assetId ? { assetId } : {}), headers: scopeHeaders(headOffice, branchId),
   }).then((r) => r.data),
-  // UC-65: Tạo tài sản; backend kiểm tra BR-202 và mã toàn chuỗi.
+  // UC-65: Backend cấp mã chính thức khi lưu tài sản.
   create: async (headOffice, branchId, body) => (await mutate(headOffice, branchId, 'post', root(headOffice), body)).data,
   // UC-67/BR-110: Cập nhật thông tin nhưng không cho đổi cơ sở ngoài luồng điều chuyển.
   update: async (headOffice, branchId, id, body) => (await mutate(headOffice, branchId, 'put', `${root(headOffice)}/${id}`, body)).data,

@@ -26,7 +26,9 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class AuthErrors {
@@ -54,6 +56,18 @@ public class AuthErrors {
     // Trả lỗi tham số URL không đúng kiểu như ngày ISO không hợp lệ.
     ResponseEntity<?> invalidParameter() {
         return error(400, "Tham số yêu cầu không hợp lệ");
+    }
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    ResponseEntity<?> missingParameter(MissingServletRequestParameterException e) {
+        return missingField(e.getParameterName());
+    }
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<?> missingPart(MissingServletRequestPartException e) {
+        return missingField(e.getRequestPartName());
+    }
+    private ResponseEntity<?> missingField(String field) {
+        String message = "Vui lòng bổ sung tham số bắt buộc: " + field + ".";
+        return ResponseEntity.badRequest().body(Map.of("message", message, "errors", Map.of(field, message)));
     }
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     // Phương thức không được hỗ trợ là lỗi yêu cầu, không phải sự cố máy chủ 503.

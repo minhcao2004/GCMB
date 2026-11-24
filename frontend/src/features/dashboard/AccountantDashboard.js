@@ -1,3 +1,4 @@
+import { PaginatedList, Pagination } from '../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -84,7 +85,7 @@ export default function AccountantDashboard() {
   const [sourceTransactions, setSourceTransactions] = useState([]);
   const [recentDay, setRecentDay] = useState('');
   const [recentPage, setRecentPage] = useState(1);
-  const [recentPageSize, setRecentPageSize] = useState(8);
+  const recentPageSize = 5;
   const [periods, setPeriods] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -132,7 +133,9 @@ export default function AccountantDashboard() {
         .map((row) => ({ id: `source-${row.id}`, bookingDate: row.businessDate, occurredAt: `${row.businessDate}T12:00:00`, branchId: row.branchId, branchName: row.branchName,
           kind: 'PAYMENT', amount: Number(row.paidAmount || 0), method: row.paymentMethod || 'Theo dữ liệu nguồn',
           reason: row.invoiceNumber || row.sourceKey || 'Booking nhập nguồn', status: row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : 'Dữ liệu nguồn', sourceSystem: row.sourceSystem })));
-      if (results.slice(1, 6).some((item) => item.status === 'rejected')) setError((current) => current || 'Một số bảng nghiệp vụ không tải được; số liệu bị thiếu được để trống.');
+      const sections = ['Báo cáo tháng', 'Hoàn tiền cọc', 'Kỳ tài chính', 'Phương thức thanh toán', 'Giao dịch', 'Dữ liệu nguồn'];
+      const failedSections = results.flatMap((item, index) => item.status === 'rejected' ? [sections[index]] : []);
+      if (failedSections.length) setError(`Không tải được: ${failedSections.join(', ')}. Số liệu có thể chưa đầy đủ. Vui lòng thử lại.`);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [month, branchId, dateFrom, dateTo]);
@@ -168,7 +171,8 @@ export default function AccountantDashboard() {
   })).filter((row) => row.revenue > 0);
   const branchRevenueMax = Math.max(1, ...branchRevenueRows.map((row) => row.revenue));
   const recentPageCount = Math.max(1, Math.ceil(recentRows.length / recentPageSize));
-  const visibleRecentRows = recentRows.slice((recentPage - 1) * recentPageSize, recentPage * recentPageSize);
+  const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const visibleRecentRows = recentRows.slice((safeRecentPage - 1) * recentPageSize, safeRecentPage * recentPageSize);
 
   async function logout() {
     setBusy(true);
@@ -208,12 +212,12 @@ export default function AccountantDashboard() {
       </div>
       <div className="accountant-dash-grid accountant-overview-secondary">
         <section className="accountant-dash-panel accountant-method-panel"><div className="accountant-panel-heading"><div><h2>Thu theo phương thức</h2></div><strong>{money(paymentTotal)}</strong></div>{activePaymentMethods.length ? <div className="accountant-method-ledger">{activePaymentMethods.map((item, index) => { const amount = Number(item.value) || 0; const share = paymentTotal ? amount / paymentTotal * 100 : 0; return <div className="accountant-method-ledger-row" key={item.label}><span className="accountant-method-index">{String(index + 1).padStart(2, '0')}</span><span className="accountant-method-name">{item.label}</span><span className="accountant-method-track"><i style={{ width: `${share}%` }} /></span><strong>{money(amount)}</strong><small>{share.toFixed(1)}%</small></div>; })}</div> : <p className="accountant-dash-empty">Không có giao dịch thu từ hóa đơn trong kỳ.</p>}</section>
-        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <div className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((a, b) => b.revenue - a.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</div> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
+        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <PaginatedList as="div" pageSize={10} className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((a, b) => b.revenue - a.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</PaginatedList> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
       </div>
       <section className="accountant-dash-panel accountant-table-panel accountant-recent-panel">
-        <div className="accountant-panel-heading"><div><h2>Giao dịch gần đây trong kỳ</h2><p>{recentRows.length} giao dịch · {dateFrom.slice(8, 10)}/{dateFrom.slice(5, 7)}/{dateFrom.slice(0, 4)}–{dateTo.slice(8, 10)}/{dateTo.slice(5, 7)}/{dateTo.slice(0, 4)} · {branchLabel}</p></div><div className="accountant-recent-controls"><label className="accountant-recent-date">Ngày giao dịch<input type="date" value={recentDay} min={dateFrom} max={dateTo} onChange={(event) => { setRecentDay(event.target.value); setRecentPage(1); }} /></label><label>Hiển thị<select value={recentPageSize} onChange={(event) => { setRecentPageSize(Number(event.target.value)); setRecentPage(1); }}><option value="8">8 dòng</option><option value="25">25 dòng</option><option value="50">50 dòng</option></select></label></div></div>
+        <div className="accountant-panel-heading"><div><h2>Giao dịch gần đây trong kỳ</h2><p>{recentRows.length} giao dịch · {dateFrom.slice(8, 10)}/{dateFrom.slice(5, 7)}/{dateFrom.slice(0, 4)}–{dateTo.slice(8, 10)}/{dateTo.slice(5, 7)}/{dateTo.slice(0, 4)} · {branchLabel}</p></div><div className="accountant-recent-controls"><label className="accountant-recent-date">Ngày giao dịch<input type="date" value={recentDay} min={dateFrom} max={dateTo} onChange={(event) => { setRecentDay(event.target.value); setRecentPage(1); }} /></label></div></div>
         {visibleRecentRows.length ? <div className="accountant-table-scroll"><table><thead><tr>{['Mã giao dịch', 'Thời gian', 'Cơ sở', 'Loại', 'Phương thức', 'Trạng thái', 'Số tiền'].map((item) => <th key={item}>{item}</th>)}</tr></thead><tbody>{visibleRecentRows.map((row) => <tr key={row.id}><td title={row.id}>{String(row.id).slice(0, 11).toUpperCase()}</td><td>{dateVi(ledgerDate(row, dateBasis))}</td><td>{row.branchName || 'Toàn chuỗi'}</td><td>{({ PAYMENT: 'Thu thanh toán', REFUND: 'Hoàn cọc', EXPENSE: 'Chi phí', SALARY: 'Trả lương', ADVANCE: 'Ứng lương', TRANSFER: 'Chuyển quỹ', OPENING: 'Số dư đầu kỳ', ADJUSTMENT: 'Điều chỉnh' })[row.kind] || row.kind}</td><td>{row.method || '—'}</td><td>{row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : row.sourceSystem ? 'Dữ liệu nhập nguồn' : row.status ? statusVi(row.status) : 'Đã ghi sổ'}</td><td className={Number(row.amount) < 0 ? 'accountant-deviation' : 'accountant-matched'}>{money(row.amount)}</td></tr>)}</tbody></table></div> : <p className="accountant-dash-empty">Không có giao dịch trong ngày và kỳ đã chọn.</p>}
-        <div className="accountant-recent-pager"><span>Trang {Math.min(recentPage, recentPageCount)} / {recentPageCount}</span><div><button type="button" disabled={recentPage <= 1} onClick={() => setRecentPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={recentPage >= recentPageCount} onClick={() => setRecentPage((page) => Math.min(recentPageCount, page + 1))}>Tiếp</button></div></div>
+        <Pagination page={Math.min(recentPage, recentPageCount) - 1} pageSize={recentPageSize} total={recentRows.length} onPageChange={(page) => setRecentPage(page + 1)} label="Phân trang giao dịch gần đây" />
       </section>
     </main>
   </AppShell>;

@@ -1,3 +1,4 @@
+import { PaginatedList, Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrors, authApi } from '../../auth/services/authApi';
@@ -7,7 +8,7 @@ import { AppShell } from './BookingManagementPage';
 import '../styles/booking.css';
 import '../styles/deposit.css';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 const statusLabels = {
   HELD: 'Đang giữ',
   PENDING_REFUND: 'Chờ hoàn',
@@ -146,7 +147,7 @@ function RefundEvidenceGallery({ evidence }) {
     <h3>Ảnh chứng từ hoàn cọc</h3>
     {error && <p className="deposit-evidence-message deposit-evidence-message--error" role="alert">{error}</p>}
     {images.length === 0 && !error ? <p className="deposit-evidence-message" role="status">Đang tải ảnh chứng từ…</p>
-      : images.map((image) => <article className="deposit-evidence-item" key={image.requestId}>
+      : <PaginatedList pageSize={5}>{images.map((image) => <article className="deposit-evidence-item" key={image.requestId}>
           <div className="deposit-evidence-meta">
             <strong>{formatVnd(image.amount)}</strong>
             <span>{dateTimeText(image.paidAt)}</span>
@@ -165,7 +166,7 @@ function RefundEvidenceGallery({ evidence }) {
           {copyMessages[image.requestId] && <small className={`deposit-evidence-copy-message${copyMessages[image.requestId].isError ? ' deposit-evidence-copy-message--error' : ''}`} role={copyMessages[image.requestId].isError ? 'alert' : 'status'}>
             {copyMessages[image.requestId].text}
           </small>}
-        </article>)}
+        </article>)}</PaginatedList>}
   </section>;
 }
 
@@ -200,10 +201,10 @@ function DepositDetails({ detail, loading, error, onClose, onOpenBooking }) {
               </dl>
               <section className="deposit-history">
                 <h3>Lịch sử xử lý</h3>
-                {detail.history?.length ? <ol>{detail.history.map((event, index) => <li key={`${event.happenedAt}-${event.type}-${index}`}>
+                {detail.history?.length ? <PaginatedList as="ol" pageSize={5}>{detail.history.map((event, index) => <li key={`${event.happenedAt}-${event.type}-${index}`}>
                   <span className={`deposit-history-dot deposit-history-dot--${event.type.toLowerCase()}`} />
                   <div><strong>{event.label}</strong><time>{dateTimeText(event.happenedAt)}</time>{event.details && <small>{event.details}</small>}</div>
-                </li>)}</ol> : <p className="deposit-history-empty">Chưa có lịch sử xử lý.</p>}
+                </li>)}</PaginatedList> : <p className="deposit-history-empty">Chưa có lịch sử xử lý.</p>}
               </section>
               {detail.refundEvidence?.length > 0 && <RefundEvidenceGallery evidence={detail.refundEvidence} />}
               <div className="deposit-accounting-note"><strong>Kế toán xác nhận sau khi chuyển khoản hoàn.</strong><p>Lễ tân chỉ theo dõi, không đánh dấu đã hoàn.</p></div>
@@ -278,6 +279,8 @@ export default function DepositManagementPage() {
         size: PAGE_SIZE,
       }).then((result) => {
         if (!active) return;
+        const lastPage = Math.max(0, Math.ceil(result.total / PAGE_SIZE) - 1);
+        if (page > lastPage) setPage(lastPage);
         setData(result);
         setSelectedId((current) => current && result.items?.some((item) => item.bookingId === current) ? current : '');
       }).catch((error) => {
@@ -401,11 +404,7 @@ export default function DepositManagementPage() {
           </div>
           <footer className="deposit-table-footer">
             <span>{loading ? 'Đang cập nhật…' : loadError ? 'Danh sách chưa tải được' : `Hiển thị ${items.length} / ${data?.total ?? 0} giao dịch`}</span>
-            <div className="deposit-pagination">
-              <button type="button" disabled={page <= 0 || loading || Boolean(loadError)} onClick={() => setPage((value) => Math.max(0, value - 1))} aria-label="Trang trước">‹</button>
-              <span>{loadError ? '—' : data?.totalPages ? `${page + 1} / ${data.totalPages}` : '0 / 0'}</span>
-              <button type="button" disabled={!data?.totalPages || page + 1 >= data.totalPages || loading || Boolean(loadError)} onClick={() => setPage((value) => value + 1)} aria-label="Trang sau">›</button>
-            </div>
+            <Pagination page={page} pageSize={PAGE_SIZE} total={data?.total ?? 0} disabled={loading || Boolean(loadError)} onPageChange={setPage} label="Phân trang tiền cọc" />
           </footer>
         </section>
 

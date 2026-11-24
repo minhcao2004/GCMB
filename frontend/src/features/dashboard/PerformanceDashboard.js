@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import './dashboard.css';
@@ -12,7 +13,7 @@ const amount = (value) => Number(value) || 0;
 
 function Results({ rows, onSelect }) {
   const maxRevenue = Math.max(1, ...rows.map((row) => amount(row.revenue)));
-  return <div className="performance-table-wrap"><table className="performance-table">
+  return <div className="performance-table-wrap"><PaginatedTable pageSize={5} className="performance-table">
     <thead><tr><th scope="col">Cơ sở</th><th scope="col">Doanh thu hóa đơn</th><th scope="col">Cọc bị tịch thu</th><th scope="col">Thu nhập vận hành</th><th scope="col">Chi phí đã thanh toán</th><th scope="col">Lương</th><th scope="col">Lợi nhuận</th><th scope="col">Biên lợi nhuận</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id}>
       <td data-label="Cơ sở" className="performance-branch-cell">{onSelect && row.status === 'ACTIVE'
@@ -24,7 +25,7 @@ function Results({ rows, onSelect }) {
       <td data-label="Lợi nhuận" className={amount(row.profit) < 0 ? 'negative' : 'positive'}>{money(row.profit)}</td>
       <td data-label="Biên lợi nhuận">{percent(row.margin)}</td>
     </tr>)}</tbody>
-  </table></div>;
+  </PaginatedTable></div>;
 }
 
 function LoadingState() {

@@ -20,10 +20,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping({ "/api/v1/head-office/accounts", "/api/v1/branch-management/accounts" })
 public class AccountController {
 
-    private final AccountService service;
+    private final AccountService accountService;
 
-    public AccountController(AccountService service) {
-        this.service = service;
+    public AccountController(AccountService accountService) {
+        this.accountService = accountService;
     }
 
     @GetMapping
@@ -36,12 +36,12 @@ public class AccountController {
         @RequestParam(defaultValue = "10") int size,
         @AuthenticationPrincipal Identity actor
     ) {
-        return service.list(q, role, branchId, status, page, size, actor);
+        return accountService.list(q, role, branchId, status, page, size, actor);
     }
 
     @GetMapping("/options")
     public Options options(@AuthenticationPrincipal Identity actor) {
-        return service.options(actor);
+        return accountService.options(actor);
     }
 
     @PostMapping
@@ -50,6 +50,6 @@ public class AccountController {
         @RequestBody CreateAccount input,
         @AuthenticationPrincipal Identity actor
     ) {
-        return service.create(input, actor);
+        return accountService.create(input, actor);
     }
 }

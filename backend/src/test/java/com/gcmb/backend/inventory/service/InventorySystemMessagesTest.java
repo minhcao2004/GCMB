@@ -9,11 +9,14 @@ import com.gcmb.backend.inventory.dto.InventoryDtos.*;
 import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemCommand;
 import com.gcmb.backend.inventory.repository.*;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -79,6 +82,19 @@ class InventorySystemMessagesTest {
         verifyNoInteractions(orders);
     }
 
+    @Test void menuImageUsesLocalStorageWithoutCloud(@TempDir Path directory) throws Exception {
+        var storage = new RefundEvidenceStorageService(directory.toString(), "", "us-east-1", "", false);
+        byte[] png = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/KZkAAAAASUVORK5CYII=");
+        var image = new MockMultipartFile("image", "menu.png", "image/png", png);
+        var stored = storage.storeMenuImage(image);
+        assertArrayEquals(png, storage.read(stored.objectKey()));
+        storage.deleteQuietly(stored.objectKey());
+        assertFalse(java.nio.file.Files.exists(directory.resolve(stored.objectKey())));
+        error(503, "Chưa cấu hình dịch vụ lưu trữ tệp. Vui lòng liên hệ quản trị viên.",
+            () -> storage.store(image, "kho-hang"));
+    }
+
     @Test void stockAdjustmentRequiresReasonBeforeWriting() {
         var repo = mock(InventoryRepository.class);
         when(repo.activeBranch(BRANCH)).thenReturn(true);
@@ -138,7 +154,6 @@ class InventorySystemMessagesTest {
 
     static Stream<Arguments> assetInputs() {
         return Stream.of(
-            Arguments.of(" ", "Loa", CATEGORY, "Kho", "Vui lòng bổ sung mã thiết bị."),
             Arguments.of("ASSET-HN01-0001", " ", CATEGORY, "Kho", "Vui lòng bổ sung tên thiết bị."),
             Arguments.of("ASSET-HN01-0001", "Loa", null, "Kho", "Vui lòng bổ sung nhóm thiết bị."),
             Arguments.of("ASSET-HN01-0001", "Loa", CATEGORY, " ", "Vui lòng bổ sung vị trí thiết bị.")
@@ -152,6 +167,17 @@ class InventorySystemMessagesTest {
         error(400, message, () -> service.create(MANAGER, BRANCH,
             new EquipmentAssetDtos.Command(code, name, category, null, location, null, null, null, null, "IN_USE")));
         verifyNoInteractions(repo);
+    }
+
+    @Test void firstAssetOfAnUninitializedSeriesRequiresACode() {
+        var repo = mock(EquipmentAssetRepository.class);
+        when(repo.categoryAvailable(BRANCH, CATEGORY, null)).thenReturn(true);
+        when(repo.roomAvailable(BRANCH, null, null)).thenReturn(true);
+        when(repo.codeSeries(BRANCH)).thenReturn(new EquipmentAssetRepository.CodeSeries("HN01", null));
+        error(400, "Vui lòng nhập mã thiết bị đầu tiên của cơ sở.", () -> new EquipmentAssetService(repo, null)
+            .create(MANAGER, BRANCH, new EquipmentAssetDtos.Command(null, "Loa", CATEGORY, null, "Kho", null, null, null, null, "IN_USE")));
+        verify(repo, never()).allocateCode(any(), any());
+        verify(repo, never()).create(any(), any(), any());
     }
 
     @Test void assetScopeNamesTheRequestedAction() {

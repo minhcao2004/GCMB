@@ -14,10 +14,10 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 public class CashClosingController {
 
-  private final CashClosingService service;
+  private final CashClosingService cashClosingService;
 
-  public CashClosingController(CashClosingService service) {
-    this.service = service;
+  public CashClosingController(CashClosingService cashClosingService) {
+    this.cashClosingService = cashClosingService;
   }
 
   @GetMapping("/api/v1/branch-management/cash-closing/preview")
@@ -25,7 +25,7 @@ public class CashClosingController {
     @AuthenticationPrincipal Identity actor,
     @RequestParam(required = false) LocalDate date
   ) {
-    return service.preview(actor, date);
+    return cashClosingService.preview(actor, date);
   }
 
   @PostMapping(
@@ -37,7 +37,7 @@ public class CashClosingController {
     @RequestPart Submit command,
     @RequestPart(required = false) MultipartFile evidence
   ) {
-    return service.submit(actor, command, evidence);
+    return cashClosingService.submit(actor, command, evidence);
   }
 
   @GetMapping({ "/api/v1/branch-management/cash-closing", "/api/v1/accounting/cash-closing" })
@@ -49,7 +49,7 @@ public class CashClosingController {
     @RequestParam(required = false) String status,
     @RequestParam(defaultValue = "false") boolean alerts
   ) {
-    return service.list(actor, from, to, branchId, status, alerts);
+    return cashClosingService.list(actor, from, to, branchId, status, alerts);
   }
 
   @GetMapping("/api/v1/accounting/cash-closing/statuses")
@@ -71,18 +71,18 @@ public class CashClosingController {
     @AuthenticationPrincipal Identity actor,
     @PathVariable UUID id
   ) {
-    return service.detail(actor, id);
+    return cashClosingService.detail(actor, id);
   }
 
   @PostMapping("/api/v1/branch-management/cash-closing/remittances")
   public Map<String,Object> remit(@AuthenticationPrincipal Identity actor, @RequestBody Remittance body) {
-    return service.remit(actor, body);
+    return cashClosingService.remit(actor, body);
   }
 
   @PostMapping("/api/v1/accounting/cash-closing/{id}/return")
   public Map<String,Object> returnReport(@AuthenticationPrincipal Identity actor, @PathVariable UUID id,
     @RequestBody Review body) {
-    return service.returnReport(actor, id, body);
+    return cashClosingService.returnReport(actor, id, body);
   }
 
   @PostMapping("/api/v1/accounting/cash-closing/{id}/reconcile")
@@ -91,7 +91,7 @@ public class CashClosingController {
     @PathVariable UUID id,
     @RequestBody Review body
   ) {
-    return service.reconcile(actor, id, body);
+    return cashClosingService.reconcile(actor, id, body);
   }
 
   @GetMapping({
@@ -103,7 +103,7 @@ public class CashClosingController {
     @PathVariable UUID id,
     @RequestParam(defaultValue = "0") int revision
   ) {
-    var value = service.evidence(actor, id, revision);
+    var value = cashClosingService.evidence(actor, id, revision);
     return ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
       .contentType(MediaType.parseMediaType((String) value.get("mime_type")))
