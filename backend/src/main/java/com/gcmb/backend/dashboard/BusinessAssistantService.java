@@ -207,9 +207,9 @@ public class BusinessAssistantService {
               "include_branch_months", Map.of("type", "BOOLEAN", "description", "Lấy từng cơ sở trong từng tháng khi cần so sánh nhiều cơ sở; mặc định chỉ tổng tháng và tổng từng cơ sở cả giai đoạn.")))),
       Map.of("name", "read_business_snapshot", "description", "Tra cứu chỉ đọc chi tiết một tháng: kết quả kinh doanh, nhóm chi phí, giờ sử dụng và tiền phòng Cinema/Music Box. Danh mục phòng và sự cố là hiện tại. Cơ sở cụ thể phải còn hoạt động.",
           "parameters", Map.of("type", "OBJECT", "properties", Map.of("month", Map.of("type", "STRING", "description", "Tháng YYYY-MM không thuộc tương lai."), "branch_id", BRANCH_ARGUMENT), "required", List.of("month"))),
-      Map.of("name", "read_popularity", "description", "Tra cứu chi tiết combo phòng được đặt nhiều nhất hoặc món F&B bán chạy: số lượt, số lượng, tỷ trọng và giá trị dòng hóa đơn. PHẢI gọi khi hỏi combo được yêu thích, combo phòng được book nhiều, món bán chạy. Combo trong hệ thống là gói phòng; món F&B là từng món, không tự suy ra combo F&B. Bỏ tháng sẽ lấy tháng hiện tại; hỏi toàn bộ lịch sử thì dùng tháng đầu trong danh mục.",
+      Map.of("name", "read_popularity", "description", "Tra cứu xếp hạng combo phòng được đặt nhiều nhất, món F&B bán chạy hoặc nguồn khách/kênh booking: số lượt, số lượng, tỷ trọng. PHẢI gọi khi hỏi khách booking từ đâu nhiều nhất, nguồn khách, kênh đặt phòng, combo được yêu thích hoặc món bán chạy. Combo trong hệ thống là gói phòng; món F&B là từng món. Nguồn khách được ghi trên booking, không phải dữ liệu chưa có. Bỏ tháng sẽ lấy tháng hiện tại; hỏi toàn bộ lịch sử thì dùng tháng đầu trong danh mục.",
           "parameters", Map.of("type", "OBJECT", "properties", Map.of(
-              "kind", Map.of("type", "STRING", "enum", List.of("ROOM_COMBO", "FNB_ITEM"), "description", "ROOM_COMBO cho combo/gói phòng; FNB_ITEM cho từng món ăn, đồ uống bán chạy."),
+              "kind", Map.of("type", "STRING", "enum", List.of("ROOM_COMBO", "FNB_ITEM", "BOOKING_CHANNEL"), "description", "ROOM_COMBO cho combo/gói phòng; FNB_ITEM cho món ăn/đồ uống; BOOKING_CHANNEL cho nguồn khách, kênh đặt phòng hoặc khách booking từ đâu nhiều nhất."),
               "start_month", Map.of("type", "STRING", "description", "Tháng bắt đầu YYYY-MM; mặc định tháng hiện tại."),
               "end_month", Map.of("type", "STRING", "description", "Tháng cuối YYYY-MM; mặc định tháng hiện tại."),
               "branch_id", BRANCH_ARGUMENT, "limit", Map.of("type", "INTEGER", "description", "Số mục đứng đầu từ 1 đến 20; mặc định 10.")), "required", List.of("kind"))));
@@ -267,7 +267,10 @@ public class BusinessAssistantService {
       Map.entry("completedBookingCount", "Lượt đặt đã hoàn thành"), Map.entry("settledLineAmount", "Giá trị dòng hóa đơn đã tất toán trước giảm giá hoặc hoàn tiền"),
       Map.entry("selectionSharePercent", "Tỷ trọng trong lượt chọn hoặc lượng bán (%)"),
       Map.entry("productName", "Tên món"), Map.entry("soldQuantity", "Số lượng bán thu tiền"),
-      Map.entry("paidItemLines", "Số dòng món bán thu tiền"), Map.entry("excludedGiftQuantity", "Số lượng món tặng hoặc miễn phí đã loại"));
+      Map.entry("paidItemLines", "Số dòng món bán thu tiền"), Map.entry("excludedGiftQuantity", "Số lượng món tặng hoặc miễn phí đã loại"),
+      Map.entry("channelName", "Nguồn khách đặt phòng"), Map.entry("bookingSharePercent", "Tỷ trọng trong tổng lượt đặt (%)"),
+      Map.entry("bookingsWithKnownChannel", "Lượt đặt đã xác định nguồn khách"),
+      Map.entry("bookingsWithoutKnownChannel", "Lượt đặt chưa xác định nguồn khách"));
 
   private static Object businessData(Object value) {
     if (value instanceof Map<?, ?> map) {
@@ -281,6 +284,7 @@ public class BusinessAssistantService {
       case "ACTIVE" -> "Đang hoạt động"; case "INACTIVE" -> "Ngừng hoạt động";
       case "CINEMA" -> "Cinema"; case "MUSIC_BOX" -> "Music Box";
       case "ROOM_COMBO" -> "Combo phòng theo lượt đặt"; case "FNB_ITEM" -> "Món ăn, đồ uống theo số lượng bán";
+      case "BOOKING_CHANNEL" -> "Nguồn khách theo lượt đặt phòng";
       default -> businessText(text);
     };
     return value;
@@ -355,6 +359,11 @@ public class BusinessAssistantService {
     Hỏi 'combo nào được yêu thích nhất', 'combo phòng được book nhiều nhất' phải gọi công cụ xếp hạng ROOM_COMBO.
     Combo ở đây là gói phòng có thể kèm đồ ăn/đồ uống; không tự hiểu thành combo F&B riêng.
     Hỏi món ăn, đồ uống bán chạy thì gọi công cụ xếp hạng FNB_ITEM và nói rõ là món, không gọi thành combo phòng.
+    Hỏi khách booking từ đâu nhiều nhất, nguồn khách, kênh đặt phòng hoặc Facebook/TikTok/Zalo/Instagram nào nhiều hơn
+    thì PHẢI gọi read_popularity với kind BOOKING_CHANNEL, đúng cơ sở và kỳ đang hỏi; không đề nghị bổ sung tính năng ghi nguồn khách.
+    Nêu kênh đứng đầu, số booking và tỷ trọng, cùng kỳ/cơ sở; nếu bằng nhau thì nói đồng hạng. Đó là số lượt booking,
+    không phải số khách duy nhất hoặc hiệu quả chi phí quảng cáo. Nhóm chưa xác định phải nói rõ là thiếu thông tin nguồn,
+    không coi là kênh thu hút khách. Các kênh ngoài bốn mạng xã hội làm mẫu số khác biểu đồ Nguồn khách; khi so biểu đồ phải nêu phạm vi.
     Nêu tên đứng đầu, số lượt đặt hoặc số lượng bán và kỳ/cơ sở, có thể thêm 2–3 mục theo sau khi hữu ích.
     Chỉ gọi là 'được đặt nhiều nhất' hoặc 'bán nhiều nhất', không khẳng định sở thích/đánh giá khách từ doanh số.
     Nêu ngắn phạm vi nếu chỉ bao phủ giao dịch vận hành; không suy ra số liệu từ danh mục combo hay tổng doanh thu F&B.

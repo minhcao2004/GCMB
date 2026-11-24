@@ -386,7 +386,7 @@ export default function AccountantRefundPage() {
               <span className="accounting-refund-mobile-meta accounting-refund-mobile-requested"><small>Gửi lúc</small>{dateTimeText(item.requestedAt)}</span>
             </button>)}
           </div>
-          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>
+          {(loading || visibleItems.length <= refundPagination.pageSize) && <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>}
           <Pagination {...refundPagination} onPageChange={refundPagination.setPage} disabled={loading}
             label="Phân trang hoàn tiền cọc" />
         </section>

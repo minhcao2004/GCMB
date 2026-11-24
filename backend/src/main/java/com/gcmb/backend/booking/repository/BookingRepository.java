@@ -405,10 +405,10 @@ public class BookingRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    // Chuyển booking sang đang sử dụng và lưu giờ check-in thực tế.
+    // Lưu khung sử dụng thực tế; giờ hẹn gốc được đọc lại từ sự kiện check-in.
     public int checkInBooking(UUID bookingId, Instant now, Instant plannedEnd) {
-        return jdbcTemplate.update("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=?,planned_end=? WHERE id=? AND status='CONFIRMED'",
-            ts(now), ts(plannedEnd), bookingId);
+        return jdbcTemplate.update("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=?,planned_start=LEAST(planned_start,?),planned_end=? WHERE id=? AND status='CONFIRMED'",
+            ts(now), ts(now), ts(plannedEnd), bookingId);
     }
 
     // Chuyển allocation đã giữ sang đang sử dụng.

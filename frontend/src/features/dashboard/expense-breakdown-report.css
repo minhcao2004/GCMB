@@ -1,23 +1,45 @@
 .expense-breakdown-report .expense-report-heading {
-  align-items: start;
-  gap: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .expense-report-filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px 12px;
-  min-width: min(680px, 58vw);
+  width: 100%;
+  min-width: 0;
 }
 
-.expense-report-filters > .finance-month { min-width: 0; }
+.expense-report-filters > .finance-month {
+  flex: 1 1 180px;
+  min-width: 0;
+  grid-template-rows: 18px 40px;
+  align-content: start;
+}
 .expense-report-filters > .finance-month > input,
 .expense-report-filters > .finance-month > select,
 .expense-report-filters > .finance-month > .finance-branch-filter { box-sizing: border-box; width: 100%; min-width: 0; }
 
-.expense-report-search {
-  grid-column: span 2;
+.expense-report-filters > .finance-month > .finance-branch-filter {
+  display: block;
+  height: 40px;
+  margin: 0;
 }
+
+.expense-report-filters > .finance-month > input,
+.expense-report-filters > .finance-month > select,
+.expense-report-filters .finance-branch-filter > summary {
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.expense-report-filters > .expense-report-search { flex: 1.4 1 240px; }
 
 .expense-report-totals {
   display: grid;
@@ -85,7 +107,7 @@
 .expense-report-detail-scroll td {
   padding: 12px 14px;
   border-top: 1px solid #edf0f5;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .expense-report-table th,
@@ -168,14 +190,8 @@
 .expense-report-preview iframe { flex: 1; min-height: 0; width: 100%; margin: 12px 0; border: 0; object-fit: contain; }
 .expense-report-preview a { align-self: end; color: #4c34aa; }
 
-@media (max-width: 950px) {
-  .expense-report-filters { min-width: 0; grid-template-columns: repeat(2, minmax(140px, 1fr)); }
-  .expense-breakdown-report .expense-report-heading { flex-direction: column; }
-}
-
 @media (max-width: 600px) {
-  .expense-report-filters { width: 100%; grid-template-columns: 1fr; }
-  .expense-report-search { grid-column: auto; }
+  .expense-report-filters > .finance-month { flex-basis: 100%; }
   .expense-report-totals { grid-template-columns: 1fr; }
   .expense-report-footer { align-items: flex-start; gap: 12px; }
   .expense-report-preview-backdrop { padding: 10px; }

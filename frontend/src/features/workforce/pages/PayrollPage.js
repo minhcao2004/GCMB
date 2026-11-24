@@ -129,6 +129,10 @@ export default function PayrollPage() {
   };
   const toggle = (id) => {
     setReviewed(false);
+    setResults((old) => old[id] ? old : {
+      ...old,
+      [id]: { result: 'PENDING', reference: '', requestId: requestId() },
+    });
     setSelected((old) => (old.includes(id) ? old.filter((item) => item !== id) : [...old, id]));
   };
   const submitPayments = () => {
@@ -431,7 +435,7 @@ export default function PayrollPage() {
                       />
                       Tôi xác nhận các kết quả trên đúng với thanh toán thực tế.
                     </label>
-                    <button disabled={busy} className="finance-primary">
+                    <button disabled={busy || !selected.length} className="finance-primary">
                       Xác nhận ghi nhận kết quả
                     </button>
                   </form>

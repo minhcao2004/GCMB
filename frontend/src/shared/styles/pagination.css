@@ -6,7 +6,7 @@
   justify-content: space-between;
   gap: 12px;
   grid-column: 1 / -1;
-  flex: 0 0 100%;
+  flex: 0 0 auto;
   width: 100%;
   padding: 14px 4px;
   color: #52637a;

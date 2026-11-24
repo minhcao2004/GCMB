@@ -232,7 +232,12 @@ export default function BusinessAssistant({ user }) {
         <form onSubmit={submit}>
           <label className="business-assistant-input-label" htmlFor="business-assistant-question">Câu hỏi của bạn</label>
           <textarea id="business-assistant-question" ref={composer} rows={2} maxLength={2000} value={draft} disabled={busy}
-            onChange={(event) => setDraft(event.target.value)} />
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
+              event.preventDefault();
+              if (!event.repeat) event.currentTarget.form?.requestSubmit();
+            }} />
           <div className="business-assistant-composer-actions">
             <button type="submit" className="business-assistant-send" disabled={busy || loading || !context?.configured || !draft.trim()}>
               {busy ? 'Đang trả lời…' : 'Gửi câu hỏi'}</button></div>
