@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-89/91/95, BR-63/64/67/75: xác nhận gửi lương ngay từ màn chi tiết. */
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
@@ -111,7 +112,7 @@ export default function MonthlyPayrollDialog({
           <details className="monthly-attendance-detail" open={rows.some((row) => row.note)}>
             <summary>Ca làm và ghi chú chấm công ({rows.length})</summary>
             <div className="attendance-table-scroll">
-              <table className="attendance-table">
+              <PaginatedTable pageSize={5} className="attendance-table">
                 <thead><tr><th>Ngày / ca</th><th>Chấm công</th><th>Giờ công</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
                 <tbody>{rows.map((row) => (
                   <tr key={row.assignmentId}>
@@ -122,7 +123,7 @@ export default function MonthlyPayrollDialog({
                     <td><button type="button" disabled={busy} onClick={() => onDaily(row.workDate)}>Xem ngày</button></td>
                   </tr>
                 ))}</tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </details>
           {!employee.closed && (

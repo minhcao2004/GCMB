@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  * Author: HuyDV
@@ -268,7 +269,7 @@ export default function TaxInvoicePage({ accounting = false }) {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="staff-table-wrap">
-              <table>
+              <PaginatedTable pageSize={5}>
                 <thead>
                   <tr>
                     <th>Đặt phòng / khách hàng</th>
@@ -292,7 +293,7 @@ export default function TaxInvoicePage({ accounting = false }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
             {!visibleRows.length && (
               <p>Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
@@ -466,7 +467,7 @@ export default function TaxInvoicePage({ accounting = false }) {
               {!!detail.history?.length && (
                 <div>
                   <h3>Lịch sử xử lý</h3>
-                  {detail.history.map((h, i) => (
+                  {<PaginatedList pageSize={5}>{detail.history.map((h, i) => (
                     <p key={i}>
                       {new Date(h.createdAt).toLocaleString('vi-VN')} ·{' '}
                       {h.action === 'CREATE_TAX_INVOICE_REQUEST'
@@ -479,7 +480,7 @@ export default function TaxInvoicePage({ accounting = false }) {
                           ? JSON.parse(h.data).note
                           : ''}
                     </p>
-                  ))}
+                  ))}</PaginatedList>}
                 </div>
               )}
               {accounting && detail.request && (

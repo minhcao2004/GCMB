@@ -384,7 +384,7 @@ public class FinancialController {
             LEFT JOIN gcmb.payment p ON p.bank_transaction_id=bt.id
             LEFT JOIN gcmb.branch b ON b.id=COALESCE(p.branch_id,a.branch_id)
             LEFT JOIN gcmb.user_account u ON u.id=bt.resolved_by
-            WHERE bt.provider='SEPAY' AND bt.match_status='EXCEPTION' AND bt.occurred_at>=? AND bt.occurred_at<?
+            WHERE bt.provider='SEPAY' AND bt.match_status IN ('EXCEPTION','UNMATCHED') AND bt.occurred_at>=? AND bt.occurred_at<?
               AND (CAST(? AS uuid) IS NULL OR COALESCE(p.branch_id,a.branch_id)=?)
             ORDER BY bt.occurred_at DESC LIMIT 100
             """, Timestamp.from(start.atStartOfDay(FinancialPeriodService.ZONE).toInstant()),

@@ -1,10 +1,13 @@
+import { PaginatedTable, PaginatedList } from '../../shared/components/Pagination';
 import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import { financeApi } from '../finance/services/financeApi';
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
+  Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import CustomerSourcesChart from './CustomerSourcesChart';
+import PeriodControls, { initialPeriodValue, vietnamToday } from './DashboardPeriodControls';
 import './executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
@@ -12,13 +15,6 @@ const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-
 const changeText = (value) => value == null ? 'Chưa có doanh thu kỳ trước để so sánh' : `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}% so kỳ trước`;
 const tooltipMoney = (value) => money(value);
 const axisMoney = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value / 1_000_000)} tr`;
-const periodNames = { DAY: 'Ngày', MONTH: 'Tháng', YEAR: 'Năm' };
-
-function vietnamToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
 
 function periodRange(type, value) {
   const today = vietnamToday();
@@ -30,27 +26,8 @@ function periodRange(type, value) {
   return { from: `${value}-01`, to: end > today ? today : end };
 }
 
-function initialPeriodValue(type) {
-  const today = vietnamToday();
-  return type === 'DAY' ? today : type === 'YEAR' ? today.slice(0, 4) : today.slice(0, 7);
-}
-
 function periodDescription(type, value) {
   return type === 'DAY' ? `ngày ${value}` : type === 'YEAR' ? `năm ${value}` : `tháng ${value}`;
-}
-
-function PeriodControls({ id, type, value, onTypeChange, onValueChange }) {
-  const setType = (nextType) => { onTypeChange(nextType); onValueChange(initialPeriodValue(nextType)); };
-  return <div className="executive-period-controls">
-    <label className="executive-compact-filter"><span>Xem theo</span><select aria-label={`Loại kỳ ${id}`} value={type} onChange={(event) => setType(event.target.value)}>
-      <option value="DAY">Ngày</option><option value="MONTH">Tháng</option><option value="YEAR">Năm</option>
-    </select></label>
-    <label className="executive-compact-filter"><span>{periodNames[type]}</span>
-      {type === 'DAY' ? <input aria-label={`Ngày ${id}`} type="date" max={vietnamToday()} value={value} onChange={(event) => onValueChange(event.target.value)} />
-        : type === 'YEAR' ? <select aria-label={`Năm ${id}`} value={value} onChange={(event) => onValueChange(event.target.value)}>{Array.from({ length: 7 }, (_, index) => Number(vietnamToday().slice(0, 4)) - index).map((year) => <option key={year} value={String(year)}>{year}</option>)}</select>
-          : <input aria-label={`Tháng ${id}`} type="month" max={vietnamToday().slice(0, 7)} value={value} onChange={(event) => onValueChange(event.target.value)} />}
-    </label>
-  </div>;
 }
 
 function financialWarnings(overview, type, value, scope = 'Toàn chuỗi', branchId = '') {
@@ -155,9 +132,9 @@ function OperationalAlertBubble({ warnings, onAlertNavigate }) {
     </button>
     {expanded && <div id="executive-alert-details" className="executive-alert-card" role={alert.level === 'critical' ? 'alert' : 'status'} aria-live={alert.level === 'critical' ? 'assertive' : 'polite'} aria-atomic="true" key={alert.id}>
       <span className="executive-alert-tail" aria-hidden="true" />
-      <div className="executive-alert-list" aria-label="Danh sách cảnh báo">{warnings.map((item, itemIndex) => <button type="button" key={item.id} className={itemIndex === index ? 'is-active' : ''} onClick={() => { setActiveIndex(itemIndex); onAlertNavigate?.(item); }} aria-label={`Mở cảnh báo ${item.kind} tại ${item.branch}`}>
+      <PaginatedList as="div" pageSize={5} className="executive-alert-list" aria-label="Danh sách cảnh báo">{warnings.map((item, itemIndex) => <button type="button" key={item.id} className={itemIndex === index ? 'is-active' : ''} onClick={() => { setActiveIndex(itemIndex); onAlertNavigate?.(item); }} aria-label={`Mở cảnh báo ${item.kind} tại ${item.branch}`}>
         <i className={item.level === 'critical' ? 'is-critical' : ''} aria-hidden="true" /><span><strong>{item.kind}</strong><small>{item.branch}</small><em>{item.detail}</em></span><b aria-hidden="true">→</b>
-      </button>)}</div>
+      </button>)}</PaginatedList>
       <div className="executive-alert-message"><strong>{alert.branch}</strong><p>{alert.detail}</p></div>
       <footer className="executive-alert-footer"><span>{index + 1} / {warnings.length}</span><span>Chọn cảnh báo để mở</span></footer>
     </div>}
@@ -165,7 +142,7 @@ function OperationalAlertBubble({ warnings, onAlertNavigate }) {
 }
 
 function RankingTable({ rows, emptyMessage }) {
-  return <div className="executive-table-scroll"><table className="executive-ranking-table">
+  return <div className="executive-table-scroll"><PaginatedTable pageSize={5} className="executive-ranking-table">
     <thead><tr><th>Cơ sở</th><th>Thu nhập vận hành</th><th>Lượt đặt không hủy</th><th>Lấp đầy</th><th>Chi phí</th><th>Trạng thái</th></tr></thead>
     <tbody>{rows.length ? rows.map((row, index) => <tr key={row.id}>
       <td><span className="executive-branch-name"><span className="executive-rank">{String(index + 1).padStart(2, '0')}</span><span>{row.name}<small>{row.code}</small></span></span></td>
@@ -174,7 +151,7 @@ function RankingTable({ rows, emptyMessage }) {
       <td className="executive-number">{money(row.cost)}</td>
       <td><span className={`executive-status${row.status === 'ACTIVE' ? '' : ' is-paused'}`}><i />{row.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm ngừng'}</span></td>
     </tr>) : <tr><td className="executive-empty-cell" colSpan="6">{emptyMessage}</td></tr>}</tbody>
-  </table></div>;
+  </PaginatedTable></div>;
 }
 
 export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
@@ -206,8 +183,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
       api.get('/head-office/dashboard', { params: { month: operationsMonth, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
       api.get('/head-office/finance'),
       financeApi.financialOverview(overviewParams(periodType, periodValue, reportBranchId)),
-      api.get('/head-office/dashboard/revenue-mix', { params: { ...selectedRange, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
-    ]).then(([reportResult, financeResult, overviewResult, mixResult]) => {
+    ]).then(([reportResult, financeResult, overviewResult]) => {
       if (!active) return;
       if (reportResult.status === 'rejected' || overviewResult.status === 'rejected') {
         setData(null);
@@ -237,7 +213,6 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
         revenueByBranch: revenueRows,
         occupancyByBranch: monthlyBranches.map((row) => ({ ...row, occupancy: row.occupancyRate == null ? 0 : Number(row.occupancyRate) / 100 })),
         revenueByDay: (overview.series || []).map((row) => ({ ...row, label: row.label, roomRevenue: Number(row.revenue) || 0, fnbRevenue: Number(row.profit) || 0, overtimeRevenue: 0, otherRevenue: 0 })),
-        revenueMix: (mixResult.status === 'fulfilled' ? mixResult.value.data.revenueMix : report.revenueMix || []).map((row) => ({ name: row.label, value: Number(row.value) || 0, color: row.label === 'Tiền mặt' ? '#168b87' : row.label === 'Chuyển khoản' ? '#6a3ee8' : '#df9b28' })),
         ranking: [...revenueRows].sort((a, b) => b.revenue - a.revenue),
         approvals: requests.filter((row) => ['WAITING_HEAD_OFFICE', 'WAITING_APPROVAL', 'WAITING_MANAGER'].includes(row.status)).map((row) => ({ id: row.id, category: row.description || row.categoryName || 'Đề nghị chi', branch: row.branchName || '—', amount: row.amount || 0 })),
         warnings: [...financeAlerts, ...operationalAlerts],
@@ -264,10 +239,9 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
     }).catch(() => { if (active) setTrendRows([]); }).finally(() => { if (active) setTrendLoading(false); });
     return () => { active = false; };
   }, [trendPeriodType, trendPeriodValue]);
-  const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], revenueMix: [], ranking: [], approvals: [], warnings: [] };
+  const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], ranking: [], approvals: [], warnings: [] };
   const selectedBranch = incomeRows.find((branch) => branch.id === selectedBranchId);
   const { kpis } = safeData;
-  const selectedRevenueMix = safeData.revenueMix.reduce((sum, item) => sum + item.value, 0);
   const rankedRevenue = [...incomeRows].sort((a, b) => b.revenue - a.revenue);
   const chartRevenueRows = rankedRevenue.slice(0, 8);
   const leadingBranch = rankedRevenue[0];
@@ -366,28 +340,14 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
         </div>
       </article>
 
-      <article className="executive-panel executive-panel-mix">
-        <PanelHeading title="Cơ cấu thu nhập" description="Theo phương thức thanh toán và cọc tịch thu" trailing={<span className="executive-panel-kicker">TỶ TRỌNG</span>} />
-        <div className="executive-chart-area executive-chart-area-donut">
-          {safeData.revenueMix.length ? <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={safeData.revenueMix} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={3} stroke="none">
-                {safeData.revenueMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-              </Pie>
-              <Tooltip formatter={tooltipMoney} />
-            </PieChart>
-          </ResponsiveContainer> : <p className="executive-empty">{data ? 'Chưa có cơ cấu doanh thu trong kỳ.' : noReportMessage}</p>}
-          <div className="executive-donut-center"><strong>{data ? money(selectedRevenueMix) : '—'}</strong><span>Thu nhập vận hành</span></div>
-        </div>
-        <div className="executive-mix-legend">{safeData.revenueMix.length ? safeData.revenueMix.map((item) => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><strong>{money(item.value)}<small>{selectedRevenueMix ? percent(item.value / selectedRevenueMix) : '0%'}</small></strong></div>) : <p className="executive-empty">{data ? 'Không có khoản thu từ hóa đơn hoặc cọc bị tịch thu trong kỳ.' : noReportMessage}</p>}</div>
-      </article>
+      <CustomerSourcesChart headOffice className="executive-panel executive-panel-sources" />
 
       <article className="executive-panel executive-panel-occupancy">
         <PanelHeading title="Tỷ lệ lấp đầy" description="Số giờ phòng có khách · khung 08:00–20:00" trailing={<span className="executive-panel-kicker">BÌNH QUÂN {occupancyAverage == null ? '—' : percent(occupancyAverage)}</span>} />
-        {rankedOccupancy.length ? <div className="executive-occupancy-list" aria-label="Tỷ lệ lấp đầy từng cơ sở">{rankedOccupancy.map((branch, index) => <div className="executive-occupancy-row" key={branch.id}>
+        {rankedOccupancy.length ? <PaginatedList as="div" pageSize={10} className="executive-occupancy-list" aria-label="Tỷ lệ lấp đầy từng cơ sở">{rankedOccupancy.map((branch, index) => <div className="executive-occupancy-row" key={branch.id}>
           <span className="executive-occupancy-rank">{String(index + 1).padStart(2, '0')}</span><span className="executive-occupancy-name" title={branch.name}>{branch.name}<small>{branch.code}</small></span>
           <span className="executive-occupancy-track" aria-hidden="true"><i className={branch.occupancy < occupancyAverage ? 'is-below-average' : ''} style={{ width: `${Math.max(0, Math.min(100, branch.occupancy * 100))}%` }} /></span><strong>{percent(branch.occupancy)}</strong>
-        </div>)}</div> : <p className="executive-empty">{data ? 'Chưa có dữ liệu lấp đầy trong kỳ.' : noReportMessage}</p>}
+        </div>)}</PaginatedList> : <p className="executive-empty">{data ? 'Chưa có dữ liệu lấp đầy trong kỳ.' : noReportMessage}</p>}
       </article>
     </div>
 
@@ -399,10 +359,10 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
     <div className="executive-bottom-grid">
       <article className="executive-panel executive-approvals">
         <PanelHeading title="Việc cần làm" description="Các đề nghị cần quản lý cấp cao xem xét và xử lý." trailing={<span className="executive-pending-count">{safeData.approvals.length} chờ duyệt</span>} />
-        {safeData.approvals.length ? <div className="executive-approval-list">{safeData.approvals.map((item) => <article className="executive-approval-row" key={item.id}>
+        {safeData.approvals.length ? <PaginatedList as="div" pageSize={5} className="executive-approval-list">{safeData.approvals.map((item) => <article className="executive-approval-row" key={item.id}>
           <div><strong>{item.category}</strong><span>{item.branch} · Mã đề nghị {item.id}</span></div><b>{money(item.amount)}</b>
           <button type="button" onClick={onNavigate} aria-label={`Mở phê duyệt đề nghị ${item.id}`}>Xem đề nghị <span aria-hidden="true">→</span></button>
-        </article>)}</div> : <p className="executive-empty">{loading ? 'Đang tải danh sách đề nghị…' : !data ? 'Chưa có dữ liệu báo cáo.' : data.approvalsAvailable ? 'Không có đề nghị vượt ngưỡng cần duyệt trong kỳ.' : 'Không tải được danh sách đề nghị chi.'}</p>}
+        </article>)}</PaginatedList> : <p className="executive-empty">{loading ? 'Đang tải danh sách đề nghị…' : !data ? 'Chưa có dữ liệu báo cáo.' : data.approvalsAvailable ? 'Không có đề nghị vượt ngưỡng cần duyệt trong kỳ.' : 'Không tải được danh sách đề nghị chi.'}</p>}
       </article>
 
     </div>

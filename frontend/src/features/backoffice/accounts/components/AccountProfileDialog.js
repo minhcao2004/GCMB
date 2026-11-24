@@ -228,7 +228,7 @@ export default function AccountProfileDialog({ onClose }) {
                     value={form.phone}
                     onChange={change}
                     disabled={!profile.linkedEmployee}
-                    maxLength={30}
+                    maxLength={15}
                     autoComplete="tel"
                   />
                 </div>

@@ -315,10 +315,6 @@
   gap: 16px;
 }
 
-.manager-account > span {
-  overflow-wrap: anywhere;
-}
-
 .manager-account button {
   border-color: #e4e9f1;
   font-size: 11px;

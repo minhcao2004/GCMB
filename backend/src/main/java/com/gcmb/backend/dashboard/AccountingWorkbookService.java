@@ -38,7 +38,7 @@ public class AccountingWorkbookService {
     Dataset data = load(selectedMonth, branches);
     BigDecimal bill = ZERO, forfeited = ZERO, expense = ZERO, profit = ZERO;
     for (Branch branch : branches) {
-      for (Day day : data.days.get(branch.id).values()) {
+      for (Day day : data.days.getOrDefault(branch.id, Map.of()).values()) {
         bill = bill.add(day.bill);
         forfeited = forfeited.add(day.forfeit);
         expense = expense.add(day.opexCash).add(day.opexBank).add(day.salary);
@@ -87,7 +87,7 @@ public class AccountingWorkbookService {
     List<Object> args = new ArrayList<>();
     args.add(month.atDay(1)); args.add(month.plusMonths(1).atDay(1));
     dataQuery("""
-      SELECT b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date day,sum(b.net_amount) amount
+      SELECT b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS day,sum(b.net_amount) amount
       FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
       WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date>=? AND (b.completed_at AT TIME ZONE br.timezone)::date<?
       """, ids, args, "b.branch_id", " GROUP BY b.branch_id,day", data, "bill");
@@ -98,7 +98,7 @@ public class AccountingWorkbookService {
         sum(d.amount) FILTER (WHERE d.kind='APPLY') apply_amount,
         sum(d.amount) FILTER (WHERE d.kind='FORFEIT') forfeit_amount,
         sum(d.amount) FILTER (WHERE d.kind='REFUND') refund_amount
-      FROM (SELECT bk.branch_id booking_branch_id,(e.created_at AT TIME ZONE br.timezone)::date day,e.kind,e.amount
+      FROM (SELECT bk.branch_id booking_branch_id,(e.created_at AT TIME ZONE br.timezone)::date AS day,e.kind,e.amount
         FROM gcmb.deposit_entry e JOIN gcmb.deposit dep ON dep.id=e.deposit_id
         JOIN gcmb.booking bk ON bk.id=dep.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
         WHERE e.kind IN ('APPLY','FORFEIT','REFUND') AND (e.created_at AT TIME ZONE br.timezone)::date>=? AND (e.created_at AT TIME ZONE br.timezone)::date<?) d
@@ -107,7 +107,7 @@ public class AccountingWorkbookService {
 
     args = rangeArgs(month);
     dataQuery("""
-      SELECT p.branch_id,(p.received_at AT TIME ZONE br.timezone)::date day,
+      SELECT p.branch_id,(p.received_at AT TIME ZONE br.timezone)::date AS day,
         sum(p.amount) FILTER (WHERE p.method='BANK_TRANSFER') bank_amount,
         sum(p.amount) FILTER (WHERE p.method='CASH') cash_amount
       FROM gcmb.payment p JOIN gcmb.branch br ON br.id=p.branch_id
@@ -116,7 +116,7 @@ public class AccountingWorkbookService {
 
     args = rangeArgs(month);
     expenseDaily("""
-      SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date day,
+      SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date AS day,
         sum(p.amount) FILTER (WHERE e.payment_source='BRANCH_FUND') cash_amount,
         sum(p.amount) FILTER (WHERE e.payment_source<>'BRANCH_FUND') bank_amount,
         sum(p.amount) FILTER (WHERE e.payment_source='BRANCH_FUND' AND e.class_snapshot='OPEX') opex_cash,
@@ -126,7 +126,7 @@ public class AccountingWorkbookService {
       """, ids, args, data, "legacyOpex");
     args = rangeArgs(month);
     expenseDaily("""
-      SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date day,sum(r.amount) bank_amount,
+      SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date AS day,sum(r.amount) bank_amount,
         sum(r.amount) FILTER (WHERE r.category_type='OPEX') opex_bank
       FROM gcmb.finance_expense_request r JOIN gcmb.branch br ON br.id=r.branch_id
       WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE br.timezone)::date>=? AND (r.paid_at AT TIME ZONE br.timezone)::date<?
@@ -134,14 +134,14 @@ public class AccountingWorkbookService {
 
     args = rangeArgs(month);
     dataQuery("""
-      SELECT e.branch_id,(t.occurred_at AT TIME ZONE br.timezone)::date day,sum(-e.amount_signed) amount
+      SELECT e.branch_id,(t.occurred_at AT TIME ZONE br.timezone)::date AS day,sum(-e.amount_signed) amount
       FROM gcmb.financial_entry e JOIN gcmb.financial_transaction t ON t.id=e.transaction_id JOIN gcmb.branch br ON br.id=e.branch_id
       WHERE t.kind IN ('SALARY','ADVANCE') AND e.amount_signed<0 AND (t.occurred_at AT TIME ZONE br.timezone)::date>=? AND (t.occurred_at AT TIME ZONE br.timezone)::date<?
       """, ids, args, "e.branch_id", " GROUP BY e.branch_id,day", data, "salary");
 
     args = rangeArgs(month);
     dataQuery("""
-      SELECT bk.branch_id,(e.created_at AT TIME ZONE br.timezone)::date day,sum(e.amount) amount
+      SELECT bk.branch_id,(e.created_at AT TIME ZONE br.timezone)::date AS day,sum(e.amount) amount
       FROM gcmb.deposit_entry e JOIN gcmb.deposit dep ON dep.id=e.deposit_id JOIN gcmb.booking bk ON bk.id=dep.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
       WHERE e.kind='REFUND' AND (e.created_at AT TIME ZONE br.timezone)::date>=? AND (e.created_at AT TIME ZONE br.timezone)::date<?
       """, ids, args, "bk.branch_id", " GROUP BY bk.branch_id,day", data, "refunds");
@@ -188,18 +188,21 @@ public class AccountingWorkbookService {
 
   private List<Map<String, Object>> expenseLines(YearMonth month, List<UUID> ids) {
     String placeholders = marks(ids.size());
+    List<Object> args = rangeArgs(month);
+    args.addAll(rangeArgs(month));
+    args.addAll(ids);
     return jdbcTemplate.queryForList("""
       SELECT x.branch_id,x.day,x.content,x.cost_type,x.amount,x.request_code
       FROM (
-        SELECT e.branch_id,(p.paid_at AT TIME ZONE b.timezone)::date day,c.name content,e.class_snapshot cost_type,p.amount,e.code request_code
+        SELECT e.branch_id,(p.paid_at AT TIME ZONE b.timezone)::date AS day,c.name content,e.class_snapshot cost_type,p.amount,e.code request_code
         FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
         WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?
         UNION ALL
-        SELECT r.branch_id,(r.paid_at AT TIME ZONE b.timezone)::date day,c.name content,r.category_type cost_type,r.amount,r.code request_code
+        SELECT r.branch_id,(r.paid_at AT TIME ZONE b.timezone)::date AS day,c.name content,r.category_type cost_type,r.amount,r.code request_code
         FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id JOIN gcmb.branch b ON b.id=r.branch_id
         WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE b.timezone)::date>=? AND (r.paid_at AT TIME ZONE b.timezone)::date<?
       ) x WHERE x.branch_id IN (""" + placeholders + ") ORDER BY x.branch_id,x.day,x.request_code",
-      month.atDay(1), month.plusMonths(1).atDay(1), month.atDay(1), month.plusMonths(1).atDay(1), ids.toArray());
+      args.toArray());
   }
 
   private List<Branch> branches(String branchIds) {
@@ -230,13 +233,15 @@ public class AccountingWorkbookService {
     if (branches.isEmpty()) return 0;
     List<UUID> ids = branches.stream().map(Branch::id).toList();
     String marks = marks(ids.size());
+    List<Object> args = rangeArgs(month);
+    args.addAll(ids);
     Long count = jdbcTemplate.queryForObject("""
       SELECT count(*) FROM gcmb.bank_transaction t JOIN gcmb.financial_account a ON a.id=t.account_id
-      WHERE t.provider='SEPAY' AND t.match_status='EXCEPTION' AND t.resolution_status='UNRESOLVED'
+      WHERE t.provider='SEPAY' AND t.match_status IN ('EXCEPTION','UNMATCHED') AND t.resolution_status='UNRESOLVED'
         AND (t.occurred_at AT TIME ZONE COALESCE((SELECT timezone FROM gcmb.branch WHERE id=a.branch_id),'Asia/Ho_Chi_Minh'))::date>=?
         AND (t.occurred_at AT TIME ZONE COALESCE((SELECT timezone FROM gcmb.branch WHERE id=a.branch_id),'Asia/Ho_Chi_Minh'))::date<?
         AND (a.branch_id IS NULL OR a.branch_id IN (""" + marks + "))",
-      Long.class, month.atDay(1), month.plusMonths(1).atDay(1), ids.toArray());
+      Long.class, args.toArray());
     return count == null ? 0 : count;
   }
 

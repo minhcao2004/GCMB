@@ -1,3 +1,4 @@
+import { Pagination } from '../../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -56,6 +57,8 @@ export default function AccountsPage({
       ])
         .then(([page, choices]) => {
           if (active) {
+            const lastPage = Math.max(0, Math.ceil(page.total / 10) - 1);
+            if (filters.page > lastPage) setFilters((old) => ({ ...old, page: lastPage }));
             setData(page);
             setOptions(choices);
           }
@@ -217,30 +220,7 @@ export default function AccountsPage({
                 <button onClick={() => setFilters(emptyFilters)}>Đặt lại bộ lọc</button>
               </div>
             )}
-            <div className="accounts-pagination">
-              <span>
-                Hiển thị {data.items.length ? filters.page * 10 + 1 : 0}–
-                {data.items.length ? filters.page * 10 + data.items.length : 0} / {data.total}
-              </span>
-              <span>10 dòng / trang</span>
-              <nav aria-label="Phân trang tài khoản">
-                <button
-                  aria-label="Trang trước"
-                  disabled={filters.page === 0}
-                  onClick={() => setFilters((old) => ({ ...old, page: old.page - 1 }))}
-                >
-                  ‹
-                </button>
-                <span aria-current="page">{filters.page + 1}</span>
-                <button
-                  aria-label="Trang sau"
-                  disabled={(filters.page + 1) * 10 >= data.total}
-                  onClick={() => setFilters((old) => ({ ...old, page: old.page + 1 }))}
-                >
-                  ›
-                </button>
-              </nav>
-            </div>
+            <Pagination page={filters.page} pageSize={10} total={data.total} disabled={loading} onPageChange={(page) => setFilters((old) => ({ ...old, page }))} label="Phân trang tài khoản" />
           </>
         )}
       </div>

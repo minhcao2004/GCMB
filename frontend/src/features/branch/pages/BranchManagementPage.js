@@ -1,3 +1,4 @@
+import { PaginatedTable, Pagination, PaginatedList } from '../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -41,8 +42,8 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
   const isStatus = modal === 'SUSPENDED' || modal === 'ACTIVE';
   const phoneError =
-    form.phone.trim() && !/^\+?[0-9]+$/.test(form.phone.trim())
-      ? 'Số điện thoại chỉ được chứa chữ số và có thể có một dấu + ở đầu.'
+    form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
+      ? 'Số điện thoại phải có từ 7 đến 15 chữ số, bắt đầu bằng 0; không được chứa dấu + hoặc ký tự định dạng.'
       : '';
 
   async function refresh() {
@@ -269,7 +270,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                     <td colSpan="5">Đang tải cơ sở…</td>
                   </tr>
                 ) : (
-                  visible.slice(page * 10, page * 10 + 10).map((branch) => (
+                  visible.slice(Math.min(page, Math.max(0, Math.ceil(visible.length / 10) - 1)) * 10, (Math.min(page, Math.max(0, Math.ceil(visible.length / 10) - 1)) + 1) * 10).map((branch) => (
                     <tr key={branch.branchId}>
                       <td>
                         <strong>{branch.branchName}</strong>
@@ -301,21 +302,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                 )}
               </tbody>
             </table>
-            <footer className="ba-pagination">
-              <span>{visible.length} cơ sở · 10 dòng / trang</span>
-              <div>
-                <button disabled={!page} onClick={() => setPage(page - 1)}>
-                  Trước
-                </button>{' '}
-                {page + 1}{' '}
-                <button
-                  disabled={(page + 1) * 10 >= visible.length}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Sau
-                </button>
-              </div>
-            </footer>
+            <Pagination page={page} pageSize={10} total={visible.length} onPageChange={setPage} label="Phân trang cơ sở" />
           </div>
         </>
       ) : (
@@ -406,7 +393,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
               ) : !related.length ? (
                 <p>Chưa có dữ liệu.</p>
               ) : (
-                <table>
+                <PaginatedTable pageSize={10}>
                   <thead>
                     <tr>
                       {(tab === 'Nhân sự'
@@ -439,7 +426,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               )}
             </section>
           )}
@@ -506,7 +493,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                     <input
                       type="tel"
                       inputMode="numeric"
-                      maxLength="30"
+                      maxLength="15"
                       value={form.phone}
                       aria-invalid={!!phoneError}
                       aria-describedby={phoneError ? 'branch-phone-error' : undefined}
@@ -558,7 +545,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                   ) : !managerOptions.length ? (
                     <p>Không có quản lý phù hợp.</p>
                   ) : (
-                    managerOptions.map((manager) => (
+                    <PaginatedList pageSize={10}>{managerOptions.map((manager) => (
                       <label
                         key={manager.userId}
                         className={`ba-manager-option ${managerId === manager.userId ? 'selected' : ''}`}
@@ -579,7 +566,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                           <small>Đang phụ trách: {manager.branchName || 'Chưa có cơ sở'}</small>
                         </div>
                       </label>
-                    ))
+                    ))}</PaginatedList>
                   )}
                   {selectedManager && (
                     <aside className="ba-success">

@@ -1,3 +1,5 @@
+import { PaginatedTable } from './Pagination';
+
 function rowKeyFor(row, index, rowKey) {
   if (typeof rowKey === 'function') return rowKey(row, index);
   return row?.[rowKey] ?? index;
@@ -23,7 +25,7 @@ export function DataTable({
       aria-busy={loading}
       tabIndex={0}
     >
-      <table className="gcmb-ui-data-table__table" aria-label={ariaLabel}>
+      <PaginatedTable pageSize={10} className="gcmb-ui-data-table__table" aria-label={ariaLabel} paginationLabel={`Phân trang ${ariaLabel}`}>
         <thead>
           <tr>
             {columns.map((column) => (
@@ -65,7 +67,7 @@ export function DataTable({
             ))
           )}
         </tbody>
-      </table>
+      </PaginatedTable>
     </div>
   );
 }

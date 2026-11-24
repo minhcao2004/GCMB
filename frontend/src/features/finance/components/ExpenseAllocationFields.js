@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import { useMemo } from 'react';
 import { calculateExpenseAllocation, formatVndInteger } from '../utils/expenseAllocation';
 
@@ -16,9 +17,9 @@ export default function ExpenseAllocationFields({ amount, months, startMonth, on
     {readyToPreview && preview.error && <p className="finance-allocation-error" role="alert">{preview.error}</p>}
     {readyToPreview && !preview.error && <div className="finance-allocation-preview">
       <strong>Lịch phân bổ xem trước</strong>
-      <div className="finance-allocation-preview-scroll"><table><thead><tr><th>Tháng</th><th>Số tiền ghi nhận</th></tr></thead>
+      <div className="finance-allocation-preview-scroll"><PaginatedTable pageSize={10}><thead><tr><th>Tháng</th><th>Số tiền ghi nhận</th></tr></thead>
         <tbody>{preview.lines.map((line) => <tr key={line.sequence}><td>{monthLabel(line.periodMonth)}</td><td>{formatVndInteger(line.amount)}đ</td></tr>)}</tbody>
-      </table></div>
+      </PaginatedTable></div>
       <small>Backend sẽ tính lại lịch phân bổ khi ghi nhận thanh toán.</small>
     </div>}
   </div>;

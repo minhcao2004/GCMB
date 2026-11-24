@@ -1,3 +1,4 @@
+import { PaginatedTable, PaginatedList, Pagination } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-91..97 / BR-64..81/213/225/227: bảng lương kế toán. */
 import { useEffect, useRef, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
@@ -8,7 +9,7 @@ import MoneyInput from '../../../shared/components/MoneyInput';
 import '../../finance/styles/finance.css';
 
 const base = '/accounting/payroll';
-const pageSize = 6;
+const pageSize = 5;
 const componentNames = {
   BASE: 'Tiền công theo ca',
   OVERTIME: 'Ngoài giờ ngày thường',
@@ -389,7 +390,7 @@ export default function PayrollPage() {
                       value={payment.accountId}
                       onChange={(accountId) => setPayment({ ...payment, accountId })}
                     />
-                    {selected.map((id) => {
+                    {<PaginatedList pageSize={5}>{selected.map((id) => {
                       const r = data.rows.find((r) => r.employee_id === id);
                       return (
                         r && (
@@ -420,7 +421,7 @@ export default function PayrollPage() {
                           </div>
                         )
                       );
-                    })}
+                    })}</PaginatedList>}
                     <label className="finance-check">
                       <input
                         required
@@ -482,16 +483,7 @@ export default function PayrollPage() {
                   ))}
                 </tbody>
               </table>
-              {!!rows.length && <nav className="payroll-pagination" aria-label="Phân trang lương nhân viên">
-                <span>Hiển thị {firstRow + 1}–{Math.min(firstRow + pageSize, rows.length)} / {rows.length} nhân viên</span>
-                <div>
-                  <button type="button" disabled={busy || currentPage === 1}
-                    onClick={() => setPage(currentPage - 1)}>Trang trước</button>
-                  <span aria-live="polite">Trang {currentPage} / {pageCount}</span>
-                  <button type="button" disabled={busy || currentPage === pageCount}
-                    onClick={() => setPage(currentPage + 1)}>Trang sau</button>
-                </div>
-              </nav>}
+              {!!rows.length && <Pagination page={currentPage - 1} pageSize={pageSize} total={rows.length} disabled={busy} onPageChange={(page) => setPage(page + 1)} label="Phân trang lương nhân viên" />}
               {!rows.length && (
                 <p>{readyRows.length ? emptyMessage : 'Chưa có bảng lương đã chốt trong tháng này.'}</p>
               )}
@@ -507,7 +499,7 @@ export default function PayrollPage() {
                   <button type="button" aria-label="Đóng chi tiết" onClick={() => setDetail(null)}>×</button>
                 </header>
                 <div className="payroll-detail-body">
-                {detail.components.map((c, i) => (
+                {<PaginatedList pageSize={10}>{detail.components.map((c, i) => (
                   <div className="finance-line" key={i}>
                     <span>
                       {componentNames[c.reason] || componentNames[c.kind]}
@@ -516,7 +508,7 @@ export default function PayrollPage() {
                     </span>
                     <strong>{vnd(c.amount)}</strong>
                   </div>
-                ))}
+                ))}</PaginatedList>}
                 <div className="finance-line">
                   <span>Ứng đã trả</span>
                   <strong>−{vnd(detail.advances)}</strong>
@@ -524,7 +516,7 @@ export default function PayrollPage() {
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
                 <SalaryBankDetails entry={detail} />
                 {error && <p className="finance-error" role="alert">{error}</p>}
-                {detail.payments.map((p, i) => (
+                {<PaginatedList pageSize={5}>{detail.payments.map((p, i) => (
                   <p key={i}>
                     {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
                     {p.external_reference}
@@ -534,7 +526,7 @@ export default function PayrollPage() {
                         catch { setError('Không tải được bằng chứng trả lương. Vui lòng thử lại.'); }
                       }}>Tải bằng chứng: {p.evidence_name}</button>}
                   </p>
-                ))}
+                ))}</PaginatedList>}
                 </div>
                 <footer><button type="button" onClick={() => setDetail(null)}>Đóng</button></footer>
               </dialog>
@@ -546,7 +538,7 @@ export default function PayrollPage() {
             <details className="finance-card">
               <summary>Lịch sử ứng lương ({advances.length})</summary>
               <div className="finance-table-wrap">
-                <table>
+                <PaginatedTable pageSize={5}>
                   <thead>
                     <tr>
                       <th>Nhân viên</th>
@@ -567,7 +559,7 @@ export default function PayrollPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </details>
           </>

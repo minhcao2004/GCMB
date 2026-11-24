@@ -58,7 +58,7 @@ public class FinancialPeriodService {
               UNION SELECT date_trunc('month',sent_on)::date FROM gcmb.finance_fund_transfer
               UNION SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date FROM gcmb.refund_request
               UNION SELECT date_trunc('month',occurred_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
-                FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status='EXCEPTION'
+                FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status IN ('EXCEPTION','UNMATCHED')
               UNION SELECT date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
             )
             SELECT p.id,m.month::text AS month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",
@@ -142,7 +142,7 @@ public class FinancialPeriodService {
               AND status IN ('REQUESTED','APPROVED','PROCESSING')
             """, start.atStartOfDay(ZONE).toOffsetDateTime(), end.atStartOfDay(ZONE).toOffsetDateTime());
         long sepayPending = count("""
-            SELECT count(*) FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status='EXCEPTION'
+            SELECT count(*) FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status IN ('EXCEPTION','UNMATCHED')
               AND resolution_status='UNRESOLVED'
               AND occurred_at<?
             """, end.atStartOfDay(ZONE).toOffsetDateTime());
@@ -203,8 +203,8 @@ public class FinancialPeriodService {
                 """, id);
             if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch SePay ngoại lệ.");
             Map<String, Object> row = rows.get(0);
-            if (!"EXCEPTION".equals(row.get("match_status")))
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ xử lý giao dịch đang ở trạng thái EXCEPTION.");
+            if (!List.of("EXCEPTION", "UNMATCHED").contains(row.get("match_status")))
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ xử lý giao dịch ngoại lệ hoặc chưa khớp thanh toán.");
             if ("UNRESOLVED".equals(row.get("resolution_status"))) {
                 jdbcTemplate.update("""
                     UPDATE gcmb.bank_transaction SET resolution_status='RESOLVED',resolved_at=CURRENT_TIMESTAMP,

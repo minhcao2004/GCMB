@@ -115,17 +115,6 @@
 .performance-dashboard:not(.accountant-finance) .performance-chart-detail { min-height: 20px; margin: 8px 0 14px; color: var(--pd-copy); font-size: 12px; line-height: 1.5; }
 .performance-dashboard:not(.accountant-finance) .performance-chart-choice { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: #9aa8b8; text-underline-offset: 3px; }
 .performance-dashboard:not(.accountant-finance) .performance-chart-choice:hover { color: var(--pd-info); }
-.performance-dashboard:not(.accountant-finance) .performance-grid-reception { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.performance-dashboard:not(.accountant-finance) .performance-dashboard-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--pd-muted); font-size: 12px; }
-.performance-dashboard:not(.accountant-finance) .performance-dashboard-actions button,
-.performance-dashboard:not(.accountant-finance) .performance-chart-results .performance-panel-heading button { min-height: 38px; padding: 7px 12px; border: 1px solid #c9d3df; border-radius: 8px; background: #fff; color: var(--pd-ink); font: inherit; font-weight: 650; cursor: pointer; }
-.performance-dashboard:not(.accountant-finance) .performance-dashboard-actions button:hover,
-.performance-dashboard:not(.accountant-finance) .performance-chart-results .performance-panel-heading button:hover { border-color: var(--pd-info); background: var(--pd-info-soft); }
-.performance-dashboard:not(.accountant-finance) .performance-dashboard-actions button:disabled { opacity: .6; cursor: wait; }
-.performance-dashboard:not(.accountant-finance) .performance-chart-results { margin-top: 16px; }
-.performance-dashboard:not(.accountant-finance) .performance-detail-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.performance-dashboard:not(.accountant-finance) .performance-detail-chips span { padding: 7px 10px; border: 1px solid var(--pd-line); border-radius: 7px; background: #f7f9fb; color: var(--pd-ink); font-size: 12px; }
-.performance-dashboard:not(.accountant-finance) .performance-quick-links { margin-top: 16px; }
 .performance-dashboard:not(.accountant-finance) .performance-occupancy { padding: 13px 14px 16px; border-radius: 10px; background: var(--pd-cyan-soft); }
 .performance-dashboard:not(.accountant-finance) .performance-occupancy > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--pd-copy); font-size: 13px; }
 .performance-dashboard:not(.accountant-finance) .performance-occupancy strong { color: var(--pd-ink); font-size: 20px; font-variant-numeric: tabular-nums; }
@@ -287,7 +276,6 @@
 @media (max-width: 820px) {
   .performance-dashboard:not(.accountant-finance) .performance-grid-chain,
   .performance-dashboard:not(.accountant-finance) .performance-grid-branch { grid-template-columns: 1fr; }
-  .performance-dashboard:not(.accountant-finance) .performance-grid-reception { grid-template-columns: 1fr; }
   .performance-dashboard:not(.accountant-finance) .performance-grid-chain .performance-aside { order: 2; }
   .performance-dashboard:not(.accountant-finance) .performance-skeleton-body { grid-template-columns: 1fr; }
   .performance-dashboard:not(.accountant-finance) .performance-skeleton-body .performance-skeleton { min-height: 180px; }

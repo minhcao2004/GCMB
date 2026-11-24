@@ -1,3 +1,4 @@
+import { PaginatedTable, Pagination } from '../../../../shared/components/Pagination';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -299,12 +300,14 @@ export default function AuditLogPage({ onAccounts }) {
             branchId: filters.branchId || undefined,
             from: filters.from || undefined,
             to: filters.to || undefined,
-            size: 10,
+            size: 5,
           }),
           accountApi.options(),
           accountAccessApi.actions(),
         ]);
         if (active) {
+          const lastPage = Math.max(0, Math.ceil(result.total / 5) - 1);
+          if (filters.page > lastPage) setFilters((old) => ({ ...old, page: lastPage }));
           setPage(result);
           setBranches(options.branches);
           setActions(availableActions);
@@ -432,30 +435,7 @@ export default function AuditLogPage({ onAccounts }) {
               </table>
             </div>
             {!page.items.length && <p className="accounts-empty">Không có nhật ký phù hợp.</p>}
-            <div className="accounts-pagination">
-              <span>
-                Hiển thị {page.items.length ? filters.page * 10 + 1 : 0}–
-                {page.items.length ? filters.page * 10 + page.items.length : 0} / {page.total}
-              </span>
-              <span>10 dòng / trang</span>
-              <nav aria-label="Phân trang nhật ký">
-                <button
-                  aria-label="Trang trước"
-                  disabled={!filters.page}
-                  onClick={() => setFilters((old) => ({ ...old, page: old.page - 1 }))}
-                >
-                  ‹
-                </button>
-                <span aria-current="page">{filters.page + 1}</span>
-                <button
-                  aria-label="Trang sau"
-                  disabled={(filters.page + 1) * 10 >= page.total}
-                  onClick={() => setFilters((old) => ({ ...old, page: old.page + 1 }))}
-                >
-                  ›
-                </button>
-              </nav>
-            </div>
+            <Pagination page={filters.page} pageSize={5} total={page.total} disabled={loading} onPageChange={(page) => setFilters((old) => ({ ...old, page }))} label="Phân trang nhật ký" />
           </>
         )}
       </div>
@@ -542,7 +522,7 @@ function AuditDetail({ id, onClose }) {
               )}
             </dl>
             {rows.length ? (
-              <table className="access-permission-table">
+              <PaginatedTable pageSize={5} className="access-permission-table">
                 <thead>
                   <tr>
                     <th>Thông tin</th>
@@ -559,7 +539,7 @@ function AuditDetail({ id, onClose }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             ) : (
               <p>Đã ghi nhận thao tác. Không có thay đổi thông tin cần hiển thị.</p>
             )}

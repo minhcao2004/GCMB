@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../../shared/components/Pagination';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { Link, useParams } from 'react-router-dom';
@@ -170,7 +171,7 @@ export default function GuestRoomOrderPage() {
             {categories.map((entry) => <button key={entry} className={category === entry ? 'is-active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
           </nav>
           <div className="mr-order-layout">
-            <section className="food-menu-list" aria-label="Danh sách món">
+            <PaginatedList as="section" pageSize={10} className="food-menu-list" aria-label="Danh sách món">
               {visibleItems.map((item) => <article className={`food-menu-item${item.available ? '' : ' is-unavailable'}`} key={item.id}>
                 <MenuItemImage item={item} />
                 <div className="food-menu-copy"><p className="food-menu-category">{item.category || 'Món ngon'}</p><h2>{item.name}</h2><p>{item.description || 'Món ngon được phục vụ tại phòng.'}</p><strong>{formatVnd(item.salePrice)}</strong></div>
@@ -180,7 +181,7 @@ export default function GuestRoomOrderPage() {
                   <button aria-label={`Thêm ${item.name}`} onClick={() => setQuantity(item.id, (cart[item.id] || 0) + 1)}>+</button>
                 </div> : <span className="food-sold-out">Tạm hết</span>}
               </article>)}
-            </section>
+            </PaginatedList>
             <aside className="food-cart">
               <div className="food-cart-heading"><h2>Giỏ món</h2><span>{cartLines.reduce((sum, item) => sum + cart[item.id], 0)} món</span></div>
               {cartLines.length === 0 ? <p className="food-cart-empty">Thêm món từ thực đơn để bắt đầu yêu cầu.</p> : <ul>{cartLines.map((item) => <li key={item.id}><span>{item.name} <small>× {cart[item.id]}</small></span><strong>{formatVnd(Number(item.salePrice || 0) * cart[item.id])}</strong></li>)}</ul>}
@@ -193,11 +194,11 @@ export default function GuestRoomOrderPage() {
         <section className="food-order-history">
           <div className="food-section-title"><h2>Yêu cầu gần đây</h2><button onClick={() => refreshOrders()}>Làm mới</button></div>
           {ordersError ? <p role="status">Không tải được yêu cầu gần đây. {ordersError}</p>
-            : orders.length === 0 ? <p>Chưa có yêu cầu món trong phiên này.</p> : <div className="food-history-list">{orders.map((order) => <article key={order.code}>
+            : orders.length === 0 ? <p>Chưa có yêu cầu món trong phiên này.</p> : <PaginatedList as="div" pageSize={5} className="food-history-list">{orders.map((order) => <article key={order.code}>
             <div><strong>{order.code} <span>{order.roomCode}</span></strong><small>{new Date(order.createdAt).toLocaleString('vi-VN')}</small></div>
             <ul>{order.items.map((line, index) => <li key={`${line.name}-${index}`}>{line.name} × {Number(line.quantity)}</li>)}</ul>
             <div className={`food-order-status status-${order.status.toLowerCase()}`}>{statusText[order.status] || order.status}</div>
-          </article>)}</div>}
+          </article>)}</PaginatedList>}
         </section>
       </>}
       {!loading && !room && !error && <div className="food-empty"><h2>Không mở được mã phòng</h2><p>Vui lòng quét lại mã MR hoặc gọi lễ tân.</p></div>}

@@ -13,6 +13,16 @@
   gap: 8px;
 }
 
+a.brand-wordmark {
+  border-radius: var(--gcmb-radius-control);
+  text-decoration: none;
+}
+
+a.brand-wordmark:focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: -2px;
+}
+
 .brand-wordmark img {
   width: 100px;
   height: 100px;
