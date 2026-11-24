@@ -1,5 +1,4 @@
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
-import MoneyInput from '../../../shared/components/MoneyInput';
 /**
  * Copyright (c) 2026 SEP490-G12.
  * Author: TrongNV
@@ -7,6 +6,7 @@ import MoneyInput from '../../../shared/components/MoneyInput';
  * Description: Màn hình báo cáo, theo dõi, đánh giá và ghi kết quả sửa chữa thiết bị UC70–UC73.
  */
 import {useCallback,useEffect,useState} from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import apiClient from '../../../api/client';
 import {equipmentIncidentApi} from '../services/equipmentIncidentApi';
 import './equipment-incidents.css';

@@ -32,6 +32,11 @@ import '../pages/branch-rooms.css';
 
 const nav = ['Tổng quan', 'Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố', 'Nhân sự', 'Ca làm & chấm công', 'Chốt quỹ', 'Chi phí & đề nghị'];
 const branchNav = [...nav, 'Tài khoản'];
+const groups = [
+  { id: 'finance', title: 'Tài chính', short: 'TC', items: ['Chốt quỹ', 'Chi phí & đề nghị'] },
+  { id: 'operations', title: 'Vận hành', short: 'VH', items: ['Phòng', 'Thực đơn F&B', 'Kho hàng', 'Thiết bị & sự cố'] },
+  { id: 'people', title: 'Nhân sự & tài khoản', short: 'NS', items: ['Nhân sự', 'Ca làm & chấm công', 'Tài khoản'] },
+];
 const screenIds = ['overview', 'rooms', 'menu', 'inventory', 'equipment', 'staff', 'attendance', 'cash-closing', 'expenses', 'accounts'];
 const icons = [
   'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
@@ -51,6 +56,11 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
   const contentRef = useRef(null);
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
   const active = branchNav[activeIndex] || 'Tổng quan';
+  const activeGroup = groups.find((group) => group.items.includes(active))?.id;
+  const [openGroups, setOpenGroups] = useState(() => activeGroup ? { [activeGroup]: true } : {});
+  useLayoutEffect(() => {
+    setOpenGroups(activeGroup ? { [activeGroup]: true } : {});
+  }, [active, activeGroup]);
   useLayoutEffect(() => {
     if (active === 'Thực đơn F&B' || active === 'Kho hàng') window.scrollTo(0, 0);
   }, [active]);
@@ -90,14 +100,21 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     } catch (error) { setBranchError(Object.values(apiErrors(error))[0]); }
     finally { setSwitching(false); }
   };
-  const selectScreen = (label) => {
+  const selectScreen = (label, equipmentTab) => {
+    if (label === 'Tổng quan') setOpenGroups({});
     const screen = screenIds[branchNav.indexOf(label)];
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set('screen', screen);
+      if (screen === 'equipment' && equipmentTab === 'incidents') next.set('equipmentTab', 'incidents');
+      else next.delete('equipmentTab');
       return next;
     });
   };
+  const renderItem = (label) => <button key={label} type="button" className="branch-nav__item" aria-label={label} title={label}
+    aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[branchNav.indexOf(label)]} /></svg><span>{label}</span>
+  </button>;
   useLayoutEffect(() => {
     contentRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [active]);
@@ -108,10 +125,17 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
     sidebarLabel="Quản lý cơ sở"
     brand={<div className="manager-brand"><BrandWordmark to="/quan-ly-chi-nhanh" /></div>}
     roleLabel="QUẢN LÝ CƠ SỞ"
-    navigation={<nav className="manager-navigation" aria-label="Chức năng quản lý cơ sở">
-        {branchNav.map((label, i) => <button key={label} aria-label={label} title={label} aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[i]} /></svg><span>{label}</span>
-        </button>)}
+    navigation={<nav className="manager-navigation branch-nav" aria-label="Chức năng quản lý cơ sở">
+        {renderItem('Tổng quan')}
+        {groups.map((group) => <div className="branch-nav__group" key={group.id} data-active={activeGroup === group.id || undefined}>
+          <button type="button" className="branch-nav__toggle" aria-label={group.title} title={group.title}
+            aria-expanded={Boolean(openGroups[group.id])} aria-controls={`branch-nav-${group.id}`}
+            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}>
+            <span className="branch-nav__title">{group.title}</span><span className="branch-nav__short" aria-hidden="true">{group.short}</span>
+            <svg className="branch-nav__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <div id={`branch-nav-${group.id}`} className="branch-nav__items" hidden={!openGroups[group.id]}>{group.items.map(renderItem)}</div>
+        </div>)}
       </nav>}
     renderTopbar={({ onToggleSidebar, sidebarExpanded }) => (
       <DashboardTopbar role="QUẢN LÝ CƠ SỞ" page={active} user={user} busy={busy || switching} onProfile={onProfile} onLogout={onLogout}

@@ -394,6 +394,13 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       disabled={busy}
+                      onClick={() => navigate(`/le-tan/don-mon?bookingId=${data.bookingId}`)}
+                    >
+                      Xem chi tiết order
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
                       onClick={() =>
                         setUnservedConfirmed(
                           window.confirm(

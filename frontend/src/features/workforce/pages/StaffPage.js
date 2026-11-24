@@ -152,14 +152,14 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                 {employee.code} · {positions[employee.position]}
               </p>
             </div>
-            <button
+            {employee.accountRole !== 'ACCOUNTANT' && <button
               type="button"
               className="staff-primary"
               disabled={readOnly || detailLoading || protectedStaff}
               onClick={() => setDialog('edit')}
             >
               Sửa hồ sơ
-            </button>
+            </button>}
           </header>
           <nav className="staff-tabs" aria-label="Chi tiết hồ sơ">
             <button
@@ -255,7 +255,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
               <section className="staff-card">
                 <h2>Phân công và trạng thái hồ sơ</h2>
                 <div className="staff-actions">
-                  {!branchScope && (
+                  {!branchScope && employee.accountRole !== 'ACCOUNTANT' && (
                     <button
                       type="button"
                       disabled={readOnly || employee.status !== 'ACTIVE'}
@@ -264,13 +264,13 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                       {employee.branchId ? 'Điều chuyển nhân viên' : 'Gán cơ sở làm việc'}
                     </button>
                   )}
-                  <button
+                  {employee.accountRole !== 'ACCOUNTANT' && <button
                     type="button"
                     disabled={!canChangeStatus}
                     onClick={() => setDialog('status')}
                   >
                     {employee.status === 'ACTIVE' ? 'Ngừng hồ sơ' : 'Kích hoạt lại hồ sơ'}
-                  </button>
+                  </button>}
                 </div>
                 <div className="staff-banner">
                   <strong>Lịch sử được lưu theo từng lần phân công</strong>

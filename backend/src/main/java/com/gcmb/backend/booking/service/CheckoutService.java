@@ -284,7 +284,7 @@ public class CheckoutService {
                 "Số dư cọc không hợp lệ hoặc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán."
             );
         }
-        // Chỉ điều chỉnh khoản phải thu sau khi trừ cọc; net_amount và bill_line giữ nguyên giá trị hóa đơn.
+        // BR-24: chỉ điều chỉnh khoản phải thu sau khi trừ cọc; net_amount và bill_line giữ nguyên giá trị hóa đơn.
         BigDecimal rawPayable = amount.subtract(heldDeposit);
         BigDecimal payableAmount = roundToNearestThousand(rawPayable);
         BigDecimal roundingAdjustment = payableAmount.subtract(rawPayable);

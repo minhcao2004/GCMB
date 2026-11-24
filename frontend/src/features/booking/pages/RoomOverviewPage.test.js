@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { ToastStack } from '../../../shared/components/Feedback';
 import { authApi } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { checkoutApi } from '../services/checkoutApi';
@@ -22,6 +23,30 @@ jest.mock('../services/bookingApi', () => ({
 }));
 jest.mock('../services/checkoutApi', () => ({ checkoutApi: { preview: jest.fn() } }));
 
+test('dismisses shared notifications after seven seconds and waits while the close control is focused', () => {
+  jest.useFakeTimers();
+  try {
+    const onClose = jest.fn();
+    const first = render(<ToastStack notice="Đã lưu." onCloseNotice={onClose} />);
+    act(() => jest.advanceTimersByTime(6999));
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    onClose.mockClear();
+    render(<ToastStack notice="Đã lưu." onCloseNotice={onClose} />);
+    const closeButton = screen.getByRole('button', { name: 'Đóng thông báo' });
+    closeButton.focus();
+    act(() => jest.advanceTimersByTime(7000));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.focusOut(closeButton, { relatedTarget: document.body });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test.each([
   [{ walkInBeforeSubmit: true }, /Chưa gửi yêu cầu mở phòng/, false],
   [{ response: { status: 503 } }, /Máy chủ báo lỗi \(503\)/, true],
@@ -41,8 +66,8 @@ test.each([
   expect(submit.disabled).toBe(disabled);
   if (disabled) {
     fireEvent.change(screen.getByLabelText(/Họ tên khách/), { target: { value: 'Khách mới' } });
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
   }
+  expect(screen.getByRole('alert')).toHaveTextContent(message);
 });
 
 test('renders the room page while data is loading and when no room is returned', async () => {

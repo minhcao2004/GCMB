@@ -52,6 +52,17 @@ public class CashClosingController {
     return cashClosingService.list(actor, from, to, branchId, status, alerts);
   }
 
+  @GetMapping("/api/v1/accounting/cash-closing/statuses")
+  public List<Map<String, Object>> statuses(@AuthenticationPrincipal Identity actor,
+      @RequestParam(required = false) LocalDate date, @RequestParam(required = false) UUID branchId) {
+    return cashClosingService.statuses(actor, date, branchId);
+  }
+
+  @GetMapping("/api/v1/accounting/cash-closing/notifications")
+  public List<Map<String, Object>> notifications(@AuthenticationPrincipal Identity actor) {
+    return cashClosingService.notifications(actor);
+  }
+
   @GetMapping({
     "/api/v1/branch-management/cash-closing/{id}",
     "/api/v1/accounting/cash-closing/{id}",

@@ -1,4 +1,4 @@
-import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import BankNameInput from '../../../shared/components/BankNameInput';
 import MoneyInput from '../../../shared/components/MoneyInput';
@@ -74,21 +74,36 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
 
   const templates = data?.recurringExpenses || [];
   const periods = data?.periods || [];
-  const notifications = data?.notifications || [];
   const activeBranches = branches.filter((branch) => !branch.status || String(branch.status).toUpperCase() === 'ACTIVE');
   const activeCategories = categories.filter((item) => item.active);
   const todayText = today();
 
   return <section className="finance-panel finance-recurring-panel">
     <div className="finance-section-heading">
-      <div><h2>Chi định kỳ</h2><p>Quản lý khoản chi theo tháng, xử lý từng kỳ và xem nhắc hạn trong ứng dụng.</p></div>
+      <div><h2>Chi định kỳ</h2><p>Quản lý khoản chi theo tháng và xử lý các kỳ đến hạn.</p></div>
       <div className="finance-mini-total pending"><span>Kỳ cần xử lý</span><strong>{data?.reminderCount ?? '—'}</strong></div>
     </div>
 
-    {notifications.length > 0 && <section className="finance-recurring-notices" aria-label="Nhắc hạn chi định kỳ">
-      <h3>Nhắc hạn gần đây</h3>
-      <PaginatedList as="ul" pageSize={5}>{notifications.map((item) => <li key={item.id}><span className={`finance-recurring-notice-type ${String(item.reminder_type).toLowerCase()}`}>{item.reminder_type === 'BEFORE_DUE' ? 'Sắp đến hạn' : item.reminder_type === 'OVERDUE' ? 'Quá hạn' : 'Đến hạn'}</span><span>{item.message}</span><small>{dateLabel(item.reminder_date)}</small></li>)}</PaginatedList>
-    </section>}
+    <div className="finance-recurring-filters" aria-label="Lọc kỳ chi định kỳ">
+      <label>Cơ sở<select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="ALL">Tất cả cơ sở</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+      <label>Tháng đến hạn<input type="month" value={dueMonth} onChange={(event) => setDueMonth(event.target.value)} /></label>
+      <label>Trạng thái<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">Tất cả</option><option value="PENDING">Chờ thanh toán</option><option value="PAID">Đã thanh toán</option><option value="SKIPPED">Đã bỏ qua</option></select></label>
+    </div>
+    {error && <p className="finance-error" role="alert">{error}</p>}
+    {loading ? <p className="finance-empty">Đang tải kỳ chi…</p> : <div className="finance-table-wrap"><PaginatedTable pageSize={5} className="finance-recurring-table">
+      <thead><tr><th>Ngày · kỳ ghi nhận</th><th>Cơ sở · hạng mục</th><th>Người nhận</th><th>Số tiền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+      <tbody>{periods.map((period) => {
+        const overdue = period.status === 'PENDING' && String(period.due_date).slice(0, 10) < todayText;
+        return <tr key={period.id} className={overdue ? 'finance-recurring-overdue' : ''}>
+          <td><strong>{dateLabel(period.due_date)}</strong><small>Kỳ {monthLabel(period.period_month)}{overdue ? ' · Quá hạn' : ''}</small></td>
+          <td>{period.branch_name}<small>{period.category_code} · {period.category_name}</small></td>
+          <td>{period.beneficiary_name}<small>{period.bank_name} · {period.bank_account}</small></td>
+          <td>{money(period.amount ?? period.suggested_amount)}<small>{period.amount == null ? 'Số thực tế được nhập khi thanh toán' : ''}</small></td>
+          <td><span className={`finance-status ${period.status === 'PAID' ? 'received' : period.status === 'SKIPPED' ? 'rejected' : 'pending'}`}>{periodStatus[period.status] || period.status}</span>{period.request_code && <small>Yêu cầu: {period.request_code}</small>}{period.skip_reason && <small>Lý do: {period.skip_reason}</small>}</td>
+          <td><div className="finance-category-actions">{period.status === 'PENDING' && <><button type="button" disabled={busy} onClick={() => onPay(period)}>Chi kỳ này</button><button type="button" disabled={busy} onClick={() => skip(period)}>Bỏ qua</button></>}</div></td>
+        </tr>;
+      })}{!periods.length && <tr><td colSpan="6" className="finance-empty">Không có kỳ chi trong bộ lọc này.</td></tr>}</tbody>
+    </PaginatedTable></div>}
 
     <form className="finance-form finance-recurring-editor" onSubmit={save}>
       <div className="finance-section-heading wide"><div><h3>{draft.id ? 'Sửa khoản chi định kỳ' : 'Tạo khoản chi định kỳ'}</h3><p>Nếu chưa biết số tiền cố định, để trống và nhập số thực tế khi thanh toán.</p></div></div>
@@ -120,27 +135,5 @@ export default function RecurringExpensesTab({ branches, categories, busy, revis
         <td><div className="finance-category-actions">{item.status === 'ACTIVE' && <><button type="button" disabled={busy} onClick={() => setDraft(fromTemplate(item))}>Sửa</button><button type="button" disabled={busy} onClick={() => window.confirm(`Chấm dứt khoản chi định kỳ cho ${item.beneficiary_name}?`) && onTerminate(item.id)}>Chấm dứt</button></>}</div></td>
       </tr>)}{!templates.length && <tr><td colSpan="7" className="finance-empty">Chưa có khoản chi định kỳ.</td></tr>}</tbody>
     </PaginatedTable></div>
-
-    <div className="finance-section-heading finance-list-heading"><div><h3>Các kỳ đến hạn</h3><p>{periods.length} kỳ trong tháng đã chọn</p></div></div>
-    <div className="finance-recurring-filters" aria-label="Lọc kỳ chi định kỳ">
-      <label>Cơ sở<select value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="ALL">Tất cả cơ sở</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
-      <label>Tháng đến hạn<input type="month" value={dueMonth} onChange={(event) => setDueMonth(event.target.value)} /></label>
-      <label>Trạng thái<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">Tất cả</option><option value="PENDING">Chờ thanh toán</option><option value="PAID">Đã thanh toán</option><option value="SKIPPED">Đã bỏ qua</option></select></label>
-    </div>
-    {error && <p className="finance-error" role="alert">{error}</p>}
-    {loading ? <p className="finance-empty">Đang tải kỳ chi…</p> : <div className="finance-table-wrap"><PaginatedTable pageSize={5} className="finance-recurring-table">
-      <thead><tr><th>Ngày · kỳ ghi nhận</th><th>Cơ sở · hạng mục</th><th>Người nhận</th><th>Số tiền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-      <tbody>{periods.map((period) => {
-        const overdue = period.status === 'PENDING' && String(period.due_date).slice(0, 10) < todayText;
-        return <tr key={period.id} className={overdue ? 'finance-recurring-overdue' : ''}>
-          <td><strong>{dateLabel(period.due_date)}</strong><small>Kỳ {monthLabel(period.period_month)}{overdue ? ' · Quá hạn' : ''}</small></td>
-          <td>{period.branch_name}<small>{period.category_code} · {period.category_name}</small></td>
-          <td>{period.beneficiary_name}<small>{period.bank_name} · {period.bank_account}</small></td>
-          <td>{money(period.amount ?? period.suggested_amount)}<small>{period.amount == null ? 'Số thực tế được nhập khi thanh toán' : ''}</small></td>
-          <td><span className={`finance-status ${period.status === 'PAID' ? 'received' : period.status === 'SKIPPED' ? 'rejected' : 'pending'}`}>{periodStatus[period.status] || period.status}</span>{period.request_code && <small>Yêu cầu: {period.request_code}</small>}{period.skip_reason && <small>Lý do: {period.skip_reason}</small>}</td>
-          <td><div className="finance-category-actions">{period.status === 'PENDING' && <><button type="button" disabled={busy} onClick={() => onPay(period)}>Chi kỳ này</button><button type="button" disabled={busy} onClick={() => skip(period)}>Bỏ qua</button></>}</div></td>
-        </tr>;
-      })}{!periods.length && <tr><td colSpan="6" className="finance-empty">Không có kỳ chi trong bộ lọc này.</td></tr>}</tbody>
-    </PaginatedTable></div>}
   </section>;
 }

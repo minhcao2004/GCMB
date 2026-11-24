@@ -75,6 +75,15 @@ public class FinanceController {
     public Map<String,Object> accountantReview(@AuthenticationPrincipal Identity who,@PathVariable UUID id,@RequestBody Review body) {
         return financeService.review(who,id,body.approve(),body.note());
     }
+    @PostMapping(value="/accounting/finance/requests/{id}/approve-and-pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String,Object> approveAndPay(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
+            @RequestParam(required=false) String note,@RequestParam(required=false) String reference,
+            @RequestPart(value="proof",required=false) MultipartFile proof,@RequestParam String paymentMethod,
+            @RequestParam(required=false) String bankAccount,@RequestParam(required=false) String bankName,
+            @RequestParam(required=false) Integer allocationMonths,
+            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate allocationStart) {
+        return financeService.approveAndPay(who,id,note,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart);
+    }
     @PostMapping(value="/accounting/finance/requests/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> pay(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
             @RequestParam(required=false) String reference,@RequestPart("proof") MultipartFile proof,

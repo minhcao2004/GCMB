@@ -1,6 +1,7 @@
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
@@ -14,13 +15,30 @@ const message = (e) => Object.values(apiErrors(e)).join(' ');
 const displayDate = (value) => String(value || '').split('-').reverse().join('/');
 
 export default function CashClosingPage({ user, accounting = false, readOnly = false }) {
+  const location = useLocation();
+  useEffect(() => {
+    if (accounting && location.hash === '#cash-closing-notifications-title')
+      document.getElementById('cash-closing-notifications-title')?.focus();
+  }, [accounting, location.hash]);
+  const initialQuery = new URLSearchParams(location.search);
+  const scopeBranchId = initialQuery.get('branchId') || '';
+  const deepLinkedReport = accounting && initialQuery.has('reportId');
   const base = accounting ? '/accounting/cash-closing' : '/branch-management/cash-closing';
   const branch = accounting ? undefined : user.branchId;
   const [tab, setTab] = useState(accounting ? 'history' : 'create');
   const [date, setDate] = useState(today());
-  const [from, setFrom] = useState(today().slice(0, 7) + '-01');
-  const [to, setTo] = useState(today());
-  const [status, setStatus] = useState(accounting ? 'SUBMITTED' : '');
+  const [from, setFrom] = useState(initialQuery.get('from') || today().slice(0, 7) + '-01');
+  const [to, setTo] = useState(initialQuery.get('to') || today());
+  const [status, setStatus] = useState(initialQuery.has('status') ? initialQuery.get('status') : accounting && !initialQuery.has('reportId') ? 'SUBMITTED' : '');
+  const [statusDate, setStatusDate] = useState(initialQuery.get('date') || today());
+  const [branchStatuses, setBranchStatuses] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [statusError, setStatusError] = useState('');
+  const [statusLoading, setStatusLoading] = useState(accounting);
+  const [notificationError, setNotificationError] = useState('');
+  const [notificationLoading, setNotificationLoading] = useState(accounting);
+  const [statusRevision, setStatusRevision] = useState(0);
+  const [notificationRevision, setNotificationRevision] = useState(0);
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState(null);
   const [saved, setSaved] = useState(null);
@@ -44,10 +62,19 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => {
+    if (!accounting) return;
+    const query = new URLSearchParams(location.search);
+    if (query.has('from')) setFrom(query.get('from'));
+    if (query.has('to')) setTo(query.get('to'));
+    if (query.has('date')) setStatusDate(query.get('date'));
+    if (query.has('reportId')) setStatus('');
+  }, [accounting, location.search]);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     setError('');
-    setDetail(null);
+    if (!deepLinkedReport) setDetail(null);
     setSaved(null);
     setPreview(null);
     setConfirm(false);
@@ -79,7 +106,29 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     };
     load();
     return () => { active = false; };
-  }, [base, branch, tab, date, from, to, status, refresh]);
+  }, [base, branch, deepLinkedReport, tab, date, from, to, status, refresh]);
+
+  useEffect(() => {
+    if (!accounting) return undefined;
+    let active = true;
+    setStatusError(''); setStatusLoading(true); setBranchStatuses([]);
+    api.get(base + '/statuses', { date: statusDate, ...(scopeBranchId ? { branchId: scopeBranchId } : {}) })
+      .then((statuses) => { if (active) { if (Array.isArray(statuses)) setBranchStatuses(statuses); else setStatusError('Không tải được trạng thái báo cáo.'); } })
+      .catch((e) => { if (active) setStatusError(message(e) || 'Không tải được trạng thái báo cáo.'); })
+      .finally(() => { if (active) setStatusLoading(false); });
+    return () => { active = false; };
+  }, [accounting, base, scopeBranchId, statusDate, refresh, statusRevision]);
+
+  useEffect(() => {
+    if (!accounting) return undefined;
+    let active = true;
+    setNotificationError(''); setNotificationLoading(true); setNotifications([]);
+    api.get(base + '/notifications')
+      .then((notices) => { if (active) { if (Array.isArray(notices)) setNotifications(notices); else setNotificationError('Không tải được thông báo.'); } })
+      .catch((e) => { if (active) setNotificationError(message(e) || 'Không tải được thông báo.'); })
+      .finally(() => { if (active) setNotificationLoading(false); });
+    return () => { active = false; };
+  }, [accounting, base, refresh, notificationRevision]);
 
   // Giữ cửa sổ Chi tiết từ nhánh hiện tại cùng luồng chốt/cấp két mới.
   useEffect(() => {
@@ -98,6 +147,16 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     catch (e) { setError(message(e)); }
     finally { setBusy(false); }
   };
+  useEffect(() => {
+    if (!accounting) return;
+    const id = new URLSearchParams(location.search).get('reportId');
+    if (!id) return;
+    let active = true;
+    setDetail(null);
+    api.get(base + '/' + id).then((report) => { if (active) setDetail(report); })
+      .catch((e) => { if (active) setError(message(e)); });
+    return () => { active = false; };
+  }, [accounting, base, location.search]);
   const edit = (report) => {
     setEvidence(null);
     setConfirm(false);
@@ -176,6 +235,22 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
       {!accounting && <button aria-current={tab === 'remit' ? 'page' : undefined} onClick={() => setTab('remit')}>Nộp tiền khỏi két</button>}
       {!accounting && <button aria-current={tab === 'handover' ? 'page' : undefined} onClick={() => setTab('handover')}>Bàn giao ca</button>}
     </nav>
+    {accounting && <section className="finance-card cash-closing-statuses" aria-label="Trạng thái báo cáo chốt quỹ ngày theo cơ sở">
+      <div className="finance-section-heading"><div><h2>Trạng thái báo cáo chốt quỹ ngày</h2><p>Trạng thái gửi báo cáo theo cơ sở và ngày; báo cáo hiệu quả tháng được tính riêng từ giao dịch.</p></div><label>Ngày báo cáo<input type="date" value={statusDate} max={today()} onChange={(e) => setStatusDate(e.target.value)} /></label></div>
+      {statusLoading && <p role="status">Đang tải trạng thái báo cáo…</p>}
+      {statusError && <p className="finance-error" role="alert">{statusError} <button type="button" onClick={() => setStatusRevision((n) => n + 1)}>Thử lại</button></p>}
+      <div className="finance-table-wrap"><table><thead><tr><th>Cơ sở</th><th>Kỳ</th><th>Trạng thái</th><th>Bản ghi</th></tr></thead><tbody>
+        {branchStatuses.map((item) => <tr key={item.branchId}><td>{item.branchName}</td><td>{displayDate(item.businessDate)}</td><td>{item.status === 'NEEDS_EXPLANATION' ? 'Cần bổ sung' : item.status === 'SUBMITTED' ? 'Đã gửi' : 'Chưa gửi'}</td><td>{item.closingId ? <button type="button" onClick={() => open(item.closingId)}>Mở báo cáo</button> : '—'}</td></tr>)}
+      </tbody></table></div>
+      {!statusLoading && !branchStatuses.length && !statusError && <p role="status">Chưa có cơ sở trong phạm vi báo cáo.</p>}
+    </section>}
+    {accounting && <section className="finance-card cash-closing-notifications" aria-label="Các lần gửi báo cáo chốt quỹ gần đây">
+      <h2 id="cash-closing-notifications-title" tabIndex={-1}>Thông báo báo cáo đã gửi</h2>
+      {notificationLoading ? <p role="status">Đang tải thông báo…</p>
+        : notificationError ? <p className="finance-error" role="alert">{notificationError} <button type="button" onClick={() => setNotificationRevision((n) => n + 1)}>Thử lại</button></p>
+          : notifications.length ? <ul>{notifications.map((item) => <li key={item.id}><Link to={`/ke-toan/chot-quy?${new URLSearchParams({ reportId: item.closingId, from: item.businessDate, to: item.businessDate, date: item.businessDate })}`}>{item.branchName} · {item.reportType} · Ngày kinh doanh {displayDate(item.businessDate)} · Gửi lúc {new Date(item.sentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · Lần gửi {item.reportVersion} · Xem báo cáo hiện tại và lịch sử phiên bản</Link></li>)}</ul>
+            : <p role="status">Chưa có thông báo gửi báo cáo.</p>}
+    </section>}
     {tab === 'handover' ? <ShiftCashHandoverPanel user={user} manager readOnly={readOnly} /> : <>
     {!accounting && preview?.pendingHandovers > 0 && <p className="finance-warning" role="status">
       Có {preview.pendingHandovers} bàn giao ca chênh lệch cần xử lý.{' '}
@@ -230,6 +305,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
             </div>}
             <label>Tiền mặt thực đếm cuối ngày *<MoneyInput required value={actual} onValueChange={(v) => { setActual(v); setConfirm(false); }} /></label>
             {cashVariance !== null && <Difference label="Chênh lệch tiền mặt" value={cashVariance} />}
+            {needsExplanation && <p className="finance-warning" role="alert">Tiền kiểm đếm chênh lệch {Math.abs(cashVariance).toLocaleString('vi-VN')} đ so với số tiền dự kiến. Vui lòng kiểm tra lại và nhập lý do chênh lệch trước khi xác nhận chốt quỹ.</p>}
             <label>Giải trình {needsExplanation ? '*' : '(không bắt buộc)'}<textarea required={needsExplanation} maxLength={2000} value={explanation} onChange={(e) => { setExplanation(e.target.value); setConfirm(false); }} /></label>
             <label>Minh chứng (không bắt buộc)<input key={date + '-' + refresh} type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf" onChange={(e) => { setEvidence(e.target.files[0] || null); setConfirm(false); }} /><small>Tối đa 20 MB. Ảnh hoặc PDF.</small></label>
             {confirm && <p className="finance-info">Xác nhận gửi tiền mặt thực đếm {vnd(actual)} cho kế toán đối soát?</p>}

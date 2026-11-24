@@ -31,7 +31,6 @@ export default function BranchRoomsPage({user,search:sharedSearch,onSearchChange
  const selectedRoomUrl=selected?.mrCode?`${window.location.origin}/mr/${encodeURIComponent(selected.mrCode)}`:'';
  const reload=useCallback(async()=>{const [r,t]=await Promise.all([roomApi.rooms(),roomApi.types()]);setRooms(r);setTypes(t);setSelected(cur=>cur?r.find(x=>x.id===cur.id)||null:r.find(x=>x.code==='P.402')||r[0]||null)},[roomApi]);
  useEffect(()=>{reload().catch(e=>setError(displayError(e)))},[reload]);
- useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(null),3500);return()=>clearTimeout(timer)},[toast]);
  const floors=useMemo(()=>[...new Set(rooms.map(r=>r.floorNumber))].sort((a,b)=>a-b),[rooms]);
  const visible=rooms.filter(r=>(floor==='all'||String(r.floorNumber)===floor)&&(type==='all'||r.roomTypeId===type)&&`${r.code} ${r.name}`.toLowerCase().includes(search.toLowerCase()));
  const pageCount=Math.max(1,Math.ceil(visible.length/10));

@@ -1,7 +1,7 @@
 import { PaginatedTable } from '../../../shared/components/Pagination';
-import MoneyInput from '../../../shared/components/MoneyInput';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { apiAssetUrl } from '../../../api/client';
 import menuItemApi from '../services/menuItemApi';
 import './menu-items.css';
@@ -83,11 +83,6 @@ export default function MenuItemsPage({ user }) {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = window.setTimeout(() => setToast(''), 3200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
   useEffect(() => {
     if (!detailOpen && !deleteId && !pendingStatus) return;
     const confirmation = confirmationRef.current;
@@ -344,7 +339,7 @@ export default function MenuItemsPage({ user }) {
       setCategories((current) => current.includes(saved.category)
         ? current : [...current, saved.category].sort((left, right) => left.localeCompare(right, 'vi')));
       setSelectedId(null);
-      setToast(editorMode === 'create' ? `Đã tạo món ${saved.code}.` : `Đã cập nhật món ${saved.code}.`);
+      setToast(editorMode === 'create' ? 'Đã tạo món.' : 'Đã cập nhật món.');
       setEditorMode(null);
       setEditorItemId(null);
       setDraft(null);

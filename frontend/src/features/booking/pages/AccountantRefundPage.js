@@ -298,7 +298,7 @@ export default function AccountantRefundPage() {
       setFilter('all');
       const proofNotice = image ? ' và lưu tệp minh chứng.'
         : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
-      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho đặt phòng ${item.bookingCode}${proofNotice}`);
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} tiền cọc${proofNotice}`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error, 'Không thể ghi nhận hoàn cọc. Dữ liệu đã nhập vẫn được giữ để bạn thử lại.')); }
     finally { setBusy(false); }
