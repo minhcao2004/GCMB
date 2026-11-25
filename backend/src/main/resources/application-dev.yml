@@ -3,7 +3,7 @@ server:
 
 gcmb:
   cloudinary:
-    enabled: false
+    enabled: ${CLOUDINARY_ENABLED:false}
   finance:
     period-close:
       allow-early-close: ${GCMB_ALLOW_EARLY_PERIOD_CLOSE:true}
