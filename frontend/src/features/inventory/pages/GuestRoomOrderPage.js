@@ -138,7 +138,7 @@ export default function GuestRoomOrderPage() {
     setMessage('');
     try {
       // BR-27: gửi mã MR của phòng hiện tại để server gắn món với đúng booking đang sử dụng.
-      const result = await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
+      await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
         idempotencyKey: pendingKey.current,
         items: cartLines.map((item) => ({ menuItemId: item.id, quantity: cart[item.id] })),
       });

@@ -23,6 +23,8 @@ export default function IncomingRoomOrderDialog({
     if (!order) return;
     setAssignedEmployeeId(order.assignedEmployeeId || '');
     setQuantities(Object.fromEntries(order.items.map((item) => [item.menuItemId, Number(item.quantity)])));
+    // Reset only when switching orders; list refreshes must preserve the receptionist's edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id]);
 
   useEffect(() => {

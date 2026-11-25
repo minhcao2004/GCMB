@@ -181,10 +181,11 @@ async function main() {
     JAVA_TOOL_OPTIONS: `${config.JAVA_TOOL_OPTIONS || ''} -Djava.io.tmpdir="${temporary}" -Dspring.devtools.restart.enabled=false`.trim(),
   };
   console.log('[GenZ] Đang khởi động backend và kết nối PostgreSQL…');
+  // Development startup only needs application classes; compile tests with Maven's test goal.
   if (process.platform === 'win32') {
-    launch(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'mvnw.cmd spring-boot:run'], { cwd: backend, env: backendEnv }, 'Backend');
+    launch(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'mvnw.cmd -Dmaven.test.skip=true spring-boot:run'], { cwd: backend, env: backendEnv }, 'Backend');
   } else {
-    launch('sh', ['./mvnw', 'spring-boot:run'], { cwd: backend, env: backendEnv }, 'Backend');
+    launch('sh', ['./mvnw', '-Dmaven.test.skip=true', 'spring-boot:run'], { cwd: backend, env: backendEnv }, 'Backend');
   }
   const deadline = Date.now() + 180000;
   while (!stopping && Date.now() < deadline) {
