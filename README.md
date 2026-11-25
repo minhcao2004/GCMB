@@ -318,6 +318,8 @@ Migration ownership: V21 and V22 are the F&B menu migrations; V30 and V31 are th
 
 V66 initializes equipment code counters from history by branch code. The first asset in an uninitialized series requires a starting code or number. Later assets receive their `ASSET-{BRANCH_CODE}-{SERIAL}` automatically when saved. See [equipment asset management](docs/Equipment%20Assets%20UC65-UC69.md#quy-tắc-cấp-mã-thiết-bị).
 
+V67 creates cash-closing notification storage. Keep V66 assigned to equipment counters because development databases have already applied that migration; do not reuse its version for another change. The earlier cash-closing notification migration was moved from V59 because that version is occupied by salary payment evidence.
+
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
 Add a new migration for changes to an already-shared schema. Preserve applied migrations and test changes against a development database.
