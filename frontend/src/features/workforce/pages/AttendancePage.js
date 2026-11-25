@@ -455,7 +455,10 @@ export default function AttendancePage({
           data={data}
           scope={branchScope}
           readOnly={readonly}
-          onClose={() => setDialog(null)}
+          onClose={(hasSavedRecords) => {
+            setDialog(null);
+            if (hasSavedRecords) setRevision((value) => value + 1);
+          }}
           onDaily={(day) => {
             setDialog(null);
             onDaily(day);

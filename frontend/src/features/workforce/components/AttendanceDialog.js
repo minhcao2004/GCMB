@@ -2,7 +2,7 @@ import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagina
 /**
  * Author: HuyDV
  * Created: 27/10/2026
- * Description: UC-87/89, xem lại công thực tế trước khi lưu, xác nhận chốt và khóa tháng.
+ * Description: UC-87/89, ghi nhận công thực tế, xác nhận chốt và khóa tháng.
  */
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
@@ -12,10 +12,21 @@ import {
   futureAttendanceMessage,
   hoursLabel,
   localInput,
-  initialAttendanceTime,
   dateTimeLabel,
   previewMinutes,
 } from '../services/attendanceApi';
+
+const attendanceOptions = [['WORKED', 'Đi làm'], ['ABSENT', 'Vắng mặt']];
+const makeEntry = (row) => ({
+  row,
+  status: row.status || '',
+  note: row.note || '',
+  resolved: [],
+  resolution: '',
+});
+const isFuture = (row) => new Date(row.startsAt).getTime() > Date.now();
+const shiftLabel = (row, timezone) =>
+  `${dateTimeLabel(row.startsAt, timezone)} → ${dateTimeLabel(row.endsAt, timezone)}`;
 
 export default function AttendanceDialog({
   dialog,
@@ -29,39 +40,38 @@ export default function AttendanceDialog({
 }) {
   const ref = useRef(null);
   const sending = useRef(false);
-  const [assignmentId, setAssignmentId] = useState(dialog.row?.assignmentId || '');
-  const [status, setStatus] = useState(dialog.row?.status || '');
-  const [actualIn, setActualIn] = useState(
-    initialAttendanceTime(dialog.row, 'actualIn', data.timezone)
-  );
-  const [actualOut, setActualOut] = useState(
-    initialAttendanceTime(dialog.row, 'actualOut', data.timezone)
-  );
-  const [note, setNote] = useState(dialog.row?.note || '');
-  const [resolved, setResolved] = useState([]);
-  const [resolution, setResolution] = useState('');
+  const closing = dialog.type === 'close';
+  const employee = dialog.type === 'employee';
+  const recording = !closing && !employee;
+  const [entries, setEntries] = useState(() => recording
+    ? data.rows.filter((row) => !dialog.row || row.shiftId === dialog.row.shiftId).map(makeEntry)
+    : []);
+  const [issues, setIssues] = useState(data.issues || []);
+  const [savedCount, setSavedCount] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
-  const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [stale, setStale] = useState(false);
-  const row = data.rows.find((rowItem) => rowItem.assignmentId === assignmentId);
-  const locked = readOnly || row?.periodStatus === 'CLOSED';
+  const locked = readOnly || (recording && entries.every(({ row }) => row.periodStatus === 'CLOSED'));
   const closingEmployees = (data.employees || []).filter((e) => !dialog.employeeIds || dialog.employeeIds.includes(e.employeeId));
-  const issues = data.issues.filter((i) => i.assignmentId === assignmentId);
-  const minutes = previewMinutes(status, actualIn, actualOut);
-  const shiftPay = status === 'ABSENT' ? 0 : row?.hourlyRate == null || minutes == null
-    ? null : Math.round((Number(row.hourlyRate) + Number(row.nightPremium)) * minutes / 60);
-  const markAttendance = (value) => {
-    setStatus(value);
-    setActualIn(value === 'WORKED' && row ? localInput(row.startsAt, data.timezone) : '');
-    setActualOut(value === 'WORKED' && row ? localInput(row.endsAt, data.timezone) : '');
-    setReview(false);
+  const editableEntries = entries.filter(({ row }) => !readOnly && row.periodStatus !== 'CLOSED' && !isFuture(row));
+  const pendingEntries = editableEntries
+    .filter(({ row, status, note, resolved }) =>
+      status !== (row.status || '') || note.trim() !== (row.note || '').trim() || resolved.length > 0)
+    .map((entry) => ({
+      ...entry,
+      actualIn: entry.status === 'WORKED' ? localInput(entry.row.startsAt, data.timezone) : null,
+      actualOut: entry.status === 'WORKED' ? localInput(entry.row.endsAt, data.timezone) : null,
+    }));
+  const sameShift = entries.length > 0 && entries.every(({ row }) => row.shiftId === entries[0].row.shiftId);
+  const futureShift = entries.length > 0 && entries.every(({ row }) => isFuture(row));
+  const closeDialog = () => onClose(savedCount > 0);
+  const updateEntry = (assignmentId, changes) => {
+    setEntries((old) => old.map((entry) => entry.row.assignmentId === assignmentId
+      ? { ...entry, ...changes }
+      : entry));
     setErrors({});
   };
-  const closing = dialog.type === 'close';
-  const employee = dialog.type === 'employee';
-  const futureShift = !closing && !employee && row && new Date(row.startsAt).getTime() > Date.now();
   const title = closing
     ? 'Xác nhận chốt bảng công'
     : employee
@@ -83,23 +93,10 @@ export default function AttendanceDialog({
     };
   }, []);
 
-  const select = (id) => {
-    const current = data.rows.find((rowItem) => rowItem.assignmentId === id);
-    setAssignmentId(id);
-    setStatus(current?.status || '');
-    setActualIn(initialAttendanceTime(current, 'actualIn', data.timezone));
-    setActualOut(initialAttendanceTime(current, 'actualOut', data.timezone));
-    setNote(current?.note || '');
-    setResolved([]);
-    setResolution('');
-    setReview(false);
-    setErrors({});
-  };
-
   async function submit(event) {
     event.preventDefault();
-    if (sending.current || locked || stale) return;
-    if (row && !closing && new Date(row.startsAt).getTime() > Date.now()) {
+    if (sending.current || locked || stale || employee) return;
+    if (futureShift) {
       setErrors({ form: futureAttendanceMessage });
       return;
     }
@@ -109,39 +106,43 @@ export default function AttendanceDialog({
       if (!confirmed)
         found.confirmedCorrect = 'Vui lòng xác nhận không còn bản ghi chấm công chưa đúng.';
     } else {
-      if (!row) found.assignmentId = 'Vui lòng bổ sung nhân viên và phân ca.'; // MSG02.
-      if (!status) found.form = 'Vui lòng tích Đi làm hoặc Vắng mặt.';
-      else if (status === 'WORKED' && (!actualIn || !actualOut))
-        found.actualOut = 'Vui lòng bổ sung ngày giờ vào và ra thực tế.'; // BR-204 / MSG02.
-      else if (minutes === null) found.actualOut = 'Giờ ra thực tế phải sau Giờ vào thực tế.'; // BR-195 / MSG07.
-      if (resolved.length && !resolution.trim())
-        found.resolution = 'Vui lòng bổ sung kết quả xử lý phản ánh.';
+      if (!pendingEntries.length) found.form = 'Chọn Đi làm hoặc Vắng mặt, hoặc sửa một bản ghi để lưu.';
+      for (const { row, status, actualIn, actualOut, resolved, resolution } of pendingEntries) {
+        let message;
+        if (!status) message = 'Vui lòng chọn Đi làm hoặc Vắng mặt.';
+        else if (previewMinutes(status, actualIn, actualOut) === null)
+          message = 'Giờ ra phải sau giờ vào.';
+        else if (resolved.length && !resolution.trim())
+          message = 'Vui lòng bổ sung kết quả xử lý phản ánh.';
+        if (message) found[row.assignmentId] = `${row.fullName}: ${message}`;
+      }
     }
     if (Object.keys(found).length) {
       setErrors(found);
       return;
     }
-    if (!closing && !review) {
-      setReview(true);
-      setErrors({});
-      return;
-    }
     sending.current = true;
     setBusy(true);
     setErrors({});
+    let savingRow;
     try {
-      const result = closing
-        ? await attendanceApi.close(
-            data.month,
-            { revision: data.revision, confirmedCorrect: confirmed, employeeIds: closingEmployees.map((e) => e.employeeId) },
-            scope
-          )
-        : await attendanceApi.record(
-            assignmentId,
+      let result;
+      if (closing) {
+        result = await attendanceApi.close(
+          data.month,
+          { revision: data.revision, confirmedCorrect: confirmed, employeeIds: closingEmployees.map((e) => e.employeeId) },
+          scope
+        );
+      } else {
+        // shortcut: mỗi phân ca lưu riêng, thêm API giao dịch chung nếu cần lưu cả ca cùng thành công hoặc cùng thất bại.
+        for (const { row, status, actualIn, actualOut, note, resolved, resolution } of pendingEntries) {
+          savingRow = row;
+          result = await attendanceApi.record(
+            row.assignmentId,
             {
               status,
-              actualIn: status === 'WORKED' ? actualIn : null,
-              actualOut: status === 'WORKED' ? actualOut : null,
+              actualIn,
+              actualOut,
               note,
               version: row.version,
               resolvedIssueIds: resolved,
@@ -149,11 +150,21 @@ export default function AttendanceDialog({
             },
             scope
           );
+          const savedRow = result.rows.find((item) => item.assignmentId === row.assignmentId);
+          setEntries((old) => old.map((entry) => entry.row.assignmentId === row.assignmentId
+            ? makeEntry(savedRow)
+            : entry));
+          setIssues(result.issues);
+          setSavedCount((count) => count + 1);
+        }
+      }
       onSaved(result);
     } catch (e) {
-      setErrors(apiErrors(e));
+      const messages = apiErrors(e);
+      setErrors(savingRow
+        ? { [savingRow.assignmentId]: `${savingRow.fullName}: ${Object.values(messages).join(' ')}` }
+        : messages);
       setStale(e.response?.status === 409);
-      setReview(false);
     } finally {
       sending.current = false;
       setBusy(false);
@@ -163,11 +174,11 @@ export default function AttendanceDialog({
   return (
     <dialog
       ref={ref}
-      className={`shift-dialog attendance-dialog${employee ? ' attendance-dialog-wide' : ''}`}
+      className={`shift-dialog attendance-dialog${employee ? ' attendance-dialog-wide' : recording ? ' attendance-dialog-record' : ''}`}
       aria-labelledby="attendance-dialog-title"
       onCancel={(e) => {
         e.preventDefault();
-        if (!busy) onClose();
+        if (!busy) closeDialog();
       }}
     >
       <header>
@@ -177,7 +188,7 @@ export default function AttendanceDialog({
             {data.branchName} · {data.month || dateLabel(data.date)}
           </p>
         </div>
-        <button type="button" disabled={busy} onClick={onClose} aria-label="Đóng">
+        <button type="button" disabled={busy} onClick={closeDialog} aria-label="Đóng">
           ×
         </button>
       </header>
@@ -188,8 +199,8 @@ export default function AttendanceDialog({
           )}
           {Object.keys(errors).length > 0 && (
             <div className="shift-message error" role="alert">
-              {Object.values(errors).map((message, i) => (
-                <p key={i}>{message}</p>
+              {Object.entries(errors).map(([key, message]) => (
+                <p key={key} id={`attendance-error-${key}`}>{message}</p>
               ))}
               {stale && (
                 <button type="button" onClick={onReload}>
@@ -285,154 +296,122 @@ export default function AttendanceDialog({
             </>
           ) : (
             <>
+              {sameShift && <p className="attendance-help attendance-entry-shift">
+                Ca dự kiến: {shiftLabel(entries[0].row, data.timezone)}
+              </p>}
+              {savedCount > 0 && !busy && (
+                <p className="shift-message" role="status">Đã lưu {savedCount} bản ghi trước khi gặp lỗi.</p>
+              )}
               <fieldset
-                disabled={busy || stale || locked || review}
+                disabled={busy || stale || locked}
                 className="attendance-fields"
               >
-                <label>
-                  Nhân viên / phân ca *
-                  <select
-                    aria-label="Nhân viên / phân ca"
-                    value={assignmentId}
-                    onChange={(e) => select(e.target.value)}
-                  >
-                    <option value="">Chọn nhân viên và ca đã phân công</option>
-                    {data.rows.filter((rowItem) => locked || rowItem.periodStatus !== 'CLOSED').map((rowItem) => (
-                      <option key={rowItem.assignmentId} value={rowItem.assignmentId}>
-                        {rowItem.code} · {rowItem.fullName} · {dateTimeLabel(rowItem.startsAt, data.timezone)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {row && (
-                  <p className="attendance-help">
-                    Ca dự kiến: {dateTimeLabel(row.startsAt, data.timezone)} →{' '}
-                    {dateTimeLabel(row.endsAt, data.timezone)}
-                  </p>
-                )}
-                <div className="attendance-form-grid">
-                  <fieldset className="attendance-status-options">
-                    <legend>Tình trạng chấm công *</legend>
-                    <label>
-                      <input type="radio" name="attendance-status" checked={status === 'WORKED'}
-                        disabled={!row} onChange={() => markAttendance('WORKED')} /> Đi làm
-                    </label>
-                    <label>
-                      <input type="radio" name="attendance-status" checked={status === 'ABSENT'}
-                        disabled={!row} onChange={() => markAttendance('ABSENT')} /> Vắng mặt
-                    </label>
-                  </fieldset>
-                  {status === 'WORKED' && (
-                    <div className="attendance-shift-pay" role="status">
-                      <strong>Tiền công ca tạm tính</strong>
-                      <p>{shiftPay == null ? 'Chưa có đơn giá áp dụng' : shiftPay.toLocaleString('vi-VN') + ' đ'}</p>
-                      <small>{hoursLabel(minutes || 0)}{status === 'WORKED' && row?.nightPremium ? ' · Phụ cấp ca đêm 3.000 đ/giờ' : ''}</small>
-                    </div>
-                  )}
+                <div className="attendance-table-scroll attendance-entry-scroll" role="region"
+                  aria-label="Danh sách nhân viên chấm công" tabIndex={0}>
+                  <table className="attendance-table attendance-entry-table">
+                    <colgroup>
+                      <col className="attendance-entry-person" />
+                      <col className="attendance-entry-status" span={2} />
+                      <col />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">Nhân viên</th>
+                        <th scope="col" className="attendance-entry-choice">Đi làm</th>
+                        <th scope="col" className="attendance-entry-choice">Vắng mặt</th>
+                        <th scope="col">Ghi chú</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map(({ row, status, note, resolved, resolution }) => {
+                        const { assignmentId, code, fullName } = row;
+                        const closed = row.periodStatus === 'CLOSED';
+                        const future = isFuture(row);
+                        const rowIssues = issues.filter((issue) => issue.assignmentId === assignmentId);
+                        const rowLabel = `${fullName} · ${code}${sameShift ? '' : ` · ${shiftLabel(row, data.timezone)}`}`;
+                        const edit = (changes) => updateEntry(assignmentId, changes);
+                        return (
+                          <tr key={assignmentId}>
+                            <th scope="row">
+                              <strong>{fullName}</strong>
+                              <small>{code}</small>
+                              {!sameShift && <small>{shiftLabel(row, data.timezone)}</small>}
+                              {closed ? <small>Công đã chốt</small> : future && <small>Ca chưa bắt đầu</small>}
+                            </th>
+                            {attendanceOptions.map(([value, label]) => (
+                              <td key={value} className="attendance-entry-choice">
+                                <label>
+                                  <input type="radio" name={`attendance-${assignmentId}`}
+                                    aria-label={`${label} · ${rowLabel}`}
+                                    aria-describedby={errors[assignmentId] ? `attendance-error-${assignmentId}` : undefined}
+                                    checked={status === value} disabled={closed || future}
+                                    onChange={() => edit({ status: value })} />
+                                </label>
+                              </td>
+                            ))}
+                            <td>
+                              <textarea aria-label={`Ghi chú · ${rowLabel}`} maxLength={2000} rows={2}
+                                placeholder="Nhập ghi chú…" value={note} disabled={closed || future}
+                                onChange={(e) => edit({ note: e.target.value })} />
+                              {rowIssues.length > 0 && (
+                                <details className="attendance-issues">
+                                  <summary>Phản ánh chấm công ({rowIssues.length})</summary>
+                                  <PaginatedList as="section" pageSize={5}>
+                                    {rowIssues.map((issue) => (
+                                      <div key={issue.id}>
+                                        {issue.status === 'OPEN' ? (
+                                          <label className="attendance-check">
+                                            <input type="checkbox" disabled={closed || future}
+                                              checked={resolved.includes(issue.id)}
+                                              onChange={(e) => edit({
+                                                resolved: e.target.checked ? [...resolved, issue.id]
+                                                  : resolved.filter((id) => id !== issue.id),
+                                              })} />
+                                            Đã xử lý: {issue.description}
+                                          </label>
+                                        ) : (
+                                          <p>{issue.description}<small>{issue.resolution || issue.status}</small></p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </PaginatedList>
+                                  {resolved.length > 0 && (
+                                    <label>
+                                      Kết quả xử lý *
+                                      <textarea maxLength={2000} value={resolution} disabled={closed || future}
+                                        aria-label={`Kết quả xử lý phản ánh · ${rowLabel}`}
+                                        onChange={(e) => edit({ resolution: e.target.value })} />
+                                    </label>
+                                  )}
+                                </details>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {!entries.length && <p className="attendance-empty">Chưa có nhân viên được phân ca.</p>}
                 </div>
-                <label>
-                  Ghi chú / lý do ngoại lệ
-                  <textarea
-                    aria-label="Ghi chú chấm công"
-                    maxLength={2000}
-                    placeholder="Ví dụ: đi muộn do kẹt xe, về sớm có lý do…"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                </label>
-                {issues.length > 0 && (
-                  <PaginatedList as="section" pageSize={5} className="attendance-issues">
-                    <h3>Phản ánh chấm công</h3>
-                    {issues.map((issue) => (
-                      <div key={issue.id}>
-                        {issue.status === 'OPEN' ? (
-                          <label className="attendance-check">
-                            <input
-                              type="checkbox"
-                              checked={resolved.includes(issue.id)}
-                              onChange={(e) =>
-                                setResolved((old) =>
-                                  e.target.checked
-                                    ? [...old, issue.id]
-                                    : old.filter((id) => id !== issue.id)
-                                )
-                              }
-                            />
-                            Đã xử lý: {issue.description}
-                          </label>
-                        ) : (
-                          <p>
-                            {issue.description}
-                            <small>{issue.resolution || issue.status}</small>
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                    {resolved.length > 0 && (
-                      <label>
-                        Kết quả xử lý *
-                        <textarea
-                          aria-label="Kết quả xử lý phản ánh"
-                          maxLength={2000}
-                          value={resolution}
-                          onChange={(e) => setResolution(e.target.value)}
-                        />
-                      </label>
-                    )}
-                  </PaginatedList>
-                )}
               </fieldset>
-              {review && (
-                <div className="attendance-summary" role="status">
-                  <strong>Xác nhận cập nhật bản ghi chấm công?</strong>
-                  <span>
-                    Hệ thống sẽ lưu ngày giờ thực tế, giờ công và các phản ánh được chọn là đã xử
-                    lý.
-                  </span>
-                  <span>
-                    {row.code} · {row.fullName} · {status === 'ABSENT' ? 'Vắng mặt' : 'Đi làm'} ·{' '}
-                    {hoursLabel(minutes)}
-                  </span>
-                  {row.attendanceId && (
-                    <span>
-                      Trước sửa: {row.status === 'ABSENT' ? 'Vắng mặt' : 'Đi làm'} ·{' '}
-                      {hoursLabel(row.workedMinutes)} · {dateTimeLabel(row.actualIn, data.timezone)}{' '}
-                      → {dateTimeLabel(row.actualOut, data.timezone)}
-                    </span>
-                  )}
-                  {status === 'WORKED' && (
-                    <span>
-                      Sau lưu: {actualIn.replace('T', ' ')} → {actualOut.replace('T', ' ')}
-                    </span>
-                  )}
-                  {note && <span>Ghi chú: {note}</span>}
-                  {resolved.length > 0 && (
-                    <span>
-                      Giải quyết {resolved.length} phản ánh: {resolution}
-                    </span>
-                  )}
-                </div>
-              )}
             </>
           )}
         </div>
         <footer className="shift-dialog-footer">
-          <button type="button" disabled={busy} onClick={review ? () => setReview(false) : onClose}>
-            {review ? 'Quay lại sửa' : 'Đóng'}
+          <button type="button" disabled={busy} onClick={closeDialog}>
+            Đóng
           </button>
           {!employee && !locked && (
             <button
               type="submit"
               className="shift-primary"
-              disabled={busy || stale || (closing && !confirmed)}
+              disabled={busy || stale || (closing ? !confirmed : !editableEntries.length)}
             >
               {busy
                 ? 'Đang lưu…'
                 : closing
                   ? 'Xác nhận chốt'
-                  : review
-                    ? 'Xác nhận lưu chấm công'
-                    : 'Kiểm tra thông tin'}
+                  : 'Lưu chấm công'}
             </button>
           )}
         </footer>
