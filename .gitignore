@@ -33,3 +33,8 @@ Thumbs.db
 
 # Private VPS backups
 .backups/
+
+# Local Draw.io diagrams and companion files
+*.drawio
+*.drawio.*
+/output/sequence-diagrams/

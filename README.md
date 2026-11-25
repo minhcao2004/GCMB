@@ -172,6 +172,15 @@ Backend package reorganization (24/10/2026): the former `backoffice/` directory 
 
 Frontend account management lives in `frontend/src/features/backoffice/accounts/`: `pages/` contains `AccountsPage` and `AuditLogPage`; `components/` contains account dialogs and the password form; `services/` contains API clients; `styles/` contains CSS. `CreateAccountDrawer` remains inside `pages/AccountsPage.js`. The parent dashboard remains at `frontend/src/features/auth/components/HeadOfficeDashboard.js`.
 
+### Tách tầng repository và quy ước đặt tên (25/11/2026)
+
+- **Quy tắc backend:** mọi câu SQL/`JdbcTemplate` chỉ nằm trong package `repository` của từng module. Controller và service không inject `JdbcTemplate`; service gọi repository qua các method có tên nghiệp vụ (`findPeriodEntries`, `lockOpenPeriod`, `insertPayrollOutflow`…). Đây là refactor cấu trúc, không đổi API, schema, câu SQL hay quy tắc nghiệp vụ.
+- Repository mới: `booking/repository/{CheckoutRepository,TaxInvoiceRepository}`, `finance/repository/{CashClosingRepository,DrawerFundingRepository,FinanceAccessRepository,FinanceRepository,FinancialPeriodRepository,ShiftCashHandoverRepository,RecurringExpenseRepository}`, `audit/repository/MutationAuditRepository`, `branch/repository/BranchRepository`, `pricing/repository/RoomCatalogRepository`, `workforce/repository/PayrollRepository`, `dashboard/repository/{DashboardRepository,MonthlyPerformanceRepository,AccountingWorkbookRepository,BusinessAssistantRepository,FinancialReportRepository}`. `AccountantFund` chuyển từ `finance/service` sang `finance/repository`.
+- `DashboardController` và `FinancialController` không còn SQL trực tiếp. Điều chỉnh bút toán (`POST /api/v1/accounting/transactions/{id}/adjustments`) chuyển từ `FinancialController.adjust` sang `dashboard/FinancialTransactionAdjustmentService`; controller chỉ nhận request và gọi service. Request/response, thông báo lỗi, audit `ADJUST_FINANCIAL_TRANSACTION` và việc xóa file chứng từ khi giao dịch thất bại giữ nguyên.
+- `PayrollService`: xóa ba method private không còn được gọi (`rebuild`, `earned`, `policy`) của luồng kế toán tự tính lương cũ; các API của luồng đó vẫn trả 403 như trước.
+- **Đặt tên Java:** không dùng biến một ký tự ngoài chỉ số vòng lặp (`i`, `j`); `ResultSet` đặt là `resultSet`, tham số dòng của `RowMapper` là `rowNumber`; command/tham số nghiệp vụ dùng tên đầy đủ (`command`, `monthStart`, `payrollPeriod`, `branchId`).
+- **Frontend:** file CSS đặt theo kebab-case (`account-access.css`, `account-profile.css`, `cash-handover.css`, `incoming-room-order-dialog.css`, `accountant-dashboard.css`); component dùng đuôi `.js` (bỏ `.jsx`). `features/dashboard/` được chia thành `pages/` (màn hình định tuyến), `components/` (biểu đồ, bộ lọc, bảng báo cáo dùng lại) và `styles/`. Đã xóa các file không còn được import: `PerformanceDashboard.js`, `MonthlyPerformanceSummary.js` + `monthly-performance-summary.css` (chỉ màn đó dùng), dữ liệu giả `executiveDashboardData.js` và `branch/components/branchDashboardMockData.js`. Biến/tham số một ký tự được đổi theo ngữ cảnh (`row`, `branch`, `response`, `previousRevision`, `left`/`right` cho hàm so sánh); giữ `e` cho sự kiện, `i`/`j` cho chỉ số và `x`/`y` cho tọa độ biểu đồ.
+
 ## Getting Started
 
 ### Prerequisites
@@ -383,6 +392,8 @@ Before opening a pull request:
 - Check that no secrets or local generated files are included.
 
 Review and test changes before merging. Keep `node_modules/`, `build/`, `target/`, and local environment files out of Git; preserve examples such as `.env.example` and Maven Wrapper files.
+
+Draw.io files (`*.drawio`), their companion files (`*.drawio.*`), and all generated artifacts under `output/sequence-diagrams/` (including ZIP archives and local notes) are excluded by `.gitignore`.
 
 ## Documentation
 
