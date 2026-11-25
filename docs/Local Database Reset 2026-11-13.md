@@ -63,4 +63,8 @@ Launcher dùng `pg_ctl` của PostgreSQL 18 để bật cụm hiện có và ch�
 
 Khi kiểm tra bản sửa khởi động trên máy này, Flyway áp dụng migration V65 có sẵn trong source. Lần khởi động kế tiếp xác nhận schema đã cập nhật, API health trả `UP` và trang `/dang-nhap` trả HTTP 200.
 
+### Đồng bộ phiên bản migration V66–V67 (25/11/2026)
+
+Database local đã áp dụng thành công V66 `equipment_asset_code_counters` ngày 24/11/2026. Source được sắp xếp lại để giữ nguyên nội dung đó ở V66; V67 là migration `cash_closing_notifications`, vốn trước đây mang số V59 nhưng trùng với `salary_payment_evidence`. Nếu V66 bị gán lại cho thông báo chốt quỹ và bộ đếm bị đưa sang V67, lần khởi động tiếp theo sẽ cố tạo lại bảng `gcmb.equipment_asset_code_counter` và backend dừng. Không sửa lịch sử Flyway hoặc xóa bảng/dữ liệu để xử lý trường hợp này.
+
 Vì thư mục dữ liệu đang nằm dưới `backend/target/`, hãy sao lưu hoặc chuyển cụm sang thư mục dữ liệu riêng và cập nhật `GCMB_LOCAL_PGDATA` trước khi chạy Maven `clean`.

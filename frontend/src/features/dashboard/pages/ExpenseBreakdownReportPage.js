@@ -18,7 +18,6 @@ const errorText = (error) => error.response?.data?.detail || error.response?.dat
   ? 'Không thể kết nối đến GCMB. Vui lòng kiểm tra kết nối mạng và thử lại.'
   : 'Không thể tải dữ liệu. Vui lòng thử lại.');
 const expenseReportPath = `/quan-ly-he-thong?${new URLSearchParams({ screen: 'Báo cáo chi phí' })}`;
-const headOfficeMonthlyPath = `/quan-ly-he-thong?${new URLSearchParams({ screen: 'Báo cáo kinh doanh' })}`;
 
 export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const navigate = useNavigate();
@@ -193,7 +192,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     </dl>
 
     {!loading && !error && currentData && rows.length === 0 && <p className="expense-report-empty" role="status">{noResults}</p>}
-    {rows.length > 0 && <div className="expense-report-table-scroll"><PaginatedTable pageSize={5} className="expense-report-table">
+    {rows.length > 0 && <div className="expense-report-table-scroll"><PaginatedTable pageSize={10} className="expense-report-table">
       <caption>Tiền đã chi {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
       <thead><tr><th scope="col">Nhóm chi</th><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">Số khoản thanh toán</th><th scope="col" className="expense-report-number">Tiền đã chi</th><th scope="col">Chi tiết</th></tr></thead>
       <tbody>{rows.map((row) => {
@@ -222,7 +221,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
         </Fragment>;
       })}</tbody>
     </PaginatedTable></div>}
-    <p className="expense-report-footer"><Link to={user.role === 'HEAD_OFFICE_MANAGER' ? headOfficeMonthlyPath : '/ke-toan/bao-cao'}>Quay lại báo cáo hiệu quả tháng</Link><button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Tải lại</button></p>
+    <p className="expense-report-footer">{user.role !== 'HEAD_OFFICE_MANAGER' && <Link to="/ke-toan/bao-cao">Quay lại báo cáo hiệu quả tháng</Link>}<button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Tải lại</button></p>
     {preview && <div className="expense-report-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><section className="expense-report-preview" role="dialog" aria-modal="true" aria-labelledby="expense-preview-title"><header><h2 id="expense-preview-title">{preview.name}</h2><button type="button" autoFocus onClick={() => setPreview(null)}>Đóng</button></header>{preview.type?.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <iframe src={preview.url} title={preview.name} /> }<a href={preview.url} download={preview.name}>Tải chứng từ</a></section></div>}
   </section>;
 

@@ -62,3 +62,9 @@ The overview has day, month, and year selectors for its totals, branch revenue c
 - `/api/v1/finance/attachments/{id}`: authenticated inline local evidence access.
 
 V40 adds finance transfers, categories, requests, attachments and request history. It does not modify deposit/refund records or branch balances.
+
+### Bộ lọc và danh sách phê duyệt quản lý cấp cao
+
+Hai tab Cấp quỹ và Đề nghị thanh toán/hoàn ứng có bộ lọc khoảng ngày; bảng kết quả hiển thị dạng danh sách cuộn trong khung có tiêu đề cột cố định. Báo cáo chi phí của quản lý cấp cao không có liên kết quay lại báo cáo hiệu quả tháng; bảng tiền đã chi hiển thị 10 dòng mỗi trang. Biểu mẫu chi và hoàn ứng chỉ cho chọn hạng mục chi vận hành, không liệt kê nhóm CAPEX/Đầu tư.
+
+Hai tab phê duyệt cấp quỹ và đề nghị chi dùng chung ngôn ngữ giao diện: tiêu đề phân cấp theo vai trò, tóm tắt số liệu, bộ lọc nằm trong một vùng riêng, bảng cuộn có tiêu đề cố định và thao tác rõ ràng. Trên màn hình nhỏ, bộ lọc và chỉ số chuyển thành một cột để tránh tràn ngang.

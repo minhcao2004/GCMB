@@ -1,5 +1,6 @@
--- The former V59 cash-closing migration was reconciled to the salary-evidence
--- V59 history. Preserve an existing notification table when restoring that backup.
+-- The cash-closing notification migration was assigned V59 before salary
+-- payment evidence occupied that version. Preserve existing V66 equipment
+-- counter installations and apply notifications at the next version.
 CREATE TABLE IF NOT EXISTS gcmb.cash_closing_notification (
   id UUID PRIMARY KEY,
   closing_id UUID NOT NULL REFERENCES gcmb.daily_cash_closing(id),
