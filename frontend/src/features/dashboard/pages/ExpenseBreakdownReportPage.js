@@ -1,12 +1,12 @@
-import { PaginatedTable } from '../../shared/components/Pagination';
+import { PaginatedTable } from '../../../shared/components/Pagination';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../../api/client';
-import { authApi } from '../auth/services/authApi';
-import { AppShell } from '../booking/pages/BookingManagementPage';
-import BranchFilterSelect from './BranchFilterSelect';
-import './dashboard.css';
-import './expense-breakdown-report.css';
+import api from '../../../api/client';
+import { authApi } from '../../auth/services/authApi';
+import { AppShell } from '../../booking/pages/BookingManagementPage';
+import BranchFilterSelect from '../components/BranchFilterSelect';
+import '../styles/dashboard.css';
+import '../styles/expense-breakdown-report.css';
 
 const monthNow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
 const noResults = 'Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.';

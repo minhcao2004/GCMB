@@ -45,7 +45,7 @@ export default function AttendanceDialog({
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [stale, setStale] = useState(false);
-  const row = data.rows.find((r) => r.assignmentId === assignmentId);
+  const row = data.rows.find((rowItem) => rowItem.assignmentId === assignmentId);
   const locked = readOnly || row?.periodStatus === 'CLOSED';
   const closingEmployees = (data.employees || []).filter((e) => !dialog.employeeIds || dialog.employeeIds.includes(e.employeeId));
   const issues = data.issues.filter((i) => i.assignmentId === assignmentId);
@@ -84,7 +84,7 @@ export default function AttendanceDialog({
   }, []);
 
   const select = (id) => {
-    const current = data.rows.find((r) => r.assignmentId === id);
+    const current = data.rows.find((rowItem) => rowItem.assignmentId === id);
     setAssignmentId(id);
     setStatus(current?.status || '');
     setActualIn(initialAttendanceTime(current, 'actualIn', data.timezone));
@@ -212,33 +212,33 @@ export default function AttendanceDialog({
                 </thead>
                 <tbody>
                   {data.rows
-                    .filter((r) => r.employeeId === dialog.employee.employeeId)
-                    .map((r) => (
-                      <tr key={r.assignmentId}>
+                    .filter((rowItem) => rowItem.employeeId === dialog.employee.employeeId)
+                    .map((rowItem) => (
+                      <tr key={rowItem.assignmentId}>
                         <td>
-                          {dateTimeLabel(r.startsAt, data.timezone)}
-                          <small>→ {dateTimeLabel(r.endsAt, data.timezone)}</small>
+                          {dateTimeLabel(rowItem.startsAt, data.timezone)}
+                          <small>→ {dateTimeLabel(rowItem.endsAt, data.timezone)}</small>
                         </td>
                         <td>
-                          {!r.attendanceId ? (
+                          {!rowItem.attendanceId ? (
                             'Chưa ghi nhận'
-                          ) : r.status === 'ABSENT' ? (
+                          ) : rowItem.status === 'ABSENT' ? (
                             'Vắng mặt'
                           ) : (
                             <>
-                              {dateTimeLabel(r.actualIn, data.timezone)}
-                              <small>→ {dateTimeLabel(r.actualOut, data.timezone)}</small>
+                              {dateTimeLabel(rowItem.actualIn, data.timezone)}
+                              <small>→ {dateTimeLabel(rowItem.actualOut, data.timezone)}</small>
                             </>
                           )}
                         </td>
-                        <td>{r.attendanceId ? hoursLabel(r.workedMinutes) : '—'}</td>
+                        <td>{rowItem.attendanceId ? hoursLabel(rowItem.workedMinutes) : '—'}</td>
                         <td>
-                          {r.exceptions.join(' · ') || '—'}
-                          <small>{r.note}</small>
-                          {r.openIssues > 0 && <small>{r.openIssues} phản ánh chưa xử lý</small>}
+                          {rowItem.exceptions.join(' · ') || '—'}
+                          <small>{rowItem.note}</small>
+                          {rowItem.openIssues > 0 && <small>{rowItem.openIssues} phản ánh chưa xử lý</small>}
                         </td>
                         <td>
-                          <button type="button" onClick={() => onDaily(r.workDate)}>
+                          <button type="button" onClick={() => onDaily(rowItem.workDate)}>
                             Xem ngày
                           </button>
                         </td>
@@ -297,9 +297,9 @@ export default function AttendanceDialog({
                     onChange={(e) => select(e.target.value)}
                   >
                     <option value="">Chọn nhân viên và ca đã phân công</option>
-                    {data.rows.filter((r) => locked || r.periodStatus !== 'CLOSED').map((r) => (
-                      <option key={r.assignmentId} value={r.assignmentId}>
-                        {r.code} · {r.fullName} · {dateTimeLabel(r.startsAt, data.timezone)}
+                    {data.rows.filter((rowItem) => locked || rowItem.periodStatus !== 'CLOSED').map((rowItem) => (
+                      <option key={rowItem.assignmentId} value={rowItem.assignmentId}>
+                        {rowItem.code} · {rowItem.fullName} · {dateTimeLabel(rowItem.startsAt, data.timezone)}
                       </option>
                     ))}
                   </select>

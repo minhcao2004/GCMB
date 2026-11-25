@@ -36,10 +36,10 @@ public class FoodOrderRepository {
             WHERE r.mr_code=?
             ORDER BY a.created_at DESC
             LIMIT 2
-            """, (rs, row) -> new ActiveRoom(rs.getObject("room_id", UUID.class), rs.getString("room_code"),
-                rs.getString("room_name"), rs.getObject("branch_id", UUID.class), rs.getString("branch_name"),
-                rs.getObject("booking_id", UUID.class), rs.getString("booking_code"),
-                rs.getObject("allocation_id", UUID.class)), mrCode);
+            """, (resultSet, row) -> new ActiveRoom(resultSet.getObject("room_id", UUID.class), resultSet.getString("room_code"),
+                resultSet.getString("room_name"), resultSet.getObject("branch_id", UUID.class), resultSet.getString("branch_name"),
+                resultSet.getObject("booking_id", UUID.class), resultSet.getString("booking_code"),
+                resultSet.getObject("allocation_id", UUID.class)), mrCode);
         if (rows.isEmpty()) return null;
         if (rows.size() > 1) throw new IllegalStateException("Phòng có nhiều lượt sử dụng đang hoạt động.");
         return rows.get(0);
@@ -58,10 +58,10 @@ public class FoodOrderRepository {
             ORDER BY a.created_at DESC
             LIMIT 2
             FOR UPDATE OF bk,a,r
-            """, (rs, row) -> new ActiveRoom(rs.getObject("room_id", UUID.class), rs.getString("room_code"),
-                rs.getString("room_name"), rs.getObject("branch_id", UUID.class), rs.getString("branch_name"),
-                rs.getObject("booking_id", UUID.class), rs.getString("booking_code"),
-                rs.getObject("allocation_id", UUID.class)), bookingId, branchId);
+            """, (resultSet, row) -> new ActiveRoom(resultSet.getObject("room_id", UUID.class), resultSet.getString("room_code"),
+                resultSet.getString("room_name"), resultSet.getObject("branch_id", UUID.class), resultSet.getString("branch_name"),
+                resultSet.getObject("booking_id", UUID.class), resultSet.getString("booking_code"),
+                resultSet.getObject("allocation_id", UUID.class)), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -75,9 +75,9 @@ public class FoodOrderRepository {
             JOIN gcmb.room r ON r.id=a.room_id
             WHERE bk.id=? AND bk.branch_id=? AND bk.status IN ('CONFIRMED','IN_HOUSE')
             ORDER BY a.created_at DESC LIMIT 2 FOR UPDATE OF bk,a,r
-            """, (rs,row) -> new ActiveRoom(rs.getObject("room_id",UUID.class),rs.getString("room_code"),
-                rs.getString("room_name"),rs.getObject("branch_id",UUID.class),rs.getString("branch_name"),
-                rs.getObject("booking_id",UUID.class),rs.getString("booking_code"),rs.getObject("allocation_id",UUID.class)),bookingId,branchId);
+            """, (resultSet,row) -> new ActiveRoom(resultSet.getObject("room_id",UUID.class),resultSet.getString("room_code"),
+                resultSet.getString("room_name"),resultSet.getObject("branch_id",UUID.class),resultSet.getString("branch_name"),
+                resultSet.getObject("booking_id",UUID.class),resultSet.getString("booking_code"),resultSet.getObject("allocation_id",UUID.class)),bookingId,branchId);
         if (rows.size() > 1) throw new IllegalStateException("Booking có nhiều lịch phòng đang hoạt động.");
         return rows.isEmpty()?null:rows.get(0);
     }
@@ -97,9 +97,9 @@ public class FoodOrderRepository {
                 OR (m.kind='PREPARED' AND m.inventory_item_id IS NULL)
             )
             ORDER BY lower(m.category),lower(m.name),m.code
-            """,(rs,n)->new ComboGiftOption(rs.getObject("id",UUID.class),rs.getString("name"),rs.getString("category"),
-                rs.getBigDecimal("sale_price"),rs.getBigDecimal("stock_quantity"),rs.getString("unit_name"),
-                rs.getBoolean("stock_tracked")),branchId);
+            """,(resultSet, rowNumber) ->new ComboGiftOption(resultSet.getObject("id",UUID.class),resultSet.getString("name"),resultSet.getString("category"),
+                resultSet.getBigDecimal("sale_price"),resultSet.getBigDecimal("stock_quantity"),resultSet.getString("unit_name"),
+                resultSet.getBoolean("stock_tracked")),branchId);
     }
 
     public UUID insertGiftAllowance(UUID bookingId, UUID menuItemId, String name, BigDecimal quantity) {
@@ -123,11 +123,11 @@ public class FoodOrderRepository {
             JOIN gcmb.branch br ON br.id=b.branch_id AND br.status='ACTIVE'
             WHERE r.mr_code=? AND s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP
             ORDER BY s.created_at DESC LIMIT 1
-            """, (rs, row) -> new RoomQrSession(rs.getObject("session_id", UUID.class),
-                rs.getObject("booking_id", UUID.class), rs.getObject("allocation_id", UUID.class),
-                rs.getObject("branch_id", UUID.class), rs.getString("booking_code"),
-                rs.getObject("room_id", UUID.class), rs.getString("room_code"), rs.getString("room_name"),
-                rs.getString("branch_name"), instant(rs, "expires_at")), mrCode, tokenHash);
+            """, (resultSet, row) -> new RoomQrSession(resultSet.getObject("session_id", UUID.class),
+                resultSet.getObject("booking_id", UUID.class), resultSet.getObject("allocation_id", UUID.class),
+                resultSet.getObject("branch_id", UUID.class), resultSet.getString("booking_code"),
+                resultSet.getObject("room_id", UUID.class), resultSet.getString("room_code"), resultSet.getString("room_name"),
+                resultSet.getString("branch_name"), instant(resultSet, "expires_at")), mrCode, tokenHash);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -147,9 +147,9 @@ public class FoodOrderRepository {
             JOIN gcmb.room r ON r.id=a.room_id
             WHERE bk.branch_id=? AND bk.status='IN_HOUSE'
             ORDER BY bk.actual_checkin DESC,bk.code
-            """, (rs, row) -> new ActiveBooking(rs.getObject("id", UUID.class), rs.getString("code"),
-                rs.getString("room_code"), rs.getString("room_name"), rs.getString("contact_name"),
-                instant(rs, "actual_checkin")), branchId);
+            """, (resultSet, row) -> new ActiveBooking(resultSet.getObject("id", UUID.class), resultSet.getString("code"),
+                resultSet.getString("room_code"), resultSet.getString("room_name"), resultSet.getString("contact_name"),
+                instant(resultSet, "actual_checkin")), branchId);
     }
 
     public List<ServingEmployee> onShiftEmployees(UUID branchId) {
@@ -167,7 +167,7 @@ public class FoodOrderRepository {
                 AND s.starts_at<=CURRENT_TIMESTAMP AND s.ends_at>CURRENT_TIMESTAMP
             GROUP BY e.id,e.full_name
             ORDER BY lower(e.full_name),e.id
-            """, (rs, row) -> new ServingEmployee(rs.getObject("id", UUID.class), rs.getString("full_name")), branchId);
+            """, (resultSet, row) -> new ServingEmployee(resultSet.getObject("id", UUID.class), resultSet.getString("full_name")), branchId);
     }
 
     public boolean eligibleOnShift(UUID employeeId, UUID branchId) {
@@ -190,7 +190,7 @@ public class FoodOrderRepository {
     }
 
     public UUID servingUser(UUID employeeId) {
-        List<UUID> rows = jdbcTemplate.query("SELECT user_id FROM gcmb.employee WHERE id=?", (rs, row) -> rs.getObject(1, UUID.class), employeeId);
+        List<UUID> rows = jdbcTemplate.query("SELECT user_id FROM gcmb.employee WHERE id=?", (resultSet, row) -> resultSet.getObject(1, UUID.class), employeeId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -203,7 +203,7 @@ public class FoodOrderRepository {
             VALUES (?,?,?,?,?,?,?,?,CASE WHEN ?::uuid IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END,?,?)
             ON CONFLICT (idempotency_key) DO NOTHING
             RETURNING id
-            """, (rs, row) -> rs.getObject("id", UUID.class), branchId, bookingId, allocationId, channel,
+            """, (resultSet, row) -> resultSet.getObject("id", UUID.class), branchId, bookingId, allocationId, channel,
             createdBy, qrSessionId, status, acceptedBy, acceptedBy, assignedEmployeeId, idempotencyKey);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -212,9 +212,9 @@ public class FoodOrderRepository {
         List<ExistingOrder> rows = jdbcTemplate.query("""
             SELECT id,branch_id,booking_id,channel,qr_session_id
             FROM gcmb.fb_order WHERE idempotency_key=?
-            """, (rs, row) -> new ExistingOrder(rs.getObject("id", UUID.class),
-                rs.getObject("branch_id", UUID.class), rs.getObject("booking_id", UUID.class),
-                rs.getString("channel"), rs.getObject("qr_session_id", UUID.class)), key);
+            """, (resultSet, row) -> new ExistingOrder(resultSet.getObject("id", UUID.class),
+                resultSet.getObject("branch_id", UUID.class), resultSet.getObject("booking_id", UUID.class),
+                resultSet.getString("channel"), resultSet.getObject("qr_session_id", UUID.class)), key);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -234,9 +234,9 @@ public class FoodOrderRepository {
         return jdbcTemplate.query("""
             SELECT id,menu_item_id,name_snapshot,quantity,unit_price
             FROM gcmb.order_line WHERE order_id=? ORDER BY created_at,id
-            """, (rs, row) -> new PendingLine(rs.getObject("id", UUID.class),
-                rs.getObject("menu_item_id", UUID.class), rs.getString("name_snapshot"),
-                rs.getBigDecimal("quantity"), rs.getBigDecimal("unit_price")), orderId);
+            """, (resultSet, row) -> new PendingLine(resultSet.getObject("id", UUID.class),
+                resultSet.getObject("menu_item_id", UUID.class), resultSet.getString("name_snapshot"),
+                resultSet.getBigDecimal("quantity"), resultSet.getBigDecimal("unit_price")), orderId);
     }
 
     public ComboAllowance comboAllowance(UUID bookingId, UUID menuItemId, UUID excludingOrderId) {
@@ -249,8 +249,8 @@ public class FoodOrderRepository {
             LEFT JOIN gcmb.fb_order o ON o.id=l.order_id
             WHERE c.booking_id=? AND c.menu_item_id=?
             GROUP BY c.id,c.included_quantity
-            """, (rs, row) -> new ComboAllowance(rs.getObject("id", UUID.class),
-                rs.getBigDecimal("included_quantity"), rs.getBigDecimal("used_quantity")),
+            """, (resultSet, row) -> new ComboAllowance(resultSet.getObject("id", UUID.class),
+                resultSet.getBigDecimal("included_quantity"), resultSet.getBigDecimal("used_quantity")),
             excludingOrderId, bookingId, menuItemId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -274,16 +274,16 @@ public class FoodOrderRepository {
             LEFT JOIN gcmb.stock_balance sb ON sb.inventory_item_id=m.inventory_item_id
             WHERE m.branch_id=? AND m.deleted_at IS NULL AND m.active=true
                 AND m.id IN (""" + placeholders + ") ORDER BY m.id",
-            (rs, row) -> new SellableItem(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("category"), rs.getString("kind"), rs.getObject("inventory_item_id", UUID.class),
-                rs.getBigDecimal("sale_price"), rs.getString("tracking_mode"), rs.getString("unit_name"),
-                rs.getBigDecimal("stock_quantity")), bind(branchId, itemIds));
+            (resultSet, row) -> new SellableItem(resultSet.getObject("id", UUID.class), resultSet.getString("name"),
+                resultSet.getString("category"), resultSet.getString("kind"), resultSet.getObject("inventory_item_id", UUID.class),
+                resultSet.getBigDecimal("sale_price"), resultSet.getString("tracking_mode"), resultSet.getString("unit_name"),
+                resultSet.getBigDecimal("stock_quantity")), bind(branchId, itemIds));
     }
 
     public BigDecimal lockStock(UUID inventoryItemId) {
         List<BigDecimal> rows = jdbcTemplate.query("""
             SELECT quantity FROM gcmb.stock_balance WHERE inventory_item_id=? FOR UPDATE
-            """, (rs, row) -> rs.getBigDecimal("quantity"), inventoryItemId);
+            """, (resultSet, row) -> resultSet.getBigDecimal("quantity"), inventoryItemId);
         return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
     }
 
@@ -308,8 +308,8 @@ public class FoodOrderRepository {
             WHERE sm.kind='SALE' AND NOT EXISTS (
               SELECT 1 FROM gcmb.stock_movement reversal WHERE reversal.kind='RETURN' AND reversal.reverses_id=sm.id)
             ORDER BY sm.inventory_item_id,sm.id FOR UPDATE OF sm
-            """,(rs,n)->new SaleMovement(rs.getObject("id",UUID.class),rs.getObject("inventory_item_id",UUID.class),
-                rs.getBigDecimal("quantity")),bookingId,branchId,bookingId);
+            """,(resultSet, rowNumber) ->new SaleMovement(resultSet.getObject("id",UUID.class),resultSet.getObject("inventory_item_id",UUID.class),
+                resultSet.getBigDecimal("quantity")),bookingId,branchId,bookingId);
     }
 
     public UUID comboGiftOrderId(UUID branchId, UUID bookingId) {
@@ -317,7 +317,7 @@ public class FoodOrderRepository {
             SELECT id FROM gcmb.fb_order
             WHERE branch_id=? AND booking_id=? AND idempotency_key='COMBO-GIFT-'||?::text
               AND status IN ('ACCEPTED','SERVED')
-            """,(rs,n)->rs.getObject("id",UUID.class),branchId,bookingId,bookingId);
+            """,(resultSet, rowNumber) ->resultSet.getObject("id",UUID.class),branchId,bookingId,bookingId);
         return ids.isEmpty()?null:ids.get(0);
     }
 
@@ -327,7 +327,7 @@ public class FoodOrderRepository {
             WHERE branch_id=? AND booking_id=? AND idempotency_key LIKE 'COMBO-GIFT-'||?::text||'%'
               AND status IN ('ACCEPTED','SERVED')
             ORDER BY created_at,id
-            """,(rs,n)->rs.getObject("id",UUID.class),branchId,bookingId,bookingId);
+            """,(resultSet, rowNumber) ->resultSet.getObject("id",UUID.class),branchId,bookingId,bookingId);
     }
 
     public void insertReturn(UUID inventoryItemId, UUID saleMovementId, BigDecimal quantity, BigDecimal before,
@@ -355,11 +355,11 @@ public class FoodOrderRepository {
             LEFT JOIN gcmb.employee e ON e.id=o.assigned_employee_id
             WHERE o.id=? AND o.branch_id=?
             FOR UPDATE OF o
-            """, (rs, row) -> new OrderLock(rs.getObject("id", UUID.class),
-                rs.getObject("branch_id", UUID.class), rs.getObject("booking_id", UUID.class),
-                rs.getObject("allocation_id", UUID.class), rs.getString("channel"),
-                rs.getObject("qr_session_id", UUID.class), rs.getString("status"),
-                rs.getObject("assigned_employee_id", UUID.class), rs.getObject("assigned_user_id", UUID.class)),
+            """, (resultSet, row) -> new OrderLock(resultSet.getObject("id", UUID.class),
+                resultSet.getObject("branch_id", UUID.class), resultSet.getObject("booking_id", UUID.class),
+                resultSet.getObject("allocation_id", UUID.class), resultSet.getString("channel"),
+                resultSet.getObject("qr_session_id", UUID.class), resultSet.getString("status"),
+                resultSet.getObject("assigned_employee_id", UUID.class), resultSet.getObject("assigned_user_id", UUID.class)),
             orderId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -419,11 +419,11 @@ public class FoodOrderRepository {
             JOIN gcmb.room r ON r.id=a.room_id
             LEFT JOIN gcmb.employee e ON e.id=o.assigned_employee_id
             """ + " WHERE " + predicate + statusClause + " ORDER BY o.created_at DESC,o.id DESC LIMIT ?",
-            (rs, row) -> new OrderHeader(rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
-                rs.getString("booking_code"), rs.getString("room_code"), rs.getString("room_name"),
-                rs.getString("contact_name"), rs.getString("channel"), rs.getString("status"),
-                rs.getObject("assigned_employee_id", UUID.class), rs.getString("assigned_employee_name"),
-                instant(rs, "created_at"), instant(rs, "accepted_at"), instant(rs, "served_at")), args);
+            (resultSet, row) -> new OrderHeader(resultSet.getObject("id", UUID.class), resultSet.getObject("booking_id", UUID.class),
+                resultSet.getString("booking_code"), resultSet.getString("room_code"), resultSet.getString("room_name"),
+                resultSet.getString("contact_name"), resultSet.getString("channel"), resultSet.getString("status"),
+                resultSet.getObject("assigned_employee_id", UUID.class), resultSet.getString("assigned_employee_name"),
+                instant(resultSet, "created_at"), instant(resultSet, "accepted_at"), instant(resultSet, "served_at")), args);
         if (headers.isEmpty()) return List.of();
 
         List<UUID> ids = headers.stream().map(OrderHeader::id).toList();
@@ -432,14 +432,14 @@ public class FoodOrderRepository {
         jdbcTemplate.query("""
             SELECT id,order_id,menu_item_id,name_snapshot,quantity,unit_price,booking_combo_item_id
             FROM gcmb.order_line WHERE order_id IN (""" + linePlaceholders + ") ORDER BY created_at,id",
-            rs -> {
-                UUID orderId = rs.getObject("order_id", UUID.class);
-                BigDecimal quantity = rs.getBigDecimal("quantity");
-                BigDecimal unitPrice = rs.getBigDecimal("unit_price");
+            resultSet -> {
+                UUID orderId = resultSet.getObject("order_id", UUID.class);
+                BigDecimal quantity = resultSet.getBigDecimal("quantity");
+                BigDecimal unitPrice = resultSet.getBigDecimal("unit_price");
                 linesByOrder.computeIfAbsent(orderId, ignored -> new ArrayList<>()).add(
-                    new OrderItem(rs.getObject("id", UUID.class), rs.getObject("menu_item_id", UUID.class),
-                        rs.getString("name_snapshot"), quantity, unitPrice, unitPrice.multiply(quantity),
-                        rs.getObject("booking_combo_item_id", UUID.class) != null));
+                    new OrderItem(resultSet.getObject("id", UUID.class), resultSet.getObject("menu_item_id", UUID.class),
+                        resultSet.getString("name_snapshot"), quantity, unitPrice, unitPrice.multiply(quantity),
+                        resultSet.getObject("booking_combo_item_id", UUID.class) != null));
             }, ids.toArray());
 
         List<OrderView> result = new ArrayList<>(headers.size());
@@ -467,8 +467,8 @@ public class FoodOrderRepository {
         return result;
     }
 
-    private static Instant instant(ResultSet rs, String column) throws SQLException {
-        var value = rs.getTimestamp(column);
+    private static Instant instant(ResultSet resultSet, String column) throws SQLException {
+        var value = resultSet.getTimestamp(column);
         return value == null ? null : value.toInstant();
     }
 

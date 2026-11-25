@@ -10,48 +10,31 @@ package com.gcmb.backend.branch.service;
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.branch.dto.BranchDtos.BranchCommand;
 import com.gcmb.backend.branch.dto.BranchDtos.StatusCommand;
+import com.gcmb.backend.branch.repository.BranchRepository;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class BranchAdministrationService {
-    private final JdbcTemplate jdbcTemplate;
+    private final BranchRepository branchRepository;
 
-    private static final String SELECT = """
-        SELECT b.id AS "branchId", b.code, b.name AS "branchName", b.address, b.phone,
-            b.notes, b.status, b.status_reason AS "statusReason",
-            b.created_at AS "createdAt", b.updated_at AS "updatedAt",
-            managers.names AS "managerName", managers.usernames AS "managerUsername",
-            managers.codes AS "managerCode", managers.total AS "managerCount"
-        FROM gcmb.branch b
-        LEFT JOIN LATERAL (
-            SELECT string_agg(COALESCE(e.full_name,u.username), ', ' ORDER BY u.username) AS names,
-                string_agg(u.username, ', ' ORDER BY u.username) AS usernames,
-                string_agg(e.code, ', ' ORDER BY u.username) AS codes, count(*) AS total
-            FROM gcmb.branch_manager_assignment a
-            JOIN gcmb.user_account u ON u.id=a.user_id
-            LEFT JOIN gcmb.employee e ON e.user_id=u.id WHERE a.branch_id=b.id
-        ) managers ON TRUE
-        """;
-
-    public BranchAdministrationService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public BranchAdministrationService(BranchRepository branchRepository) {
+        this.branchRepository = branchRepository;
     }
 
     public List<Map<String, Object>> list() {
-        return jdbcTemplate.queryForList(SELECT + " ORDER BY b.name,b.id");
+        return branchRepository.findAll();
     }
 
     public Map<String, Object> get(UUID id) {
-        var rows = jdbcTemplate.queryForList(SELECT + " WHERE b.id=?", id);
+        var rows = branchRepository.findById(id);
         if (rows.isEmpty()) {
             throw failure(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
         }
@@ -62,20 +45,16 @@ public class BranchAdministrationService {
     // BR-136: mã cơ sở phải duy nhất trong toàn hệ thống.
     public Map<String, Object> create(BranchCommand input) {
         validate(input);
-        if (Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE upper(code)=?)", Boolean.class,
-                input.code().trim().toUpperCase(Locale.ROOT)))) {
-            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + input.code().trim().toUpperCase(Locale.ROOT) + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
+        String code = input.code().trim().toUpperCase(Locale.ROOT);
+        if (branchRepository.codeExists(code, null)) {
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         UUID id = UUID.randomUUID();
         try {
-            jdbcTemplate.update("""
-                INSERT INTO gcmb.branch(id,code,name,address,phone,notes,timezone,status,opened_on)
-                VALUES (?,?,?,?,?,?,'Asia/Ho_Chi_Minh','ACTIVE',CURRENT_DATE)
-                """, id, input.code().trim().toUpperCase(Locale.ROOT), input.name().trim(),
-                input.address().trim(), clean(input.phone()), clean(input.notes()));
-        } catch (DataIntegrityViolationException e) {
-            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + input.code().trim().toUpperCase(Locale.ROOT) + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
+            branchRepository.insert(id, code, input.name().trim(), input.address().trim(),
+                clean(input.phone()), clean(input.notes()));
+        } catch (DataIntegrityViolationException duplicateCode) {
+            throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         return get(id);
     }
@@ -86,16 +65,13 @@ public class BranchAdministrationService {
         validate(input);
         lock(id);
         String code = input.code().trim().toUpperCase(Locale.ROOT);
-        if (Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE upper(code)=? AND id<>?)", Boolean.class, code, id))) {
+        if (branchRepository.codeExists(code, id)) {
             throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         try {
-            jdbcTemplate.update("""
-                UPDATE gcmb.branch SET code=?,name=?,address=?,phone=?,notes=?,updated_at=CURRENT_TIMESTAMP
-                WHERE id=?
-                """, code, input.name().trim(), input.address().trim(), clean(input.phone()), clean(input.notes()), id);
-        } catch (DataIntegrityViolationException e) {
+            branchRepository.update(id, code, input.name().trim(), input.address().trim(),
+                clean(input.phone()), clean(input.notes()));
+        } catch (DataIntegrityViolationException duplicateCode) {
             throw failure(HttpStatus.CONFLICT, "Mã cơ sở “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
         return get(id);
@@ -104,18 +80,7 @@ public class BranchAdministrationService {
     // Danh sách này dùng cho cả màn kiểm tra và kiểm tra lại trong giao dịch xác nhận.
     public List<Map<String, Object>> blockers(UUID id) {
         get(id);
-        return jdbcTemplate.queryForList("""
-            SELECT id,code,'BOOKING' AS kind,status FROM gcmb.booking
-                WHERE branch_id=? AND status IN ('DRAFT','CONFIRMED','IN_HOUSE')
-            UNION ALL
-            SELECT a.id,b.code,'ROOM_SESSION',a.state FROM gcmb.room_allocation a
-                JOIN gcmb.booking b ON b.id=a.booking_id
-                WHERE a.branch_id=? AND a.state IN ('RESERVED','OCCUPIED')
-            UNION ALL
-            SELECT id,number,'BILL',status FROM gcmb.bill
-                WHERE branch_id=? AND status IN ('DRAFT','ISSUED')
-            ORDER BY kind,code
-            """, id, id, id);
+        return branchRepository.findOpenWork(id);
     }
 
     @Transactional
@@ -141,10 +106,7 @@ public class BranchAdministrationService {
             throw failure(HttpStatus.CONFLICT,
                 "Chưa thể ngừng hoạt động cơ sở " + branchName + " vì còn booking chờ nhận phòng, khách đang sử dụng phòng hoặc bill chưa thanh toán. Vui lòng xử lý các mục còn tồn tại.");
         }
-        jdbcTemplate.update("""
-            UPDATE gcmb.branch SET status=?,status_reason=?,updated_at=CURRENT_TIMESTAMP,
-                closed_on=CASE WHEN ?='CLOSED' THEN CURRENT_DATE ELSE closed_on END WHERE id=?
-            """, input.status(), input.reason().trim(), input.status(), id);
+        branchRepository.updateStatus(id, input.status(), input.reason().trim());
         return get(id);
     }
 
@@ -156,26 +118,12 @@ public class BranchAdministrationService {
         if (!"SUSPENDED".equals(current)) {
             throw failure(HttpStatus.CONFLICT, "Chỉ mở lại cơ sở đang tạm ngừng.");
         }
-        jdbcTemplate.update("""
-            UPDATE gcmb.branch SET status='ACTIVE',status_reason='',updated_at=CURRENT_TIMESTAMP WHERE id=?
-            """, id);
+        branchRepository.reactivate(id);
         return get(id);
     }
 
     public List<Map<String, Object>> managers() {
-        return jdbcTemplate.queryForList("""
-            SELECT u.id AS "userId",u.username,u.email,COALESCE(e.full_name,u.username) AS "fullName",
-                e.code AS "employeeCode", managed.names AS "branchName"
-            FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
-            LEFT JOIN gcmb.employee e ON e.user_id=u.id
-            LEFT JOIN LATERAL (
-                SELECT string_agg(b.name, ', ' ORDER BY b.name,b.id) AS names
-                FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id WHERE a.user_id=u.id
-            ) managed ON TRUE
-            WHERE u.status='ACTIVE' AND r.code='BRANCH_MANAGER'
-                AND (e.id IS NULL OR e.status='ACTIVE')
-            ORDER BY COALESCE(e.full_name,u.username),u.id
-            """);
+        return branchRepository.findManagerCandidates();
     }
 
     @Transactional
@@ -188,117 +136,69 @@ public class BranchAdministrationService {
             throw failure(HttpStatus.BAD_REQUEST, "Chọn tài khoản quản lý cơ sở.");
         }
         // Dùng cùng khóa với phân quyền tài khoản, tránh gán người vừa bị thu hồi quyền.
-        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        var users = jdbcTemplate.queryForList("""
-            SELECT u.id FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id
-            WHERE u.id=? AND u.status='ACTIVE' AND r.code='BRANCH_MANAGER'
-                AND NOT EXISTS(SELECT 1 FROM gcmb.employee e WHERE e.user_id=u.id AND e.status<>'ACTIVE')
-            FOR UPDATE OF u
-            """, UUID.class, userId);
-        if (users.isEmpty()) {
+        branchRepository.lockManagerAssignments();
+        if (!branchRepository.lockActiveManagerAccount(userId)) {
             throw failure(HttpStatus.CONFLICT, "Quản lý phải có tài khoản đang hoạt động và vai trò Quản lý cơ sở.");
         }
         lock(branchId);
         if (!"ACTIVE".equals(get(branchId).get("status"))) {
             throw failure(HttpStatus.CONFLICT, "Chỉ gán quản lý cho cơ sở đang hoạt động.");
         }
-        var current = jdbcTemplate.queryForList("SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?", UUID.class, userId);
-        if (current.contains(branchId)) return get(branchId);
-        Integer count = jdbcTemplate.queryForObject("SELECT count(*) FROM gcmb.branch_manager_assignment WHERE branch_id=?", Integer.class, branchId);
-        if (count != null && count >= 2) {
+        if (branchRepository.findManagedBranchIds(userId).contains(branchId)) return get(branchId);
+        if (branchRepository.countManagers(branchId) >= 2) {
             throw failure(HttpStatus.CONFLICT, "Cơ sở đã có đủ 2 quản lý. Hãy chuyển hoặc thu hồi phân công một quản lý trước.");
         }
         // Thêm phân công, giữ nguyên các cơ sở người này đang quản lý.
-        jdbcTemplate.update("UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id=?", branchId);
-        jdbcTemplate.update("INSERT INTO gcmb.branch_manager_assignment(branch_id,user_id,assigned_by) VALUES(?,?,?)",
-            branchId, userId, actorId);
-        jdbcTemplate.update("UPDATE gcmb.user_account SET branch_id=COALESCE(branch_id,?) WHERE id=?", branchId, userId);
-        jdbcTemplate.update("""
-            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
-            SELECT ?,b.id,'ASSIGN_BRANCH_MANAGER','BRANCH',b.id,
-                jsonb_build_object('name',b.name,'managerId',CAST(? AS uuid),'actorRole',CAST(? AS text))
-            FROM gcmb.branch b WHERE b.id=?
-            """, actorId, userId, actorRole, branchId);
+        branchRepository.touch(branchId);
+        branchRepository.insertManagerAssignment(branchId, userId, actorId);
+        branchRepository.setDefaultBranchIfMissing(userId, branchId);
+        branchRepository.auditAssignManager(actorId, userId, actorRole, branchId);
         return get(branchId);
     }
 
     @Transactional
     public void replaceAccountManagers(UUID userId, List<UUID> branchIds, UUID actorId) {
-        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        String actorRole = jdbcTemplate.queryForObject("SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?", String.class, actorId);
+        branchRepository.lockManagerAssignments();
+        String actorRole = branchRepository.findRoleCode(actorId);
         for (UUID branchId : branchIds) assign(branchId, userId, actorId, actorRole);
-        var current = jdbcTemplate.queryForList("SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?", UUID.class, userId);
-        for (UUID branchId : current) {
+        for (UUID branchId : branchRepository.findManagedBranchIds(userId)) {
             if (branchIds.contains(branchId)) continue;
-            jdbcTemplate.update("""
-                INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
-                SELECT ?,id,'UNASSIGN_BRANCH_MANAGER','BRANCH',id,
-                    jsonb_build_object('name',name,'managerId',CAST(? AS uuid)),
-                    jsonb_build_object('name',name,'actorRole',CAST(? AS text)) FROM gcmb.branch WHERE id=?
-                """, actorId, userId, actorRole, branchId);
-            jdbcTemplate.update("DELETE FROM gcmb.branch_manager_assignment WHERE user_id=? AND branch_id=?", userId, branchId);
-            jdbcTemplate.update("UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id=?", branchId);
+            branchRepository.auditUnassignManager(actorId, userId, actorRole, branchId);
+            branchRepository.deleteManagerAssignment(userId, branchId);
+            branchRepository.touch(branchId);
         }
     }
 
     // Hai màn tài khoản và cơ sở dùng chung một luồng phân công trong cùng giao dịch.
     @Transactional
     public void syncAccountManager(UUID userId, UUID actorId) {
-        jdbcTemplate.execute("SELECT pg_advisory_xact_lock(1300261013)");
-        var account = jdbcTemplate.queryForMap("""
-            SELECT u.branch_id,u.status,r.code FROM gcmb.user_account u
-            JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
-            """, userId);
+        branchRepository.lockManagerAssignments();
+        var account = branchRepository.findAccountRole(userId);
         if ("BRANCH_MANAGER".equals(account.get("code")) && !"REVOKED".equals(account.get("status"))
                 && account.get("branch_id") != null) {
-            String actorRole = jdbcTemplate.queryForObject("""
-                SELECT r.code FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=?
-                """, String.class, actorId);
+            String actorRole = branchRepository.findRoleCode(actorId);
             assign((UUID) account.get("branch_id"), userId, actorId, actorRole);
             return;
         }
-        jdbcTemplate.update("""
-            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
-            SELECT ?,b.id,'UNASSIGN_BRANCH_MANAGER','BRANCH',b.id,
-                jsonb_build_object('name',b.name,'managerId',a.user_id),
-                jsonb_build_object('name',b.name,'managerId',NULL)
-            FROM gcmb.branch_manager_assignment a JOIN gcmb.branch b ON b.id=a.branch_id WHERE a.user_id=?
-            """, actorId, userId);
-        jdbcTemplate.update("""
-            UPDATE gcmb.branch SET updated_at=CURRENT_TIMESTAMP WHERE id IN
-                (SELECT branch_id FROM gcmb.branch_manager_assignment WHERE user_id=?)
-            """, userId);
-        jdbcTemplate.update("DELETE FROM gcmb.branch_manager_assignment WHERE user_id=?", userId);
+        branchRepository.removeAllManagerAssignments(actorId, userId);
     }
 
     public List<Map<String, Object>> staff(UUID id) {
         get(id);
-        return jdbcTemplate.queryForList("""
-            SELECT DISTINCT e.id,e.code,e.full_name AS "fullName",e.status
-            FROM gcmb.employee e JOIN gcmb.employee_assignment a ON a.employee_id=e.id
-            WHERE a.branch_id=? AND a.valid_from<=CURRENT_TIMESTAMP
-                AND (a.valid_to IS NULL OR a.valid_to>CURRENT_TIMESTAMP)
-            ORDER BY e.code
-            """, id);
+        return branchRepository.findCurrentStaff(id);
     }
 
     public List<Map<String, Object>> history(UUID id) {
         get(id);
-        return jdbcTemplate.queryForList("""
-            SELECT a.id,a.action,a.created_at AS "createdAt",COALESCE(e.full_name,u.username) AS actor,
-                COALESCE(a.reason,CASE WHEN a.action='DEACTIVATE_BRANCH'
-                    THEN a.after_data->>'status_reason' END,'') AS reason
-            FROM gcmb.audit_event a LEFT JOIN gcmb.user_account u ON u.id=a.actor_id
-            LEFT JOIN gcmb.employee e ON e.user_id=u.id
-            WHERE a.entity_type='BRANCH' AND a.entity_id=? ORDER BY a.created_at DESC,a.id
-            """, id);
+        return branchRepository.findHistory(id);
     }
 
     private void lock(UUID id) {
-        if (jdbcTemplate.queryForList("SELECT id FROM gcmb.branch WHERE id=? FOR UPDATE", UUID.class, id).isEmpty()) {
+        if (!branchRepository.lockById(id)) {
             throw failure(HttpStatus.NOT_FOUND, "Không tìm thấy cơ sở.");
         }
     }
+
 
     // BR-111, BR-135, BR-179–181: kiểm tra trường bắt buộc, định dạng mã và độ dài thông tin cơ sở.
     private static void validate(BranchCommand input) {

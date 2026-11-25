@@ -1,0 +1,93 @@
+package com.gcmb.backend.audit.repository;
+
+import java.util.List;
+import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+@Repository
+// Ghi audit_event và chụp snapshot JSON của đối tượng trước/sau thao tác thay đổi dữ liệu.
+public class MutationAuditRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public MutationAuditRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public void insertEvent(UUID actorId, String action, String type, UUID entityId, String before, String after,
+            String additionalAfterDataJson, String actorRole) {
+        jdbcTemplate.update("""
+            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data)
+            VALUES (?,COALESCE(CAST(CAST(? AS jsonb)->>'branch_id' AS uuid),
+                CAST(CAST(? AS jsonb)->>'branch_id' AS uuid)),?,?,?,CAST(? AS jsonb),
+                COALESCE(CAST(? AS jsonb),'{}'::jsonb) || COALESCE(CAST(? AS jsonb),'{}'::jsonb)
+                  || jsonb_build_object('actorRole',CAST(? AS text)))
+            """, actorId, after, before, action, type, entityId, before, after, additionalAfterDataJson, actorRole);
+    }
+
+    // table phải lấy từ danh sách cho phép trong MutationAudit, không nhận từ đầu vào người dùng.
+    public String lockAndSnapshot(String type, String table, UUID id) {
+        // Table identifiers only come from TABLES; snapshot columns are an explicit allowlist.
+        jdbcTemplate.queryForList("SELECT id FROM gcmb." + table + " WHERE id=? FOR UPDATE", UUID.class, id);
+        String extra = "BRANCH".equals(type) ? " || jsonb_build_object('branch_id',t.id,'managerNames',"
+            + "(SELECT string_agg(COALESCE(e.full_name,u.username), ', ' ORDER BY u.username)"
+            + " FROM gcmb.branch_manager_assignment a JOIN gcmb.user_account u ON u.id=a.user_id"
+            + " LEFT JOIN gcmb.employee e ON e.user_id=u.id WHERE a.branch_id=t.id))" : "";
+        if ("BOOKING".equals(type)) extra = " || jsonb_build_object('event',"
+            + "(SELECT jsonb_build_object('type',event_type,'reason',reason,'details',details)"
+            + " FROM gcmb.booking_event WHERE booking_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1))";
+        if ("ASSET_CATEGORY".equals(type)) extra = " || jsonb_build_object('assetCount',"
+            + "(SELECT count(*) FROM gcmb.asset a WHERE a.category_id=t.id))";
+        if ("ASSET".equals(type)) extra = " || jsonb_build_object('latestIncident',"
+            + "(SELECT jsonb_build_object('id',i.id,'status',i.status,'description',i.description) FROM gcmb.asset_incident i"
+            + " WHERE i.asset_id=t.id ORDER BY i.created_at DESC,i.id DESC LIMIT 1))";
+        if ("ROOM_TYPE".equals(type)) extra = " || jsonb_build_object('combos',"
+            + "(SELECT jsonb_agg(jsonb_build_object('id',id,'code',code,'name',name,'price',price)) FROM gcmb.combo WHERE room_type_id=t.id AND branch_id IS NULL),"
+            + "'priceRules',(SELECT jsonb_agg(jsonb_build_object('id',id,'name',name,'hourly_price',hourly_price)) FROM gcmb.price_rule WHERE room_type_id=t.id AND branch_id IS NULL))";
+        if ("INVENTORY_ITEM".equals(type)) extra = " || jsonb_build_object('stockBalance',"
+            + "(SELECT jsonb_build_object('quantity',quantity,'minimum_quantity',minimum_quantity,'version',version)"
+            + " FROM gcmb.stock_balance WHERE inventory_item_id=t.id))";
+        if ("FINANCIAL_TRANSACTION".equals(type)) extra = " || jsonb_build_object('branch_id',"
+            + "(SELECT e.branch_id FROM gcmb.financial_entry e WHERE e.transaction_id=t.id ORDER BY e.id LIMIT 1),"
+            + "'entries',(SELECT jsonb_agg(jsonb_build_object('account_id',e.account_id,'branch_id',e.branch_id,'amount_signed',e.amount_signed) ORDER BY e.id)"
+            + " FROM gcmb.financial_entry e WHERE e.transaction_id=t.id),"
+            + "'attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'kind',a.kind,'original_name',a.original_name,'mime_type',a.mime_type,'byte_size',a.byte_size) ORDER BY a.created_at,a.id)"
+            + " FROM gcmb.finance_attachment a WHERE a.owner_type='FINANCIAL_TRANSACTION' AND a.owner_id=t.id))";
+        if ("FINANCIAL_PERIOD".equals(type)) extra = " || jsonb_build_object('month',t.\"month\",'close_note',t.close_note)";
+        if ("BANK_TRANSACTION".equals(type)) extra = " || jsonb_build_object('branch_id',(SELECT branch_id FROM gcmb.financial_account a WHERE a.id=t.account_id))";
+        if ("FINANCE_EXPENSE_CATEGORY".equals(type)) extra = " || jsonb_build_object('request_count',(SELECT count(*) FROM gcmb.finance_expense_request r WHERE r.category_id=t.id))";
+        // HuyDV: chi trực tiếp cần giữ chứng từ, tiến trình xử lý và lịch phân bổ cùng snapshot audit.
+        if ("FINANCE_EXPENSE_REQUEST".equals(type)) extra = " || jsonb_build_object('history',"
+            + "(SELECT jsonb_agg(jsonb_build_object('action',h.action,'actor_id',h.actor_id,'note',h.note,'created_at',h.created_at) ORDER BY h.created_at,h.id)"
+            + " FROM gcmb.finance_request_history h WHERE h.request_id=t.id),"
+            + "'attachments',(SELECT jsonb_agg(jsonb_build_object('id',a.id,'kind',a.kind,'original_name',a.original_name,'mime_type',a.mime_type,'byte_size',a.byte_size) ORDER BY a.created_at,a.id)"
+            + " FROM gcmb.finance_attachment a WHERE a.owner_type='EXPENSE_REQUEST' AND a.owner_id=t.id),"
+            + "'allocations',(SELECT jsonb_agg(jsonb_build_object('period_month',a.period_month,'seq',a.seq,'amount',a.amount) ORDER BY a.seq,a.id)"
+            + " FROM gcmb.finance_expense_allocation a WHERE a.request_id=t.id))";
+        List<String> snapshots = jdbcTemplate.queryForList("""
+            SELECT (COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t))
+                WHERE key IN ('id','code','name','branch_id','room_type_id','mode','capacity','description','category_id','room_id','location_note','serial_number','purchase_date','purchase_value','warranty_expiry','image_attachment_id',
+                    'address','phone','notes','updated_at','closed_on','floor_number','operating_status','status_reason','expected_ready_at','active','version',
+                    'valid_from','valid_to','minute_from','minute_to','weekdays','day_kind','specific_date',
+                    'hourly_price','overtime_hourly_price','billing_step_minutes','priority','price',
+                    'duration_minutes','deposit_required','day_group','min_guests','included_description','cost_type',
+                    'status','contact_name','contact_phone','guest_count','planned_start','planned_end',
+                    'actual_checkin','actual_checkout','note','channel','pricing_mode','category','kind',
+                    'inventory_item_id','sale_price','description','image_original_name','image_mime_type',
+                    'sku','unit_id','tracking_mode',
+                    'period_id','booking_date','occurred_at','adjusts_transaction_id','reason','created_by','idempotency_key',
+                    'closed_by','closed_at','close_note','external_id','direction','amount','match_status',
+                    'exception_reason','resolution_status','resolved_at','resolved_by','resolution_note',
+                    'deleted_at','deleted_by','booking_id','allocation_id','assigned_employee_id',
+                    'accepted_by','accepted_at','served_at',
+                    'beneficiary_name','bank_account','bank_name','due_day','monthly_amount','expected_amount',
+                    'expense_on','origin','recognition_mode','allocation_months','allocation_start','requested_by','requested_at',
+                    'accountant_reviewed_by','accountant_reviewed_at','head_office_reviewed_by','head_office_reviewed_at',
+                    'paid_by','paid_at','paid_reference',
+                    'expense_belongs_to','start_month','end_month','reminder_days','terminated_at','updated_by',
+                    'due_date','period_month','default_amount','request_id','skip_reason')),'{}'::jsonb)
+            """ + extra + ")::text FROM gcmb." + table + " t WHERE t.id=?", String.class, id);
+        return snapshots.isEmpty() ? null : snapshots.get(0);
+    }
+}

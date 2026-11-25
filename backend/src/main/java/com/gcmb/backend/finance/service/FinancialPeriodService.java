@@ -3,6 +3,7 @@ package com.gcmb.backend.finance.service;
 import com.gcmb.backend.audit.service.MutationAudit;
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
+import com.gcmb.backend.finance.repository.FinancialPeriodRepository;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -14,7 +15,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -25,21 +25,21 @@ public class FinancialPeriodService {
     private static final DateTimeFormatter LABEL = DateTimeFormatter.ofPattern("MM/yyyy");
     private static final List<String> ROLES = List.of("ACCOUNTANT");
 
-    private final JdbcTemplate jdbcTemplate;
+    private final FinancialPeriodRepository financialPeriodRepository;
     private final MutationAudit mutationAudit;
     @Value("${gcmb.finance.period-close.allow-early-close:${GCMB_ALLOW_EARLY_PERIOD_CLOSE:false}}")
     private boolean allowEarlyClose;
 
-    public FinancialPeriodService(JdbcTemplate jdbcTemplate, MutationAudit mutationAudit) {
-        this.jdbcTemplate = jdbcTemplate;
+    public FinancialPeriodService(FinancialPeriodRepository financialPeriodRepository, MutationAudit mutationAudit) {
+        this.financialPeriodRepository = financialPeriodRepository;
         this.mutationAudit = mutationAudit;
     }
 
     public void requireOpen(LocalDate date, String operation) {
         if (date == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày giao dịch không hợp lệ.");
         LocalDate month = date.withDayOfMonth(1);
-        jdbcTemplate.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", month);
-        String status = jdbcTemplate.queryForObject("SELECT status FROM gcmb.financial_period WHERE \"month\"=? FOR SHARE", String.class, month);
+        financialPeriodRepository.ensurePeriod(month);
+        String status = financialPeriodRepository.lockPeriodStatusForShare(month);
         if (!"OPEN".equals(status)) throw new AuthFailure(409, "form",
             "Kỳ tài chính " + LABEL.format(YearMonth.from(month)) + " đã khóa. Không thể " + operation + ".");
     }
@@ -47,28 +47,7 @@ public class FinancialPeriodService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list(Identity actor) {
         accountant(actor);
-        return jdbcTemplate.queryForList("""
-            WITH months AS (
-              SELECT \"month\" FROM gcmb.financial_period
-              UNION SELECT date_trunc('month',business_date)::date FROM gcmb.daily_cash_closing
-              UNION SELECT date_trunc('month',booking_date)::date FROM gcmb.financial_transaction
-              UNION SELECT month FROM gcmb.attendance_period
-              UNION SELECT month FROM gcmb.payroll_period
-              UNION SELECT date_trunc('month',expense_on)::date FROM gcmb.finance_expense_request
-              UNION SELECT date_trunc('month',sent_on)::date FROM gcmb.finance_fund_transfer
-              UNION SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date FROM gcmb.refund_request
-              UNION SELECT date_trunc('month',occurred_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
-                FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status IN ('EXCEPTION','UNMATCHED')
-              UNION SELECT date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
-            )
-            SELECT p.id,m.month::text AS month,COALESCE(p.status,'OPEN') status,p.closed_at "closedAt",
-              u.username "closedBy",p.close_note "closeNote",
-              (SELECT count(*) FROM gcmb.daily_cash_closing c WHERE date_trunc('month',c.business_date)::date=m.month
-                AND c.status<>'RECONCILED') "unreconciledClosings"
-            FROM months m LEFT JOIN gcmb.financial_period p ON p.\"month\"=m.month
-            LEFT JOIN gcmb.user_account u ON u.id=p.closed_by
-            ORDER BY m.month DESC
-            """);
+        return financialPeriodRepository.findPeriodsWithActivity();
     }
 
     @Transactional(readOnly = true)
@@ -88,64 +67,37 @@ public class FinancialPeriodService {
         boolean monthEnded = periodEnded(start);
         if (!monthEnded && !allowEarlyClose) throw new AuthFailure(409, "form", "Chỉ có thể khóa kỳ sau khi tháng đã kết thúc.");
         boolean earlyClose = allowEarlyClose && !monthEnded;
-        jdbcTemplate.update("INSERT INTO gcmb.financial_period(\"month\",status) VALUES (?,'OPEN') ON CONFLICT(\"month\") DO NOTHING", start);
-        UUID id = jdbcTemplate.queryForObject("SELECT id FROM gcmb.financial_period WHERE \"month\"=? FOR UPDATE", UUID.class, start);
-        UUID closedId = mutationAudit.recordWithMetadata("CLOSE_FINANCIAL_PERIOD", "FINANCIAL_PERIOD", id, () -> {
-            Map<String, Object> period = jdbcTemplate.queryForMap("SELECT status FROM gcmb.financial_period WHERE id=? FOR UPDATE", id);
-            if ("CLOSED".equals(period.get("status"))) throw new AuthFailure(409, "form", "Kỳ tài chính này đã được khóa.");
+        financialPeriodRepository.ensurePeriod(start);
+        UUID periodId = financialPeriodRepository.lockPeriodIdForUpdate(start);
+        UUID closedId = mutationAudit.recordWithMetadata("CLOSE_FINANCIAL_PERIOD", "FINANCIAL_PERIOD", periodId, () -> {
+            if ("CLOSED".equals(financialPeriodRepository.lockPeriodStatusById(periodId)))
+                throw new AuthFailure(409, "form", "Kỳ tài chính này đã được khóa.");
             Map<String, Object> checks = readiness(start, "OPEN");
             @SuppressWarnings("unchecked") List<Map<String, Object>> items = (List<Map<String, Object>>) checks.get("checks");
             List<String> blockers = items.stream().filter(item -> !Boolean.TRUE.equals(item.get("passed")))
                 .map(item -> item.get("label") + ": còn " + item.get("pendingCount"))
                 .toList();
             if (!blockers.isEmpty()) throw new AuthFailure(409, "form", "Chưa thể khóa kỳ " + LABEL.format(YearMonth.from(start)) + ". " + String.join("; ", blockers) + ".");
-            if (jdbcTemplate.update("UPDATE gcmb.financial_period SET status='CLOSED',closed_by=?,closed_at=CURRENT_TIMESTAMP,close_note=? WHERE id=? AND status='OPEN'",
-                    actor.id(), closeNote, id) != 1)
+            if (financialPeriodRepository.closePeriod(periodId, actor.id(), closeNote) != 1)
                 throw new AuthFailure(409, "form", "Kỳ tài chính vừa được khóa ở phiên khác.");
-            return id;
+            return periodId;
         }, value -> value, earlyClose ? "{\"earlyClose\":true}" : null);
-        return jdbcTemplate.queryForMap("""
-            SELECT p.id,p."month"::text AS "month",p.status,p.closed_at "closedAt",u.username "closedBy",p.close_note "closeNote"
-            FROM gcmb.financial_period p LEFT JOIN gcmb.user_account u ON u.id=p.closed_by WHERE p.id=?
-            """, closedId);
+        return financialPeriodRepository.getPeriodView(closedId);
     }
 
     private Map<String, Object> readiness(LocalDate start, String periodStatus) {
         LocalDate end = start.plusMonths(1);
         boolean monthEnded = periodEnded(start);
         long periodEndPending = monthEnded || allowEarlyClose ? 0 : 1;
-        long unreconciled = count("SELECT count(*) FROM gcmb.daily_cash_closing WHERE business_date>=? AND business_date<? AND status<>'RECONCILED'", start, end);
-        long missingActivityClosings = count("""
-            SELECT count(*) FROM (
-              SELECT DISTINCT e.account_id,e.branch_id,t.booking_date
-              FROM gcmb.financial_entry e JOIN gcmb.financial_transaction t ON t.id=e.transaction_id
-              JOIN gcmb.financial_account a ON a.id=e.account_id AND a.kind='CASH_DRAWER'
-              WHERE t.booking_date>=? AND t.booking_date<?
-            ) expected WHERE NOT EXISTS (
-              SELECT 1 FROM gcmb.daily_cash_closing c WHERE c.account_id=expected.account_id
-                AND c.business_date=expected.booking_date
-            )
-            """, start, end);
-        long cashPending = unreconciled + missingActivityClosings;
-        long attendancePending = count("""
-            SELECT count(*) FROM gcmb.branch b WHERE b.status='ACTIVE' AND NOT EXISTS (
-              SELECT 1 FROM gcmb.attendance_period a WHERE a.branch_id=b.id AND a.month=? AND a.status='CLOSED'
-            )
-            """, start);
-        long payrollPending = count("SELECT CASE WHEN EXISTS(SELECT 1 FROM gcmb.payroll_period WHERE month=? AND status='CONFIRMED') THEN 0 ELSE 1 END", start);
-        long expensesPending = count("""
-            SELECT count(*) FROM gcmb.finance_expense_request WHERE expense_on>=? AND expense_on<?
-              AND status IN ('WAITING_ACCOUNTANT','WAITING_HEAD_OFFICE','APPROVED_TO_PAY')
-            """, start, end);
-        long refundsPending = count("""
-            SELECT count(*) FROM gcmb.refund_request WHERE created_at>=? AND created_at<?
-              AND status IN ('REQUESTED','APPROVED','PROCESSING')
-            """, start.atStartOfDay(ZONE).toOffsetDateTime(), end.atStartOfDay(ZONE).toOffsetDateTime());
-        long sepayPending = count("""
-            SELECT count(*) FROM gcmb.bank_transaction WHERE provider='SEPAY' AND match_status IN ('EXCEPTION','UNMATCHED')
-              AND resolution_status='UNRESOLVED'
-              AND occurred_at<?
-            """, end.atStartOfDay(ZONE).toOffsetDateTime());
+        long unreconciledCount = financialPeriodRepository.countUnreconciledClosings(start, end);
+        long missingActivityClosings = financialPeriodRepository.countCashActivityWithoutClosing(start, end);
+        long cashPending = unreconciledCount + missingActivityClosings;
+        long attendancePending = financialPeriodRepository.countBranchesWithOpenAttendance(start);
+        long payrollPending = financialPeriodRepository.countUnconfirmedPayroll(start);
+        long expensesPending = financialPeriodRepository.countPendingExpenseRequests(start, end);
+        long refundsPending = financialPeriodRepository.countPendingRefunds(
+            start.atStartOfDay(ZONE).toOffsetDateTime(), end.atStartOfDay(ZONE).toOffsetDateTime());
+        long sepayPending = financialPeriodRepository.countUnresolvedSePayTransactionsBefore(end.atStartOfDay(ZONE).toOffsetDateTime());
 
         List<Map<String, Object>> checks = new ArrayList<>();
         checks.add(check("periodEnded",
@@ -180,45 +132,29 @@ public class FinancialPeriodService {
     }
 
     private String currentStatus(LocalDate start) {
-        List<String> rows = jdbcTemplate.queryForList("SELECT status FROM gcmb.financial_period WHERE \"month\"=?", String.class, start);
-        return rows.isEmpty() ? "OPEN" : rows.get(0);
-    }
-
-    private long count(String sql, Object... args) {
-        Long value = jdbcTemplate.queryForObject(sql, Long.class, args);
-        return value == null ? 0 : value;
+        List<String> statuses = financialPeriodRepository.findPeriodStatus(start);
+        return statuses.isEmpty() ? "OPEN" : statuses.get(0);
     }
 
     @Transactional
-    public Map<String, Object> resolveSePayException(Identity actor, UUID id, String note) {
+    public Map<String, Object> resolveSePayException(Identity actor, UUID transactionId, String note) {
         accountant(actor);
-        if (id == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giao dịch ngoại lệ không hợp lệ.");
+        if (transactionId == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giao dịch ngoại lệ không hợp lệ.");
         String resolutionNote = note == null ? "" : note.trim();
         if (resolutionNote.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập ghi chú xử lý.");
         if (resolutionNote.length() > 1000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ghi chú xử lý chỉ được chứa tối đa 1000 ký tự.");
-        UUID resolvedId = mutationAudit.record("RESOLVE_SEPAY_EXCEPTION", "BANK_TRANSACTION", id, () -> {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                SELECT match_status,resolution_status FROM gcmb.bank_transaction
-                WHERE id=? AND provider='SEPAY' FOR UPDATE
-                """, id);
+        UUID resolvedId = mutationAudit.record("RESOLVE_SEPAY_EXCEPTION", "BANK_TRANSACTION", transactionId, () -> {
+            List<Map<String, Object>> rows = financialPeriodRepository.lockSePayTransaction(transactionId);
             if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giao dịch SePay ngoại lệ.");
-            Map<String, Object> row = rows.get(0);
-            if (!List.of("EXCEPTION", "UNMATCHED").contains(row.get("match_status")))
+            Map<String, Object> transaction = rows.get(0);
+            if (!List.of("EXCEPTION", "UNMATCHED").contains(transaction.get("match_status")))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ xử lý giao dịch ngoại lệ hoặc chưa khớp thanh toán.");
-            if ("UNRESOLVED".equals(row.get("resolution_status"))) {
-                jdbcTemplate.update("""
-                    UPDATE gcmb.bank_transaction SET resolution_status='RESOLVED',resolved_at=CURRENT_TIMESTAMP,
-                      resolved_by=?,resolution_note=? WHERE id=? AND resolution_status='UNRESOLVED'
-                    """, actor.id(), resolutionNote, id);
+            if ("UNRESOLVED".equals(transaction.get("resolution_status"))) {
+                financialPeriodRepository.resolveSePayTransaction(transactionId, actor.id(), resolutionNote);
             }
-            return id;
+            return transactionId;
         }, value -> value);
-        return jdbcTemplate.queryForMap("""
-            SELECT bt.id,bt.external_id AS "externalId",bt.match_status AS status,bt.exception_reason AS "exceptionReason",
-              bt.resolution_status AS "resolutionStatus",bt.resolved_at AS "resolvedAt",u.username AS "resolvedBy",
-              bt.resolution_note AS "resolutionNote"
-            FROM gcmb.bank_transaction bt LEFT JOIN gcmb.user_account u ON u.id=bt.resolved_by WHERE bt.id=?
-            """, resolvedId);
+        return financialPeriodRepository.getSePayTransactionView(resolvedId);
     }
 
     private static LocalDate firstOfMonth(LocalDate month) {

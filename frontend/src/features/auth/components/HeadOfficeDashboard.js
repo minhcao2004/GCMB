@@ -8,9 +8,9 @@
  * Description: Hiển thị khung quản lý cấp cao với menu chọn mục, thông tin tài khoản, lời chào và nút đăng xuất.
  */
 
-import ExecutiveDashboard from '../../dashboard/ExecutiveDashboard';
-import AccountantFinancePage from '../../dashboard/AccountantFinancePage';
-import ExpenseBreakdownReportPage from '../../dashboard/ExpenseBreakdownReportPage';
+import ExecutiveDashboard from '../../dashboard/pages/ExecutiveDashboard';
+import AccountantFinancePage from '../../dashboard/pages/AccountantFinancePage';
+import ExpenseBreakdownReportPage from '../../dashboard/pages/ExpenseBreakdownReportPage';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
 import AppShell from '../../../shared/components/AppShell';
 import SidebarNavigationGroup from '../../../shared/components/SidebarNavigationGroup';
@@ -21,7 +21,7 @@ import RoomCatalogPage from '../../pricing/pages/RoomCatalogPage';
 import BranchManagementPage from '../../branch/pages/BranchManagementPage';
 import AccountsPage from '../../backoffice/accounts/pages/AccountsPage';
 import AuditLogPage from '../../backoffice/accounts/pages/AuditLogPage';
-import BusinessAssistant from '../../dashboard/BusinessAssistant';
+import BusinessAssistant from '../../dashboard/pages/BusinessAssistant';
 
 import StaffPage from '../../workforce/pages/StaffPage';
 

@@ -1,5 +1,5 @@
 /** HuyDV | BR-83/87: một số dư và một khóa chi tiền cho quỹ kế toán toàn chuỗi. */
-package com.gcmb.backend.finance.service;
+package com.gcmb.backend.finance.repository;
 
 import java.math.BigDecimal;
 import org.springframework.jdbc.core.JdbcTemplate;

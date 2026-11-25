@@ -55,18 +55,18 @@ public class AccountRepository {
         "ARRAY(SELECT ma.branch_id FROM gcmb.branch_manager_assignment ma WHERE ma.user_id=u.id ORDER BY ma.branch_id) AS managed_branch_ids " +
         JOINS;
 
-    private static AccountView row(java.sql.ResultSet rs, int index) throws java.sql.SQLException {
+    private static AccountView row(java.sql.ResultSet resultSet, int rowNumber) throws java.sql.SQLException {
         return new AccountView(
-            rs.getObject("id", UUID.class),
-            rs.getString("employee_name"),
-            rs.getString("employee_code"),
-            rs.getString("username"),
-            rs.getString("email"),
-            rs.getString("role"),
-            rs.getObject("branch_id", UUID.class),
-            rs.getString("branch_name"),
-            rs.getString("status"),
-            java.util.Arrays.asList((UUID[]) rs.getArray("managed_branch_ids").getArray())
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("employee_name"),
+            resultSet.getString("employee_code"),
+            resultSet.getString("username"),
+            resultSet.getString("email"),
+            resultSet.getString("role"),
+            resultSet.getObject("branch_id", UUID.class),
+            resultSet.getString("branch_name"),
+            resultSet.getString("status"),
+            java.util.Arrays.asList((UUID[]) resultSet.getArray("managed_branch_ids").getArray())
         );
     }
 
@@ -112,12 +112,12 @@ public class AccountRepository {
                     " WHERE e.status='ACTIVE' AND e.user_id IS NULL ORDER BY e.full_name,e.id",
                 AccountRepository::employeeOption
             ),
-            jdbcTemplate.query("SELECT code,name FROM gcmb.role ORDER BY name", (rs, n) ->
-                new Option(rs.getString(1), rs.getString(2))
+            jdbcTemplate.query("SELECT code,name FROM gcmb.role ORDER BY name", (resultSet, rowNumber) ->
+                new Option(resultSet.getString(1), resultSet.getString(2))
             ),
             jdbcTemplate.query(
                 "SELECT id,name FROM gcmb.branch WHERE status='ACTIVE' ORDER BY name",
-                (rs, n) -> new Option(rs.getString(1), rs.getString(2))
+                (resultSet, rowNumber) -> new Option(resultSet.getString(1), resultSet.getString(2))
             )
         );
     }
@@ -168,7 +168,7 @@ public class AccountRepository {
             List.of(new Option("RECEPTIONIST", "Lễ tân")),
             jdbcTemplate.query(
                 "SELECT id,name FROM gcmb.branch WHERE id=?",
-                (rs, n) -> new Option(rs.getString(1), rs.getString(2)),
+                (resultSet, rowNumber) -> new Option(resultSet.getString(1), resultSet.getString(2)),
                 branch
             )
         );
@@ -192,7 +192,7 @@ public class AccountRepository {
         return !jdbcTemplate
             .query(
                 "SELECT id FROM gcmb.employee WHERE id=? AND status='ACTIVE' AND user_id IS NULL FOR UPDATE",
-                (rs, n) -> rs.getObject("id", UUID.class),
+                (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class),
                 id
             )
             .isEmpty();
@@ -208,16 +208,16 @@ public class AccountRepository {
         ) a ON true LEFT JOIN gcmb.branch b ON b.id=a.branch_id
         """;
 
-    private static EmployeeOption employeeOption(java.sql.ResultSet rs, int n)
+    private static EmployeeOption employeeOption(java.sql.ResultSet resultSet, int rowNumber)
         throws java.sql.SQLException {
         return new EmployeeOption(
-            rs.getObject("id", UUID.class),
-            rs.getString("full_name"),
-            rs.getString("code"),
-            rs.getString("position"),
-            rs.getString("contact_email"),
-            rs.getObject("branch_id", UUID.class),
-            rs.getString("branch_name")
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("full_name"),
+            resultSet.getString("code"),
+            resultSet.getString("position"),
+            resultSet.getString("contact_email"),
+            resultSet.getObject("branch_id", UUID.class),
+            resultSet.getString("branch_name")
         );
     }
 
@@ -232,7 +232,7 @@ public class AccountRepository {
     public UUID roleId(String code) {
         var ids = jdbcTemplate.query(
             "SELECT id FROM gcmb.role WHERE code=?",
-            (rs, n) -> rs.getObject("id", UUID.class),
+            (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class),
             code
         );
         return ids.isEmpty() ? null : ids.get(0);
@@ -242,7 +242,7 @@ public class AccountRepository {
         return !jdbcTemplate
             .query(
                 "SELECT id FROM gcmb.branch WHERE id=? AND status='ACTIVE' FOR SHARE",
-                (rs, n) -> rs.getObject("id", UUID.class),
+                (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class),
                 branch
             )
             .isEmpty();

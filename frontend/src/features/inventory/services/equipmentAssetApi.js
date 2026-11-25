@@ -26,11 +26,11 @@ export const equipmentAssetApi = {
   // UC-66: Tìm và lọc tài sản; dữ liệu chỉ đọc trong phạm vi chi nhánh hiện tại.
   list: (headOffice, branchId, filters) => apiClient.get(root(headOffice), {
     params: scopeParams(headOffice, branchId, filters), headers: scopeHeaders(headOffice, branchId),
-  }).then((r) => r.data),
+  }).then((response) => response.data),
   // UC-65/67: Lấy danh mục, phòng và mã dự kiến khi thêm hồ sơ.
   options: (headOffice, branchId, assetId) => apiClient.get(`${root(headOffice)}/options`, {
     params: scopeParams(headOffice, branchId, assetId ? { assetId } : {}), headers: scopeHeaders(headOffice, branchId),
-  }).then((r) => r.data),
+  }).then((response) => response.data),
   // UC-65: Backend cấp mã chính thức khi lưu tài sản.
   create: async (headOffice, branchId, body) => (await mutate(headOffice, branchId, 'post', root(headOffice), body)).data,
   // UC-67/BR-110: Cập nhật thông tin nhưng không cho đổi cơ sở ngoài luồng điều chuyển.
@@ -47,5 +47,5 @@ export const equipmentAssetApi = {
   // UC-66: Đọc ảnh qua cookie phiên và phạm vi branch, không làm lộ khóa lưu file.
   image: (headOffice, branchId, id) => apiClient.get(`${root(headOffice)}/${id}/image`, {
     params: scopeParams(headOffice, branchId), headers: scopeHeaders(headOffice, branchId), responseType: 'blob',
-  }).then((r) => r.data),
+  }).then((response) => response.data),
 };

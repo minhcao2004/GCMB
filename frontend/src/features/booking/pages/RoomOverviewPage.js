@@ -297,7 +297,7 @@ export default function RoomOverviewPage() {
         status: booking.status === 'IN_HOUSE' ? 'occupied' : 'reserved', booking,
       });
     });
-    return [...byRoom.values()].sort((a, b) => String(a.code).localeCompare(String(b.code), 'vi-VN', { numeric: true }));
+    return [...byRoom.values()].sort((left, right) => String(left.code).localeCompare(String(right.code), 'vi-VN', { numeric: true }));
   }, [inventory, bookings, slot, options]);
 
   useEffect(() => {
@@ -313,7 +313,7 @@ export default function RoomOverviewPage() {
   const selectedBooking = selected?.booking;
   const selectedRoomBookings = useMemo(() => bookings
     .filter((booking) => booking.roomId === selected?.id)
-    .sort((a, b) => new Date(a.plannedStart) - new Date(b.plannedStart)), [bookings, selected?.id]);
+    .sort((left, right) => new Date(left.plannedStart) - new Date(right.plannedStart)), [bookings, selected?.id]);
   useEffect(() => {
     if (!selectedBooking) { setDetail(null); return undefined; }
     let active = true;

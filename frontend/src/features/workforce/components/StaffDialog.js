@@ -60,7 +60,7 @@ export default function StaffDialog({
           resignedOn: '',
         }
       : mode === 'edit'
-        ? Object.fromEntries(Object.keys(fieldLabels).map((k) => [k, employee[k] || '']))
+        ? Object.fromEntries(Object.keys(fieldLabels).map((key) => [key, employee[key] || '']))
         : { branchId: '', reason: '', resignedOn: employee.resignedOn || '' }
   );
   const [errors, setErrors] = useState({});
@@ -78,7 +78,7 @@ export default function StaffDialog({
     assign: 'Gán cơ sở làm việc chính',
     transfer: 'Điều chuyển nhân viên',
   };
-  const destination = branches.find((b) => b.id === form.branchId);
+  const destination = branches.find((branch) => branch.id === form.branchId);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -134,7 +134,7 @@ export default function StaffDialog({
       setConflict(false);
       setErrors({});
       if (mode === 'edit')
-        setForm(Object.fromEntries(Object.keys(fieldLabels).map((k) => [k, fresh[k] || ''])));
+        setForm(Object.fromEntries(Object.keys(fieldLabels).map((key) => [key, fresh[key] || ''])));
       else setForm({ branchId: '', reason: '', resignedOn: fresh.resignedOn || '' });
     } catch (e) {
       setErrors(apiErrors(e));
@@ -196,7 +196,7 @@ export default function StaffDialog({
       const found = apiErrors(e);
       setErrors(found);
       if (e.response?.status === 409 && found.form?.includes('đã thay đổi')) setConflict(true);
-      if (Object.keys(found).some((k) => k !== 'form')) setReview(false);
+      if (Object.keys(found).some((key) => key !== 'form')) setReview(false);
     } finally {
       sending.current = false;
       setBusy(false);
@@ -332,15 +332,15 @@ export default function StaffDialog({
                   <dl className="staff-review">
                     {['create', 'edit'].includes(mode) ? (
                       Object.keys(fieldLabels)
-                        .filter((k) =>
-                          mode === 'create' ? !!form[k] : form[k] !== (current[k] || '')
+                        .filter((key) =>
+                          mode === 'create' ? !!form[key] : form[key] !== (current[key] || '')
                         )
-                        .map((k) => (
-                          <div key={k}>
-                            <dt>{fieldLabels[k]}</dt>
+                        .map((key) => (
+                          <div key={key}>
+                            <dt>{fieldLabels[key]}</dt>
                             <dd>
-                              {mode === 'edit' && <del>{label(k, current[k])}</del>}
-                              <strong>{label(k, form[k])}</strong>
+                              {mode === 'edit' && <del>{label(key, current[key])}</del>}
+                              <strong>{label(key, form[key])}</strong>
                             </dd>
                           </div>
                         ))
@@ -527,11 +527,11 @@ export default function StaffDialog({
                       <select {...attrs('branchId')}>
                         <option value="">Chọn cơ sở</option>
                         {branches
-                          .filter((b) => b.id !== current.branchId)
-                          .map((b) => (
-                            <option key={b.id} value={b.id} disabled={b.status !== 'ACTIVE'}>
-                              {b.name} · {b.code}
-                              {b.status !== 'ACTIVE' ? ' · Ngừng hoạt động' : ''}
+                          .filter((branch) => branch.id !== current.branchId)
+                          .map((branch) => (
+                            <option key={branch.id} value={branch.id} disabled={branch.status !== 'ACTIVE'}>
+                              {branch.name} · {branch.code}
+                              {branch.status !== 'ACTIVE' ? ' · Ngừng hoạt động' : ''}
                             </option>
                           ))}
                       </select>,

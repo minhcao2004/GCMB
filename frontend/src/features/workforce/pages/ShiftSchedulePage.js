@@ -100,8 +100,8 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const slots = new Map(
     (data?.shifts || [])
-      .filter((s) => s.status !== 'CANCELLED')
-      .map((s) => [slotKey(s.date, s.templateId), s])
+      .filter((slot) => slot.status !== 'CANCELLED')
+      .map((slot) => [slotKey(slot.date, slot.templateId), slot])
   );
   const open = (type, shift, assignment) => {
     setNotice('');
@@ -140,22 +140,22 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
     }
   }
   const published = Array.from(slots.values());
-  const matchesSlot = (s, people) => {
+  const matchesSlot = (slot, people) => {
     if (
       search &&
-      !people.some((a) => `${a.fullName} ${a.code}`.toLowerCase().includes(search.toLowerCase()))
+      !people.some((person) => `${person.fullName} ${person.code}`.toLowerCase().includes(search.toLowerCase()))
     )
       return false;
-    if (filter === 'UNPUBLISHED') return !s;
-    if (filter === 'SHORT') return !!s && s.registered < s.capacity;
-    if (filter === 'FULL') return !!s && s.registered >= s.capacity;
+    if (filter === 'UNPUBLISHED') return !slot;
+    if (filter === 'SHORT') return !!slot && slot.registered < slot.capacity;
+    if (filter === 'FULL') return !!slot && slot.registered >= slot.capacity;
     if (filter === 'MINE') return people.length > 0;
     return true;
   };
-  const hasMatches = data?.templates.some((t) =>
+  const hasMatches = data?.templates.some((template) =>
     days.some((date) => {
-      const s = slots.get(slotKey(date, t.id));
-      return matchesSlot(s, s ? data.assignments.filter((a) => a.shiftId === s.id) : []);
+      const slot = slots.get(slotKey(date, template.id));
+      return matchesSlot(slot, slot ? data.assignments.filter((assignment) => assignment.shiftId === slot.id) : []);
     })
   );
   return (
@@ -169,7 +169,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
       {error && (
         <div className="shift-message error" role="alert">
           {error}
-          <button onClick={() => setRevision((v) => v + 1)}>Tải lại lịch</button>
+          <button onClick={() => setRevision((previousRevision) => previousRevision + 1)}>Tải lại lịch</button>
         </div>
       )}
       <div className="shift-toolbar">
@@ -241,11 +241,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                 <strong>{published.length}/28</strong> ca đã công bố
               </span>
               <span>
-                <strong>{published.filter((s) => s.registered < s.capacity).length}</strong> ca
+                <strong>{published.filter((slot) => slot.registered < slot.capacity).length}</strong> ca
                 thiếu người
               </span>
               <span>
-                <strong>{published.reduce((n, s) => n + s.registered, 0)}</strong> lượt phân công
+                <strong>{published.reduce((total, item) => total + item.registered, 0)}</strong> lượt phân công
               </span>
               <span className="shift-help">Bốn khung giờ cố định · Giờ Việt Nam</span>
             </div>
@@ -286,64 +286,64 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                   </tr>
                 </thead>
                 <tbody>
-                  {data.templates.map((t, index) => (
-                    <tr key={t.id} className={`shift-period-${t.startMinute}`}>
+                  {data.templates.map((template, index) => (
+                    <tr key={template.id} className={`shift-period-${template.startMinute}`}>
                       <th scope="row">
                         <strong>Ca {index + 1}</strong>
-                        <span>{shiftLabel(t)}</span>
+                        <span>{shiftLabel(template)}</span>
                       </th>
                       {days.map((date) => {
-                        const s = slots.get(slotKey(date, t.id)),
-                          people = s ? data.assignments.filter((a) => a.shiftId === s.id) : [],
-                          full = s && s.registered >= s.capacity,
-                          startTime = s ? new Date(s.startsAt).getTime() : NaN,
+                        const slot = slots.get(slotKey(date, template.id)),
+                          people = slot ? data.assignments.filter((assignment) => assignment.shiftId === slot.id) : [],
+                          full = slot && slot.registered >= slot.capacity,
+                          startTime = slot ? new Date(slot.startsAt).getTime() : NaN,
                           started = !Number.isFinite(startTime) || startTime <= Date.now();
-                        const matches = matchesSlot(s, people);
+                        const matches = matchesSlot(slot, people);
                         return (
                           <td
                             key={date}
                             className={`${matches ? '' : 'shift-dim'} ${date === today() ? 'shift-today-column' : ''}`}
                           >
                             <article
-                              className={`shift-slot ${!s ? 'unpublished' : full ? 'full' : 'short'}`}
+                              className={`shift-slot ${!slot ? 'unpublished' : full ? 'full' : 'short'}`}
                               aria-label={`${dateLabel(date)} ca ${index + 1}`}
-                              tabIndex={manager && s ? 0 : undefined}
-                              onKeyDown={manager && s ? (event) => {
+                              tabIndex={manager && slot ? 0 : undefined}
+                              onKeyDown={manager && slot ? (event) => {
                                 if (event.target === event.currentTarget &&
                                     (event.key === 'Enter' || event.key === ' ')) {
                                   event.preventDefault();
-                                  open('detail', s);
+                                  open('detail', slot);
                                 }
                               } : undefined}
-                              style={manager && s ? { cursor: 'pointer' } : undefined}
-                              onClick={manager && s ? (event) => {
-                                if (!event.target.closest('button')) open('detail', s);
+                              style={manager && slot ? { cursor: 'pointer' } : undefined}
+                              onClick={manager && slot ? (event) => {
+                                if (!event.target.closest('button')) open('detail', slot);
                               } : undefined}
                             >
-                              {s ? (
+                              {slot ? (
                                 <>
                                   <div className="shift-slot-count">
                                     <strong>
-                                      {s.registered}
-                                      <span>/{s.capacity}</span>
+                                      {slot.registered}
+                                      <span>/{slot.capacity}</span>
                                     </strong>
                                     <span className={`shift-badge ${full ? 'full' : 'short'}`}>
-                                      {full ? 'Đủ người' : `Thiếu ${s.capacity - s.registered}`}
+                                      {full ? 'Đủ người' : `Thiếu ${slot.capacity - slot.registered}`}
                                     </span>
                                   </div>
                                   <small className="shift-slot-status">
-                                    {s.status === 'OPEN' && data.registrationOpen
+                                    {slot.status === 'OPEN' && data.registrationOpen
                                       ? 'Mở đăng ký'
                                       : 'Đóng đăng ký'}
                                   </small>
                                   {manager ? (
                                     <ul>
-                                      {people.map((a) => (
-                                        <li key={a.id}>
-                                          <span title={`${a.code} · ${a.fullName}`}>
-                                            {a.fullName}
+                                      {people.map((person) => (
+                                        <li key={person.id}>
+                                          <span title={`${person.code} · ${person.fullName}`}>
+                                            {person.fullName}
                                           </span>
-                                          {a.source === 'MANAGER' && <small>Làm thay</small>}
+                                          {person.source === 'MANAGER' && <small>Làm thay</small>}
                                         </li>
                                       ))}
                                     </ul>
@@ -351,7 +351,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                     <p className="shift-mine">✓ Bạn đã đăng ký</p>
                                   ) : (
                                     <p className="shift-help">
-                                      Còn {Math.max(0, s.capacity - s.registered)} chỗ
+                                      Còn {Math.max(0, slot.capacity - slot.registered)} chỗ
                                     </p>
                                   )}
                                   {manager ? (
@@ -361,7 +361,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                       className="shift-slot-action"
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        openAttendance(s);
+                                        openAttendance(slot);
                                       }}
                                     >
                                       Chấm công
@@ -375,11 +375,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                         readonly ||
                                         people.length > 0 ||
                                         full ||
-                                        s.status !== 'OPEN' ||
+                                        slot.status !== 'OPEN' ||
                                         !data.registrationOpen ||
                                         started
                                       }
-                                      onClick={() => open('register', s)}
+                                      onClick={() => open('register', slot)}
                                     >
                                       {people.length
                                         ? 'Đã xác nhận'
@@ -393,12 +393,12 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
                                 <>
                                   <span className="shift-unpublished-mark">—</span>
                                   <p>Chưa mở ca</p>
-                                  {manager && data.editableSlots?.includes(slotKey(date, t.id)) && (
+                                  {manager && data.editableSlots?.includes(slotKey(date, template.id)) && (
                                     <button
                                       type="button"
                                       className="shift-slot-action"
                                       disabled={readonly || preparing}
-                                      onClick={() => publish(week, slotKey(date, t.id))}
+                                      onClick={() => publish(week, slotKey(date, template.id))}
                                     >
                                       Mở ca
                                     </button>
@@ -441,11 +441,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           scope={branchScope}
           readOnly={readonly || dialog.data.readOnly || dialog.data.period.status === 'CLOSED' ||
             new Date(dialog.shift.startsAt).getTime() > Date.now()}
-          onClose={() => { setDialog(null); setRevision((v) => v + 1); }}
-          onReload={() => { setDialog(null); setRevision((v) => v + 1); }}
+          onClose={() => { setDialog(null); setRevision((previousRevision) => previousRevision + 1); }}
+          onReload={() => { setDialog(null); setRevision((previousRevision) => previousRevision + 1); }}
           onSaved={() => {
             setDialog(null);
-            setRevision((v) => v + 1);
+            setRevision((previousRevision) => previousRevision + 1);
             setNotice('Đã cập nhật chấm công của ca.');
           }}
         />
@@ -461,11 +461,11 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
           scope={branchScope}
           onClose={() => {
             setDialog(null);
-            setRevision((v) => v + 1);
+            setRevision((previousRevision) => previousRevision + 1);
           }}
           onReload={() => {
             setDialog(null);
-            setRevision((v) => v + 1);
+            setRevision((previousRevision) => previousRevision + 1);
           }}
           onSaved={(next, message) => {
             setData(next);
@@ -474,7 +474,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
               setDialog({
                 ...dialog,
                 data: { ...next, readOnly: readonly },
-                shift: next.shifts.find((s) => s.id === dialog.shift.id),
+                shift: next.shifts.find((shift) => shift.id === dialog.shift.id),
               });
             } else {
               setDialog(null);

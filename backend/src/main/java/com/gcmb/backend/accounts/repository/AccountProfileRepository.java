@@ -8,7 +8,7 @@
 package com.gcmb.backend.accounts.repository;
 
 import com.gcmb.backend.accounts.dto.AccountProfileDtos.Profile;
-import com.gcmb.backend.finance.service.AccountantFund;
+import com.gcmb.backend.finance.repository.AccountantFund;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -28,9 +28,9 @@ public class AccountProfileRepository {
         var account = accountRepository.find(id);
         var employees = jdbcTemplate.query(
             "SELECT full_name,phone,bank_name,bank_account,bank_holder FROM gcmb.employee WHERE user_id=?",
-            (rs, row) ->
-                new Profile(account, rs.getString("full_name"), rs.getString("phone"), true,
-                    rs.getString("bank_name"), rs.getString("bank_account"), rs.getString("bank_holder")),
+            (resultSet, row) ->
+                new Profile(account, resultSet.getString("full_name"), resultSet.getString("phone"), true,
+                    resultSet.getString("bank_name"), resultSet.getString("bank_account"), resultSet.getString("bank_holder")),
             id
         );
         return employees.isEmpty() ? new Profile(account, null, null, false) : employees.get(0);

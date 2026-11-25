@@ -11,7 +11,7 @@ import { apiErrors } from '../../../auth/services/authApi';
 import { accountApi } from '../services/accountApi';
 import { accountAccessApi, actionNames, roleNames } from '../services/accountAccessApi';
 import '../styles/accounts.css';
-import '../styles/accountAccess.css';
+import '../styles/account-access.css';
 
 const initialFilters = { q: '', action: '', branchId: '', from: '', to: '', page: 0 };
 const statusNames = {

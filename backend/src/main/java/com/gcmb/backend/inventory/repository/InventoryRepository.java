@@ -49,7 +49,7 @@ public class InventoryRepository {
 
     public List<UnitOption> units() {
         return jdbcTemplate.query("SELECT id,code,name FROM gcmb.unit ORDER BY lower(name)",
-            (rs, row) -> new UnitOption(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name")));
+            (resultSet, row) -> new UnitOption(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name")));
     }
 
     public List<String> categories(UUID branchId) {
@@ -73,7 +73,7 @@ public class InventoryRepository {
     }
 
     public String nextInventorySku(UUID branchId) {
-        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> {}, "GCMB_INVENTORY_ITEM_SKU:" + branchId);
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", resultSet -> {}, "GCMB_INVENTORY_ITEM_SKU:" + branchId);
         Long next = jdbcTemplate.queryForObject("""
             SELECT COALESCE(MAX(substring(sku FROM 4)::bigint),0)+1
             FROM gcmb.inventory_item WHERE branch_id=? AND sku ~ '^MH-[0-9]+$'
@@ -99,9 +99,9 @@ public class InventoryRepository {
             SELECT i.id,i.unit_id,i.active,s.quantity,s.version
             FROM gcmb.inventory_item i JOIN gcmb.stock_balance s ON s.inventory_item_id=i.id
             WHERE i.branch_id=? AND i.id=? FOR UPDATE OF i,s
-            """, (rs, row) -> new LockedItem(rs.getObject("id", UUID.class),
-                rs.getObject("unit_id", UUID.class), rs.getBoolean("active"), rs.getBigDecimal("quantity"),
-                rs.getLong("version")), branchId, id);
+            """, (resultSet, row) -> new LockedItem(resultSet.getObject("id", UUID.class),
+                resultSet.getObject("unit_id", UUID.class), resultSet.getBoolean("active"), resultSet.getBigDecimal("quantity"),
+                resultSet.getLong("version")), branchId, id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -134,12 +134,12 @@ public class InventoryRepository {
     public StockBalance lockBalance(UUID inventoryItemId) {
         List<StockBalance> rows = jdbcTemplate.query("""
             SELECT quantity,version FROM gcmb.stock_balance WHERE inventory_item_id=? FOR UPDATE
-            """, (rs, row) -> new StockBalance(rs.getBigDecimal("quantity"), rs.getLong("version")), inventoryItemId);
+            """, (resultSet, row) -> new StockBalance(resultSet.getBigDecimal("quantity"), resultSet.getLong("version")), inventoryItemId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public String nextReceiptCode() {
-        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> {}, "GCMB_STOCK_RECEIPT_CODE");
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", resultSet -> {}, "GCMB_STOCK_RECEIPT_CODE");
         Long next = jdbcTemplate.queryForObject("""
             SELECT COALESCE(MAX(substring(code FROM 4)::bigint),0)+1
             FROM gcmb.stock_receipt WHERE code ~ '^NK-[0-9]+$'
@@ -227,8 +227,8 @@ public class InventoryRepository {
             LEFT JOIN gcmb.stock_receipt r ON r.id=rl.receipt_id
             WHERE i.branch_id=? AND i.id=? AND m.id=?
               AND COALESCE(m.evidence_object_key,r.evidence_object_key) IS NOT NULL
-            """, (rs, row) -> new EvidenceRow(rs.getString("object_key"),
-                rs.getString("original_name"), rs.getString("mime_type")), branchId, itemId, movementId);
+            """, (resultSet, row) -> new EvidenceRow(resultSet.getString("object_key"),
+                resultSet.getString("original_name"), resultSet.getString("mime_type")), branchId, itemId, movementId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -253,21 +253,21 @@ public class InventoryRepository {
         LEFT JOIN gcmb.employee e ON e.user_id=u.id
         """;
 
-    private static InventoryItemView mapItem(ResultSet rs, int row) throws SQLException {
-        return new InventoryItemView(rs.getObject("id", UUID.class), rs.getString("sku"), rs.getString("name"),
-            rs.getString("category"), rs.getObject("unit_id", UUID.class), rs.getString("unit_name"),
-            rs.getString("tracking_mode"), rs.getBigDecimal("quantity"), rs.getBigDecimal("minimum_quantity"),
-            rs.getLong("stock_version"), rs.getBoolean("active"), rs.getBoolean("has_movements"),
-            rs.getString("stock_status"));
+    private static InventoryItemView mapItem(ResultSet resultSet, int row) throws SQLException {
+        return new InventoryItemView(resultSet.getObject("id", UUID.class), resultSet.getString("sku"), resultSet.getString("name"),
+            resultSet.getString("category"), resultSet.getObject("unit_id", UUID.class), resultSet.getString("unit_name"),
+            resultSet.getString("tracking_mode"), resultSet.getBigDecimal("quantity"), resultSet.getBigDecimal("minimum_quantity"),
+            resultSet.getLong("stock_version"), resultSet.getBoolean("active"), resultSet.getBoolean("has_movements"),
+            resultSet.getString("stock_status"));
     }
 
-    private static StockMovementView mapMovement(ResultSet rs, int row) throws SQLException {
-        Timestamp createdAt = rs.getTimestamp("created_at");
-        return new StockMovementView(rs.getObject("id", UUID.class), createdAt == null ? null : createdAt.toInstant(),
-            rs.getString("kind"), rs.getBigDecimal("quantity_delta"), rs.getBigDecimal("quantity_after"),
-            rs.getBigDecimal("unit_cost"), rs.getString("source"), rs.getString("actor"), rs.getString("reason"),
-            rs.getString("evidence_name"), rs.getString("evidence_url"),
-            rs.getString("supplier_name"), rs.getObject("expiry_date", LocalDate.class));
+    private static StockMovementView mapMovement(ResultSet resultSet, int row) throws SQLException {
+        Timestamp createdAt = resultSet.getTimestamp("created_at");
+        return new StockMovementView(resultSet.getObject("id", UUID.class), createdAt == null ? null : createdAt.toInstant(),
+            resultSet.getString("kind"), resultSet.getBigDecimal("quantity_delta"), resultSet.getBigDecimal("quantity_after"),
+            resultSet.getBigDecimal("unit_cost"), resultSet.getString("source"), resultSet.getString("actor"), resultSet.getString("reason"),
+            resultSet.getString("evidence_name"), resultSet.getString("evidence_url"),
+            resultSet.getString("supplier_name"), resultSet.getObject("expiry_date", LocalDate.class));
     }
 
     public record LockedItem(UUID id, UUID unitId, boolean active, BigDecimal quantity, long version) {}

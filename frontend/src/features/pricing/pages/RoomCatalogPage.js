@@ -104,7 +104,7 @@ export default function RoomCatalogPage() {
       setRooms(roomData);
       setPrices(priceData);
       setRules(ruleData);
-      setSelectedRoom(current => roomData.find(r => r.id === current?.id && r.active) || roomData.find(r => r.code === 'RT-QN' && r.active) || roomData.find(r => r.active) || null);
+      setSelectedRoom(current => roomData.find(row => row.id === current?.id && row.active) || roomData.find(row => row.code === 'RT-QN' && row.active) || roomData.find(row => row.active) || null);
     } catch (e) {
       setError(catalogError(e));
     } finally {
@@ -115,8 +115,8 @@ export default function RoomCatalogPage() {
     refresh();
   }, []);
   const visibleRooms = useMemo(() => rooms.filter(room => `${room.code} ${room.name}`.toLowerCase().includes(query.toLowerCase()) && (service === 'ALL' || room.serviceType === service) && matchesStatus(room.active, statusFilter)), [rooms, query, service, statusFilter]);
-  const visibleRules = useMemo(() => rules.filter(rule => (!roomFilterId || rule.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(r => r.id === rule.roomTypeId)?.serviceType === service) && matchesStatus(rule.active, statusFilter) && `${rule.code} ${rule.name} ${rule.roomTypeName}`.toLowerCase().includes(query.toLowerCase())), [rules, roomFilterId, service, statusFilter, rooms, query]);
-  const visibleCombos = useMemo(() => prices.filter(price => price.kind === 'COMBO' && (!roomFilterId || price.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(r => r.id === price.roomTypeId)?.serviceType === service) && matchesStatus(price.active, statusFilter) && `${price.code} ${price.name} ${price.roomTypeName} ${price.description}`.toLowerCase().includes(query.toLowerCase())), [prices, roomFilterId, service, statusFilter, rooms, query]);
+  const visibleRules = useMemo(() => rules.filter(rule => (!roomFilterId || rule.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(room => room.id === rule.roomTypeId)?.serviceType === service) && matchesStatus(rule.active, statusFilter) && `${rule.code} ${rule.name} ${rule.roomTypeName}`.toLowerCase().includes(query.toLowerCase())), [rules, roomFilterId, service, statusFilter, rooms, query]);
+  const visibleCombos = useMemo(() => prices.filter(price => price.kind === 'COMBO' && (!roomFilterId || price.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(room => room.id === price.roomTypeId)?.serviceType === service) && matchesStatus(price.active, statusFilter) && `${price.code} ${price.name} ${price.roomTypeName} ${price.description}`.toLowerCase().includes(query.toLowerCase())), [prices, roomFilterId, service, statusFilter, rooms, query]);
   useEffect(() => {
     setPage(0);
   }, [query, service, statusFilter, rooms]);
@@ -153,7 +153,7 @@ export default function RoomCatalogPage() {
       hourlyPrice: item.hourlyPrice
     } : {
       ...blankRule,
-      roomTypeId: selectedRoom?.id || rooms.find(r => r.serviceType === 'CINEMA')?.id || ''
+      roomTypeId: selectedRoom?.id || rooms.find(room => room.serviceType === 'CINEMA')?.id || ''
     });
   };
   const openCombo = (item = null) => {
@@ -161,7 +161,7 @@ export default function RoomCatalogPage() {
       type: 'combo',
       item
     });
-    const room = rooms.find(r => r.id === (item?.roomTypeId || selectedRoom?.id)) || rooms.find(r => r.active);
+    const room = rooms.find(roomItem => roomItem.id === (item?.roomTypeId || selectedRoom?.id)) || rooms.find(roomItem => roomItem.active);
     setForm(item ? {
       code: item.code,
       name: item.name,
@@ -296,9 +296,9 @@ export default function RoomCatalogPage() {
         <option value="CINEMA">Cinema</option>
         <option value="MUSIC_BOX">Music Box</option>
       </select>
-      {tab !== 'Hạng phòng' && <select aria-label="Hạng phòng" value={tab === 'Hạng phòng' ? selectedRoom?.id || '' : roomFilterId} onChange={e => tab === 'Hạng phòng' ? setSelectedRoom(rooms.find(r => r.id === e.target.value) || null) : setRoomFilterId(e.target.value)}>
+      {tab !== 'Hạng phòng' && <select aria-label="Hạng phòng" value={tab === 'Hạng phòng' ? selectedRoom?.id || '' : roomFilterId} onChange={e => tab === 'Hạng phòng' ? setSelectedRoom(rooms.find(room => room.id === e.target.value) || null) : setRoomFilterId(e.target.value)}>
         <option value="">Tất cả hạng phòng</option>
-        {rooms.filter(r => r.active).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+        {rooms.filter(room => room.active).map(room => <option key={room.id} value={room.id}>{room.name}</option>)}
       </select>}
       <select aria-label="Trạng thái" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
         <option value="active">Đang áp dụng</option>
@@ -372,7 +372,7 @@ export default function RoomCatalogPage() {
                 <small>{rule.roomTypeName} · {rule.name}</small>
               </td>
               <td>{rule.roomTypeName}</td>
-              <td>{rule.weekdays.map(d => weekdayLabels[d - 1]).join(', ')}</td>
+              <td>{rule.weekdays.map(weekday => weekdayLabels[weekday - 1]).join(', ')}</td>
               <td>{timeLabel(rule.minuteFrom)}–{timeLabel(rule.minuteTo)}</td>
               <td>
                 <strong>{money(rule.hourlyPrice)} / giờ</strong>
@@ -466,11 +466,11 @@ function EditorPage({
   const isRoom = editor.type === 'room';
   const isRule = editor.type === 'rule';
   const item = editor.item;
-  const room = rooms.find(r => r.id === (form.roomTypeId || item?.roomTypeId));
+  const room = rooms.find(roomItem => roomItem.id === (form.roomTypeId || item?.roomTypeId));
   const heading = isRoom ? item ? 'Sửa hạng phòng' : 'Thêm hạng phòng' : isRule ? item ? 'Sửa quy tắc giá' : 'Thêm quy tắc giá' : item ? 'Sửa combo' : 'Thêm combo';
   const toggleDay = day => setForm({
     ...form,
-    weekdays: form.weekdays.includes(day) ? form.weekdays.filter(d => d !== day) : [...form.weekdays, day].sort((a, b) => a - b)
+    weekdays: form.weekdays.includes(day) ? form.weekdays.filter(weekday => weekday !== day) : [...form.weekdays, day].sort((left, right) => left - right)
   });
   return <div className={`catalog-editor-page ${isRoom ? 'room-drawer-page' : ''}`}>
     {isRoom && <button className="catalog-drawer-scrim" aria-label="Đóng biểu mẫu" disabled={busy} onClick={onCancel} />}
@@ -547,7 +547,7 @@ Hạng phòng
 <select required value={form.roomTypeId} onChange={e => setForm({
                   ...form,
                   roomTypeId: e.target.value
-                })}>{rooms.filter(r => r.serviceType === 'CINEMA' && r.active).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+                })}>{rooms.filter(roomItem => roomItem.serviceType === 'CINEMA' && roomItem.active).map(roomItem => <option key={roomItem.id} value={roomItem.id}>{roomItem.name}</option>)}</select>
               </label>
               <label>
 Giá áp dụng / giờ
@@ -580,14 +580,14 @@ Bắt đầu
 <select value={form.minuteFrom} onChange={e => setForm({
                   ...form,
                   minuteFrom: e.target.value
-                })}>{timeOptions().map(t => <option value={t.value} key={t.value}>{t.label}</option>)}</select>
+                })}>{timeOptions().map(timeOption => <option value={timeOption.value} key={timeOption.value}>{timeOption.label}</option>)}</select>
               </label>
               <label>
 Kết thúc
 <select value={form.minuteTo} onChange={e => setForm({
                   ...form,
                   minuteTo: e.target.value
-                })}>{timeOptions(true).map(t => <option value={t.value} key={t.value}>{t.label}</option>)}</select>
+                })}>{timeOptions(true).map(timeOption => <option value={timeOption.value} key={timeOption.value}>{timeOption.label}</option>)}</select>
               </label>
             </div>
           </div>
@@ -598,7 +598,7 @@ Kết thúc
             <p>Giá áp dụng</p>
             <strong>{money(form.hourlyPrice)} / giờ</strong>
             <p>Phạm vi ngày</p>
-            <strong>{(form.weekdays || []).map(d => weekdayLabels[d - 1]).join(', ') || 'Chưa chọn ngày'}</strong>
+            <strong>{(form.weekdays || []).map(day => weekdayLabels[day - 1]).join(', ') || 'Chưa chọn ngày'}</strong>
             <div className="catalog-info-box">
               <strong>Kiểm tra thời gian áp dụng</strong>
               <span>{form.validTo ? `Áp dụng đến ${form.validTo}.` : `Quy tắc bắt đầu từ ${form.validFrom || 'ngày đã chọn'}.`}</span>
@@ -626,7 +626,7 @@ Tên combo
 Loại dịch vụ
 <select value={form.serviceType || room?.serviceType || 'CINEMA'} onChange={e => {
                   const serviceType = e.target.value;
-                  const firstRoom = rooms.find(r => r.active && r.serviceType === serviceType);
+                  const firstRoom = rooms.find(roomItem => roomItem.active && roomItem.serviceType === serviceType);
                   setForm({
                     ...form,
                     serviceType,
@@ -640,13 +640,13 @@ Loại dịch vụ
               <label>
 Hạng áp dụng
 <select required value={form.roomTypeId || ''} onChange={e => {
-                  const selected = rooms.find(r => r.id === e.target.value);
+                  const selected = rooms.find(roomItem => roomItem.id === e.target.value);
                   setForm({
                     ...form,
                     roomTypeId: e.target.value,
                     serviceType: selected?.serviceType || form.serviceType
                   });
-                }}>{rooms.filter(r => r.serviceType === (form.serviceType || room?.serviceType || 'CINEMA') && r.active).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+                }}>{rooms.filter(roomItem => roomItem.serviceType === (form.serviceType || room?.serviceType || 'CINEMA') && roomItem.active).map(roomItem => <option key={roomItem.id} value={roomItem.id}>{roomItem.name}</option>)}</select>
               </label>
               <label className="span-two">
 Mô tả / thành phần

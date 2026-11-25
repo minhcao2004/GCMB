@@ -1,6 +1,7 @@
 package com.gcmb.backend.dashboard;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.dashboard.repository.AccountingWorkbookRepository;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
@@ -12,7 +13,6 @@ import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,11 +22,11 @@ public class AccountingWorkbookService {
   private static final BigDecimal ZERO = BigDecimal.ZERO;
   private static final String NOTE = "Nguồn không có: TINGBOX, TK HKD, ẢNH SAO KÊ, NỘP KÉT MINI. CHI KÉT lấy từ payment_source=BRANCH_FUND (luồng cũ); CHI CK gồm các khoản còn lại và toàn bộ luồng chi mới (không có trường phương thức chi). Hoàn cọc chỉ tham khảo, không phải chi phí/lợi nhuận. CAPEX tách riêng, không trừ vào lợi nhuận.";
 
-  private final JdbcTemplate jdbcTemplate;
+  private final AccountingWorkbookRepository accountingWorkbookRepository;
   private final MonthlyPerformanceService monthlyPerformanceService;
 
-  public AccountingWorkbookService(JdbcTemplate jdbcTemplate, MonthlyPerformanceService monthlyPerformanceService) {
-    this.jdbcTemplate = jdbcTemplate;
+  public AccountingWorkbookService(AccountingWorkbookRepository accountingWorkbookRepository, MonthlyPerformanceService monthlyPerformanceService) {
+    this.accountingWorkbookRepository = accountingWorkbookRepository;
     this.monthlyPerformanceService = monthlyPerformanceService;
   }
 
@@ -75,8 +75,7 @@ public class AccountingWorkbookService {
     byte[] bytes = MonthlyPerformanceExport.xlsx(rows, selectedMonth.toString(), scope,
       String.valueOf(report.get("periodStatus")), details);
     String selected = branchIdsJson(branches);
-    jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_ACCOUNTING_MONTHLY_WORKBOOK','REPORT',?::jsonb)",
-      actor.id(), "{\"month\":\"" + selectedMonth + "\",\"branchIds\":" + selected + "}");
+    accountingWorkbookRepository.insertExportAudit(actor.id(), "{\"month\":\"" + selectedMonth + "\",\"branchIds\":" + selected + "}");
     return bytes;
   }
 
@@ -84,97 +83,39 @@ public class AccountingWorkbookService {
     var data = new Dataset(month.lengthOfMonth());
     if (branches.isEmpty()) return data;
     List<UUID> ids = branches.stream().map(Branch::id).toList();
-    List<Object> args = new ArrayList<>();
-    args.add(month.atDay(1)); args.add(month.plusMonths(1).atDay(1));
-    dataQuery("""
-      SELECT b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS day,sum(b.net_amount) amount
-      FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
-      WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE br.timezone)::date>=? AND (b.completed_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, "b.branch_id", " GROUP BY b.branch_id,day", data, "bill");
-
-    args = rangeArgs(month);
-    dataQuery("""
-      SELECT d.booking_branch_id branch_id,d.day,
-        sum(d.amount) FILTER (WHERE d.kind='APPLY') apply_amount,
-        sum(d.amount) FILTER (WHERE d.kind='FORFEIT') forfeit_amount,
-        sum(d.amount) FILTER (WHERE d.kind='REFUND') refund_amount
-      FROM (SELECT bk.branch_id booking_branch_id,(e.created_at AT TIME ZONE br.timezone)::date AS day,e.kind,e.amount
-        FROM gcmb.deposit_entry e JOIN gcmb.deposit dep ON dep.id=e.deposit_id
-        JOIN gcmb.booking bk ON bk.id=dep.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
-        WHERE e.kind IN ('APPLY','FORFEIT','REFUND') AND (e.created_at AT TIME ZONE br.timezone)::date>=? AND (e.created_at AT TIME ZONE br.timezone)::date<?) d
-      WHERE 1=1
-      """, ids, args, "d.booking_branch_id", " GROUP BY d.booking_branch_id,d.day", data, "deposits");
-
-    args = rangeArgs(month);
-    dataQuery("""
-      SELECT p.branch_id,(p.received_at AT TIME ZONE br.timezone)::date AS day,
-        sum(p.amount) FILTER (WHERE p.method='BANK_TRANSFER') bank_amount,
-        sum(p.amount) FILTER (WHERE p.method='CASH') cash_amount
-      FROM gcmb.payment p JOIN gcmb.branch br ON br.id=p.branch_id
-      WHERE p.purpose='BILL' AND (p.received_at AT TIME ZONE br.timezone)::date>=? AND (p.received_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, "p.branch_id", " GROUP BY p.branch_id,day", data, "payments");
-
-    args = rangeArgs(month);
-    expenseDaily("""
-      SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date AS day,
-        sum(p.amount) FILTER (WHERE e.payment_source='BRANCH_FUND') cash_amount,
-        sum(p.amount) FILTER (WHERE e.payment_source<>'BRANCH_FUND') bank_amount,
-        sum(p.amount) FILTER (WHERE e.payment_source='BRANCH_FUND' AND e.class_snapshot='OPEX') opex_cash,
-        sum(p.amount) FILTER (WHERE e.payment_source<>'BRANCH_FUND' AND e.class_snapshot='OPEX') opex_bank
-      FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id JOIN gcmb.branch br ON br.id=e.branch_id
-      WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE br.timezone)::date>=? AND (p.paid_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, data, "legacyOpex");
-    args = rangeArgs(month);
-    expenseDaily("""
-      SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date AS day,sum(r.amount) bank_amount,
-        sum(r.amount) FILTER (WHERE r.category_type='OPEX') opex_bank
-      FROM gcmb.finance_expense_request r JOIN gcmb.branch br ON br.id=r.branch_id
-      WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE br.timezone)::date>=? AND (r.paid_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, data, "newOpex");
-
-    args = rangeArgs(month);
-    dataQuery("""
-      SELECT e.branch_id,(t.occurred_at AT TIME ZONE br.timezone)::date AS day,sum(-e.amount_signed) amount
-      FROM gcmb.financial_entry e JOIN gcmb.financial_transaction t ON t.id=e.transaction_id JOIN gcmb.branch br ON br.id=e.branch_id
-      WHERE t.kind IN ('SALARY','ADVANCE') AND e.amount_signed<0 AND (t.occurred_at AT TIME ZONE br.timezone)::date>=? AND (t.occurred_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, "e.branch_id", " GROUP BY e.branch_id,day", data, "salary");
-
-    args = rangeArgs(month);
-    dataQuery("""
-      SELECT bk.branch_id,(e.created_at AT TIME ZONE br.timezone)::date AS day,sum(e.amount) amount
-      FROM gcmb.deposit_entry e JOIN gcmb.deposit dep ON dep.id=e.deposit_id JOIN gcmb.booking bk ON bk.id=dep.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
-      WHERE e.kind='REFUND' AND (e.created_at AT TIME ZONE br.timezone)::date>=? AND (e.created_at AT TIME ZONE br.timezone)::date<?
-      """, ids, args, "bk.branch_id", " GROUP BY bk.branch_id,day", data, "refunds");
-
-    data.expenses = expenseLines(month, ids);
+    applyDaily(accountingWorkbookRepository.billDaily(month, ids), data, "bill");
+    applyDaily(accountingWorkbookRepository.depositDaily(month, ids), data, "deposits");
+    applyDaily(accountingWorkbookRepository.billPaymentDaily(month, ids), data, "payments");
+    applyLegacyExpenses(accountingWorkbookRepository.legacyExpenseDaily(month, ids), data);
+    applyFinanceExpenses(accountingWorkbookRepository.financeExpenseDaily(month, ids), data);
+    applyDaily(accountingWorkbookRepository.salaryDaily(month, ids), data, "salary");
+    applyDaily(accountingWorkbookRepository.depositRefundDaily(month, ids), data, "refunds");
+    data.expenses = accountingWorkbookRepository.expenseLines(month, ids);
     data.hasTransactions = data.days.values().stream().anyMatch(m -> m.values().stream().anyMatch(Day::hasValues)) || !data.expenses.isEmpty();
     return data;
   }
 
-  private void expenseDaily(String sql, List<UUID> ids, List<Object> args, Dataset data, String ignored) {
-    String full = sql + " AND " + (sql.contains("expense_payment") ? "e.branch_id" : "r.branch_id") + " IN (" + marks(ids.size()) + ") GROUP BY branch_id,day";
-    args.addAll(ids);
-    for (Map<String, Object> row : jdbcTemplate.queryForList(full, args.toArray())) {
+  private static void applyLegacyExpenses(List<Map<String, Object>> rows, Dataset data) {
+    for (Map<String, Object> row : rows) {
       Day day = data.day((UUID) row.get("branch_id"), localDate(row.get("day")));
-      if (sql.contains("expense_payment")) {
-        day.totalExpenseCash = decimal(row.get("cash_amount"));
-        day.totalExpenseBank = day.totalExpenseBank.add(decimal(row.get("bank_amount")));
-        day.opexCash = decimal(row.get("opex_cash"));
-        day.opexBank = decimal(row.get("opex_bank"));
-      } else {
-        day.totalExpenseBank = day.totalExpenseBank.add(decimal(row.get("bank_amount")));
-        day.opexBank = day.opexBank.add(decimal(row.get("opex_bank")));
-      }
+      day.totalExpenseCash = decimal(row.get("cash_amount"));
+      day.totalExpenseBank = day.totalExpenseBank.add(decimal(row.get("bank_amount")));
+      day.opexCash = decimal(row.get("opex_cash"));
+      day.opexBank = decimal(row.get("opex_bank"));
     }
   }
 
-  private void dataQuery(String sql, List<UUID> ids, List<Object> args, String branchColumn, String group, Dataset data, String kind) {
-    String query = sql + " AND " + branchColumn + " IN (" + marks(ids.size()) + ")" + group;
-    args.addAll(ids);
-    for (Map<String, Object> row : jdbcTemplate.queryForList(query, args.toArray())) {
-      UUID branch = (UUID) row.get("branch_id");
-      LocalDate date = localDate(row.get("day"));
-      Day day = data.day(branch, date);
+  private static void applyFinanceExpenses(List<Map<String, Object>> rows, Dataset data) {
+    for (Map<String, Object> row : rows) {
+      Day day = data.day((UUID) row.get("branch_id"), localDate(row.get("day")));
+      day.totalExpenseBank = day.totalExpenseBank.add(decimal(row.get("bank_amount")));
+      day.opexBank = day.opexBank.add(decimal(row.get("opex_bank")));
+    }
+  }
+
+  private static void applyDaily(List<Map<String, Object>> rows, Dataset data, String kind) {
+    for (Map<String, Object> row : rows) {
+      Day day = data.day((UUID) row.get("branch_id"), localDate(row.get("day")));
       switch (kind) {
         case "bill" -> day.bill = decimal(row.get("amount"));
         case "deposits" -> { day.apply = decimal(row.get("apply_amount")); day.forfeit = decimal(row.get("forfeit_amount")); day.refund = decimal(row.get("refund_amount")); }
@@ -186,32 +127,12 @@ public class AccountingWorkbookService {
     }
   }
 
-  private List<Map<String, Object>> expenseLines(YearMonth month, List<UUID> ids) {
-    String placeholders = marks(ids.size());
-    List<Object> args = rangeArgs(month);
-    args.addAll(rangeArgs(month));
-    args.addAll(ids);
-    return jdbcTemplate.queryForList("""
-      SELECT x.branch_id,x.day,x.content,x.cost_type,x.amount,x.request_code
-      FROM (
-        SELECT e.branch_id,(p.paid_at AT TIME ZONE b.timezone)::date AS day,c.name content,e.class_snapshot cost_type,p.amount,e.code request_code
-        FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id JOIN gcmb.expense_category c ON c.id=e.category_id JOIN gcmb.branch b ON b.id=e.branch_id
-        WHERE p.status='PAID' AND (p.paid_at AT TIME ZONE b.timezone)::date>=? AND (p.paid_at AT TIME ZONE b.timezone)::date<?
-        UNION ALL
-        SELECT r.branch_id,(r.paid_at AT TIME ZONE b.timezone)::date AS day,c.name content,r.category_type cost_type,r.amount,r.code request_code
-        FROM gcmb.finance_expense_request r JOIN gcmb.finance_expense_category c ON c.id=r.category_id JOIN gcmb.branch b ON b.id=r.branch_id
-        WHERE r.status='PAID' AND (r.paid_at AT TIME ZONE b.timezone)::date>=? AND (r.paid_at AT TIME ZONE b.timezone)::date<?
-      ) x WHERE x.branch_id IN (""" + placeholders + ") ORDER BY x.branch_id,x.day,x.request_code",
-      args.toArray());
-  }
-
   private List<Branch> branches(String branchIds) {
     List<UUID> ids = parseIds(branchIds);
-    if (ids.isEmpty()) return jdbcTemplate.query("SELECT id,code,name,timezone FROM gcmb.branch ORDER BY name,id", (rs,n) -> new Branch(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("timezone")));
-    String marks = marks(ids.size());
-    List<Branch> branches = jdbcTemplate.query("SELECT id,code,name,timezone FROM gcmb.branch WHERE id IN (" + marks + ") ORDER BY name,id",
-      (rs,n) -> new Branch(rs.getObject("id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("timezone")), ids.toArray());
-    if (branches.size() != ids.size()) throw bad("Cơ sở được chọn không tồn tại.");
+    List<Branch> branches = accountingWorkbookRepository.findBranches(ids).stream()
+      .map(row -> new Branch((UUID) row.get("id"), (String) row.get("code"), (String) row.get("name"), (String) row.get("timezone")))
+      .toList();
+    if (!ids.isEmpty() && branches.size() != ids.size()) throw bad("Cơ sở được chọn không tồn tại.");
     return branches;
   }
 
@@ -225,28 +146,15 @@ public class AccountingWorkbookService {
   }
 
   private String periodStatus(LocalDate month) {
-    List<String> rows = jdbcTemplate.queryForList("SELECT status FROM gcmb.financial_period WHERE \"month\"=?", String.class, month);
+    List<String> rows = accountingWorkbookRepository.findPeriodStatus(month);
     return rows.isEmpty() ? "OPEN" : rows.get(0);
   }
 
   private long unresolvedExceptions(YearMonth month, List<Branch> branches) {
     if (branches.isEmpty()) return 0;
-    List<UUID> ids = branches.stream().map(Branch::id).toList();
-    String marks = marks(ids.size());
-    List<Object> args = rangeArgs(month);
-    args.addAll(ids);
-    Long count = jdbcTemplate.queryForObject("""
-      SELECT count(*) FROM gcmb.bank_transaction t JOIN gcmb.financial_account a ON a.id=t.account_id
-      WHERE t.provider='SEPAY' AND t.match_status IN ('EXCEPTION','UNMATCHED') AND t.resolution_status='UNRESOLVED'
-        AND (t.occurred_at AT TIME ZONE COALESCE((SELECT timezone FROM gcmb.branch WHERE id=a.branch_id),'Asia/Ho_Chi_Minh'))::date>=?
-        AND (t.occurred_at AT TIME ZONE COALESCE((SELECT timezone FROM gcmb.branch WHERE id=a.branch_id),'Asia/Ho_Chi_Minh'))::date<?
-        AND (a.branch_id IS NULL OR a.branch_id IN (""" + marks + "))",
-      Long.class, args.toArray());
-    return count == null ? 0 : count;
+    return accountingWorkbookRepository.countUnresolvedSePayExceptions(month, branches.stream().map(Branch::id).toList());
   }
 
-  private static String marks(int count){return String.join(",",Collections.nCopies(count,"?"));}
-  private static List<Object> rangeArgs(YearMonth m){return new ArrayList<>(List.of(m.atDay(1),m.plusMonths(1).atDay(1)));}
   private static BigDecimal decimal(Object v){return v==null?ZERO:v instanceof BigDecimal b?b:new BigDecimal(v.toString());}
   private static LocalDate localDate(Object v){return v instanceof java.sql.Date d?d.toLocalDate():v instanceof LocalDate d?d:LocalDate.parse(v.toString());}
   private static void requireAccountant(Identity actor){if(actor==null||!"ACCOUNTANT".equals(actor.role()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Bạn không có quyền thực hiện đối với nghiệp vụ kế toán.");}

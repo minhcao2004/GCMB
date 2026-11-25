@@ -69,13 +69,13 @@ public class EquipmentAssetRepository {
             SELECT id,code,name,active FROM gcmb.asset_category
             WHERE (branch_id IS NULL OR branch_id=?) AND (active OR id=(SELECT category_id FROM gcmb.asset WHERE id=? AND branch_id=?))
             ORDER BY active DESC,code
-            """, (r,n) -> new CategoryOption(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"), r.getBoolean("active")),
+            """, (resultSet, rowNumber) -> new CategoryOption(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"), resultSet.getBoolean("active")),
             branchId, assetId, branchId);
         List<RoomOption> rooms = jdbcTemplate.query("""
             SELECT id,code,name,operating_status FROM gcmb.room
             WHERE branch_id=? AND (operating_status<>'INACTIVE' OR id=(SELECT room_id FROM gcmb.asset WHERE id=? AND branch_id=?))
             ORDER BY code
-            """, (r,n) -> new RoomOption(r.getObject("id", UUID.class), r.getString("code"), r.getString("name"), r.getString("operating_status")),
+            """, (resultSet, rowNumber) -> new RoomOption(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"), resultSet.getString("operating_status")),
             branchId, assetId, branchId);
         CodeSeries series = assetId == null ? codeSeries(branchId) : null;
         return new Options(categories, rooms, series == null ? null : series.prefix(),
@@ -193,8 +193,8 @@ public class EquipmentAssetRepository {
             SELECT x.id,x.object_key,x.original_name,x.mime_type,x.byte_size,x.sha256
             FROM gcmb.asset a JOIN gcmb.attachment x ON x.id=a.image_attachment_id
             WHERE a.id=? AND a.branch_id=?
-            """, (r,n) -> new StoredImage(r.getObject("id", UUID.class), r.getString("object_key"), r.getString("original_name"),
-            r.getString("mime_type"), r.getLong("byte_size"), r.getString("sha256")), id, branchId);
+            """, (resultSet, rowNumber) -> new StoredImage(resultSet.getObject("id", UUID.class), resultSet.getString("object_key"), resultSet.getString("original_name"),
+            resultSet.getString("mime_type"), resultSet.getLong("byte_size"), resultSet.getString("sha256")), id, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 

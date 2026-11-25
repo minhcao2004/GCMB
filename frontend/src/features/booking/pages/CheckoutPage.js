@@ -447,13 +447,13 @@ export default function CheckoutPage() {
                       value={fee.reason}
                       onChange={(e) =>
                         setFees(
-                          fees.map((f, i) =>
+                          fees.map((feeItem, i) =>
                             i === index
                               ? {
-                                  ...f,
+                                  ...feeItem,
                                   reason: e.target.value,
                                 }
-                              : f
+                              : feeItem
                           )
                         )
                       }
@@ -466,13 +466,13 @@ export default function CheckoutPage() {
                       value={fee.amount}
                       onValueChange={(amount) =>
                         setFees(
-                          fees.map((f, i) =>
+                          fees.map((feeItem, i) =>
                             i === index
                               ? {
-                                  ...f,
+                                  ...feeItem,
                                   amount,
                                 }
-                              : f
+                              : feeItem
                           )
                         )
                       }

@@ -26,8 +26,8 @@ public class BookingRepository {
     // Chuyển thời điểm Java sang tham số thời gian của JDBC.
     private static Timestamp ts(Instant value) { return Timestamp.from(value); }
     // Đọc timestamp có thể rỗng từ kết quả truy vấn.
-    private static Instant instant(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
-        Timestamp value = rs.getTimestamp(column);
+    private static Instant instant(java.sql.ResultSet resultSet, String column) throws java.sql.SQLException {
+        Timestamp value = resultSet.getTimestamp(column);
         return value == null ? null : value.toInstant();
     }
     // Khôi phục giờ hẹn gốc của booking cũ đã check-in sớm.
@@ -105,31 +105,31 @@ public class BookingRepository {
               AND b.status IN ('ACTIVE','SUSPENDED')
             ORDER BY ea.valid_from DESC
             LIMIT 1
-            """, (rs, rowNum) -> new BranchScope(rs.getObject("id", UUID.class), rs.getString("name"), ZoneId.of(rs.getString("timezone"))), userId);
+            """, (resultSet, rowNumber) -> new BranchScope(resultSet.getObject("id", UUID.class), resultSet.getString("name"), ZoneId.of(resultSet.getString("timezone"))), userId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     // Lấy các hạng phòng đang hoạt động.
     public List<RoomTypeRow> roomTypes() {
         return jdbcTemplate.query("SELECT id,code,name,mode,capacity FROM gcmb.room_type WHERE active=true ORDER BY name,code",
-            (rs, rowNum) -> new RoomTypeRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), rs.getString("mode"), rs.getInt("capacity")));
+            (resultSet, rowNumber) -> new RoomTypeRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"), resultSet.getString("mode"), resultSet.getInt("capacity")));
     }
 
     // Tìm một hạng phòng đang hoạt động theo ID.
     public RoomTypeRow roomType(UUID id) {
         List<RoomTypeRow> rows = jdbcTemplate.query("SELECT id,code,name,mode,capacity FROM gcmb.room_type WHERE id=? AND active=true",
-            (rs, rowNum) -> new RoomTypeRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), rs.getString("mode"), rs.getInt("capacity")), id);
+            (resultSet, rowNumber) -> new RoomTypeRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"), resultSet.getString("mode"), resultSet.getInt("capacity")), id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public RoomTypeRow lockRoomType(UUID id) {
         List<RoomTypeRow> rows = jdbcTemplate.query("SELECT id,code,name,mode,capacity FROM gcmb.room_type WHERE id=? AND active=true FOR UPDATE",
-            (rs, rowNum) -> new RoomTypeRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), rs.getString("mode"), rs.getInt("capacity")), id);
+            (resultSet, rowNumber) -> new RoomTypeRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"), resultSet.getString("mode"), resultSet.getInt("capacity")), id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public String roomTypeName(UUID id) {
-        return jdbcTemplate.query("SELECT name FROM gcmb.room_type WHERE id=?", rs -> rs.next() ? rs.getString(1) : null, id);
+        return jdbcTemplate.query("SELECT name FROM gcmb.room_type WHERE id=?", resultSet -> resultSet.next() ? resultSet.getString(1) : null, id);
     }
 
     public int unassignedBookings(UUID branchId, UUID roomTypeId, Instant start, Instant end, UUID excludeBookingId) {
@@ -162,7 +162,7 @@ public class BookingRepository {
             FROM gcmb.combo c
             WHERE active=true AND room_type_id=? AND (branch_id IS NULL OR branch_id=?) AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
             ORDER BY name,version DESC
-            """, (rs, rowNum) -> combo(rs), roomTypeId, branchId);
+            """, (resultSet, rowNumber) -> combo(resultSet), roomTypeId, branchId);
     }
 
     // Tìm combo đang áp dụng để xác thực lựa chọn của client.
@@ -175,17 +175,17 @@ public class BookingRepository {
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
                    overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
             FROM gcmb.combo c WHERE id=? AND active=true AND (branch_id IS NULL OR branch_id=?)
-            """, (rs, rowNum) -> combo(rs), id, branchId);
+            """, (resultSet, rowNumber) -> combo(resultSet), id, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     // Ánh xạ hàng SQL sang dữ liệu combo.
-    private static ComboRow combo(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new ComboRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getInt("version"),
-            rs.getObject("room_type_id", UUID.class), rs.getString("name"), rs.getInt("duration_minutes"),
-            rs.getBigDecimal("price"), rs.getBigDecimal("deposit_required"), rs.getBigDecimal("overtime_hourly_price"),
-            instant(rs, "valid_from"), instant(rs, "valid_to"), rs.getInt("included_fnb_quantity"),
-            rs.getInt("included_food_quantity"));
+    private static ComboRow combo(java.sql.ResultSet resultSet) throws java.sql.SQLException {
+        return new ComboRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getInt("version"),
+            resultSet.getObject("room_type_id", UUID.class), resultSet.getString("name"), resultSet.getInt("duration_minutes"),
+            resultSet.getBigDecimal("price"), resultSet.getBigDecimal("deposit_required"), resultSet.getBigDecimal("overtime_hourly_price"),
+            instant(resultSet, "valid_from"), instant(resultSet, "valid_to"), resultSet.getInt("included_fnb_quantity"),
+            resultSet.getInt("included_food_quantity"));
     }
 
     // Lấy các rule giá có thể bao phủ khoảng ngày cần báo giá.
@@ -200,12 +200,12 @@ public class BookingRepository {
             ORDER BY (branch_id IS NOT NULL) DESC,priority DESC,
                      CASE day_kind WHEN 'SPECIFIC' THEN 4 WHEN 'HOLIDAY' THEN 3 WHEN 'WEEKEND' THEN 2 WHEN 'WEEKDAY' THEN 2 ELSE 1 END DESC,
                      id
-            """, (rs, rowNum) -> new PricingRule(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getObject("branch_id", UUID.class), rs.getObject("valid_from", LocalDate.class),
-                rs.getObject("valid_to", LocalDate.class), rs.getString("day_kind"),
-                rs.getObject("specific_date", LocalDate.class), rs.getInt("minute_from"), rs.getInt("minute_to"),
-                rs.getBigDecimal("hourly_price"), rs.getBigDecimal("overtime_hourly_price"),
-                rs.getInt("billing_step_minutes"), rs.getInt("priority")), roomTypeId, branchId,
+            """, (resultSet, rowNumber) -> new PricingRule(resultSet.getObject("id", UUID.class), resultSet.getString("name"),
+                resultSet.getObject("branch_id", UUID.class), resultSet.getObject("valid_from", LocalDate.class),
+                resultSet.getObject("valid_to", LocalDate.class), resultSet.getString("day_kind"),
+                resultSet.getObject("specific_date", LocalDate.class), resultSet.getInt("minute_from"), resultSet.getInt("minute_to"),
+                resultSet.getBigDecimal("hourly_price"), resultSet.getBigDecimal("overtime_hourly_price"),
+                resultSet.getInt("billing_step_minutes"), resultSet.getInt("priority")), roomTypeId, branchId,
                 endDate, startDate, startDate, endDate);
     }
 
@@ -214,9 +214,9 @@ public class BookingRepository {
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE r.branch_id=? ORDER BY r.code
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), branchId);
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), branchId);
     }
 
     // BR-03, BR-04: đặt trước theo khoảng lịch; khách hiện tại không chặn lịch sau giờ trả dự kiến.
@@ -232,9 +232,9 @@ public class BookingRepository {
                   AND a.starts_at < ? AND a.ends_at > ?
               )
             ORDER BY r.code
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), branchId, roomTypeId, ts(end), ts(start));
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), branchId, roomTypeId, ts(end), ts(start));
     }
 
     // Tìm phòng trống nhưng bỏ qua allocation của booking đang sửa.
@@ -257,9 +257,9 @@ public class BookingRepository {
                        OR (a.starts_at < ? AND a.ends_at > ?))
               )
             ORDER BY rt.name,r.code
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), branchId, excludeBookingId, requireVacantNow, ts(end), ts(start));
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), branchId, excludeBookingId, requireVacantNow, ts(end), ts(start));
     }
 
     // Khóa hàng phòng trước khi đổi để giảm tranh chấp đồng thời.
@@ -269,9 +269,9 @@ public class BookingRepository {
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE r.id=? AND r.branch_id=? AND r.operating_status='AVAILABLE' AND rt.active=true
             FOR UPDATE OF r
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), roomId, branchId);
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), roomId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -282,9 +282,9 @@ public class BookingRepository {
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE r.id=? AND r.branch_id=? AND rt.active=true
             FOR UPDATE OF r
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), roomId, branchId);
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), roomId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -294,9 +294,9 @@ public class BookingRepository {
             SELECT r.id,r.code,r.name,r.capacity,r.operating_status,r.room_type_id,rt.name AS room_type_name
             FROM gcmb.room r JOIN gcmb.room_type rt ON rt.id=r.room_type_id
             WHERE r.id=? AND r.branch_id=? AND r.operating_status='AVAILABLE' AND rt.active=true
-            """, (rs, rowNum) -> new RoomRow(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getInt("capacity"), rs.getString("operating_status"), rs.getObject("room_type_id", UUID.class),
-                rs.getString("room_type_name")), roomId, branchId);
+            """, (resultSet, rowNumber) -> new RoomRow(resultSet.getObject("id", UUID.class), resultSet.getString("code"), resultSet.getString("name"),
+                resultSet.getInt("capacity"), resultSet.getString("operating_status"), resultSet.getObject("room_type_id", UUID.class),
+                resultSet.getString("room_type_name")), roomId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -329,7 +329,7 @@ public class BookingRepository {
             WHERE a.room_id=? AND a.booking_id<>? AND a.state IN ('RESERVED','OCCUPIED')
               AND b.status IN ('CONFIRMED','IN_HOUSE') AND a.starts_at>=?
             ORDER BY a.starts_at LIMIT 1
-            """, (rs, i) -> instant(rs, "starts_at"), roomId, excludeBookingId, ts(after));
+            """, (resultSet, rowNumber) -> instant(resultSet, "starts_at"), roomId, excludeBookingId, ts(after));
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -352,8 +352,8 @@ public class BookingRepository {
         List<ComboGiftRequirements> rows = jdbcTemplate.query("""
             SELECT combo_included_drink_quantity,combo_included_food_quantity
             FROM gcmb.booking WHERE id=? AND branch_id=?
-            """,(rs,n)->new ComboGiftRequirements(rs.getInt("combo_included_drink_quantity"),
-                rs.getInt("combo_included_food_quantity")),bookingId,branchId);
+            """,(resultSet, rowNumber) ->new ComboGiftRequirements(resultSet.getInt("combo_included_drink_quantity"),
+                resultSet.getInt("combo_included_food_quantity")),bookingId,branchId);
         return rows.isEmpty()?null:rows.get(0);
     }
 
@@ -444,11 +444,11 @@ public class BookingRepository {
             SELECT id,allocation_id,price_rule_id,started_at,billed_from,original_allocation_end,
                    reserved_until,hourly_price,status,stopped_at,billed_minutes,amount
             FROM gcmb.booking_hourly_meter WHERE booking_id=?
-            """, (rs, i) -> new MeterRow(rs.getObject("id", UUID.class), rs.getObject("allocation_id", UUID.class),
-                rs.getObject("price_rule_id", UUID.class), instant(rs, "started_at"), instant(rs, "billed_from"),
-                instant(rs, "original_allocation_end"), instant(rs, "reserved_until"), rs.getBigDecimal("hourly_price"),
-                rs.getString("status"), instant(rs, "stopped_at"), (Integer) rs.getObject("billed_minutes"),
-                rs.getBigDecimal("amount")), bookingId);
+            """, (resultSet, rowNumber) -> new MeterRow(resultSet.getObject("id", UUID.class), resultSet.getObject("allocation_id", UUID.class),
+                resultSet.getObject("price_rule_id", UUID.class), instant(resultSet, "started_at"), instant(resultSet, "billed_from"),
+                instant(resultSet, "original_allocation_end"), instant(resultSet, "reserved_until"), resultSet.getBigDecimal("hourly_price"),
+                resultSet.getString("status"), instant(resultSet, "stopped_at"), (Integer) resultSet.getObject("billed_minutes"),
+                resultSet.getBigDecimal("amount")), bookingId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -496,7 +496,7 @@ public class BookingRepository {
     // Khóa tài khoản cọc để các bút toán không ghi đè nhau.
     public UUID lockDeposit(UUID bookingId) {
         List<UUID> rows = jdbcTemplate.query("SELECT id FROM gcmb.deposit WHERE booking_id=? FOR UPDATE",
-            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId);
+            (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class), bookingId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -515,7 +515,7 @@ public class BookingRepository {
     public UUID lockBookingId(UUID bookingId, UUID branchId) {
         requireActiveBranch(branchId);
         List<UUID> rows = jdbcTemplate.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
-            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
+            (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -523,7 +523,7 @@ public class BookingRepository {
     public UUID lockBookingIdForRefund(UUID bookingId, UUID branchId) {
         if (jdbcTemplate.queryForList("SELECT id FROM gcmb.branch WHERE id=? FOR SHARE", UUID.class, branchId).isEmpty()) return null;
         List<UUID> rows = jdbcTemplate.query("SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
-            (rs, rowNum) -> rs.getObject("id", UUID.class), bookingId, branchId);
+            (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class), bookingId, branchId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -549,12 +549,12 @@ public class BookingRepository {
     }
 
     // Ánh xạ hàng SQL sang booking nội bộ.
-    private static BookingRow bookingRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
-        return new BookingRow(rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class), rs.getObject("room_type_id", UUID.class), rs.getString("code"),
-            rs.getString("contact_name"), rs.getString("contact_phone"), rs.getInt("guest_count"), rs.getString("channel"), instant(rs, "planned_start"),
-            instant(rs, "planned_end"), instant(rs, "actual_checkin"), instant(rs, "actual_checkout"), rs.getString("status"),
-            instant(rs, "cancelled_at"), rs.getString("cancellation_reason"), rs.getInt("refund_cutoff_minutes"),
-            rs.getObject("created_by", UUID.class), rs.getString("note"), instant(rs, "created_at"));
+    private static BookingRow bookingRow(java.sql.ResultSet resultSet, int rowNumber) throws java.sql.SQLException {
+        return new BookingRow(resultSet.getObject("id", UUID.class), resultSet.getObject("branch_id", UUID.class), resultSet.getObject("room_type_id", UUID.class), resultSet.getString("code"),
+            resultSet.getString("contact_name"), resultSet.getString("contact_phone"), resultSet.getInt("guest_count"), resultSet.getString("channel"), instant(resultSet, "planned_start"),
+            instant(resultSet, "planned_end"), instant(resultSet, "actual_checkin"), instant(resultSet, "actual_checkout"), resultSet.getString("status"),
+            instant(resultSet, "cancelled_at"), resultSet.getString("cancellation_reason"), resultSet.getInt("refund_cutoff_minutes"),
+            resultSet.getObject("created_by", UUID.class), resultSet.getString("note"), instant(resultSet, "created_at"));
     }
 
     // Lấy toàn bộ lịch sử các chặng phòng của booking.
@@ -569,11 +569,11 @@ public class BookingRepository {
     }
 
     // Ánh xạ hàng SQL sang chặng phòng nội bộ.
-    private static AllocationRow allocationRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
-        return new AllocationRow(rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
-            rs.getObject("room_id", UUID.class), rs.getObject("room_type_id", UUID.class), rs.getString("room_code"), rs.getString("room_name"),
-            rs.getString("room_type_name"), rs.getString("operating_status"),
-            instant(rs, "starts_at"), instant(rs, "ends_at"), rs.getString("state"), rs.getString("change_reason"), instant(rs, "created_at"));
+    private static AllocationRow allocationRow(java.sql.ResultSet resultSet, int rowNumber) throws java.sql.SQLException {
+        return new AllocationRow(resultSet.getObject("id", UUID.class), resultSet.getObject("booking_id", UUID.class),
+            resultSet.getObject("room_id", UUID.class), resultSet.getObject("room_type_id", UUID.class), resultSet.getString("room_code"), resultSet.getString("room_name"),
+            resultSet.getString("room_type_name"), resultSet.getString("operating_status"),
+            instant(resultSet, "starts_at"), instant(resultSet, "ends_at"), resultSet.getString("state"), resultSet.getString("change_reason"), instant(resultSet, "created_at"));
     }
 
     // Ghi dòng phí với snapshot giá để đối soát về sau.
@@ -597,9 +597,9 @@ public class BookingRepository {
             SELECT id,allocation_id,kind,description,quantity,unit_price,amount,status,price_rule_id,combo_id,
                    pricing_snapshot::text AS snapshot,created_at
             FROM gcmb.booking_charge WHERE booking_id=? ORDER BY created_at,id
-            """, (rs, rowNum) -> new ChargeRow(rs.getObject("id", UUID.class), rs.getObject("allocation_id", UUID.class), rs.getString("kind"), rs.getString("description"),
-                rs.getBigDecimal("quantity"), rs.getBigDecimal("unit_price"), rs.getBigDecimal("amount"), rs.getString("status"),
-                rs.getObject("price_rule_id", UUID.class), rs.getObject("combo_id", UUID.class), rs.getString("snapshot"), instant(rs, "created_at")), bookingId);
+            """, (resultSet, rowNumber) -> new ChargeRow(resultSet.getObject("id", UUID.class), resultSet.getObject("allocation_id", UUID.class), resultSet.getString("kind"), resultSet.getString("description"),
+                resultSet.getBigDecimal("quantity"), resultSet.getBigDecimal("unit_price"), resultSet.getBigDecimal("amount"), resultSet.getString("status"),
+                resultSet.getObject("price_rule_id", UUID.class), resultSet.getObject("combo_id", UUID.class), resultSet.getString("snapshot"), instant(resultSet, "created_at")), bookingId);
     }
 
     // Lấy các dòng phí còn hiệu lực của một chặng phòng.
@@ -608,10 +608,10 @@ public class BookingRepository {
             SELECT id,allocation_id,kind,description,quantity,unit_price,amount,status,price_rule_id,combo_id,
                    pricing_snapshot::text AS snapshot,created_at
             FROM gcmb.booking_charge WHERE allocation_id=? AND status='ACTIVE' ORDER BY created_at,id
-            """, (rs, rowNum) -> new ChargeRow(rs.getObject("id", UUID.class), rs.getObject("allocation_id", UUID.class),
-                rs.getString("kind"), rs.getString("description"), rs.getBigDecimal("quantity"), rs.getBigDecimal("unit_price"),
-                rs.getBigDecimal("amount"), rs.getString("status"), rs.getObject("price_rule_id", UUID.class),
-                rs.getObject("combo_id", UUID.class), rs.getString("snapshot"), instant(rs, "created_at")), allocationId);
+            """, (resultSet, rowNumber) -> new ChargeRow(resultSet.getObject("id", UUID.class), resultSet.getObject("allocation_id", UUID.class),
+                resultSet.getString("kind"), resultSet.getString("description"), resultSet.getBigDecimal("quantity"), resultSet.getBigDecimal("unit_price"),
+                resultSet.getBigDecimal("amount"), resultSet.getString("status"), resultSet.getObject("price_rule_id", UUID.class),
+                resultSet.getObject("combo_id", UUID.class), resultSet.getString("snapshot"), instant(resultSet, "created_at")), allocationId);
     }
 
     // Đánh dấu dòng phí cũ bị thay thế khi tách giá đổi phòng.
@@ -661,7 +661,7 @@ public class BookingRepository {
             SELECT COALESCE(v.balance,0) AS balance
             FROM gcmb.deposit d LEFT JOIN gcmb.v_deposit_balance v ON v.id=d.id
             WHERE d.booking_id=?
-            """, (rs, rowNum) -> rs.getBigDecimal("balance"), bookingId);
+            """, (resultSet, rowNumber) -> resultSet.getBigDecimal("balance"), bookingId);
         return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
     }
 
@@ -716,7 +716,7 @@ public class BookingRepository {
             WHERE booking_id=? AND event_type='BOOKING_CANCELLED'
             ORDER BY created_at DESC,id DESC
             LIMIT 1
-            """, (rs, rowNum) -> rs.getString(1), bookingId);
+            """, (resultSet, rowNumber) -> resultSet.getString(1), bookingId);
         String outcome = outcomes.isEmpty() ? null : outcomes.get(0);
         if (outcome != null) return outcome;
         return jdbcTemplate.queryForObject("""
@@ -749,7 +749,7 @@ public class BookingRepository {
             JOIN gcmb.payment p ON p.id=e.payment_id
             WHERE d.booking_id=?
             ORDER BY p.method
-            """, (rs, rowNum) -> rs.getString("method"), bookingId);
+            """, (resultSet, rowNumber) -> resultSet.getString("method"), bookingId);
         if (methods.isEmpty()) return null;
         return methods.size() == 1 ? methods.get(0) : "MULTIPLE";
     }
@@ -827,12 +827,12 @@ public class BookingRepository {
             """;
         String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,COALESCE(rt.name,requested_rt.name) room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new BookingDtos.BookingSummary(rs.getObject("id", UUID.class), rs.getString("code"),
-            rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("channel"), instant(rs, "planned_start"),
-            instant(rs, "planned_end"), instant(rs, "actual_checkin"), rs.getString("status"), rs.getObject("room_id", UUID.class), rs.getString("room_code"),
-            rs.getString("room_name"), rs.getString("room_type_name"), rs.getBigDecimal("expected_amount"), rs.getBigDecimal("deposit_balance"),
-            rs.getBigDecimal("deposit_received_amount"),
-            rs.getInt("guest_count"), rs.getString("room_operating_status")), params.toArray());
+        return jdbcTemplate.query(sql, (resultSet, rowNumber) -> new BookingDtos.BookingSummary(resultSet.getObject("id", UUID.class), resultSet.getString("code"),
+            resultSet.getString("contact_name"), resultSet.getString("contact_phone"), resultSet.getString("channel"), instant(resultSet, "planned_start"),
+            instant(resultSet, "planned_end"), instant(resultSet, "actual_checkin"), resultSet.getString("status"), resultSet.getObject("room_id", UUID.class), resultSet.getString("room_code"),
+            resultSet.getString("room_name"), resultSet.getString("room_type_name"), resultSet.getBigDecimal("expected_amount"), resultSet.getBigDecimal("deposit_balance"),
+            resultSet.getBigDecimal("deposit_received_amount"),
+            resultSet.getInt("guest_count"), resultSet.getString("room_operating_status")), params.toArray());
     }
 
     // Đếm booking theo cùng bộ lọc để tính tổng số trang.

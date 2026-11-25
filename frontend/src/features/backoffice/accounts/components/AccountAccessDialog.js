@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../../auth/services/authApi';
 import { accountAccessApi, roleNames } from '../services/accountAccessApi';
-import '../styles/accountAccess.css';
+import '../styles/account-access.css';
 
 export default function AccountAccessDialog({
   account,

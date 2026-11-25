@@ -9,8 +9,8 @@ package com.gcmb.backend.booking.service;
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.auth.service.AuthValidation;
+import com.gcmb.backend.booking.repository.TaxInvoiceRepository;
 import java.util.*;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -19,11 +19,11 @@ import tools.jackson.databind.ObjectMapper;
 @Transactional
 public class TaxInvoiceService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final TaxInvoiceRepository taxInvoiceRepository;
     private final ObjectMapper objectMapper;
 
-    public TaxInvoiceService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
-        this.jdbcTemplate = jdbcTemplate;
+    public TaxInvoiceService(TaxInvoiceRepository taxInvoiceRepository, ObjectMapper objectMapper) {
+        this.taxInvoiceRepository = taxInvoiceRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -55,122 +55,73 @@ public class TaxInvoiceService {
         "UNREACHABLE",
         "SEND_FAILED"
     );
-    private static final String SELECT = """
-        SELECT t.booking_id AS "bookingId",b.code AS "bookingCode",b.contact_name AS customer,
-          b.branch_id AS "branchId",br.name AS "branchName",t.buyer_name AS "buyerName",
-          t.tax_code AS "taxCode",t.buyer_address AS "buyerAddress",t.contact_email AS "contactEmail",
-          t.status,t.note,t.delivery_result AS "deliveryResult",t.version,
-          t.created_at AS "createdAt",t.updated_at AS "updatedAt"
-        FROM gcmb.tax_invoice_request t JOIN gcmb.booking b ON b.id=t.booking_id
-        JOIN gcmb.branch br ON br.id=b.branch_id
-        """;
 
-    private void authorize(Identity actor, boolean reception) {
+    private void authorize(Identity actor, boolean receptionOnly) {
         if (
             actor == null ||
-            !(reception
+            !(receptionOnly
                 ? "RECEPTIONIST".equals(actor.role())
                 : Set.of("RECEPTIONIST", "ACCOUNTANT").contains(actor.role()))
         ) throw denied();
-        if (
-            !Boolean.TRUE.equals(
-                jdbcTemplate.queryForObject(
-                    "SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=? AND u.status='ACTIVE' AND r.code=? AND (r.code='ACCOUNTANT' OR u.branch_id=?))",
-                    Boolean.class,
-                    actor.id(),
-                    actor.role(),
-                    actor.branchId()
-                )
-            )
-        ) throw denied();
+        if (!taxInvoiceRepository.isActiveAccountInScope(actor.id(), actor.role(), actor.branchId())) throw denied();
     }
 
-    private Map<String, Object> booking(Identity actor, UUID id, boolean writing) {
+    private Map<String, Object> booking(Identity actor, UUID bookingId, boolean writing) {
         authorize(actor, false);
-        var rows = jdbcTemplate.queryForList(
-            "SELECT b.id,b.code,b.branch_id,br.name,br.status FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id WHERE b.id=?" +
-                (writing ? " FOR UPDATE OF b FOR SHARE OF br" : ""),
-            id
-        );
+        var rows = taxInvoiceRepository.findBookingWithBranch(bookingId, writing);
         if (rows.isEmpty()) throw new AuthFailure(404, "form", "Không tìm thấy booking.");
-        var b = rows.get(0);
+        var bookingRow = rows.get(0);
         if (
             "RECEPTIONIST".equals(actor.role()) &&
-            !Objects.equals(actor.branchId(), b.get("branch_id"))
+            !Objects.equals(actor.branchId(), bookingRow.get("branch_id"))
         ) throw denied();
         // BR-177 / MSG43: cơ sở tạm ngừng vẫn xem được yêu cầu và lịch sử.
-        if (writing && !"ACTIVE".equals(b.get("status"))) throw new AuthFailure(
+        if (writing && !"ACTIVE".equals(bookingRow.get("status"))) throw new AuthFailure(
             403,
             "form",
             "Cơ sở " +
-                b.get("name") +
+                bookingRow.get("name") +
                 " đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi."
         );
-        return b;
+        return bookingRow;
     }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list(Identity actor) {
         authorize(actor, false);
-        return jdbcTemplate.queryForList(
-            SELECT +
-                " WHERE (?='ACCOUNTANT' OR b.branch_id=?) ORDER BY t.updated_at DESC,t.booking_id",
-            actor.role(),
-            actor.branchId()
-        );
+        return taxInvoiceRepository.findRequestsInScope(actor.role(), actor.branchId());
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> detail(Identity actor, UUID id) {
-        var b = booking(actor, id, false);
-        var rows = jdbcTemplate.queryForList(SELECT + " WHERE t.booking_id=?", id);
+    public Map<String, Object> detail(Identity actor, UUID bookingId) {
+        var bookingRow = booking(actor, bookingId, false);
+        var requests = taxInvoiceRepository.findRequest(bookingId);
         var result = new LinkedHashMap<String, Object>();
-        result.put("bookingId", id);
-        result.put("bookingCode", b.get("code"));
+        result.put("bookingId", bookingId);
+        result.put("bookingCode", bookingRow.get("code"));
         // UC-127: the booking already uniquely identifies its checkout bill.
-        var bills = jdbcTemplate.queryForList("""
-            SELECT b.id,b.number,b.status,b.net_amount AS amount,b.checkout_at AS "checkoutAt",
-                k.contact_name AS customer,k.actual_checkin AS checkin,
-                COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
-                    WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
-                COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
-                COALESCE((SELECT sum(p.amount) FROM gcmb.payment p WHERE p.bill_id=b.id
-                    AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)),0) AS paid
-            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id WHERE b.booking_id=?
-            """, id);
+        var bills = taxInvoiceRepository.findBillsForBooking(bookingId);
         result.put("bill", null);
         if (!bills.isEmpty()) {
             var bill = bills.get(0);
-            bill.put("lines", jdbcTemplate.queryForList("""
-                SELECT l.description,l.quantity,l.amount,
-                    CASE WHEN l.order_line_id IS NOT NULL THEN 'FNB'
-                        WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category
-                FROM gcmb.bill_line l LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
-                WHERE l.bill_id=? ORDER BY l.created_at,l.id
-                """, bill.get("id")));
+            bill.put("lines", taxInvoiceRepository.findBillLines(bill.get("id")));
             result.put("bill", bill);
         }
-        result.put("request", rows.isEmpty() ? null : rows.get(0));
-        result.put(
-            "history",
-            jdbcTemplate.queryForList(
-                "SELECT action,after_data::text AS data,created_at AS \"createdAt\" FROM gcmb.audit_event WHERE entity_type='TAX_INVOICE_REQUEST' AND entity_id=? ORDER BY created_at,id",
-                id
-            )
-        );
+        result.put("request", requests.isEmpty() ? null : requests.get(0));
+        result.put("history", taxInvoiceRepository.findHistory(bookingId));
         return result;
     }
 
-    public Map<String, Object> create(Identity actor, UUID id, Request input) {
+    public Map<String, Object> create(Identity actor, UUID bookingId, Request input) {
         authorize(actor, true); // Lễ tân tiếp nhận yêu cầu của khách và gửi kế toán.
-        var b = booking(actor, id, true);
+        var bookingRow = booking(actor, bookingId, true);
         if (input == null) throw new AuthFailure(
             400,
             "form",
             "Vui lòng bổ sung thông tin yêu cầu hóa đơn."
         );
         // BR-111/113; MSG02/03/05. Request snapshot is retained for external handling.
-        String buyer = AuthValidation.required(
+        String buyerName = AuthValidation.required(
             input.buyerName(),
             "buyerName",
             "tên người mua / đơn vị",
@@ -179,51 +130,40 @@ public class TaxInvoiceService {
         );
         String email = optional(input.contactEmail(), "contactEmail", "Email", 254);
         if (!email.isEmpty()) email = AuthValidation.email(email);
-        if (
-            !jdbcTemplate
-                .queryForList(
-                    "SELECT booking_id FROM gcmb.tax_invoice_request WHERE booking_id=?",
-                    id
-                )
-                .isEmpty()
-        ) throw new AuthFailure(
+        if (taxInvoiceRepository.requestExists(bookingId)) throw new AuthFailure(
             409,
             "form",
             "Booking đã có yêu cầu hóa đơn. Vui lòng xem yêu cầu hiện có."
         );
-        jdbcTemplate.update(
-            "INSERT INTO gcmb.tax_invoice_request(booking_id,buyer_name,tax_code,buyer_address,contact_email,note,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?)",
-            id,
-            buyer,
+        taxInvoiceRepository.insertRequest(
+            bookingId,
+            buyerName,
             optional(input.taxCode(), "taxCode", "Mã số thuế", 30),
             optional(input.buyerAddress(), "buyerAddress", "Địa chỉ", 2000),
             email,
             optional(input.note(), "note", "Ghi chú", 2000),
-            actor.id(),
             actor.id()
         );
-        audit(actor, id, b, "CREATE_TAX_INVOICE_REQUEST");
-        return detail(actor, id); // Yêu cầu mới đồng thời xuất hiện trong hộp thông báo của kế toán.
+        audit(actor, bookingId, bookingRow, "CREATE_TAX_INVOICE_REQUEST");
+        return detail(actor, bookingId); // Yêu cầu mới đồng thời xuất hiện trong hộp thông báo của kế toán.
     }
 
-    public Map<String, Object> progress(Identity actor, UUID id, Progress input) {
+    public Map<String, Object> progress(Identity actor, UUID bookingId, Progress input) {
         // UC-127 / BR-125: theo phân công mới của người dùng, chỉ kế toán được cập nhật tiến độ.
         authorize(actor, false);
         if (!"ACCOUNTANT".equals(actor.role())) throw denied(); // MSG24, áp dụng cả khi gọi trực tiếp service.
-        var b = booking(actor, id, true);
-        var rows = jdbcTemplate.queryForList(
-            "SELECT version,status,delivery_result FROM gcmb.tax_invoice_request WHERE booking_id=? FOR UPDATE",
-            id
-        );
+        var bookingRow = booking(actor, bookingId, true);
+        var rows = taxInvoiceRepository.lockRequestProgress(bookingId);
         if (rows.isEmpty()) throw new AuthFailure(
             404,
             "form",
             "Booking chưa có yêu cầu hóa đơn thuế."
         );
+        var current = rows.get(0);
         if (
             input == null ||
             input.version() == null ||
-            input.version().longValue() != ((Number) rows.get(0).get("version")).longValue()
+            input.version().longValue() != ((Number) current.get("version")).longValue()
         ) throw new AuthFailure(
             409,
             "form",
@@ -234,80 +174,55 @@ public class TaxInvoiceService {
             "status",
             "Vui lòng bổ sung trạng thái xử lý hợp lệ."
         );
-        String delivery = optional(
+        String deliveryResult = optional(
             input.deliveryResult(),
             "deliveryResult",
             "Kết quả giao hóa đơn",
             2000
         );
-        if (Set.of("DELIVERED", "DELIVERY_FAILED").contains(input.status())) delivery =
-            AuthValidation.required(delivery, "deliveryResult", "kết quả giao hóa đơn", 2000, true);
+        if (Set.of("DELIVERED", "DELIVERY_FAILED").contains(input.status())) deliveryResult =
+            AuthValidation.required(deliveryResult, "deliveryResult", "kết quả giao hóa đơn", 2000, true);
         // UC-127 theo yêu cầu đã chốt: dùng lựa chọn kết quả cố định, không nhập ghi chú xử lý.
         boolean allowed = "DELIVERED".equals(input.status())
-            ? DELIVERED_RESULTS.contains(delivery)
+            ? DELIVERED_RESULTS.contains(deliveryResult)
             : "DELIVERY_FAILED".equals(input.status())
-              ? FAILED_RESULTS.contains(delivery)
-              : delivery.isEmpty();
+              ? FAILED_RESULTS.contains(deliveryResult)
+              : deliveryResult.isEmpty();
         // Giữ nguyên văn kết quả cũ khi trạng thái/kết quả không đổi, không biến dữ liệu lịch sử thành lỗi.
         boolean unchanged =
-            Objects.equals(input.status(), rows.get(0).get("status")) &&
-            Objects.equals(delivery, rows.get(0).get("delivery_result"));
+            Objects.equals(input.status(), current.get("status")) &&
+            Objects.equals(deliveryResult, current.get("delivery_result"));
         if (!allowed && !unchanged) throw new AuthFailure(
             400,
             "deliveryResult",
             "Vui lòng chọn kết quả giao hóa đơn phù hợp với trạng thái xử lý."
         );
-        jdbcTemplate.update(
-            "UPDATE gcmb.tax_invoice_request SET status=?,delivery_result=?,version=version+1,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE booking_id=?",
-            input.status(),
-            delivery,
-            actor.id(),
-            id
-        );
-        audit(actor, id, b, "UPDATE_TAX_INVOICE_REQUEST");
-        return detail(actor, id);
+        taxInvoiceRepository.updateProgress(bookingId, input.status(), deliveryResult, actor.id());
+        audit(actor, bookingId, bookingRow, "UPDATE_TAX_INVOICE_REQUEST");
+        return detail(actor, bookingId);
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> unread(Identity actor) {
         authorize(actor, false);
         if (!"ACCOUNTANT".equals(actor.role())) throw denied();
-        return Map.of(
-            "count",
-            jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM gcmb.tax_invoice_request t WHERE NOT EXISTS(SELECT 1 FROM gcmb.tax_invoice_read r WHERE r.booking_id=t.booking_id AND r.user_id=?)",
-                Long.class,
-                actor.id()
-            )
-        );
+        return Map.of("count", taxInvoiceRepository.countUnread(actor.id()));
     }
 
-    public void read(Identity actor, UUID id) {
+    public void read(Identity actor, UUID bookingId) {
         authorize(actor, false);
         if (!"ACCOUNTANT".equals(actor.role())) throw denied();
-        if (
-            jdbcTemplate
-                .queryForList(
-                    "SELECT booking_id FROM gcmb.tax_invoice_request WHERE booking_id=?",
-                    id
-                )
-                .isEmpty()
-        ) throw new AuthFailure(404, "form", "Không tìm thấy yêu cầu hóa đơn.");
-        jdbcTemplate.update(
-            "INSERT INTO gcmb.tax_invoice_read(booking_id,user_id) VALUES (?,?) ON CONFLICT DO NOTHING",
-            id,
-            actor.id()
-        );
+        if (!taxInvoiceRepository.requestExists(bookingId)) throw new AuthFailure(404, "form", "Không tìm thấy yêu cầu hóa đơn.");
+        taxInvoiceRepository.markRead(bookingId, actor.id());
     }
 
-    private void audit(Identity actor, UUID id, Map<String, Object> b, String action) {
-        var after = jdbcTemplate.queryForMap(SELECT + " WHERE t.booking_id=?", id);
-        jdbcTemplate.update(
-            "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data) VALUES (?,?,?,'TAX_INVOICE_REQUEST',?,CAST(? AS jsonb))",
+    private void audit(Identity actor, UUID bookingId, Map<String, Object> bookingRow, String action) {
+        var after = taxInvoiceRepository.getRequest(bookingId);
+        taxInvoiceRepository.insertAudit(
             actor.id(),
-            b.get("branch_id"),
+            bookingRow.get("branch_id"),
             action,
-            id,
+            bookingId,
             objectMapper.writeValueAsString(after)
         );
     }

@@ -12,6 +12,7 @@ import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.booking.dto.CheckoutDtos.*;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
+import com.gcmb.backend.booking.repository.CheckoutRepository;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
@@ -27,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -36,7 +36,7 @@ import tools.jackson.databind.ObjectMapper;
 public class CheckoutService {
 
     private final byte[] quoteKey = new java.security.SecureRandom().generateSeed(32);
-    private final JdbcTemplate jdbcTemplate;
+    private final CheckoutRepository checkoutRepository;
     private final BookingRepository bookingRepository;
     private final BookingService bookingService;
     private final SePaySettings sePaySettings;
@@ -45,7 +45,7 @@ public class CheckoutService {
     private final FinancialPeriodService financialPeriodService;
 
     public CheckoutService(
-        JdbcTemplate jdbcTemplate,
+        CheckoutRepository checkoutRepository,
         BookingRepository bookingRepository,
         BookingService bookingService,
         SePaySettings sePaySettings,
@@ -53,7 +53,7 @@ public class CheckoutService {
         FoodOrderService foodOrderService,
         FinancialPeriodService financialPeriodService
     ) {
-        this.jdbcTemplate = jdbcTemplate;
+        this.checkoutRepository = checkoutRepository;
         this.bookingRepository = bookingRepository;
         this.bookingService = bookingService;
         this.sePaySettings = sePaySettings;
@@ -93,39 +93,29 @@ public class CheckoutService {
         if (amount.signum() <= 0 || reviewedAmount == null || amount.compareTo(reviewedAmount) != 0) {
             throw fail(409, "Số tiền cọc đã thay đổi. Vui lòng tải lại trước khi xác nhận.");
         }
-        java.time.LocalDate day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-        financialPeriodService.requireOpen(day, "ghi nhận tiền cọc");
-        jdbcTemplate.update("INSERT INTO gcmb.financial_period(month,status) VALUES (?,'OPEN') ON CONFLICT(month) DO NOTHING", day.withDayOfMonth(1));
-        var period = jdbcTemplate.queryForMap("SELECT id,status FROM gcmb.financial_period WHERE month=? FOR SHARE", day.withDayOfMonth(1));
+        java.time.LocalDate businessDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        financialPeriodService.requireOpen(businessDate, "ghi nhận tiền cọc");
+        var period = checkoutRepository.ensureAndLockFinancialPeriod(businessDate.withDayOfMonth(1));
         if (!"OPEN".equals(period.get("status"))) throw fail(409, "Kỳ tài chính đã đóng, chưa thể ghi nhận cọc.");
         // HuyDV: sổ chuyển khoản ngoài hệ thống, không yêu cầu cấu hình tài khoản ngân hàng thực tế.
         String accountCode = "EXTERNAL-DEPOSIT-" + branchId;
-        jdbcTemplate.update("""
-            INSERT INTO gcmb.financial_account(code,name,kind,branch_id,active)
-            VALUES (?,'Cọc chuyển khoản nhận ngoài hệ thống','BANK',?,true)
-            ON CONFLICT(code) DO NOTHING
-            """, accountCode, branchId);
-        UUID account = jdbcTemplate.queryForObject("SELECT id FROM gcmb.financial_account WHERE code=? AND branch_id=? AND kind='BANK'",
-            UUID.class, accountCode, branchId);
-        jdbcTemplate.update("UPDATE gcmb.payment_request SET status='CANCELLED' WHERE booking_id=? AND purpose='DEPOSIT' AND status IN ('PENDING','EXPIRED')", bookingId);
+        UUID accountId = checkoutRepository.ensureExternalDepositAccount(accountCode, branchId);
+        checkoutRepository.cancelOpenDepositRequests(bookingId);
         bookingRepository.receiveDeposit(branchId, bookingId, actor.id(), amount, "MANUAL_TRANSFER", content);
-        UUID paymentId = jdbcTemplate.queryForObject("SELECT p.id FROM gcmb.payment p WHERE p.booking_id=? AND p.purpose='DEPOSIT' ORDER BY p.created_at DESC LIMIT 1", UUID.class, bookingId);
-        UUID transaction = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO gcmb.financial_transaction(id,period_id,booking_date,occurred_at,kind,payment_id,reason,created_by,idempotency_key) VALUES (?,?,?,CURRENT_TIMESTAMP,'PAYMENT',?,?,?,?)", transaction, period.get("id"), day, paymentId, content, actor.id(), "MANUAL-DEPOSIT-"+paymentId);
-        jdbcTemplate.update("INSERT INTO gcmb.financial_entry(transaction_id,account_id,branch_id,amount_signed) VALUES (?,?,?,?)", transaction, account, branchId, amount);
+        UUID paymentId = checkoutRepository.findLatestDepositPaymentId(bookingId);
+        UUID transactionId = UUID.randomUUID();
+        checkoutRepository.insertFinancialTransaction(transactionId, period.get("id"), businessDate, paymentId, content,
+            actor.id(), "MANUAL-DEPOSIT-" + paymentId);
+        checkoutRepository.insertFinancialEntry(transactionId, accountId, branchId, amount);
         bookingRepository.event(bookingId, actor.id(), "CONFIRM_MANUAL_DEPOSIT", null, Map.of("amount", amount, "reference", content));
         return depositStatus(actor, bookingId);
     }
 
     public Map<String, Object> preview(Identity actor, UUID bookingId) {
-        UUID branch = branch(actor);
-        var booking = bookingRepository.booking(bookingId, branch);
+        UUID branchId = branch(actor);
+        var booking = bookingRepository.booking(bookingId, branchId);
         if (booking == null) throw fail(404, "Không tìm thấy booking trong cơ sở của bạn.");
-        var bills = jdbcTemplate.queryForList(
-            "SELECT id FROM gcmb.bill WHERE booking_id=? AND branch_id=?",
-            bookingId,
-            branch
-        );
+        var bills = checkoutRepository.findBillIdsByBooking(bookingId, branchId);
         if (!bills.isEmpty()) return bill(actor, (UUID) bills.get(0).get("id"));
         requireInHouse(booking.status());
         var result = new LinkedHashMap<String, Object>();
@@ -168,24 +158,17 @@ public class CheckoutService {
     }
 
     public List<Map<String, Object>> list(Identity actor) {
-        return jdbcTemplate.queryForList(
-            """
-            SELECT b.id,b.number,b.status,b.net_amount AS amount,k.contact_name AS customer
-            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id
-            WHERE b.branch_id=? ORDER BY b.created_at DESC LIMIT 100
-            """,
-            branch(actor)
-        );
+        return checkoutRepository.findRecentBills(branch(actor));
     }
 
     // BR-01/13/20/21/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-22 tạm hoãn; BR-125 được theo dõi độc lập trong TaxInvoiceService).
     @Transactional
     public Map<String, Object> issue(Identity actor, UUID bookingId, Issue input) {
-        UUID branch = branch(actor);
-        lockBooking(bookingId, branch);
-        var existing = jdbcTemplate.queryForList("SELECT id FROM gcmb.bill WHERE booking_id=?", bookingId);
+        UUID branchId = branch(actor);
+        lockBooking(bookingId, branchId);
+        var existing = checkoutRepository.findBillIdsByBooking(bookingId);
         if (!existing.isEmpty()) return bill(actor, (UUID) existing.get(0).get("id"));
-        var booking = bookingRepository.booking(bookingId, branch);
+        var booking = bookingRepository.booking(bookingId, branchId);
         requireInHouse(booking.status());
         if (input == null || !input.inspected()) throw fail(
             400,
@@ -195,7 +178,7 @@ public class CheckoutService {
             400,
             "Ghi chú kiểm tra phòng chỉ được chứa tối đa 2000 ký tự."
         );
-        UUID deposit = bookingRepository.lockDeposit(bookingId);
+        UUID depositId = bookingRepository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(
             409,
             "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill."
@@ -210,16 +193,16 @@ public class CheckoutService {
         );
         // BR-164/170/215: chốt theo báo giá server đã ký, tối đa 5 phút để lễ tân đọc và xác nhận.
         // Không so với tiền chạy từng giây lúc POST vì sẽ khiến mọi báo giá vừa xem đều bị lệch.
-        Instant at = input.quotedAt();
+        Instant quotedAt = input.quotedAt();
         Instant now = Instant.now();
         if (
-            at == null ||
-            at.isAfter(now) ||
-            at.isBefore(now.minusSeconds(300)) ||
-            at.isBefore(booking.actualCheckin())
+            quotedAt == null ||
+            quotedAt.isAfter(now) ||
+            quotedAt.isBefore(now.minusSeconds(300)) ||
+            quotedAt.isBefore(booking.actualCheckin())
         ) throw fail(409, "Báo giá đã hết hiệu lực. Vui lòng cập nhật tiền phòng và xác nhận lại.");
-        financialPeriodService.requireOpen(at.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "lập bill");
-        var overtime = bookingService.checkoutOvertime(actor, bookingId, at);
+        financialPeriodService.requireOpen(quotedAt.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "lập bill");
+        var overtime = bookingService.checkoutOvertime(actor, bookingId, quotedAt);
         BigDecimal overtimeAmount = overtime
             .stream()
             .map(Overtime::amount)
@@ -230,48 +213,38 @@ public class CheckoutService {
                 input.overtimeAmount() == null ||
                 overtimeAmount.compareTo(input.overtimeAmount()) != 0)
         ) throw fail(409, "Vui lòng xác nhận tiền quá giờ theo báo giá mới nhất.");
-        String signed = quoteToken(
+        String signedToken = quoteToken(
             actor,
             bookingId,
-            at,
-            total(checkoutLines(actor, bookingId, at, overtime))
+            quotedAt,
+            total(checkoutLines(actor, bookingId, quotedAt, overtime))
         );
         if (
             input.quoteToken() == null ||
             !java.security.MessageDigest.isEqual(
-                signed.getBytes(StandardCharsets.UTF_8),
+                signedToken.getBytes(StandardCharsets.UTF_8),
                 input.quoteToken().getBytes(StandardCharsets.UTF_8)
             )
         ) throw fail(409, "Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
-        bookingService.settleCheckoutCharges(actor, bookingId, at, overtime);
+        bookingService.settleCheckoutCharges(actor, bookingId, quotedAt, overtime);
         if (input.surcharges() != null) {
             if (input.surcharges().size() > 20) throw fail(400, "Tối đa 20 phụ phí.");
-            for (var fee : input.surcharges()) {
+            for (var surcharge : input.surcharges()) {
                 if (
-                    fee == null ||
-                    fee.reason() == null ||
-                    fee.reason().isBlank()
+                    surcharge == null ||
+                    surcharge.reason() == null ||
+                    surcharge.reason().isBlank()
                 ) {
                     throw fail(400, "Vui lòng bổ sung lý do phụ phí.");
                 }
-                if (fee.reason().length() > 180) throw fail(
+                if (surcharge.reason().length() > 180) throw fail(
                     400, "Lý do phụ phí chỉ được chứa tối đa 180 ký tự."
                 );
-                if (fee.amount() != null && fee.amount().signum() <= 0) throw fail(
+                if (surcharge.amount() != null && surcharge.amount().signum() <= 0) throw fail(
                     400, "Phụ phí phải lớn hơn 0 đ."
                 );
-                money(fee.amount(), "Phụ phí");
-                jdbcTemplate.update(
-                    """
-                    INSERT INTO gcmb.booking_charge(booking_id,kind,description,quantity,unit_price,amount,pricing_snapshot,status)
-                    VALUES (?,'SURCHARGE',?,1,?,?,jsonb_build_object('source','CHECKOUT','reason',CAST(? AS text)),'ACTIVE')
-                    """,
-                    bookingId,
-                    fee.reason().trim(),
-                    fee.amount(),
-                    fee.amount(),
-                    fee.reason().trim()
-                );
+                money(surcharge.amount(), "Phụ phí");
+                checkoutRepository.insertSurcharge(bookingId, surcharge.reason().trim(), surcharge.amount());
             }
         }
         List<Map<String, Object>> lines = sourceLines(bookingId);
@@ -292,33 +265,23 @@ public class CheckoutService {
         if (input.payableAmount() == null || input.payableAmount().compareTo(payableAmount) != 0) {
             throw fail(409, "Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
         }
-        UUID id = UUID.randomUUID();
-        String number =
+        UUID billId = UUID.randomUUID();
+        String billNumber =
             "HD" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
-        jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.bill(id,booking_id,branch_id,number,status,gross_amount,discount_amount,net_amount,checkout_rounding_adjustment,
-                issued_at,checkout_at,inspection_note,issued_by)
-            VALUES (?,?,?,?,'ISSUED',?,0,?,?,CURRENT_TIMESTAMP,?,?,?)
-            """,
-            id,
+        checkoutRepository.insertBill(
+            billId,
             bookingId,
-            branch,
-            number,
-            amount,
+            branchId,
+            billNumber,
             amount,
             roundingAdjustment,
-            Timestamp.from(at),
+            Timestamp.from(quotedAt),
             input.inspectionNote() == null ? "" : input.inspectionNote().trim(),
             actor.id()
         );
         for (var line : lines) {
-            jdbcTemplate.update(
-                """
-                INSERT INTO gcmb.bill_line(bill_id,booking_charge_id,order_line_id,description,quantity,unit_price,amount)
-                VALUES (?,?,?,?,?,?,?)
-                """,
-                id,
+            checkoutRepository.insertBillLine(
+                billId,
                 line.get("chargeId"),
                 line.get("orderId"),
                 line.get("description"),
@@ -329,26 +292,16 @@ public class CheckoutService {
         }
         // Dùng bút toán APPLY; không sửa tiền cọc gốc và không tạo khoản thu lần hai.
         if (heldDeposit.signum() > 0) {
-            jdbcTemplate.update(
-                """
-                INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,bill_id,actor_id,reason,idempotency_key)
-                VALUES (?,'APPLY',?,?,?,'Trừ cọc đã thu vào bill checkout',?)
-                """,
-                deposit,
-                heldDeposit,
-                id,
-                actor.id(),
-                "CHECKOUT-DEPOSIT-" + id
-            );
+            checkoutRepository.insertDepositApplication(depositId, heldDeposit, billId, actor.id(), "CHECKOUT-DEPOSIT-" + billId);
         }
         audit(
             actor.id(),
-            branch,
+            branchId,
             bookingId,
             "ISSUE_BILL",
             Map.of(
                 "billId",
-                id,
+                billId,
                 "amount",
                 amount,
                 "roundingAdjustment",
@@ -363,41 +316,14 @@ public class CheckoutService {
                 unservedCount(unserved)
             )
         );
-        return bill(actor, id);
+        return bill(actor, billId);
     }
 
-    public Map<String, Object> bill(Identity actor, UUID id) {
-        var rows = jdbcTemplate.queryForList(
-            """
-            SELECT b.id,b.booking_id AS "bookingId",b.number,b.status,b.net_amount AS amount,
-                b.checkout_rounding_adjustment AS "roundingAdjustment",
-                b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
-                b.planned_cash AS "plannedCash",b.planned_cash_tendered AS "plannedCashTendered",
-                COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
-                k.code AS "bookingCode",k.contact_name AS customer,k.actual_checkin AS checkin,
-                COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
-                    WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
-                COALESCE((SELECT sum(p.amount) FROM gcmb.payment p WHERE p.bill_id=b.id AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)),0) AS paid
-            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id WHERE b.id=? AND b.branch_id=?
-            """,
-            id,
-            branch(actor)
-        );
+    public Map<String, Object> bill(Identity actor, UUID billId) {
+        var rows = checkoutRepository.findBill(billId, branch(actor));
         if (rows.isEmpty()) throw fail(404, "Không tìm thấy bill trong cơ sở của bạn.");
         var result = new LinkedHashMap<>(rows.get(0));
-        result.put(
-            "lines",
-            jdbcTemplate.queryForList(
-                """
-            SELECT l.description,l.quantity,l.unit_price AS "unitPrice",l.amount,
-                CASE WHEN l.order_line_id IS NOT NULL THEN 'FNB'
-                    WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category
-            FROM gcmb.bill_line l LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
-            WHERE l.bill_id=? ORDER BY l.created_at,l.id
-            """,
-                id
-            )
-        );
+        result.put("lines", checkoutRepository.findBillLines(billId));
         result.put(
             "remaining",
             decimal(result, "amount")
@@ -413,15 +339,7 @@ public class CheckoutService {
                 .compareTo(decimal(result, "amount").add(decimal(result, "roundingAdjustment"))) == 0
         );
         result.put("sepayReady", sePaySettings.ready());
-        var requests = jdbcTemplate.queryForList(
-            """
-            SELECT q.id,q.reference_code AS reference,q.expected_amount AS amount,q.status,q.expires_at AS "expiresAt",
-                f.bank_name AS bank,f.bank_account_number AS account,f.account_holder AS holder
-            FROM gcmb.payment_request q JOIN gcmb.financial_account f ON f.id=q.account_id
-            WHERE q.bill_id=? AND q.status<>'CANCELLED' ORDER BY q.created_at DESC,q.id DESC LIMIT 1
-            """,
-            id
-        );
+        var requests = checkoutRepository.findLatestPaymentRequest(billId);
         if (!requests.isEmpty()) {
             var request = new LinkedHashMap<>(requests.get(0));
             request.put(
@@ -441,112 +359,81 @@ public class CheckoutService {
             );
             result.put("request", request);
         }
-        result.put(
-            "payments",
-            jdbcTemplate.queryForList(
-                "SELECT method,amount,cash_tendered AS \"cashTendered\",cash_change AS \"cashChange\" FROM gcmb.payment p WHERE bill_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id) ORDER BY created_at",
-                id
-            )
-        );
+        result.put("payments", checkoutRepository.findBillPayments(billId));
         return result;
     }
 
     // BR-25/26/144/145/160/161/162/167: tiền mặt đủ phần cần thu, QR đúng phần chuyển khoản và hạn 30 phút.
     @Transactional
-    public Map<String, Object> plan(Identity actor, UUID id, PaymentPlan input) {
-        var bill = lockBill(actor, id);
-        if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
+    public Map<String, Object> plan(Identity actor, UUID billId, PaymentPlan input) {
+        var bill = lockBill(actor, billId);
+        if ("SETTLED".equals(bill.get("status"))) return bill(actor, billId);
         financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "cập nhật thanh toán bill");
         if (
             input == null || !List.of("CASH", "BANK_TRANSFER", "MIXED").contains(input.method())
         ) throw fail(400, "Chọn phương thức thanh toán hợp lệ.");
         // Gửi lặp giữ nguyên phân bổ tạm; không ghi khoản thu khi chỉ tạo QR.
-        if (
-            decimal(bill, "plannedCash").signum() > 0 ||
-            !jdbcTemplate
-                .queryForList(
-                    "SELECT id FROM gcmb.payment p WHERE bill_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id) UNION ALL SELECT id FROM gcmb.payment_request WHERE bill_id=? AND status<>'CANCELLED'",
-                    id,
-                    id
-                )
-                .isEmpty()
-        ) {
-            return bill(actor, id);
+        if (decimal(bill, "plannedCash").signum() > 0 || checkoutRepository.hasPaymentOrOpenRequest(billId)) {
+            return bill(actor, billId);
         }
-        BigDecimal amount = decimal(bill, "remaining");
-        BigDecimal cash = "CASH".equals(input.method())
-            ? amount
+        BigDecimal remainingAmount = decimal(bill, "remaining");
+        BigDecimal cashAmount = "CASH".equals(input.method())
+            ? remainingAmount
             : "MIXED".equals(input.method())
               ? input.cashAmount()
               : BigDecimal.ZERO;
-        money(cash);
+        money(cashAmount);
         if (
-            cash.compareTo(amount) > 0 ||
-            ("MIXED".equals(input.method()) && (cash.signum() <= 0 || cash.compareTo(amount) >= 0))
+            cashAmount.compareTo(remainingAmount) > 0 ||
+            ("MIXED".equals(input.method()) && (cashAmount.signum() <= 0 || cashAmount.compareTo(remainingAmount) >= 0))
         ) throw fail(
             400,
             "Phần thanh toán bằng tiền mặt phải lớn hơn 0 đ và nhỏ hơn " +
-                amount.toPlainString() + " đ. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt."
+                remainingAmount.toPlainString() + " đ. Nếu trả toàn bộ bằng tiền mặt, hãy chọn thanh toán tiền mặt."
         );
-        BigDecimal bank = amount.subtract(cash);
-        if (bank.signum() > 0 && !sePaySettings.ready()) throw fail(
+        BigDecimal bankAmount = remainingAmount.subtract(cashAmount);
+        if (bankAmount.signum() > 0 && !sePaySettings.ready()) throw fail(
             503,
             "Chưa cấu hình ngân hàng và khóa webhook SePay trong backend/.env."
         );
-        UUID booking = (UUID) bill.get("bookingId");
-        UUID branch = branch(actor);
-        BigDecimal tendered = BigDecimal.ZERO;
-        if (cash.signum() > 0) {
+        UUID bookingId = (UUID) bill.get("bookingId");
+        UUID branchId = branch(actor);
+        BigDecimal cashTendered = BigDecimal.ZERO;
+        if (cashAmount.signum() > 0) {
             money(input.cashTendered(), "Tiền khách đưa");
-            if (input.cashTendered().compareTo(cash) < 0) throw fail(
+            if (input.cashTendered().compareTo(cashAmount) < 0) throw fail(
                 400,
-                "Tiền khách đưa chưa đủ. Cần thu ít nhất " + cash.toPlainString() + " đ."
+                "Tiền khách đưa chưa đủ. Cần thu ít nhất " + cashAmount.toPlainString() + " đ."
             );
-            tendered = input.cashTendered();
+            cashTendered = input.cashTendered();
         }
-        jdbcTemplate.update(
-            "UPDATE gcmb.bill SET planned_cash=?,planned_cash_tendered=? WHERE id=?",
-            cash,
-            tendered,
-            id
-        );
-        if (bank.signum() > 0) {
-            UUID account = bankAccount();
-            String reference =
+        checkoutRepository.updatePlannedCash(billId, cashAmount, cashTendered);
+        if (bankAmount.signum() > 0) {
+            UUID accountId = bankAccount();
+            String referenceCode =
                 "GZ" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
-            jdbcTemplate.update(
-                """
-                INSERT INTO gcmb.payment_request(branch_id,booking_id,bill_id,account_id,purpose,reference_code,expected_amount,expires_at,status)
-                VALUES (?,?,?,?,'BILL',?,?,CURRENT_TIMESTAMP+interval '30 minutes','PENDING')
-                """,
-                branch,
-                booking,
-                id,
-                account,
-                reference,
-                bank
-            );
+            checkoutRepository.insertBillPaymentRequest(branchId, bookingId, billId, accountId, referenceCode, bankAmount);
         }
         audit(
             actor.id(),
-            branch,
-            booking,
+            branchId,
+            bookingId,
             "PLAN_BILL_PAYMENT",
-            Map.of("billId", id, "cashAmount", cash, "bankAmount", bank)
+            Map.of("billId", billId, "cashAmount", cashAmount, "bankAmount", bankAmount)
         );
-        return bill(actor, id);
+        return bill(actor, billId);
     }
 
     @Transactional
-    public Map<String, Object> complete(Identity actor, UUID id) {
-        var bill = lockBill(actor, id);
-        if ("SETTLED".equals(bill.get("status"))) return bill(actor, id);
+    public Map<String, Object> complete(Identity actor, UUID billId) {
+        var bill = lockBill(actor, billId);
+        if ("SETTLED".equals(bill.get("status"))) return bill(actor, billId);
         financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "hoàn tất bill");
         BigDecimal received = decimal(bill, "paid");
-        BigDecimal cash = decimal(bill, "plannedCash");
+        BigDecimal plannedCash = decimal(bill, "plannedCash");
         if (
             received
-                .add(cash)
+                .add(plannedCash)
                 .add(decimal(bill, "depositApplied"))
                 .compareTo(decimal(bill, "amount").add(decimal(bill, "roundingAdjustment"))) != 0
         ) throw fail(409, "Bill chưa được thanh toán đủ; chờ SePay xác nhận hoặc nhập tiền mặt.");
@@ -559,59 +446,31 @@ public class CheckoutService {
         // Quà combo đã được khách chọn lúc check-in; chỉ xuất kho khi bill được thanh toán đủ.
         foodOrderService.deductComboGiftStock(actor, bookingId);
         // Tiền mặt chỉ thành khoản thu chính thức cùng giao dịch hoàn tất bill.
-        if (cash.signum() > 0) {
-            BigDecimal tendered = decimal(bill, "plannedCashTendered");
-            jdbcTemplate.update(
-                """
-                INSERT INTO gcmb.payment(branch_id,booking_id,bill_id,purpose,method,amount,cash_tendered,cash_change,received_at,received_by,idempotency_key)
-                VALUES (?,?,?,'BILL','CASH',?,?,?,CURRENT_TIMESTAMP,?,?)
-                """,
+        if (plannedCash.signum() > 0) {
+            BigDecimal cashTendered = decimal(bill, "plannedCashTendered");
+            checkoutRepository.insertCashPayment(
                 branch(actor),
                 bookingId,
-                id,
-                cash,
-                tendered,
-                tendered.subtract(cash),
+                billId,
+                plannedCash,
+                cashTendered,
+                cashTendered.subtract(plannedCash),
                 actor.id(),
-                "CHECKOUT-CASH-" + id + "-FINAL"
+                "CHECKOUT-CASH-" + billId + "-FINAL"
             );
         }
-        received = received.add(cash);
-        jdbcTemplate.update(
-            "UPDATE gcmb.bill SET status='SETTLED',completed_at=CURRENT_TIMESTAMP,planned_cash=0,planned_cash_tendered=0 WHERE id=?",
-            id
-        );
-        Timestamp checkout = (Timestamp) bill.get("checkoutAt");
-        jdbcTemplate.update(
-            "UPDATE gcmb.room_allocation SET state='FINISHED',actual_end=? WHERE id=?",
-            checkout,
-            allocation.id()
-        );
-        jdbcTemplate.update(
-            "UPDATE gcmb.booking SET status='COMPLETED',actual_checkout=? WHERE id=?",
-            checkout,
-            bookingId
-        );
-        jdbcTemplate.update(
-            "UPDATE gcmb.room SET operating_status='AVAILABLE',status_reason='Khách đã checkout',expected_ready_at=NULL WHERE id=?",
-            allocation.roomId()
-        );
-        jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,changed_by)
-            VALUES (?, ?, ?, 'AVAILABLE','Khách đã checkout',?)
-            """,
-            allocation.roomId(),
-            branch(actor),
-            allocation.operatingStatus(),
-            actor.id()
-        );
+        received = received.add(plannedCash);
+        checkoutRepository.settleBill(billId);
+        Timestamp checkoutAt = (Timestamp) bill.get("checkoutAt");
+        checkoutRepository.finishAllocation(allocation.id(), checkoutAt);
+        checkoutRepository.completeBooking(bookingId, checkoutAt);
+        checkoutRepository.releaseRoomAfterCheckout(allocation.roomId(), branch(actor), allocation.operatingStatus(), actor.id());
         bookingRepository.event(
             bookingId,
             actor.id(),
             "BOOKING_CHECKED_OUT",
             null,
-            Map.of("billId", id.toString())
+            Map.of("billId", billId.toString())
         );
         audit(
             actor.id(),
@@ -620,7 +479,7 @@ public class CheckoutService {
             "CHECKOUT_BOOKING",
             Map.of(
                 "billId",
-                id,
+                billId,
                 "amount",
                 received,
                 "roundingAdjustment",
@@ -629,73 +488,54 @@ public class CheckoutService {
                 decimal(bill, "depositApplied")
             )
         );
-        return bill(actor, id);
+        return bill(actor, billId);
     }
 
     @Transactional
-    public Map<String, Object> renew(Identity actor, UUID id) {
-        var bill = lockBill(actor, id);
+    public Map<String, Object> renew(Identity actor, UUID billId) {
+        var bill = lockBill(actor, billId);
         financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "gia hạn mã thanh toán bill");
         // Gia hạn cùng mã tham chiếu; không tạo mã thứ hai có thể nhận tiền trùng.
-        int changed = jdbcTemplate.update(
-            """
-            UPDATE gcmb.payment_request SET expires_at=CURRENT_TIMESTAMP+interval '30 minutes'
-            WHERE bill_id=? AND status='PENDING' AND expires_at<CURRENT_TIMESTAMP
-            """,
-            id
-        );
-        if (changed > 0) {
+        int renewedCount = checkoutRepository.renewExpiredBillRequest(billId);
+        if (renewedCount > 0) {
             audit(
                 actor.id(),
                 branch(actor),
                 (UUID) bill.get("bookingId"),
                 "RENEW_BILL_QR",
-                Map.of("billId", id)
+                Map.of("billId", billId)
             );
         }
-        return bill(actor, id);
+        return bill(actor, billId);
     }
 
     /** Hủy QR và xóa phân bổ tạm để form trở về ban đầu; không đảo khoản thu thật. */
     @Transactional
-    public Map<String, Object> changeMethod(Identity actor, UUID id) {
+    public Map<String, Object> changeMethod(Identity actor, UUID billId) {
         // Khóa cùng thứ tự với webhook: giao dịch đã ghi nhận sẽ chặn đổi phương thức.
-        var bill = lockBill(actor, id);
+        var bill = lockBill(actor, billId);
         financialPeriodService.requireOpen(businessDay((Timestamp) bill.get("checkoutAt")), "đổi phương thức thanh toán bill");
         if (!"ISSUED".equals(bill.get("status"))) {
             throw fail(409, "Chỉ đổi phương thức cho bill đang chờ thanh toán.");
         }
-        if (
-            !jdbcTemplate
-                .queryForList(
-                    "SELECT id FROM gcmb.payment p WHERE bill_id=? AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)",
-                    id
-                )
-                .isEmpty()
-        ) {
+        if (checkoutRepository.hasActualPayment(billId)) {
             throw fail(
                 409,
                 "Bill đã nhận thanh toán thực tế, không thể đặt lại phương thức thanh toán."
             );
         }
-        int changed = jdbcTemplate.update(
-            """
-            UPDATE gcmb.payment_request SET status='CANCELLED'
-            WHERE bill_id=? AND status IN ('PENDING','EXPIRED')
-            """,
-            id
-        );
-        jdbcTemplate.update("UPDATE gcmb.bill SET planned_cash=0,planned_cash_tendered=0 WHERE id=?", id);
-        if (changed > 0 || decimal(bill, "plannedCash").signum() > 0) {
+        int cancelledCount = checkoutRepository.cancelOpenBillRequests(billId);
+        checkoutRepository.resetPlannedCash(billId);
+        if (cancelledCount > 0 || decimal(bill, "plannedCash").signum() > 0) {
             audit(
                 actor.id(),
                 branch(actor),
                 (UUID) bill.get("bookingId"),
                 "CHANGE_BILL_PAYMENT_METHOD",
-                Map.of("billId", id)
+                Map.of("billId", billId)
             );
         }
-        return bill(actor, id);
+        return bill(actor, billId);
     }
 
     @Transactional
@@ -715,106 +555,72 @@ public class CheckoutService {
             400,
             "Loại giao dịch không hợp lệ."
         );
-        UUID account = bankAccount();
+        UUID accountId = bankAccount();
         String content = payload.content() == null ? "" : payload.content();
-        var found = Pattern.compile("(?i)(?<![A-Z0-9])GZ[A-F0-9]{20}(?![A-Z0-9])").matcher(content);
-        String reference =
+        var referenceMatcher = Pattern.compile("(?i)(?<![A-Z0-9])GZ[A-F0-9]{20}(?![A-Z0-9])").matcher(content);
+        String referenceCode =
             payload.code() != null && payload.code().matches("(?i)GZ[A-F0-9]{20}")
                 ? payload.code().toUpperCase()
-                : found.find()
-                  ? found.group().toUpperCase()
+                : referenceMatcher.find()
+                  ? referenceMatcher.group().toUpperCase()
                   : "";
-        var requests = jdbcTemplate.queryForList(
-            "SELECT * FROM gcmb.payment_request WHERE reference_code=? AND purpose IN ('BILL','DEPOSIT')",
-            reference
-        );
+        var requests = checkoutRepository.findPaymentRequestsByReference(referenceCode);
         if (!requests.isEmpty()) {
-            var request = requests.get(0);
+            var matchedRequest = requests.get(0);
             // Cùng thứ tự khóa với thu tiền mặt/hoàn tất để tránh race và deadlock.
-            lockBooking((UUID) request.get("booking_id"), (UUID) request.get("branch_id"));
-            if ("BILL".equals(request.get("purpose"))) jdbcTemplate.queryForList(
-                "SELECT id FROM gcmb.bill WHERE id=? FOR UPDATE",
-                request.get("bill_id")
-            );
+            lockBooking((UUID) matchedRequest.get("booking_id"), (UUID) matchedRequest.get("branch_id"));
+            if ("BILL".equals(matchedRequest.get("purpose"))) checkoutRepository.lockBill(matchedRequest.get("bill_id"));
         }
-        Instant occurred;
+        Instant occurredAt;
         try {
-            occurred = LocalDateTime.parse(
+            occurredAt = LocalDateTime.parse(
                 payload.transactionDate(),
                 DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             )
                 .atZone(ZoneId.of("Asia/Ho_Chi_Minh"))
                 .toInstant();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException exception) {
             throw fail(400, "Ngày giao dịch SePay không hợp lệ.");
         }
-        if (!jdbcTemplate.queryForList("SELECT id FROM gcmb.bank_transaction WHERE provider='SEPAY' AND account_id=? AND external_id=?",
-                UUID.class, account, payload.id().toString()).isEmpty()) return;
+        String externalId = payload.id().toString();
+        String direction = "in".equals(payload.transferType()) ? "IN" : "OUT";
+        if (checkoutRepository.bankTransactionExists(accountId, externalId)) return;
         try {
-            financialPeriodService.requireOpen(occurred.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "ghi nhận giao dịch SePay");
+            financialPeriodService.requireOpen(occurredAt.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate(), "ghi nhận giao dịch SePay");
         } catch (AuthFailure failure) {
             if (failure.status() != 409) throw failure;
-            jdbcTemplate.update("""
-                INSERT INTO gcmb.bank_transaction(id,account_id,provider,external_id,direction,amount,transfer_content,
-                  occurred_at,match_status,raw_payload,exception_reason)
-                VALUES (?,?,'SEPAY',?,?,?,?,?,'EXCEPTION',CAST(? AS jsonb),'PERIOD_CLOSED')
-                ON CONFLICT(provider,account_id,external_id) DO NOTHING
-                """, UUID.randomUUID(), account, payload.id().toString(),
-                "in".equals(payload.transferType()) ? "IN" : "OUT", payload.transferAmount(), content,
-                Timestamp.from(occurred), objectMapper.writeValueAsString(payload));
+            checkoutRepository.insertClosedPeriodBankTransaction(UUID.randomUUID(), accountId, externalId, direction,
+                payload.transferAmount(), content, Timestamp.from(occurredAt), objectMapper.writeValueAsString(payload));
             return;
         }
-        UUID transaction = UUID.randomUUID();
-        int inserted = jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.bank_transaction(id,account_id,provider,external_id,direction,amount,transfer_content,occurred_at,match_status,raw_payload)
-            VALUES (?,?,'SEPAY',?,?,?,?,?,'UNMATCHED',CAST(? AS jsonb)) ON CONFLICT(provider,account_id,external_id) DO NOTHING
-            """,
-            transaction,
-            account,
-            payload.id().toString(),
-            "in".equals(payload.transferType()) ? "IN" : "OUT",
-            payload.transferAmount(),
-            content,
-            Timestamp.from(occurred),
-            objectMapper.writeValueAsString(payload)
-        );
-        if (inserted == 0) return;
+        UUID transactionId = UUID.randomUUID();
+        int insertedCount = checkoutRepository.insertUnmatchedBankTransaction(transactionId, accountId, externalId, direction,
+            payload.transferAmount(), content, Timestamp.from(occurredAt), objectMapper.writeValueAsString(payload));
+        if (insertedCount == 0) return;
         if (requests.isEmpty()) {
-            jdbcTemplate.update("UPDATE gcmb.bank_transaction SET match_status='EXCEPTION',exception_reason='REFERENCE_NOT_FOUND' WHERE id=?",
-                transaction);
+            checkoutRepository.markBankTransactionException(transactionId, "REFERENCE_NOT_FOUND");
             return;
         }
-        var request = jdbcTemplate.queryForMap(
-            "SELECT * FROM gcmb.payment_request WHERE id=? FOR UPDATE",
-            requests.get(0).get("id")
-        );
+        var request = checkoutRepository.lockPaymentRequest(requests.get(0).get("id"));
         String mismatchReason = null;
         if (!"in".equals(payload.transferType())) mismatchReason = "DIRECTION_MISMATCH";
         else if (!"PENDING".equals(request.get("status"))) mismatchReason = "REQUEST_NOT_PENDING";
-        else if (!account.equals(request.get("account_id"))) mismatchReason = "ACCOUNT_MISMATCH";
+        else if (!accountId.equals(request.get("account_id"))) mismatchReason = "ACCOUNT_MISMATCH";
         else if (payload.transferAmount().compareTo((BigDecimal) request.get("expected_amount")) != 0)
             mismatchReason = "AMOUNT_MISMATCH";
-        else if (occurred.isBefore(((Timestamp) request.get("created_at")).toInstant().minusSeconds(2)))
+        else if (occurredAt.isBefore(((Timestamp) request.get("created_at")).toInstant().minusSeconds(2)))
             mismatchReason = "PAYMENT_BEFORE_REQUEST";
-        else if (occurred.isAfter(((Timestamp) request.get("expires_at")).toInstant()))
+        else if (occurredAt.isAfter(((Timestamp) request.get("expires_at")).toInstant()))
             mismatchReason = "PAYMENT_EXPIRED";
-        boolean deposit = "DEPOSIT".equals(request.get("purpose"));
+        boolean isDeposit = "DEPOSIT".equals(request.get("purpose"));
         // Cọc chuyển khoản vẫn phải do lễ tân xác nhận.
-        if (mismatchReason == null && deposit) mismatchReason = "DEPOSIT_MANUAL_CONFIRMATION_REQUIRED";
+        if (mismatchReason == null && isDeposit) mismatchReason = "DEPOSIT_MANUAL_CONFIRMATION_REQUIRED";
         if (mismatchReason != null) {
-            jdbcTemplate.update(
-                "UPDATE gcmb.bank_transaction SET match_status='EXCEPTION',exception_reason=? WHERE id=?",
-                mismatchReason, transaction
-            );
+            checkoutRepository.markBankTransactionException(transactionId, mismatchReason);
             return;
         }
         UUID paymentId = UUID.randomUUID();
-        jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.payment(id,branch_id,booking_id,bill_id,purpose,method,amount,request_id,bank_transaction_id,received_at,idempotency_key)
-            VALUES (?,?,?,?,?,'BANK_TRANSFER',?,?,?, ?,?)
-            """,
+        checkoutRepository.insertBankTransferPayment(
             paymentId,
             request.get("branch_id"),
             request.get("booking_id"),
@@ -822,44 +628,28 @@ public class CheckoutService {
             request.get("purpose"),
             payload.transferAmount(),
             request.get("id"),
-            transaction,
-            Timestamp.from(occurred),
+            transactionId,
+            Timestamp.from(occurredAt),
             "SEPAY-" + payload.id()
         );
-        if (deposit) {
+        if (isDeposit) {
             bookingRepository.createDepositAccount((UUID) request.get("booking_id"));
-            jdbcTemplate.update(
-                """
-                INSERT INTO gcmb.deposit_entry(deposit_id,kind,amount,payment_id,reason,idempotency_key)
-                SELECT id,'RECEIVE',?,?,'SePay xác nhận tiền cọc',? FROM gcmb.deposit WHERE booking_id=?
-                """,
-                payload.transferAmount(),
-                paymentId,
-                "SEPAY-DEPOSIT-" + payload.id(),
-                request.get("booking_id")
-            );
+            checkoutRepository.insertSePayDepositReceipt(payload.transferAmount(), paymentId,
+                "SEPAY-DEPOSIT-" + payload.id(), request.get("booking_id"));
         }
         audit(
             null,
             (UUID) request.get("branch_id"),
             (UUID) request.get("booking_id"),
-            deposit ? "CONFIRM_SEPAY_DEPOSIT" : "CONFIRM_SEPAY_PAYMENT",
-            deposit
+            isDeposit ? "CONFIRM_SEPAY_DEPOSIT" : "CONFIRM_SEPAY_PAYMENT",
+            isDeposit
                 ? Map.of("amount", payload.transferAmount())
                 : Map.of("billId", request.get("bill_id"), "amount", payload.transferAmount())
         );
     }
 
     private boolean hasPendingRefund(UUID bookingId) {
-        return !jdbcTemplate
-            .queryForList(
-                """
-            SELECT id FROM gcmb.refund_request WHERE booking_id=? AND kind='DEPOSIT'
-                AND status IN ('REQUESTED','APPROVED','PROCESSING')
-            """,
-                bookingId
-            )
-            .isEmpty();
+        return checkoutRepository.hasPendingDepositRefund(bookingId);
     }
 
     private static java.time.LocalDate businessDay(Timestamp value) {
@@ -867,40 +657,26 @@ public class CheckoutService {
     }
 
     private UUID bankAccount() {
-        String code =
+        String accountCode =
             "SEPAY-" +
             UUID.nameUUIDFromBytes(
                 (sePaySettings.bank + ":" + sePaySettings.account).getBytes(StandardCharsets.UTF_8)
             ).toString();
-        jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.financial_account(code,name,kind,bank_name,bank_account_number,account_holder,active)
-            VALUES (?,'Ngân hàng nhận thanh toán SePay','BANK',?,?,?,true) ON CONFLICT(code) DO NOTHING
-            """,
-            code,
-            sePaySettings.bank,
-            sePaySettings.account,
-            sePaySettings.holder
-        );
-        return jdbcTemplate.queryForObject(
-            "SELECT id FROM gcmb.financial_account WHERE code=? AND active=true",
-            UUID.class,
-            code
-        );
+        return checkoutRepository.ensureSePayAccount(accountCode, sePaySettings.bank, sePaySettings.account, sePaySettings.holder);
     }
 
     // BR-13/21/28/29/30/172/215/216/218: preview chỉ đọc; chỉ món đã phục vụ mới được tính vào bill.
     private List<Map<String, Object>> checkoutLines(
         Identity actor,
         UUID bookingId,
-        Instant at,
+        Instant checkoutAt,
         List<Overtime> overtime
     ) {
-        var hourly = bookingService.checkoutHourlyCharges(actor, bookingId, at);
+        var hourlyCharges = bookingService.checkoutHourlyCharges(actor, bookingId, checkoutAt);
         var result = new java.util.ArrayList<Map<String, Object>>();
         for (var original : sourceLines(bookingId)) {
             if ("OVERTIME".equals(original.get("chargeKind"))) continue;
-            var adjusted = hourly.get(original.get("chargeId"));
+            var adjusted = hourlyCharges.get(original.get("chargeId"));
             if (adjusted != null && adjusted.quantity().signum() == 0) continue;
             var line = new LinkedHashMap<>(original);
             if (adjusted != null) {
@@ -931,7 +707,7 @@ public class CheckoutService {
         return result;
     }
 
-    private String quoteToken(Identity actor, UUID bookingId, Instant at, BigDecimal amount) {
+    private String quoteToken(Identity actor, UUID bookingId, Instant quotedAt, BigDecimal amount) {
         try {
             var mac = javax.crypto.Mac.getInstance("HmacSHA256");
             mac.init(new javax.crypto.spec.SecretKeySpec(quoteKey, "HmacSHA256"));
@@ -940,72 +716,44 @@ public class CheckoutService {
                 ":" +
                 bookingId +
                 ":" +
-                at +
+                quotedAt +
                 ":" +
                 amount.stripTrailingZeros().toPlainString();
             return java.util.Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.GeneralSecurityException e) {
-            throw new IllegalStateException("Cannot sign checkout quote", e);
+        } catch (java.security.GeneralSecurityException exception) {
+            throw new IllegalStateException("Cannot sign checkout quote", exception);
         }
     }
 
-    private List<Map<String, Object>> sourceLines(UUID booking) {
-        return jdbcTemplate.queryForList(
-            """
-            SELECT c.id AS "chargeId",NULL::uuid AS "orderId",c.description,c.quantity,c.unit_price AS "unitPrice",c.amount,
-                CASE WHEN c.kind='SURCHARGE' THEN 'SURCHARGE' ELSE 'ROOM' END AS category,c.kind AS "chargeKind"
-            FROM gcmb.booking_charge c WHERE c.booking_id=? AND c.status='ACTIVE'
-            UNION ALL
-            SELECT NULL::uuid,l.id,l.name_snapshot,l.quantity,l.unit_price,round(l.quantity*l.unit_price),'FNB','FNB'
-            FROM gcmb.order_line l JOIN gcmb.fb_order o ON o.id=l.order_id
-            WHERE l.booking_id=? AND o.status='SERVED' AND l.unit_price>0
-            """,
-            booking,
-            booking
-        );
+    private List<Map<String, Object>> sourceLines(UUID bookingId) {
+        return checkoutRepository.findChargeAndServedOrderLines(bookingId);
     }
 
-    private List<Map<String, Object>> pendingOrders(UUID booking) {
-        return jdbcTemplate.queryForList(
-            """
-            SELECT o.id,o.status,COALESCE(sum(l.quantity),0) AS "itemCount" FROM gcmb.fb_order o
-            LEFT JOIN gcmb.order_line l ON l.order_id=o.id
-            WHERE o.booking_id=? AND o.status IN ('PENDING','ACCEPTED') GROUP BY o.id,o.status
-            """,
-            booking
-        );
+    private List<Map<String, Object>> pendingOrders(UUID bookingId) {
+        return checkoutRepository.findPendingOrders(bookingId);
     }
 
     private static BigDecimal unservedCount(List<Map<String, Object>> orders) {
         return orders
             .stream()
-            .map(o -> new BigDecimal(String.valueOf(o.getOrDefault("itemCount", 0))))
+            .map(order -> new BigDecimal(String.valueOf(order.getOrDefault("itemCount", 0))))
             .reduce(BigDecimal.ZERO, BigDecimal::add)
             .stripTrailingZeros();
     }
 
-    private Map<String, Object> lockBill(Identity actor, UUID id) {
-        var found = bill(actor, id);
+    private Map<String, Object> lockBill(Identity actor, UUID billId) {
+        var found = bill(actor, billId);
         lockBooking((UUID) found.get("bookingId"), branch(actor));
-        jdbcTemplate.queryForList("SELECT id FROM gcmb.bill WHERE id=? FOR UPDATE", id);
-        return bill(actor, id);
+        checkoutRepository.lockBill(billId);
+        return bill(actor, billId);
     }
 
-    private void lockBooking(UUID id, UUID branch) {
-        bookingRepository.requireActiveBranch(branch); // BR-177
-        if (
-            jdbcTemplate
-                .queryForList(
-                    "SELECT id FROM gcmb.booking WHERE id=? AND branch_id=? FOR UPDATE",
-                    UUID.class,
-                    id,
-                    branch
-                )
-                .isEmpty()
-        ) {
-            if (bookingRepository.bookingExists(id)) throw fail(403, "Bạn không có quyền tạo yêu cầu thanh toán đối với booking.");
+    private void lockBooking(UUID bookingId, UUID branchId) {
+        bookingRepository.requireActiveBranch(branchId); // BR-177
+        if (!checkoutRepository.lockBookingInBranch(bookingId, branchId)) {
+            if (bookingRepository.bookingExists(bookingId)) throw fail(403, "Bạn không có quyền tạo yêu cầu thanh toán đối với booking.");
             throw fail(404, "Không tìm thấy booking.");
         }
     }
@@ -1019,25 +767,15 @@ public class CheckoutService {
     }
 
     private void audit(
-        UUID actor,
-        UUID branch,
-        UUID booking,
+        UUID actorId,
+        UUID branchId,
+        UUID bookingId,
         String action,
         Map<String, Object> data
     ) {
         var snapshot = new LinkedHashMap<>(data);
-        snapshot.put("actorRole", actor == null ? "SYSTEM" : "RECEPTIONIST");
-        jdbcTemplate.update(
-            """
-            INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,after_data)
-            VALUES (?,?,?,'BOOKING',?,CAST(? AS jsonb))
-            """,
-            actor,
-            branch,
-            action,
-            booking,
-            objectMapper.writeValueAsString(snapshot)
-        );
+        snapshot.put("actorRole", actorId == null ? "SYSTEM" : "RECEPTIONIST");
+        checkoutRepository.insertBookingAudit(actorId, branchId, action, bookingId, objectMapper.writeValueAsString(snapshot));
     }
 
     private static BigDecimal total(List<Map<String, Object>> lines) {

@@ -11,20 +11,20 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
   const ref = useRef(null),
     sending = useRef(false);
   const { type, data, shift, assignment } = dialog;
-  const template = shift && data.templates.find((t) => t.id === shift.templateId);
-  const original = new Map(data.shifts.map((s) => [slotKey(s.date, s.templateId), s]));
+  const template = shift && data.templates.find((templateItem) => templateItem.id === shift.templateId);
+  const original = new Map(data.shifts.map((shiftItem) => [slotKey(shiftItem.date, shiftItem.templateId), shiftItem]));
   const [slots, setSlots] = useState(() =>
     Array.from({ length: 7 }, (_, day) =>
-      data.templates.map((t) => {
+      data.templates.map((templateItem) => {
         const date = addDays(data.week, day),
-          old = original.get(slotKey(date, t.id));
+          old = original.get(slotKey(date, templateItem.id));
         return {
           date,
-          templateId: t.id,
+          templateId: templateItem.id,
           capacity: String(old?.capacity || 3),
           open:
-            (dialog.focusSlot === slotKey(date, t.id) &&
-              data.editableSlots?.includes(slotKey(date, t.id))) ||
+            (dialog.focusSlot === slotKey(date, templateItem.id) &&
+              data.editableSlots?.includes(slotKey(date, templateItem.id))) ||
             old?.status === 'OPEN',
           version: old?.version ?? null,
         };
@@ -58,21 +58,21 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
   const updateSlot = (index, key, value) => {
     if (!data.editableSlots?.includes(slotKey(slots[index].date, slots[index].templateId))) return;
     setErrors({});
-    setSlots((old) => old.map((s, i) => (i === index ? { ...s, [key]: value } : s)));
+    setSlots((old) => old.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
   };
-  const editable = (s) => !!data.editableSlots?.includes(slotKey(s.date, s.templateId));
-  const participants = shift ? data.assignments.filter((a) => a.shiftId === shift.id) : [];
+  const editable = (slot) => !!data.editableSlots?.includes(slotKey(slot.date, slot.templateId));
+  const participants = shift ? data.assignments.filter((assignmentItem) => assignmentItem.shiftId === shift.id) : [];
   const candidates = data.employees.filter(
-    (e) => e.id !== assignment?.employeeId && !participants.some((a) => a.employeeId === e.id)
-      && !(data.employeeClosings || []).some((c) => c.employeeId === e.id && c.month.slice(0, 7) === shift?.date.slice(0, 7))
+    (e) => e.id !== assignment?.employeeId && !participants.some((participant) => participant.employeeId === e.id)
+      && !(data.employeeClosings || []).some((closing) => closing.employeeId === e.id && closing.month.slice(0, 7) === shift?.date.slice(0, 7))
   );
   const canReplace =
     manager && !data.readOnly && shift && new Date(shift.endsAt).getTime() > Date.now();
-  const changes = slots.filter((s) => {
-    const before = original.get(slotKey(s.date, s.templateId));
+  const changes = slots.filter((slot) => {
+    const before = original.get(slotKey(slot.date, slot.templateId));
     return before
-      ? before.capacity !== Number(s.capacity) || (before.status === 'OPEN') !== s.open
-      : s.open;
+      ? before.capacity !== Number(slot.capacity) || (before.status === 'OPEN') !== slot.open
+      : slot.open;
   });
   async function submit(event) {
     event.preventDefault();
@@ -80,15 +80,15 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
     const found = {};
     if (type === 'publish') {
       if (!changes.length) found.form = 'Chưa có thay đổi để công bố.';
-      for (const s of changes) {
-        const count = original.get(slotKey(s.date, s.templateId))?.registered || 0;
+      for (const slot of changes) {
+        const count = original.get(slotKey(slot.date, slot.templateId))?.registered || 0;
         if (
-          !Number.isInteger(Number(s.capacity)) ||
-          Number(s.capacity) < 1 ||
-          Number(s.capacity) > 2147483647
+          !Number.isInteger(Number(slot.capacity)) ||
+          Number(slot.capacity) < 1 ||
+          Number(slot.capacity) > 2147483647
         )
           found.form = 'Số chỗ phải là số nguyên lớn hơn 0.'; // MSG44
-        else if (Number(s.capacity) < count)
+        else if (Number(slot.capacity) < count)
           found.form = `Ca này đã có ${count} người đăng ký. Số chỗ không được nhỏ hơn ${count}.`; // MSG85
       }
     }
@@ -108,7 +108,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
       const result =
         type === 'publish'
           ? await shiftApi.publish(
-              changes.map((s) => ({ ...s, capacity: Number(s.capacity) })),
+              changes.map((change) => ({ ...change, capacity: Number(change.capacity) })),
               scope
             )
           : type === 'replace'
@@ -135,7 +135,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
       setErrors(apiErrors(e));
       setStale(
         e.response?.status === 409 &&
-          Object.values(apiErrors(e)).some((v) => v.includes('đã thay đổi'))
+          Object.values(apiErrors(e)).some((value) => value.includes('đã thay đổi'))
       );
     } finally {
       sending.current = false;
@@ -189,9 +189,9 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                 </div>
                 <h3>Nhân viên được phân công</h3>
                 {participants.length ? <PaginatedList as="ul" pageSize={10} className="shift-people">
-                  {participants.map((a) => <li key={a.id}>
-                    <div><strong>{a.fullName}</strong><small>{a.code} · {a.source === 'MANAGER' ? 'Quản lý phân công' : 'Tự đăng ký'}{a.employeeStatus !== 'ACTIVE' ? ' · Hồ sơ đã ngừng' : ''}</small></div>
-                    {canReplace && <button type="button" onClick={() => dialog.onReplace(a)}>Làm thay</button>}
+                  {participants.map((participant) => <li key={participant.id}>
+                    <div><strong>{participant.fullName}</strong><small>{participant.code} · {participant.source === 'MANAGER' ? 'Quản lý phân công' : 'Tự đăng ký'}{participant.employeeStatus !== 'ACTIVE' ? ' · Hồ sơ đã ngừng' : ''}</small></div>
+                    {canReplace && <button type="button" onClick={() => dialog.onReplace(participant)}>Làm thay</button>}
                   </li>)}
                 </PaginatedList> : <p>Chưa có nhân viên đăng ký ca này.</p>}
                 {canReplace && shift.status !== 'CANCELLED' && participants.length < Math.min(3, shift.capacity) && (
@@ -205,16 +205,16 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                     <button type="submit" disabled={!employeeId || busy}>Phân công</button>
                   </div>
                 )}
-                {data.history.some((h) => h.shiftId === shift.id) && (
+                {data.history.some((historyItem) => historyItem.shiftId === shift.id) && (
                   <>
                     <h3>Lịch sử thay người</h3>
                     <PaginatedList as="ul" pageSize={5}>
                       {data.history
-                        .filter((h) => h.shiftId === shift.id)
-                        .map((h) => (
-                          <li key={h.id}>
-                            {h.fullName} · {h.reason} ·{' '}
-                            {new Date(h.cancelledAt).toLocaleString('vi-VN')}
+                        .filter((historyItem) => historyItem.shiftId === shift.id)
+                        .map((historyItem) => (
+                          <li key={historyItem.id}>
+                            {historyItem.fullName} · {historyItem.reason} ·{' '}
+                            {new Date(historyItem.cancelledAt).toLocaleString('vi-VN')}
                           </li>
                         ))}
                     </PaginatedList>
@@ -239,8 +239,8 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                     type="button"
                     onClick={() =>
                       setSlots((old) =>
-                        old.map((s) =>
-                          editable(s) && s.open ? { ...s, capacity: defaultCapacity } : s
+                        old.map((item) =>
+                          editable(item) && item.open ? { ...item, capacity: defaultCapacity } : item
                         )
                       )
                     }
@@ -250,7 +250,7 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                   <button
                     type="button"
                     onClick={() =>
-                      setSlots((old) => old.map((s) => (editable(s) ? { ...s, open: true } : s)))
+                      setSlots((old) => old.map((item) => (editable(item) ? { ...item, open: true } : item)))
                     }
                   >
                     Chọn các ca còn chỉnh được
@@ -267,38 +267,38 @@ export default function ShiftDialog({ dialog, manager, scope, onClose, onSaved, 
                         {['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'][day]}
                         <small>{dateLabel(addDays(data.week, day)).slice(0, 5)}</small>
                       </h3>
-                      {data.templates.map((t, i) => {
+                      {data.templates.map((templateItem, i) => {
                         const index = day * data.templates.length + i,
-                          s = slots[index],
-                          before = original.get(slotKey(s.date, t.id));
+                          slot = slots[index],
+                          before = original.get(slotKey(slot.date, templateItem.id));
                         return (
-                          <div key={t.id} className={s.open ? 'selected' : ''}>
+                          <div key={templateItem.id} className={slot.open ? 'selected' : ''}>
                             <label>
                               <input
                                 type="checkbox"
-                                checked={s.open}
-                                disabled={!editable(s)}
+                                checked={slot.open}
+                                disabled={!editable(slot)}
                                 onChange={(e) => updateSlot(index, 'open', e.target.checked)}
                               />
                               Ca {i + 1}
                             </label>
-                            <small>{shiftLabel(t)}</small>
+                            <small>{shiftLabel(templateItem)}</small>
                             <label>
                               Số chỗ
                               <input
-                                aria-label={`Số chỗ ${s.date} ca ${i + 1}`}
+                                aria-label={`Số chỗ ${slot.date} ca ${i + 1}`}
                                 type="number"
                                 min="1"
                                 max="3"
                                 step="1"
                                 readOnly
-                                value={s.capacity}
-                                disabled={!editable(s) || (!s.open && !before)}
+                                value={slot.capacity}
+                                disabled={!editable(slot) || (!slot.open && !before)}
                                 onChange={(e) => updateSlot(index, 'capacity', e.target.value)}
                               />
                             </label>
                             <small>Đã đăng ký: {before?.registered || 0}</small>
-                            {!editable(s) && <small>Ca đã khóa chỉnh sửa</small>}
+                            {!editable(slot) && <small>Ca đã khóa chỉnh sửa</small>}
                           </div>
                         );
                       })}

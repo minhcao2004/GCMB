@@ -1,14 +1,14 @@
-import { PaginatedTable, PaginatedList } from '../../shared/components/Pagination';
+import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useRef, useState } from 'react';
-import api from '../../api/client';
-import { financeApi } from '../finance/services/financeApi';
+import api from '../../../api/client';
+import { financeApi } from '../../finance/services/financeApi';
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import CustomerSourcesChart from './CustomerSourcesChart';
-import PeriodControls, { initialPeriodValue, vietnamToday } from './DashboardPeriodControls';
-import './executive-dashboard.css';
+import CustomerSourcesChart from '../components/CustomerSourcesChart';
+import PeriodControls, { initialPeriodValue, vietnamToday } from '../components/DashboardPeriodControls';
+import '../styles/executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(Number(value) * 100)}%`;
@@ -213,7 +213,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
         revenueByBranch: revenueRows,
         occupancyByBranch: monthlyBranches.map((row) => ({ ...row, occupancy: row.occupancyRate == null ? 0 : Number(row.occupancyRate) / 100 })),
         revenueByDay: (overview.series || []).map((row) => ({ ...row, label: row.label, roomRevenue: Number(row.revenue) || 0, fnbRevenue: Number(row.profit) || 0, overtimeRevenue: 0, otherRevenue: 0 })),
-        ranking: [...revenueRows].sort((a, b) => b.revenue - a.revenue),
+        ranking: [...revenueRows].sort((left, right) => right.revenue - left.revenue),
         approvals: requests.filter((row) => ['WAITING_HEAD_OFFICE', 'WAITING_APPROVAL', 'WAITING_MANAGER'].includes(row.status)).map((row) => ({ id: row.id, category: row.description || row.categoryName || 'Đề nghị chi', branch: row.branchName || '—', amount: row.amount || 0 })),
         warnings: [...financeAlerts, ...operationalAlerts],
         approvalsAvailable: financeResult.status === 'fulfilled',
@@ -242,7 +242,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
   const safeData = data || { kpis: {}, revenueByBranch: [], occupancyByBranch: [], revenueByDay: [], ranking: [], approvals: [], warnings: [] };
   const selectedBranch = incomeRows.find((branch) => branch.id === selectedBranchId);
   const { kpis } = safeData;
-  const rankedRevenue = [...incomeRows].sort((a, b) => b.revenue - a.revenue);
+  const rankedRevenue = [...incomeRows].sort((left, right) => right.revenue - left.revenue);
   const chartRevenueRows = rankedRevenue.slice(0, 8);
   const leadingBranch = rankedRevenue[0];
   const activeBranchCount = Math.max(1, Number(kpis.activeBranches) || 0);
@@ -250,7 +250,7 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
   const averageDailyRevenue = data && safeData.revenueByDay.length
     ? safeData.revenueByDay.reduce((sum, row) => sum + row.roomRevenue, 0) / safeData.revenueByDay.length
     : null;
-  const rankedOccupancy = [...safeData.occupancyByBranch].sort((a, b) => b.occupancy - a.occupancy);
+  const rankedOccupancy = [...safeData.occupancyByBranch].sort((left, right) => right.occupancy - left.occupancy);
   const occupancyAverage = rankedOccupancy.length
     ? rankedOccupancy.reduce((sum, row) => sum + row.occupancy, 0) / rankedOccupancy.length
     : null;

@@ -27,48 +27,48 @@ public final class AuthMapper {
     private AuthMapper() {}
 
     // Ánh xạ hàng tài khoản và vai trò từ JDBC.
-    public static Account account(ResultSet rs, int row) throws SQLException {
+    public static Account account(ResultSet resultSet, int row) throws SQLException {
         return new Account(
-            rs.getObject("id", UUID.class),
-            rs.getString("username"),
-            rs.getString("email"),
-            rs.getString("password_hash"),
-            rs.getString("status"),
-            rs.getString("role"),
-            rs.getObject("branch_id", UUID.class),
-            rs.getString("branch_name")
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("username"),
+            resultSet.getString("email"),
+            resultSet.getString("password_hash"),
+            resultSet.getString("status"),
+            resultSet.getString("role"),
+            resultSet.getObject("branch_id", UUID.class),
+            resultSet.getString("branch_name")
         );
     }
 
     // Ánh xạ trạng thái mã khôi phục từ JDBC.
-    public static Reset reset(ResultSet rs, int row) throws SQLException {
+    public static Reset reset(ResultSet resultSet, int row) throws SQLException {
         return new Reset(
-            rs.getObject("id", UUID.class),
-            rs.getString("code_hash"),
-            instant(rs, "used_at"),
-            instant(rs, "revoked_at")
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("code_hash"),
+            instant(resultSet, "used_at"),
+            instant(resultSet, "revoked_at")
         );
     }
 
     // Ánh xạ danh tính phiên sang dữ liệu dùng bởi Spring Security.
-    public static Identity identity(ResultSet rs, int row) throws SQLException {
-        String role = rs.getString("code");
+    public static Identity identity(ResultSet resultSet, int row) throws SQLException {
+        String role = resultSet.getString("code");
         // BR-177: dữ liệu cơ sở tạm ngừng vẫn được đọc, nhưng không được sửa.
         return new Identity(
-            rs.getObject("id", UUID.class),
-            rs.getString("username"),
+            resultSet.getObject("id", UUID.class),
+            resultSet.getString("username"),
             role,
             destination(role),
-            rs.getObject("branch_id", UUID.class),
-            rs.getString("branch_name"),
+            resultSet.getObject("branch_id", UUID.class),
+            resultSet.getString("branch_name"),
             java.util.List.of("BRANCH_MANAGER", "RECEPTIONIST").contains(role) &&
-                "SUSPENDED".equals(rs.getString("branch_status"))
+                "SUSPENDED".equals(resultSet.getString("branch_status"))
         );
     }
 
     // Đọc timestamp có thể rỗng từ ResultSet.
-    private static Instant instant(ResultSet rs, String column) throws SQLException {
-        Timestamp value = rs.getTimestamp(column);
+    private static Instant instant(ResultSet resultSet, String column) throws SQLException {
+        Timestamp value = resultSet.getTimestamp(column);
         return value == null ? null : value.toInstant();
     }
 

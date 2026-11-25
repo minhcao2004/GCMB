@@ -1,7 +1,7 @@
-import { Pagination } from '../../shared/components/Pagination';
+import { Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
-import api from '../../api/client';
-import './imported-source-report.css';
+import api from '../../../api/client';
+import '../styles/imported-source-report.css';
 
 const tabs = [
   ['cashflow', 'Thu chi'], ['revenue', 'Doanh thu'], ['cost', 'Chi phí'],
@@ -45,7 +45,7 @@ function SourceChart({ type, rows, financialReport }) {
       const method = paymentMethod(row);
       methods.set(method, (methods.get(method) || 0) + Number(row.paidAmount || 0));
     });
-    const data = [...methods.entries()].sort((a, b) => b[1] - a[1]);
+    const data = [...methods.entries()].sort((leftItem, rightItem) => rightItem[1] - leftItem[1]);
     const max = Math.max(1, ...data.map((item) => item[1]));
     return data.length ? <div className="isr-method-chart" role="img" aria-label="Tổng thanh toán theo phương thức">
       {data.map(([name, value]) => <div className="isr-method-row" key={name}><span>{name}</span><div><i style={{ width: `${value / max * 100}%` }} /></div><strong>{money(value)}</strong></div>)}
@@ -54,7 +54,7 @@ function SourceChart({ type, rows, financialReport }) {
   if (type === 'branch') {
     const totals = new Map();
     rows.filter((row) => row.recordType === 'KIOT_INVOICE').forEach((row) => totals.set(row.branchName, (totals.get(row.branchName) || 0) + Number(row.amount || 0)));
-    const data = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    const data = [...totals.entries()].sort((leftItem, rightItem) => rightItem[1] - leftItem[1]);
     const max = Math.max(1, ...data.map((item) => item[1]));
     return data.length ? <div className="isr-method-chart" role="img" aria-label="Doanh thu hóa đơn theo cơ sở">
       {data.map(([name, value]) => <div className="isr-method-row" key={name}><span>{name}</span><div><i style={{ width: `${value / max * 100}%` }} /></div><strong>{money(value)}</strong></div>)}
@@ -74,7 +74,7 @@ function SourceChart({ type, rows, financialReport }) {
       item.expense += Number(row.expenses || 0);
       daily.set(row.label, item);
     });
-    const data = [...daily.entries()].sort((a, b) => a[0].split('/').reverse().join('-').localeCompare(b[0].split('/').reverse().join('-')));
+    const data = [...daily.entries()].sort((leftItem, rightItem) => leftItem[0].split('/').reverse().join('-').localeCompare(rightItem[0].split('/').reverse().join('-')));
     if (!data.length) return <div className="isr-empty-chart">Chưa có dữ liệu thu chi trong kỳ.</div>;
     const width = 760; const height = 260; const left = 52; const right = 18; const top = 18; const bottom = 38;
     const innerWidth = width - left - right; const innerHeight = height - top - bottom;
@@ -97,7 +97,7 @@ function SourceChart({ type, rows, financialReport }) {
     const day = row.businessDate;
     daily.set(day, (daily.get(day) || 0) + Number(type === 'revenue' ? row.amount : row.paidAmount));
   });
-  const data = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const data = [...daily.entries()].sort((leftItem, rightItem) => leftItem[0].localeCompare(rightItem[0]));
   const width = 760; const height = 260; const left = 52; const right = 18; const top = 18; const bottom = 38;
   const innerWidth = width - left - right; const innerHeight = height - top - bottom;
   const max = Math.max(1, ...data.map((item) => item[1]));

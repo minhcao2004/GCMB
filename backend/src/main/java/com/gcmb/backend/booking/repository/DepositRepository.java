@@ -124,10 +124,10 @@ public class DepositRepository {
               AND (CAST(? AS date) IS NULL OR (v.activity_at AT TIME ZONE ?)::date>=CAST(? AS date))
               AND (CAST(? AS date) IS NULL OR (v.activity_at AT TIME ZONE ?)::date<=CAST(? AS date))
             """;
-        return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new DepositDtos.DepositSummary(
-            rs.getBigDecimal("held_amount"), rs.getLong("held_bookings"), rs.getBigDecimal("pending_amount"),
-            rs.getLong("pending_requests"), rs.getBigDecimal("refunded_amount"), rs.getLong("refund_transactions"),
-            rs.getBigDecimal("forfeited_amount"), rs.getLong("forfeited_bookings")),
+        return jdbcTemplate.queryForObject(sql, (resultSet, rowNumber) -> new DepositDtos.DepositSummary(
+            resultSet.getBigDecimal("held_amount"), resultSet.getLong("held_bookings"), resultSet.getBigDecimal("pending_amount"),
+            resultSet.getLong("pending_requests"), resultSet.getBigDecimal("refunded_amount"), resultSet.getLong("refund_transactions"),
+            resultSet.getBigDecimal("forfeited_amount"), resultSet.getLong("forfeited_bookings")),
             branchId, dateFrom, timezone.getId(), dateFrom, dateTo, timezone.getId(), dateTo);
     }
 
@@ -173,9 +173,9 @@ public class DepositRepository {
             WHERE v.branch_id=? AND v.can_request_refund=true
             ORDER BY v.cancelled_at DESC,v.booking_code
             """;
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new DepositDtos.RefundableBooking(
-            rs.getObject("booking_id", UUID.class), rs.getString("booking_code"), rs.getString("customer_name"),
-            rs.getString("phone"), instant(rs, "cancelled_at"), rs.getBigDecimal("amount")), branchId);
+        return jdbcTemplate.query(sql, (resultSet, rowNumber) -> new DepositDtos.RefundableBooking(
+            resultSet.getObject("booking_id", UUID.class), resultSet.getString("booking_code"), resultSet.getString("customer_name"),
+            resultSet.getString("phone"), instant(resultSet, "cancelled_at"), resultSet.getBigDecimal("amount")), branchId);
     }
 
     public List<DepositDtos.RefundRequestItem> refundRequestsForAccounting() {
@@ -189,12 +189,12 @@ public class DepositRepository {
             WHERE r.kind='DEPOSIT'
             ORDER BY CASE WHEN r.status IN ('REQUESTED','APPROVED','PROCESSING') THEN 0 ELSE 1 END,
                      r.created_at DESC,r.id DESC
-            """, (rs, rowNum) -> new DepositDtos.RefundRequestItem(
-                rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class), rs.getString("code"),
-                rs.getString("branch_name"), rs.getString("contact_name"), rs.getString("contact_phone"), rs.getBigDecimal("amount"),
-                rs.getString("reason"), rs.getString("beneficiary_name"), rs.getString("bank_name"),
-                rs.getString("bank_account"), rs.getString("status"), instant(rs, "created_at"),
-                instant(rs, "paid_at"), rs.getString("external_reference"), rs.getBoolean("has_evidence")));
+            """, (resultSet, rowNumber) -> new DepositDtos.RefundRequestItem(
+                resultSet.getObject("id", UUID.class), resultSet.getObject("booking_id", UUID.class), resultSet.getString("code"),
+                resultSet.getString("branch_name"), resultSet.getString("contact_name"), resultSet.getString("contact_phone"), resultSet.getBigDecimal("amount"),
+                resultSet.getString("reason"), resultSet.getString("beneficiary_name"), resultSet.getString("bank_name"),
+                resultSet.getString("bank_account"), resultSet.getString("status"), instant(resultSet, "created_at"),
+                instant(resultSet, "paid_at"), resultSet.getString("external_reference"), resultSet.getBoolean("has_evidence")));
     }
 
     public RefundEvidenceRow refundEvidenceForAccounting(UUID requestId) {
@@ -203,8 +203,8 @@ public class DepositRepository {
             FROM gcmb.refund_request r
             JOIN gcmb.attachment a ON a.id=r.evidence_id
             WHERE r.id=? AND r.kind='DEPOSIT' AND r.status='PAID'
-            """, (rs, rowNum) -> new RefundEvidenceRow(
-                rs.getString("object_key"), rs.getString("original_name"), rs.getString("mime_type")),
+            """, (resultSet, rowNumber) -> new RefundEvidenceRow(
+                resultSet.getString("object_key"), resultSet.getString("original_name"), resultSet.getString("mime_type")),
             requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -215,8 +215,8 @@ public class DepositRepository {
             FROM gcmb.refund_request r
             JOIN gcmb.attachment a ON a.id=r.evidence_id
             WHERE r.branch_id=? AND r.id=? AND r.kind='DEPOSIT' AND r.status='PAID'
-            """, (rs, rowNum) -> new RefundEvidenceRow(
-                rs.getString("object_key"), rs.getString("original_name"), rs.getString("mime_type")),
+            """, (resultSet, rowNumber) -> new RefundEvidenceRow(
+                resultSet.getString("object_key"), resultSet.getString("original_name"), resultSet.getString("mime_type")),
             branchId, requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -230,9 +230,9 @@ public class DepositRepository {
             WHERE b.branch_id=? AND b.id=? AND r.branch_id=b.branch_id
               AND r.kind='DEPOSIT' AND r.status='PAID' AND r.evidence_id IS NOT NULL
             ORDER BY r.paid_at DESC,r.id DESC
-            """, (rs, rowNum) -> new DepositDtos.RefundEvidenceItem(
-                rs.getObject("id", UUID.class), rs.getBigDecimal("amount"), instant(rs, "paid_at"),
-                rs.getString("external_reference"), rs.getString("original_name")), branchId, bookingId);
+            """, (resultSet, rowNumber) -> new DepositDtos.RefundEvidenceItem(
+                resultSet.getObject("id", UUID.class), resultSet.getBigDecimal("amount"), instant(resultSet, "paid_at"),
+                resultSet.getString("external_reference"), resultSet.getString("original_name")), branchId, bookingId);
     }
 
     public void insertAttachment(UUID id, String objectKey, String originalName, String mimeType,
@@ -249,11 +249,11 @@ public class DepositRepository {
             SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
             FROM gcmb.refund_request
             WHERE branch_id=? AND id=? AND kind='DEPOSIT'
-            """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
-                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
-                rs.getObject("booking_id", UUID.class),
-                rs.getObject("deposit_id", UUID.class), rs.getBigDecimal("amount"),
-                rs.getString("reason"), rs.getString("status")), branchId, requestId);
+            """ + lockClause, (resultSet, rowNumber) -> new RefundRequestRow(
+                resultSet.getObject("id", UUID.class), resultSet.getObject("branch_id", UUID.class),
+                resultSet.getObject("booking_id", UUID.class),
+                resultSet.getObject("deposit_id", UUID.class), resultSet.getBigDecimal("amount"),
+                resultSet.getString("reason"), resultSet.getString("status")), branchId, requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -263,10 +263,10 @@ public class DepositRepository {
             SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
             FROM gcmb.refund_request
             WHERE id=? AND kind='DEPOSIT'
-            """ + lockClause, (rs, rowNum) -> new RefundRequestRow(
-                rs.getObject("id", UUID.class), rs.getObject("branch_id", UUID.class),
-                rs.getObject("booking_id", UUID.class), rs.getObject("deposit_id", UUID.class),
-                rs.getBigDecimal("amount"), rs.getString("reason"), rs.getString("status")), requestId);
+            """ + lockClause, (resultSet, rowNumber) -> new RefundRequestRow(
+                resultSet.getObject("id", UUID.class), resultSet.getObject("branch_id", UUID.class),
+                resultSet.getObject("booking_id", UUID.class), resultSet.getObject("deposit_id", UUID.class),
+                resultSet.getBigDecimal("amount"), resultSet.getString("reason"), resultSet.getString("status")), requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -331,7 +331,7 @@ public class DepositRepository {
                  WHERE fa.branch_id=? AND fa.kind='CASH_DRAWER' AND fa.active
                  ORDER BY fa.code LIMIT 1)
             ) AS account_id
-            """, (rs, rowNum) -> rs.getObject("account_id", UUID.class),
+            """, (resultSet, rowNumber) -> resultSet.getObject("account_id", UUID.class),
             request.depositId(), request.depositId(), request.branchId());
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -348,7 +348,7 @@ public class DepositRepository {
             SELECT id FROM gcmb.financial_period
             WHERE month=date_trunc('month',CURRENT_DATE)::date AND status='OPEN'
             FOR SHARE
-            """, (rs, rowNum) -> rs.getObject("id", UUID.class));
+            """, (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -402,8 +402,8 @@ public class DepositRepository {
                 WHERE b.branch_id=? AND b.id=? AND r.kind='DEPOSIT' AND r.paid_at IS NOT NULL
             ) timeline
             ORDER BY timeline.happened_at,timeline.type
-            """, (rs, rowNum) -> new DepositDtos.DepositEvent(
-                instant(rs, "happened_at"), rs.getString("type"), rs.getString("label"), rs.getString("details")),
+            """, (resultSet, rowNumber) -> new DepositDtos.DepositEvent(
+                instant(resultSet, "happened_at"), resultSet.getString("type"), resultSet.getString("label"), resultSet.getString("details")),
             branchId, bookingId, branchId, bookingId, branchId, bookingId, branchId, bookingId);
     }
 
@@ -414,17 +414,17 @@ public class DepositRepository {
             search, search };
     }
 
-    private static DepositDtos.DepositItem mapItem(ResultSet rs, int rowNum) throws SQLException {
-        return new DepositDtos.DepositItem(rs.getObject("booking_id", UUID.class), rs.getString("booking_code"),
-            rs.getString("customer_name"), rs.getString("phone"), rs.getString("room_code"), rs.getString("room_name"),
-            instant(rs, "check_in_at"), rs.getBigDecimal("amount"), rs.getBigDecimal("received_amount"),
-            rs.getBigDecimal("balance"), rs.getBigDecimal("pending_amount"), rs.getBigDecimal("refunded_amount"),
-            rs.getBigDecimal("forfeited_amount"), rs.getString("payment_method"), rs.getString("status"),
-            rs.getString("latest_request_status"), instant(rs, "activity_at"), rs.getBoolean("can_request_refund"));
+    private static DepositDtos.DepositItem mapItem(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new DepositDtos.DepositItem(resultSet.getObject("booking_id", UUID.class), resultSet.getString("booking_code"),
+            resultSet.getString("customer_name"), resultSet.getString("phone"), resultSet.getString("room_code"), resultSet.getString("room_name"),
+            instant(resultSet, "check_in_at"), resultSet.getBigDecimal("amount"), resultSet.getBigDecimal("received_amount"),
+            resultSet.getBigDecimal("balance"), resultSet.getBigDecimal("pending_amount"), resultSet.getBigDecimal("refunded_amount"),
+            resultSet.getBigDecimal("forfeited_amount"), resultSet.getString("payment_method"), resultSet.getString("status"),
+            resultSet.getString("latest_request_status"), instant(resultSet, "activity_at"), resultSet.getBoolean("can_request_refund"));
     }
 
-    private static Instant instant(ResultSet rs, String column) throws SQLException {
-        var value = rs.getTimestamp(column);
+    private static Instant instant(ResultSet resultSet, String column) throws SQLException {
+        var value = resultSet.getTimestamp(column);
         return value == null ? null : value.toInstant();
     }
 }

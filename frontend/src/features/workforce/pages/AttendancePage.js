@@ -131,7 +131,7 @@ export default function AttendancePage({
         {!monthly && (
           <button
             className="shift-primary"
-            disabled={loading || readonly || !data?.rows.some((r) => r.periodStatus !== 'CLOSED')}
+            disabled={loading || readonly || !data?.rows.some((row) => row.periodStatus !== 'CLOSED')}
             onClick={() => openRecord()}
           >
             Ghi nhận chấm công
@@ -152,7 +152,7 @@ export default function AttendancePage({
       )}
       {error && (
         <p className="shift-message error" role="alert">
-          {error} <button onClick={() => setRevision((v) => v + 1)}>Tải lại</button>
+          {error} <button onClick={() => setRevision((previousRevision) => previousRevision + 1)}>Tải lại</button>
         </p>
       )}
       <div className="shift-toolbar attendance-filters">
@@ -196,8 +196,8 @@ export default function AttendancePage({
               onChange={(e) => setTemplate(e.target.value)}
             >
               <option value="">Tất cả ca</option>
-              {data?.templates.map((t, i) => (
-                <option key={t.id} value={t.id}>
+              {data?.templates.map((templateItem, i) => (
+                <option key={templateItem.id} value={templateItem.id}>
                   Ca {i + 1}
                 </option>
               ))}
@@ -462,7 +462,7 @@ export default function AttendancePage({
           }}
           onReload={() => {
             setDialog(null);
-            setRevision((v) => v + 1);
+            setRevision((previousRevision) => previousRevision + 1);
           }}
           onSaved={(result) => {
             setData(result);

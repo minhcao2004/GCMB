@@ -4,7 +4,7 @@ import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import api from '../../../api/client';
-import CustomerSourcesChart from '../../dashboard/CustomerSourcesChart';
+import CustomerSourcesChart from '../../dashboard/components/CustomerSourcesChart';
 import './branch-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
@@ -216,7 +216,7 @@ export default function BranchOverviewDashboard({ user }) {
   const { kpis } = dataView;
   const total = rooms.vacant + rooms.booked + rooms.occupied + rooms.maintenance;
   const occupiedShare = total ? rooms.occupied / total * 100 : 0;
-  const slices = [rooms.vacant, rooms.booked, rooms.occupied, rooms.maintenance].map((n) => n / Math.max(1, total) * 100);
+  const slices = [rooms.vacant, rooms.booked, rooms.occupied, rooms.maintenance].map((count) => count / Math.max(1, total) * 100);
   const gradient = `conic-gradient(#16855b 0 ${slices[0]}%, #2586a0 ${slices[0]}% ${slices[0] + slices[1]}%, #a91669 ${slices[0] + slices[1]}% ${slices[0] + slices[1] + slices[2]}%, #bf6744 ${slices[0] + slices[1] + slices[2]}% 100%)`;
   const shiftRows = dataView.shifts;
   return <main className="bm-dashboard" aria-labelledby="bm-title">

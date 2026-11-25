@@ -153,41 +153,41 @@ public class StaffRepository {
         );
     }
 
-    public void create(UUID id, StaffCommand c) {
+    public void create(UUID id, StaffCommand command) {
         jdbcTemplate.update(
             """
             INSERT INTO gcmb.employee(id,code,full_name,phone,position,contact_email,identity_number,address,notes,hired_on,status)
             VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE')
             """,
             id,
-            c.code(),
-            c.fullName(),
-            c.phone(),
-            c.position(),
-            c.contactEmail(),
-            c.identityNumber(),
-            c.address(),
-            c.notes(),
-            c.hiredOn()
+            command.code(),
+            command.fullName(),
+            command.phone(),
+            command.position(),
+            command.contactEmail(),
+            command.identityNumber(),
+            command.address(),
+            command.notes(),
+            command.hiredOn()
         );
     }
 
-    public void update(UUID id, StaffCommand c) {
+    public void update(UUID id, StaffCommand command) {
         jdbcTemplate.update(
             """
             UPDATE gcmb.employee SET code=?,full_name=?,phone=?,position=?,contact_email=?,identity_number=?,address=?,notes=?,
                 hired_on=?,resigned_on=?,version=version+1 WHERE id=?
             """,
-            c.code(),
-            c.fullName(),
-            c.phone(),
-            c.position(),
-            c.contactEmail(),
-            c.identityNumber(),
-            c.address(),
-            c.notes(),
-            c.hiredOn(),
-            c.resignedOn(),
+            command.code(),
+            command.fullName(),
+            command.phone(),
+            command.position(),
+            command.contactEmail(),
+            command.identityNumber(),
+            command.address(),
+            command.notes(),
+            command.hiredOn(),
+            command.resignedOn(),
             id
         );
     }
@@ -208,7 +208,7 @@ public class StaffRepository {
             SELECT GREATEST(clock_timestamp(),COALESCE(max(valid_from)+interval '1 microsecond',clock_timestamp()))
             FROM gcmb.employee_assignment WHERE employee_id=?
             """,
-            (rs, n) -> rs.getTimestamp(1).toInstant(),
+            (resultSet, rowNumber) -> resultSet.getTimestamp(1).toInstant(),
             employee
         );
         jdbcTemplate.update(

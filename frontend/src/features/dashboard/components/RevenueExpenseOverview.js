@@ -4,8 +4,8 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { financeApi } from '../finance/services/financeApi';
-import './revenue-expense-overview.css';
+import { financeApi } from '../../finance/services/financeApi';
+import '../styles/revenue-expense-overview.css';
 
 const MAX_RANGE_DAYS = 366;
 const ALERT_THRESHOLD_PERCENT = 20;
@@ -178,7 +178,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   const categories = useMemo(() => {
     const values = [...(data?.categories || [])]
       .filter((item) => number(item.current) > 0 || number(item.comparison) > 0)
-      .sort((a, b) => number(b.current) - number(a.current));
+      .sort((left, right) => number(right.current) - number(left.current));
     const sum = values.reduce((result, item) => result + number(item.current), 0);
     return values.map((item, index) => ({
       ...item,
@@ -369,7 +369,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
 
           <article className="rx-card">
             <div className="rx-card__head"><div><h3 className="rx-card__title">Chi phí vận hành theo cơ sở</h3><p className="rx-card__hint">Số liệu theo bộ lọc kỳ và cơ sở đang chọn.</p></div></div>
-            <div className="rx-chart rx-chart--branch"><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((a,b)=>number(b.expenses)-number(a.expenses)).slice(0, 10)} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 0 }}>
+            <div className="rx-chart rx-chart--branch"><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((left,right)=>number(right.expenses)-number(left.expenses)).slice(0, 10)} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--rx-border)" />
               <XAxis type="number" tickFormatter={compactMoney} tick={{ fontSize: 11, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} />
               <YAxis type="category" dataKey="name" width={172} interval={0} tick={<BranchExpenseTick />} tickLine={false} axisLine={false} />
@@ -380,7 +380,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
 
         <article className="rx-card rx-ranking">
           <div className="rx-card__head"><div><h3 className="rx-card__title">Xếp hạng cơ sở</h3><p className="rx-card__hint">So sánh thu nhập, chi phí và lợi nhuận vận hành theo cơ sở.</p></div></div>
-          {branchRows.length ? <div className="rx-ranking-scroll"><div className="rx-chart rx-chart--ranking" style={{ minWidth: `${Math.max(820, branchRows.length * 74)}px` }}><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((a, b) => number(b.revenue) - number(a.revenue))} margin={{ top: 8, right: 16, left: 8, bottom: 58 }}>
+          {branchRows.length ? <div className="rx-ranking-scroll"><div className="rx-chart rx-chart--ranking" style={{ minWidth: `${Math.max(820, branchRows.length * 74)}px` }}><ResponsiveContainer width="100%" height="100%"><BarChart data={[...branchRows].sort((left, right) => number(right.revenue) - number(left.revenue))} margin={{ top: 8, right: 16, left: 8, bottom: 58 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--rx-border)" />
             <XAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={76} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={compactMoney} tick={{ fontSize: 10, fill: 'var(--rx-muted)' }} tickLine={false} axisLine={false} width={58} />

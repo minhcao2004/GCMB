@@ -113,7 +113,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
   function saved(record, message) {
     setEmployee(record);
     setNotice(message);
-    setRevision((v) => v + 1);
+    setRevision((previousRevision) => previousRevision + 1);
   }
   return (
     <section className="staff-page" aria-labelledby="staff-page-title">
@@ -124,7 +124,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
           <button
             type="button"
             className="staff-link"
-            onClick={() => (employee ? open(employee.id) : setRevision((v) => v + 1))}
+            onClick={() => (employee ? open(employee.id) : setRevision((previousRevision) => previousRevision + 1))}
           >
             Thử lại
           </button>
@@ -293,16 +293,16 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                     </tr>
                   </thead>
                   <tbody>
-                    {employee.history.map((h) => (
-                      <tr key={h.id}>
-                        <td>{timeLabel(h.createdAt)}</td>
+                    {employee.history.map((historyItem) => (
+                      <tr key={historyItem.id}>
+                        <td>{timeLabel(historyItem.createdAt)}</td>
                         <td>
-                          {h.previousBranchName ? 'Điều chuyển' : 'Gán ban đầu'}
-                          {h.reason && <small>{h.reason}</small>}
+                          {historyItem.previousBranchName ? 'Điều chuyển' : 'Gán ban đầu'}
+                          {historyItem.reason && <small>{historyItem.reason}</small>}
                         </td>
-                        <td>{h.previousBranchName || '—'}</td>
-                        <td>{h.branchName}</td>
-                        <td>{h.actor}</td>
+                        <td>{historyItem.previousBranchName || '—'}</td>
+                        <td>{historyItem.branchName}</td>
+                        <td>{historyItem.actor}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -360,9 +360,9 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
               onChange={(e) => filter('branchId', e.target.value)}
             >
               <option value="">{branchScope ? user.branchName : 'Cơ sở: Tất cả'}</option>
-              {branches.map((b) => (
-                <option value={b.id} key={b.id}>
-                  {b.name}
+              {branches.map((branch) => (
+                <option value={branch.id} key={branch.id}>
+                  {branch.name}
                 </option>
               ))}
               {!branchScope && <option value="NONE">Chưa gán</option>}
@@ -412,23 +412,23 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
                       </tr>
                     </thead>
                     <tbody>
-                      {data.items.map((r, index) => (
-                        <tr key={r.id} className={index === 0 ? 'staff-highlight' : ''}>
+                      {data.items.map((item, index) => (
+                        <tr key={item.id} className={index === 0 ? 'staff-highlight' : ''}>
                           <td>
-                            <strong>{r.code}</strong>
-                            <small>{r.fullName}</small>
+                            <strong>{item.code}</strong>
+                            <small>{item.fullName}</small>
                           </td>
-                          <td>{positions[r.position]}</td>
-                          <td>{r.branchName || 'Chưa gán'}</td>
-                          <td>{r.phone || '—'}</td>
-                          <td>{statusBadge(r.status)}</td>
+                          <td>{positions[item.position]}</td>
+                          <td>{item.branchName || 'Chưa gán'}</td>
+                          <td>{item.phone || '—'}</td>
+                          <td>{statusBadge(item.status)}</td>
                           <td>
                             <button
                               type="button"
                               className="staff-link"
                               disabled={detailLoading}
-                              onClick={() => open(r.id)}
-                              aria-label={`Chi tiết ${r.fullName}`}
+                              onClick={() => open(item.id)}
+                              aria-label={`Chi tiết ${item.fullName}`}
                             >
                               Chi tiết
                             </button>

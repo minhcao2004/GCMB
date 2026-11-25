@@ -99,7 +99,7 @@ export default function PayrollPage() {
     if (dialog === 'advance' && payment.employeeId)
       api
         .get(`${base}/${month}/available/${payment.employeeId}`)
-        .then((r) => active && setAvailable(r))
+        .then((response) => active && setAvailable(response))
         .catch((e) => active && setError(Object.values(apiErrors(e)).join(' ')));
     return () => {
       active = false;
@@ -113,12 +113,12 @@ export default function PayrollPage() {
       const result = await api.post(path, body);
       const outcomes = result?.outcomes
         ?.map(
-          (r) =>
-            `${options.employees.find((e) => e.id === r.employeeId)?.name || ''}: ${r.message || (r.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thành công, chưa ghi giảm quỹ')}`,
+          (outcome) =>
+            `${options.employees.find((e) => e.id === outcome.employeeId)?.name || ''}: ${outcome.message || (outcome.status === 'PAID' ? 'Đã thanh toán' : 'Chưa thành công, chưa ghi giảm quỹ')}`,
         )
         .join('; ');
       setNotice(outcomes || result?.message || message || 'Đã lưu.');
-      setRevision((n) => n + 1);
+      setRevision((previousRevision) => previousRevision + 1);
       return true;
     } catch (e) {
       setError(Object.values(apiErrors(e)).join(' '));
@@ -180,9 +180,9 @@ export default function PayrollPage() {
     row.submitted_branch_id === branchFilter ||
     row.components?.some((component) => component.branch_id === branchFilter));
   const rows = branchRows.filter(
-    (r) =>
-      `${r.code} ${r.name}`.toLowerCase().includes(search.toLowerCase()) &&
-      (!filter || Boolean(r.paid) === (filter === 'paid')),
+    (branchRow) =>
+      `${branchRow.code} ${branchRow.name}`.toLowerCase().includes(search.toLowerCase()) &&
+      (!filter || Boolean(branchRow.paid) === (filter === 'paid')),
   );
   const totalDue = rows.filter((row) => !row.paid).reduce((sum, row) => sum + Number(row.net_amount), 0);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -221,7 +221,7 @@ export default function PayrollPage() {
             <option value="unpaid">Chưa trả</option>
           </select>
         </label>
-        <button disabled={loading || busy} onClick={() => setRevision((n) => n + 1)}>
+        <button disabled={loading || busy} onClick={() => setRevision((previousRevision) => previousRevision + 1)}>
           Tải lại
         </button>
       </div>
@@ -280,12 +280,12 @@ export default function PayrollPage() {
               <button
                 className="finance-primary"
                 disabled={busy || !selected.length || selected.some((id) =>
-                  !data.rows.some((r) => r.employee_id === id &&
-                    (data.status === 'CONFIRMED' || r.submitted_branch_id)))}
+                  !data.rows.some((row) => row.employee_id === id &&
+                    (data.status === 'CONFIRMED' || row.submitted_branch_id)))}
                 onClick={() => {
                   setDialog('payments');
                   setEvidence({});
-                  setPayment((p) => ({ ...p, accountId: '' }));
+                  setPayment((previousPayment) => ({ ...previousPayment, accountId: '' }));
                   setReviewed(false);
                   setResults(
                     Object.fromEntries(
@@ -395,22 +395,22 @@ export default function PayrollPage() {
                       onChange={(accountId) => setPayment({ ...payment, accountId })}
                     />
                     {<PaginatedList pageSize={5}>{selected.map((id) => {
-                      const r = data.rows.find((r) => r.employee_id === id);
+                      const row = data.rows.find((row) => row.employee_id === id);
                       return (
-                        r && (
+                        row && (
                           <div className="finance-card" key={id}>
                             <h3>
-                              {r.code} · {r.name} · {vnd(r.net_amount)}
+                              {row.code} · {row.name} · {vnd(row.net_amount)}
                             </h3>
-                            <SalaryBankDetails entry={r} />
+                            <SalaryBankDetails entry={row} />
                             <ResultInputs
                               value={results[id]}
                               hasEvidence={Boolean(evidence[id])}
-                              onChange={(v) => setResults({ ...results, [id]: v })}
+                              onChange={(value) => setResults({ ...results, [id]: value })}
                             />
                             <label>Ảnh / chứng từ trả lương (không bắt buộc)
                               <input type="file" disabled={busy}
-                                aria-label={`Bằng chứng trả lương ${r.name}`}
+                                aria-label={`Bằng chứng trả lương ${row.name}`}
                                 accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
                                 onChange={(event) => {
                                   const file = event.target.files?.[0] || null;
@@ -458,30 +458,30 @@ export default function PayrollPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageRows.map((r) => (
-                    <tr key={r.id}>
+                  {pageRows.map((pageRow) => (
+                    <tr key={pageRow.id}>
                       <td>
                         <input
-                          aria-label={`Chọn ${r.name}`}
+                          aria-label={`Chọn ${pageRow.name}`}
                           type="checkbox"
-                          disabled={r.paid}
-                          checked={selected.includes(r.employee_id)}
-                          onChange={() => toggle(r.employee_id)}
+                          disabled={pageRow.paid}
+                          checked={selected.includes(pageRow.employee_id)}
+                          onChange={() => toggle(pageRow.employee_id)}
                         />
                       </td>
                       <td>
-                        {r.code}
-                        <small>{r.name}</small>
-                        {r.submitted_branch_name && <small>{r.submitted_branch_name}</small>}
+                        {pageRow.code}
+                        <small>{pageRow.name}</small>
+                        {pageRow.submitted_branch_name && <small>{pageRow.submitted_branch_name}</small>}
                       </td>
-                      <td><SalaryBankDetails entry={r} /></td>
-                      <td>{vnd(r.gross_amount)}</td>
-                      <td>{vnd(r.deduction_amount)}</td>
-                      <td>{vnd(r.advances)}</td>
-                      <td>{vnd(r.net_amount)}</td>
-                      <td>{r.paid ? 'Đã trả' : r.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
+                      <td><SalaryBankDetails entry={pageRow} /></td>
+                      <td>{vnd(pageRow.gross_amount)}</td>
+                      <td>{vnd(pageRow.deduction_amount)}</td>
+                      <td>{vnd(pageRow.advances)}</td>
+                      <td>{vnd(pageRow.net_amount)}</td>
+                      <td>{pageRow.paid ? 'Đã trả' : pageRow.submitted_branch_id ? 'Cơ sở đã gửi' : 'Chưa trả'}</td>
                       <td>
-                        <button type="button" aria-haspopup="dialog" onClick={() => setDetail(r)}>Chi tiết</button>
+                        <button type="button" aria-haspopup="dialog" onClick={() => setDetail(pageRow)}>Chi tiết</button>
                       </td>
                     </tr>
                   ))}
@@ -503,14 +503,14 @@ export default function PayrollPage() {
                   <button type="button" aria-label="Đóng chi tiết" onClick={() => setDetail(null)}>×</button>
                 </header>
                 <div className="payroll-detail-body">
-                {<PaginatedList pageSize={10}>{detail.components.map((c, i) => (
+                {<PaginatedList pageSize={10}>{detail.components.map((component, i) => (
                   <div className="finance-line" key={i}>
                     <span>
-                      {componentNames[c.reason] || componentNames[c.kind]}
-                      {c.branch_name && <small>{c.branch_name}</small>}
-                      {['ADDITION', 'DEDUCTION'].includes(c.kind) && <small>{c.reason}</small>}
+                      {componentNames[component.reason] || componentNames[component.kind]}
+                      {component.branch_name && <small>{component.branch_name}</small>}
+                      {['ADDITION', 'DEDUCTION'].includes(component.kind) && <small>{component.reason}</small>}
                     </span>
-                    <strong>{vnd(c.amount)}</strong>
+                    <strong>{vnd(component.amount)}</strong>
                   </div>
                 ))}</PaginatedList>}
                 <div className="finance-line">
@@ -520,15 +520,15 @@ export default function PayrollPage() {
                 <div className="finance-info">Thực nhận: {vnd(detail.net_amount)}</div>
                 <SalaryBankDetails entry={detail} />
                 {error && <p className="finance-error" role="alert">{error}</p>}
-                {<PaginatedList pageSize={5}>{detail.payments.map((p, i) => (
+                {<PaginatedList pageSize={5}>{detail.payments.map((paymentItem, i) => (
                   <p key={i}>
-                    {p.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(p.amount)} ·{' '}
-                    {p.external_reference}
-                    {p.evidence_name && <button type="button" className="finance-link"
+                    {paymentItem.status === 'PAID' ? 'Đã trả' : 'Chưa thành công'} · {vnd(paymentItem.amount)} ·{' '}
+                    {paymentItem.external_reference}
+                    {paymentItem.evidence_name && <button type="button" className="finance-link"
                       onClick={async () => {
-                        try { await api.download(`${base}/payments/${p.id}/evidence`, p.evidence_name); }
+                        try { await api.download(`${base}/payments/${paymentItem.id}/evidence`, paymentItem.evidence_name); }
                         catch { setError('Không tải được bằng chứng trả lương. Vui lòng thử lại.'); }
-                      }}>Tải bằng chứng: {p.evidence_name}</button>}
+                      }}>Tải bằng chứng: {paymentItem.evidence_name}</button>}
                   </p>
                 ))}</PaginatedList>}
                 </div>
@@ -552,14 +552,14 @@ export default function PayrollPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {advances.map((a) => (
-                      <tr key={a.id}>
+                    {advances.map((advance) => (
+                      <tr key={advance.id}>
                         <td>
-                          {a.code} · {a.name}
+                          {advance.code} · {advance.name}
                         </td>
-                        <td>{vnd(a.amount)}</td>
-                        <td>{paymentStatusNames[a.status] || 'Chưa xác định'}</td>
-                        <td>{a.external_reference}</td>
+                        <td>{vnd(advance.amount)}</td>
+                        <td>{paymentStatusNames[advance.status] || 'Chưa xác định'}</td>
+                        <td>{advance.external_reference}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -594,9 +594,9 @@ function FundInput({ options, value, onChange }) {
       Quỹ kế toán chi tiền *
       <select required value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Chọn quỹ</option>
-        {options.funds.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.name} · Còn {vnd(f.balance)}
+        {options.funds.map((fund) => (
+          <option key={fund.id} value={fund.id}>
+            {fund.name} · Còn {vnd(fund.balance)}
           </option>
         ))}
       </select>

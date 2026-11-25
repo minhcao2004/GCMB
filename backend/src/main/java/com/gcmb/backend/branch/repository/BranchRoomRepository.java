@@ -52,23 +52,23 @@ public class BranchRoomRepository {
     }
     public List<RoomView> types() {
         return jdbcTemplate.query("SELECT id, code, name, mode FROM gcmb.room_type WHERE active=true ORDER BY name",
-            (r,n)->new RoomView(null,r.getString("code"),r.getString("name"),null,r.getObject("id",UUID.class),r.getString("code"),r.getString("name"),r.getString("mode"),null,null,null,null,null,null,null));
+            (resultSet, rowNumber) ->new RoomView(null,resultSet.getString("code"),resultSet.getString("name"),null,resultSet.getObject("id",UUID.class),resultSet.getString("code"),resultSet.getString("name"),resultSet.getString("mode"),null,null,null,null,null,null,null));
     }
-    public RoomView create(UUID branch, RoomCommand c) {
-        UUID id=jdbcTemplate.queryForObject("INSERT INTO gcmb.room(branch_id,room_type_id,code,name,capacity,operating_status,floor_number,description,status_reason) SELECT ?,id,?,?,?,'AVAILABLE',?,?,'' FROM gcmb.room_type WHERE id=? AND active=true RETURNING id",UUID.class,branch,c.code().trim(),c.name().trim(),c.capacity(),c.floorNumber(),c.description()==null?"":c.description().trim(),c.roomTypeId());
+    public RoomView create(UUID branch, RoomCommand command) {
+        UUID id=jdbcTemplate.queryForObject("INSERT INTO gcmb.room(branch_id,room_type_id,code,name,capacity,operating_status,floor_number,description,status_reason) SELECT ?,id,?,?,?,'AVAILABLE',?,?,'' FROM gcmb.room_type WHERE id=? AND active=true RETURNING id",UUID.class,branch,command.code().trim(),command.name().trim(),command.capacity(),command.floorNumber(),command.description()==null?"":command.description().trim(),command.roomTypeId());
         return get(branch,id);
     }
-    public RoomView update(UUID branch, UUID id, RoomCommand c) {
-        int changed=jdbcTemplate.update("UPDATE gcmb.room r SET room_type_id=rt.id,code=?,name=?,capacity=?,floor_number=?,description=? FROM gcmb.room_type rt WHERE r.id=? AND r.branch_id=? AND rt.id=? AND rt.active=true",c.code().trim(),c.name().trim(),c.capacity(),c.floorNumber(),c.description()==null?"":c.description().trim(),id,branch,c.roomTypeId());
+    public RoomView update(UUID branch, UUID id, RoomCommand command) {
+        int changed=jdbcTemplate.update("UPDATE gcmb.room r SET room_type_id=rt.id,code=?,name=?,capacity=?,floor_number=?,description=? FROM gcmb.room_type rt WHERE r.id=? AND r.branch_id=? AND rt.id=? AND rt.active=true",command.code().trim(),command.name().trim(),command.capacity(),command.floorNumber(),command.description()==null?"":command.description().trim(),id,branch,command.roomTypeId());
         return changed==0?null:get(branch,id);
     }
     public boolean delete(UUID branch, UUID id) { return jdbcTemplate.update("DELETE FROM gcmb.room WHERE id=? AND branch_id=? AND NOT EXISTS(SELECT 1 FROM gcmb.room_allocation a WHERE a.room_id=gcmb.room.id) AND NOT EXISTS(SELECT 1 FROM gcmb.asset x WHERE x.room_id=gcmb.room.id) AND NOT EXISTS(SELECT 1 FROM gcmb.asset_transfer at WHERE at.to_room_id=gcmb.room.id)",id,branch)>0; }
-    public RoomView changeStatus(UUID branch, UUID id, UUID actor, RoomStatusCommand c) {
+    public RoomView changeStatus(UUID branch, UUID id, UUID actor, RoomStatusCommand command) {
         RoomView before=get(branch,id); if(before==null)return null;
-        Timestamp ready=c.expectedReadyAt()==null?null:Timestamp.from(c.expectedReadyAt().toInstant());
-        int changed=jdbcTemplate.update("UPDATE gcmb.room SET operating_status=?,status_reason=?,expected_ready_at=? WHERE id=? AND branch_id=?",c.status(),c.reason()==null?"":c.reason().trim(),ready,id,branch);
+        Timestamp ready=command.expectedReadyAt()==null?null:Timestamp.from(command.expectedReadyAt().toInstant());
+        int changed=jdbcTemplate.update("UPDATE gcmb.room SET operating_status=?,status_reason=?,expected_ready_at=? WHERE id=? AND branch_id=?",command.status(),command.reason()==null?"":command.reason().trim(),ready,id,branch);
         if(changed==0)return null;
-        jdbcTemplate.update("INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,expected_ready_at,changed_by) VALUES(?,?,?,?,?,?,?)",id,branch,before.operatingStatus(),c.status(),c.reason()==null?"":c.reason().trim(),ready,actor);
+        jdbcTemplate.update("INSERT INTO gcmb.room_operating_status_history(room_id,branch_id,previous_status,new_status,reason,expected_ready_at,changed_by) VALUES(?,?,?,?,?,?,?)",id,branch,before.operatingStatus(),command.status(),command.reason()==null?"":command.reason().trim(),ready,actor);
         return get(branch,id);
     }
 }

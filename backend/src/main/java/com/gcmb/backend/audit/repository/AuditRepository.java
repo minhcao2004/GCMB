@@ -63,18 +63,18 @@ public class AuditRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    private static AuditEntry entry(ResultSet rs, int row) throws SQLException {
+    private static AuditEntry entry(ResultSet resultSet, int row) throws SQLException {
         return new AuditEntry(
-            rs.getObject("id", UUID.class),
-            rs.getTimestamp("created_at").toInstant(),
-            rs.getString("actor_name"),
-            rs.getString("actor_username"),
-            rs.getString("action"),
-            rs.getString("entity_type"),
-            rs.getObject("entity_id", UUID.class),
-            rs.getString("entity_name"),
-            rs.getString("branch_name"),
-            rs.getString("reason")
+            resultSet.getObject("id", UUID.class),
+            resultSet.getTimestamp("created_at").toInstant(),
+            resultSet.getString("actor_name"),
+            resultSet.getString("actor_username"),
+            resultSet.getString("action"),
+            resultSet.getString("entity_type"),
+            resultSet.getObject("entity_id", UUID.class),
+            resultSet.getString("entity_name"),
+            resultSet.getString("branch_name"),
+            resultSet.getString("reason")
         );
     }
 
@@ -158,30 +158,30 @@ public class AuditRepository {
                 """;
         List<AuditDetail> result = jdbcTemplate.query(
             SELECT + snapshots + FROM + " WHERE a.id=?",
-            (rs, row) ->
+            (resultSet, row) ->
                 new AuditDetail(
-                    entry(rs, row),
+                    entry(resultSet, row),
                     new Snapshot(
-                        rs.getString("before_username"),
-                        rs.getString("before_role"),
-                        rs.getString("before_branch"),
-                        rs.getString("before_status"),
-                        rs.getString("before_name"),
-                        rs.getString("before_email"),
-                        rs.getString("before_phone")
+                        resultSet.getString("before_username"),
+                        resultSet.getString("before_role"),
+                        resultSet.getString("before_branch"),
+                        resultSet.getString("before_status"),
+                        resultSet.getString("before_name"),
+                        resultSet.getString("before_email"),
+                        resultSet.getString("before_phone")
                     ),
                     new Snapshot(
-                        rs.getString("after_username"),
-                        rs.getString("after_role"),
-                        rs.getString("after_branch"),
-                        rs.getString("after_status"),
-                        rs.getString("after_name"),
-                        rs.getString("after_email"),
-                        rs.getString("after_phone")
+                        resultSet.getString("after_username"),
+                        resultSet.getString("after_role"),
+                        resultSet.getString("after_branch"),
+                        resultSet.getString("after_status"),
+                        resultSet.getString("after_name"),
+                        resultSet.getString("after_email"),
+                        resultSet.getString("after_phone")
                     ),
-                    AuditSnapshots.read(rs.getString("before_values")),
-                    AuditSnapshots.read(rs.getString("after_values")),
-                    rs.getString("actor_role")
+                    AuditSnapshots.read(resultSet.getString("before_values")),
+                    AuditSnapshots.read(resultSet.getString("after_values")),
+                    resultSet.getString("actor_role")
                 ),
             id
         );

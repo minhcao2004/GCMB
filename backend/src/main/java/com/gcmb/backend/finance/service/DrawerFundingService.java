@@ -4,11 +4,11 @@ package com.gcmb.backend.finance.service;
 import static com.gcmb.backend.finance.service.FinanceAccess.*;
 
 import com.gcmb.backend.auth.dto.Identity;
+import com.gcmb.backend.finance.repository.DrawerFundingRepository;
 import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -18,13 +18,13 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @Transactional
 public class DrawerFundingService {
-  private final JdbcTemplate jdbcTemplate;
+  private final DrawerFundingRepository drawerFundingRepository;
   private final FinanceAccess financeAccess;
   private final CashClosingService cashClosingService;
   private final EquipmentAssetFileStorageService equipmentAssetFileStorageService;
-  public DrawerFundingService(JdbcTemplate jdbcTemplate,FinanceAccess financeAccess,CashClosingService cashClosingService,
+  public DrawerFundingService(DrawerFundingRepository drawerFundingRepository,FinanceAccess financeAccess,CashClosingService cashClosingService,
       EquipmentAssetFileStorageService equipmentAssetFileStorageService) {
-    this.jdbcTemplate=jdbcTemplate;
+    this.drawerFundingRepository=drawerFundingRepository;
     this.financeAccess=financeAccess;
     this.cashClosingService=cashClosingService;
     this.equipmentAssetFileStorageService=equipmentAssetFileStorageService;
@@ -44,32 +44,23 @@ public class DrawerFundingService {
       result.put("requesterId",actor.id());
     } else {
       financeAccess.accountant(actor);
-      result.put("fundBalance",AccountantFund.balance(jdbcTemplate));
-      result.put("branches",jdbcTemplate.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name"));
+      result.put("fundBalance",drawerFundingRepository.accountantFundBalance());
+      result.put("branches",drawerFundingRepository.findBranchOptions());
     }
-    var rows=jdbcTemplate.queryForList("""
-      SELECT f.*,b.name AS "branchName",u.username AS "requestedBy",p.username AS "processedBy"
-      FROM gcmb.cash_drawer_funding f JOIN gcmb.branch b ON b.id=f.branch_id
-      JOIN gcmb.user_account u ON u.id=f.requested_by LEFT JOIN gcmb.user_account p ON p.id=f.processed_by
-      WHERE (CAST(? AS uuid) IS NULL OR f.branch_id=?) ORDER BY f.requested_at DESC,f.id
-      """,branchId,branchId);
-    result.put("requests",rows);
-    rows.forEach(this::publicRow);
+    var requests=drawerFundingRepository.findRequests(branchId);
+    result.put("requests",requests);
+    requests.forEach(this::publicRow);
     return result;
   }
 
   // HuyDV: lấy tài khoản của QLCS gửi yêu cầu; không nhận người thụ hưởng từ trình duyệt.
-  private Map<String,Object> recipient(UUID actor,boolean required) {
-    var row=jdbcTemplate.queryForMap("""
-      SELECT COALESCE(e.full_name,u.username) AS recipient_name,e.bank_name AS recipient_bank_name,
-        e.bank_account AS recipient_bank_account,e.bank_holder AS recipient_bank_holder
-      FROM gcmb.user_account u LEFT JOIN gcmb.employee e ON e.user_id=u.id WHERE u.id=?
-      """,actor);
-    if(required && (row.values().stream().anyMatch(v->v==null || v.toString().isBlank())
-        || !Objects.toString(row.get("recipient_bank_account"),"").matches("[A-Za-z0-9]{3,60}"))) {
+  private Map<String,Object> recipient(UUID requesterId,boolean required) {
+    var recipient=drawerFundingRepository.findRecipientOfUser(requesterId);
+    if(required && (recipient.values().stream().anyMatch(value->value==null || value.toString().isBlank())
+        || !Objects.toString(recipient.get("recipient_bank_account"),"").matches("[A-Za-z0-9]{3,60}"))) {
       throw bad("QLCS cần cập nhật đầy đủ ngân hàng, số tài khoản và chủ tài khoản trong Thông tin tài khoản trước khi gửi yêu cầu cấp két.");
     }
-    return row;
+    return recipient;
   }
 
   private Map<String,Object> publicRow(Map<String,Object> row) {
@@ -77,145 +68,126 @@ public class DrawerFundingService {
     return row;
   }
 
-  public Map<String,Object> completeRecipient(Identity actor,UUID id) {
+  public Map<String,Object> completeRecipient(Identity actor,UUID fundingId) {
     financeAccess.lock();
     boolean accounting="ACCOUNTANT".equals(actor.role());
-    UUID branch=null;
+    UUID branchId=null;
     if(accounting) financeAccess.accountant(actor);
-    else branch=financeAccess.branch(actor,true);
-    var old=pending(id);
-    if(!accounting && (!branch.equals(old.get("branch_id")) || !actor.id().equals(old.get("requested_by"))))
+    else branchId=financeAccess.branch(actor,true);
+    var current=pending(fundingId);
+    if(!accounting && (!branchId.equals(current.get("branch_id")) || !actor.id().equals(current.get("requested_by"))))
       throw bad("Chỉ QLCS đã gửi yêu cầu tại cơ sở này được bổ sung thông tin nhận tiền.");
     // HuyDV: yêu cầu cũ lấy đúng người đã gửi, kể cả khi kế toán mở màn thanh toán.
     // Thông tin đã lưu được giữ nguyên; không tự đổi tài khoản theo lần sửa hồ sơ sau đó.
-    if(old.get("recipient_name")!=null) return publicRow(old);
-    branch=(UUID)old.get("branch_id");
-    var receiver=recipient((UUID)old.get("requested_by"),true);
-    jdbcTemplate.update("""
-      UPDATE gcmb.cash_drawer_funding SET recipient_name=?,recipient_bank_name=?,recipient_bank_account=?,recipient_bank_holder=?
-      WHERE id=?
-      """,receiver.get("recipient_name"),receiver.get("recipient_bank_name"),
-      receiver.get("recipient_bank_account"),receiver.get("recipient_bank_holder"),id);
-    financeAccess.audit(actor,branch,id,"COMPLETE_DRAWER_FUNDING_RECIPIENT",null,receiver);
-    return publicRow(jdbcTemplate.queryForMap("SELECT * FROM gcmb.cash_drawer_funding WHERE id=?",id));
+    if(current.get("recipient_name")!=null) return publicRow(current);
+    branchId=(UUID)current.get("branch_id");
+    var recipient=recipient((UUID)current.get("requested_by"),true);
+    drawerFundingRepository.updateRecipient(fundingId,recipient.get("recipient_name"),recipient.get("recipient_bank_name"),
+      recipient.get("recipient_bank_account"),recipient.get("recipient_bank_holder"));
+    financeAccess.audit(actor,branchId,fundingId,"COMPLETE_DRAWER_FUNDING_RECIPIENT",null,recipient);
+    return publicRow(drawerFundingRepository.getFunding(fundingId));
   }
 
   public Map<String,Object> request(Identity actor,Request input) {
     financeAccess.lock();
-    UUID branch=financeAccess.branch(actor,true);
+    UUID branchId=financeAccess.branch(actor,true);
     BigDecimal amount=money(input.amount(),"Tiền cấp két",true);
     if(amount.compareTo(new BigDecimal("500000"))<0 || amount.compareTo(new BigDecimal("1000000"))>0)
       throw bad("Mỗi lần cấp két phải từ 500.000đ đến 1.000.000đ.");
     String reason=text(input.reason(),"Nội dung yêu cầu cấp két",true);
     if(input.requestId()==null) throw bad("Thiếu mã xác nhận yêu cầu cấp két.");
-    var duplicate=jdbcTemplate.queryForList("SELECT * FROM gcmb.cash_drawer_funding WHERE idempotency_key=?",input.requestId());
-    if(!duplicate.isEmpty()) {
-      var old=duplicate.get(0);
-      if(!Objects.equals(old.get("branch_id"),branch) || amount.compareTo((BigDecimal)old.get("amount"))!=0
-        || !reason.equals(old.get("reason"))) throw conflict("Mã xác nhận đã được dùng cho yêu cầu khác.");
-      return publicRow(old);
+    var duplicates=drawerFundingRepository.findByIdempotencyKey(input.requestId());
+    if(!duplicates.isEmpty()) {
+      var existing=duplicates.get(0);
+      if(!Objects.equals(existing.get("branch_id"),branchId) || amount.compareTo((BigDecimal)existing.get("amount"))!=0
+        || !reason.equals(existing.get("reason"))) throw conflict("Mã xác nhận đã được dùng cho yêu cầu khác.");
+      return publicRow(existing);
     }
     var preview=cashClosingService.preview(actor,null);
-    UUID account=(UUID)preview.get("accountId");
+    UUID accountId=(UUID)preview.get("accountId");
     if(new BigDecimal(preview.get("currentBalance").toString()).signum()!=0)
       throw conflict("Cần nộp hết tiền trong két, đưa số dư về 0đ trước khi yêu cầu cấp lại.");
-    if(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-      "SELECT EXISTS(SELECT 1 FROM gcmb.cash_drawer_funding WHERE account_id=? AND status='REQUESTED')",
-      Boolean.class,account))) throw conflict("Két đã có yêu cầu cấp tiền đang chờ kế toán.");
-    UUID id=UUID.randomUUID();
-    var receiver=recipient(actor.id(),true);
-    String code="KET-"+LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).toString().replace("-","")+"-"+id.toString().substring(0,8).toUpperCase(Locale.ROOT);
-    jdbcTemplate.update("""
-      INSERT INTO gcmb.cash_drawer_funding(id,code,branch_id,account_id,amount,reason,requested_by,idempotency_key,
-        recipient_name,recipient_bank_name,recipient_bank_account,recipient_bank_holder)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-      """,id,code,branch,account,amount,reason,actor.id(),input.requestId(),receiver.get("recipient_name"),
-      receiver.get("recipient_bank_name"),receiver.get("recipient_bank_account"),receiver.get("recipient_bank_holder"));
-    financeAccess.audit(actor,branch,id,"REQUEST_DRAWER_FUNDING",null,Map.of("amount",amount,"reason",reason));
-    return publicRow(jdbcTemplate.queryForMap("SELECT * FROM gcmb.cash_drawer_funding WHERE id=?",id));
+    if(drawerFundingRepository.hasPendingRequest(accountId)) throw conflict("Két đã có yêu cầu cấp tiền đang chờ kế toán.");
+    UUID fundingId=UUID.randomUUID();
+    var recipient=recipient(actor.id(),true);
+    String code="KET-"+LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).toString().replace("-","")+"-"+fundingId.toString().substring(0,8).toUpperCase(Locale.ROOT);
+    drawerFundingRepository.insertRequest(fundingId,code,branchId,accountId,amount,reason,actor.id(),input.requestId(),
+      recipient.get("recipient_name"),recipient.get("recipient_bank_name"),recipient.get("recipient_bank_account"),
+      recipient.get("recipient_bank_holder"));
+    financeAccess.audit(actor,branchId,fundingId,"REQUEST_DRAWER_FUNDING",null,Map.of("amount",amount,"reason",reason));
+    return publicRow(drawerFundingRepository.getFunding(fundingId));
   }
 
-  public Map<String,Object> pay(Identity actor,UUID id,Payment input) {
-    return pay(actor,id,input,null);
+  public Map<String,Object> pay(Identity actor,UUID fundingId,Payment input) {
+    return pay(actor,fundingId,input,null);
   }
 
-  public Map<String,Object> pay(Identity actor,UUID id,Payment input,MultipartFile proof) {
+  public Map<String,Object> pay(Identity actor,UUID fundingId,Payment input,MultipartFile proof) {
     financeAccess.accountant(actor);
     financeAccess.lock(); // Same lock as expense and payroll payments; one shared fund cannot be overspent.
-    var old=pending(id);
-    if(old.get("recipient_name")==null) throw conflict("Yêu cầu chưa có thông tin nhận tiền. QLCS đã gửi cần bổ sung từ Thông tin tài khoản trước khi thanh toán.");
+    var current=pending(fundingId);
+    if(current.get("recipient_name")==null) throw conflict("Yêu cầu chưa có thông tin nhận tiền. QLCS đã gửi cần bổ sung từ Thông tin tài khoản trước khi thanh toán.");
     if(!input.confirmed()) throw bad("Vui lòng xác nhận đã thực tế thanh toán tiền cấp két cho cơ sở.");
-    var account=jdbcTemplate.queryForMap("""
-      SELECT a.active,a.kind,a.branch_id,b.status,b.timezone FROM gcmb.financial_account a
-      JOIN gcmb.branch b ON b.id=a.branch_id WHERE a.id=? FOR SHARE OF a,b
-      """,old.get("account_id"));
+    var account=drawerFundingRepository.lockDrawerAccount(current.get("account_id"));
     if(!Boolean.TRUE.equals(account.get("active")) || !"CASH_DRAWER".equals(account.get("kind"))
-      || !"ACTIVE".equals(account.get("status")) || !Objects.equals(account.get("branch_id"),old.get("branch_id")))
+      || !"ACTIVE".equals(account.get("status")) || !Objects.equals(account.get("branch_id"),current.get("branch_id")))
       throw conflict("Cơ sở hoặc két tiền mặt đã ngừng hoạt động; chưa thể thanh toán yêu cầu.");
     LocalDate today=LocalDate.now(ZoneId.of((String)account.get("timezone")));
-    if(Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.financial_period WHERE month=? AND status='CLOSED')",
-      Boolean.class,today.withDayOfMonth(1)))) throw conflict("Kỳ tài chính hiện tại đã khóa.");
-    BigDecimal amount=(BigDecimal)old.get("amount");
-    if(AccountantFund.balance(jdbcTemplate).compareTo(amount)<0) throw conflict("Quỹ kế toán không đủ tiền để cấp két.");
+    if(drawerFundingRepository.isPeriodClosed(today.withDayOfMonth(1))) throw conflict("Kỳ tài chính hiện tại đã khóa.");
+    BigDecimal amount=(BigDecimal)current.get("amount");
+    if(drawerFundingRepository.accountantFundBalance().compareTo(amount)<0) throw conflict("Quỹ kế toán không đủ tiền để cấp két.");
     String reference=text(input.reference(),"Mã chứng từ thanh toán",false);
     if(reference.length()>200) throw bad("Mã chứng từ tối đa 200 ký tự.");
     String note=text(input.note(),"Ghi chú thanh toán",false);
     if(proof!=null && proof.isEmpty()) throw bad("Tệp minh chứng thanh toán không được để rỗng.");
     boolean hasProof=proof!=null && !proof.isEmpty();
     if(reference.isBlank() && !hasProof) throw bad("Vui lòng nhập mã giao dịch hoặc tải minh chứng thanh toán.");
-    EquipmentAssetFileStorageService.StoredFile stored=null;
+    EquipmentAssetFileStorageService.StoredFile storedProof=null;
     if(hasProof) {
-      stored=equipmentAssetFileStorageService.store(proof, "cap-ket");
-      String key=stored.objectKey();
+      storedProof=equipmentAssetFileStorageService.store(proof, "cap-ket");
+      String objectKey=storedProof.objectKey();
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
         @Override public void afterCompletion(int status) {
-          if(status!=STATUS_COMMITTED) equipmentAssetFileStorageService.deleteQuietly(key);
+          if(status!=STATUS_COMMITTED) equipmentAssetFileStorageService.deleteQuietly(objectKey);
         }
       });
     }
-    jdbcTemplate.update("""
-      UPDATE gcmb.cash_drawer_funding SET status='PAID',processed_by=?,processed_at=clock_timestamp(),
-        payment_reference=?,resolution_note=?,evidence_original_name=?,evidence_mime_type=?,evidence_object_key=?
-        WHERE id=? AND status='REQUESTED'
-      """,actor.id(),reference,note,stored==null?null:stored.originalName(),
-      stored==null?null:stored.mimeType(),stored==null?null:stored.objectKey(),id);
+    drawerFundingRepository.markPaid(fundingId,actor.id(),reference,note,
+      storedProof==null?null:storedProof.originalName(),
+      storedProof==null?null:storedProof.mimeType(),
+      storedProof==null?null:storedProof.objectKey());
     // The PAID row debits AccountantFund and credits drawer_funding_movement atomically.
-    financeAccess.audit(actor,(UUID)old.get("branch_id"),id,"PAY_DRAWER_FUNDING",old,Map.of("amount",amount,"reference",reference));
-    return publicRow(jdbcTemplate.queryForMap("SELECT * FROM gcmb.cash_drawer_funding WHERE id=?",id));
+    financeAccess.audit(actor,(UUID)current.get("branch_id"),fundingId,"PAY_DRAWER_FUNDING",current,Map.of("amount",amount,"reference",reference));
+    return publicRow(drawerFundingRepository.getFunding(fundingId));
   }
 
-  public Map<String,Object> reject(Identity actor,UUID id,Payment input) {
+  public Map<String,Object> reject(Identity actor,UUID fundingId,Payment input) {
     financeAccess.accountant(actor);
     financeAccess.lock();
-    var old=pending(id);
+    var current=pending(fundingId);
     String note=text(input.note(),"Lý do từ chối",true);
-    jdbcTemplate.update("UPDATE gcmb.cash_drawer_funding SET status='REJECTED',processed_by=?,processed_at=clock_timestamp(),resolution_note=? WHERE id=?",
-      actor.id(),note,id);
-    financeAccess.audit(actor,(UUID)old.get("branch_id"),id,"REJECT_DRAWER_FUNDING",old,Map.of("note",note));
-    return publicRow(jdbcTemplate.queryForMap("SELECT * FROM gcmb.cash_drawer_funding WHERE id=?",id));
+    drawerFundingRepository.markRejected(fundingId,actor.id(),note);
+    financeAccess.audit(actor,(UUID)current.get("branch_id"),fundingId,"REJECT_DRAWER_FUNDING",current,Map.of("note",note));
+    return publicRow(drawerFundingRepository.getFunding(fundingId));
   }
 
-  public Map<String,Object> evidence(Identity actor,UUID id) {
-    UUID branch=null;
-    if("BRANCH_MANAGER".equals(actor.role())) branch=financeAccess.branch(actor,false);
+  public Map<String,Object> evidence(Identity actor,UUID fundingId) {
+    UUID branchId=null;
+    if("BRANCH_MANAGER".equals(actor.role())) branchId=financeAccess.branch(actor,false);
     else financeAccess.accountant(actor);
-    var rows=jdbcTemplate.queryForList("""
-      SELECT evidence_original_name AS original_name,evidence_mime_type AS mime_type,evidence_object_key AS object_key
-      FROM gcmb.cash_drawer_funding WHERE id=? AND (CAST(? AS uuid) IS NULL OR branch_id=?)
-        AND evidence_object_key IS NOT NULL
-      """,id,branch,branch);
+    var rows=drawerFundingRepository.findEvidence(fundingId,branchId);
     if(rows.isEmpty()) throw bad("Không tìm thấy minh chứng thanh toán tại cơ sở được phép xem.");
-    var row=rows.get(0);
-    try { row.put("bytes",equipmentAssetFileStorageService.read((String)row.get("object_key"))); }
+    var evidence=rows.get(0);
+    try { evidence.put("bytes",equipmentAssetFileStorageService.read((String)evidence.get("object_key"))); }
     catch(java.io.IOException failure) { throw conflict("Không đọc được minh chứng thanh toán. Vui lòng thử lại."); }
-    return row;
+    return evidence;
   }
 
-  private Map<String,Object> pending(UUID id) {
-    var rows=jdbcTemplate.queryForList("SELECT * FROM gcmb.cash_drawer_funding WHERE id=? FOR UPDATE",id);
+  private Map<String,Object> pending(UUID fundingId) {
+    var rows=drawerFundingRepository.lockFunding(fundingId);
     if(rows.isEmpty()) throw bad("Không tìm thấy yêu cầu cấp tiền két.");
-    var row=rows.get(0);
-    if(!"REQUESTED".equals(row.get("status"))) throw conflict("Yêu cầu đã thanh toán hoặc đã từ chối; không được xử lý lần nữa.");
-    return row;
+    var funding=rows.get(0);
+    if(!"REQUESTED".equals(funding.get("status"))) throw conflict("Yêu cầu đã thanh toán hoặc đã từ chối; không được xử lý lần nữa.");
+    return funding;
   }
 }

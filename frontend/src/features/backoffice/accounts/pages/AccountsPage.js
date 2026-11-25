@@ -132,9 +132,9 @@ export default function AccountsPage({
           onChange={(e) => filter('branchId', e.target.value)}
         >
           <option value="">Cơ sở: Tất cả</option>
-          {options.branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
+          {options.branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
             </option>
           ))}
         </select>
@@ -155,7 +155,7 @@ export default function AccountsPage({
         {error ? (
           <div className="accounts-empty account-error" role="alert">
             {error}
-            <button onClick={() => setRevision((n) => n + 1)}>Thử lại</button>
+            <button onClick={() => setRevision((previousRevision) => previousRevision + 1)}>Thử lại</button>
           </div>
         ) : loading ? (
           <p className="accounts-empty" role="status">
@@ -249,7 +249,7 @@ export default function AccountsPage({
           branchScope={branchScope}
           options={options}
           onClose={close}
-          onCreated={() => setRevision((n) => n + 1)}
+          onCreated={() => setRevision((previousRevision) => previousRevision + 1)}
           onView={viewCreated}
         />
       )}

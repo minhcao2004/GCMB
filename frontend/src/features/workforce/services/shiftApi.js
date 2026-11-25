@@ -38,7 +38,7 @@ export const today = () => {
       day: '2-digit',
     })
       .formatToParts(new Date())
-      .map((p) => [p.type, p.value])
+      .map((part) => [part.type, part.value])
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
 };

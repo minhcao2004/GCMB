@@ -162,7 +162,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     setConfirm(false);
     setDate(String(report.business_date).slice(0, 10));
     setTab('create');
-    setRefresh((n) => n + 1);
+    setRefresh((previousRefresh) => previousRefresh + 1);
   };
   const changeDate = (value) => {
     setDate(value);
@@ -206,7 +206,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         setTab('history');
       }
       setConfirm(false);
-      setRefresh((n) => n + 1);
+      setRefresh((previousRefresh) => previousRefresh + 1);
     } catch (e) { setError(message(e)); setConfirm(false); }
     finally { setBusy(false); }
   };
@@ -217,13 +217,13 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     try {
       await api.post(base + '/' + detail.id + (returned ? '/return' : '/reconcile'), { resolved, conclusion });
       setNotice(returned ? 'Đã yêu cầu quản lý cơ sở bổ sung báo cáo.' : 'Đã hoàn tất đối soát. Không phát sinh thao tác nhận hoặc nộp tiền.');
-      setRefresh((n) => n + 1);
+      setRefresh((previousRefresh) => previousRefresh + 1);
     } catch (e) { setError(message(e)); }
     finally { setBusy(false); }
   };
   const cashVariance = preview && actual !== '' ? Number(actual) - Number(preview.expected) : null;
   const needsExplanation = cashVariance !== null && cashVariance !== 0;
-  const shown = rows.filter((r) => (r.branchName + ' ' + r.business_date + ' ' + (r.explanation || '')).toLowerCase().includes(search.toLowerCase()));
+  const shown = rows.filter((row) => (row.branchName + ' ' + row.business_date + ' ' + (row.explanation || '')).toLowerCase().includes(search.toLowerCase()));
   const canCorrect = saved?.status === 'NEEDS_EXPLANATION';
   const remittanceBlocked = preview?.closingBlocked || (!!saved && date !== today());
 
@@ -238,7 +238,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     {accounting && <section className="finance-card cash-closing-statuses" aria-label="Trạng thái báo cáo chốt quỹ ngày theo cơ sở">
       <div className="finance-section-heading"><div><h2>Trạng thái báo cáo chốt quỹ ngày</h2><p>Trạng thái gửi báo cáo theo cơ sở và ngày; báo cáo hiệu quả tháng được tính riêng từ giao dịch.</p></div><label>Ngày báo cáo<input type="date" value={statusDate} max={today()} onChange={(e) => setStatusDate(e.target.value)} /></label></div>
       {statusLoading && <p role="status">Đang tải trạng thái báo cáo…</p>}
-      {statusError && <p className="finance-error" role="alert">{statusError} <button type="button" onClick={() => setStatusRevision((n) => n + 1)}>Thử lại</button></p>}
+      {statusError && <p className="finance-error" role="alert">{statusError} <button type="button" onClick={() => setStatusRevision((previousStatusRevision) => previousStatusRevision + 1)}>Thử lại</button></p>}
       <div className="finance-table-wrap"><table><thead><tr><th>Cơ sở</th><th>Kỳ</th><th>Trạng thái</th><th>Bản ghi</th></tr></thead><tbody>
         {branchStatuses.map((item) => <tr key={item.branchId}><td>{item.branchName}</td><td>{displayDate(item.businessDate)}</td><td>{item.status === 'NEEDS_EXPLANATION' ? 'Cần bổ sung' : item.status === 'SUBMITTED' ? 'Đã gửi' : 'Chưa gửi'}</td><td>{item.closingId ? <button type="button" onClick={() => open(item.closingId)}>Mở báo cáo</button> : '—'}</td></tr>)}
       </tbody></table></div>
@@ -247,7 +247,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     {accounting && <section className="finance-card cash-closing-notifications" aria-label="Các lần gửi báo cáo chốt quỹ gần đây">
       <h2 id="cash-closing-notifications-title" tabIndex={-1}>Thông báo báo cáo đã gửi</h2>
       {notificationLoading ? <p role="status">Đang tải thông báo…</p>
-        : notificationError ? <p className="finance-error" role="alert">{notificationError} <button type="button" onClick={() => setNotificationRevision((n) => n + 1)}>Thử lại</button></p>
+        : notificationError ? <p className="finance-error" role="alert">{notificationError} <button type="button" onClick={() => setNotificationRevision((previousNotificationRevision) => previousNotificationRevision + 1)}>Thử lại</button></p>
           : notifications.length ? <ul>{notifications.map((item) => <li key={item.id}><Link to={`/ke-toan/chot-quy?${new URLSearchParams({ reportId: item.closingId, from: item.businessDate, to: item.businessDate, date: item.businessDate })}`}>{item.branchName} · {item.reportType} · Ngày kinh doanh {displayDate(item.businessDate)} · Gửi lúc {new Date(item.sentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · Lần gửi {item.reportVersion} · Xem báo cáo hiện tại và lịch sử phiên bản</Link></li>)}</ul>
             : <p role="status">Chưa có thông báo gửi báo cáo.</p>}
     </section>}
@@ -269,7 +269,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
           {Object.entries(labels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
         </select></label>
       </>}
-      <button disabled={loading || busy} onClick={() => setRefresh((n) => n + 1)}>Tải lại</button>
+      <button disabled={loading || busy} onClick={() => setRefresh((previousRefresh) => previousRefresh + 1)}>Tải lại</button>
     </div>
     {loading ? <p role="status">Đang tải…</p> : preview && (tab === 'create' || tab === 'remit') ? <>
       {tab === 'remit' ? <section className="cash-drawer-workspace" aria-label="Nộp tiền và cấp lại tiền két">
@@ -279,14 +279,14 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         <h2>Ghi nhận khoản tiền đã nộp khỏi két</h2>
         {remittanceBlocked ? <p className="finance-warning">Ngày cũ đã chốt hoặc đã có ngày chốt mới hơn. Vui lòng ghi khoản nộp vào đúng ngày thực tế.</p> : <fieldset disabled={busy || readOnly}>
           {date === today() && <button type="button" disabled={Number(preview.currentBalance) <= 0} onClick={() => { setAmount(String(preview.currentBalance)); setFullSweep(true); setConfirm(false); if (!reason.trim()) setReason('Nộp toàn bộ tiền mặt khỏi két cơ sở.'); }}>Nộp hết tiền trong két ({vnd(preview.currentBalance)})</button>}
-          <label>Số tiền đã nộp *<MoneyInput required value={amount} onValueChange={(v) => { setAmount(v); setFullSweep(false); setConfirm(false); }} /></label>
+          <label>Số tiền đã nộp *<MoneyInput required value={amount} onValueChange={(value) => { setAmount(value); setFullSweep(false); setConfirm(false); }} /></label>
           <label>Nội dung / nơi hoặc người nhận *<textarea required maxLength={2000} value={reason} onChange={(e) => { setReason(e.target.value); setConfirm(false); }} /></label>
           <label>Mã chứng từ (không bắt buộc)<input maxLength={200} value={reference} onChange={(e) => { setReference(e.target.value); setConfirm(false); }} /></label>
           {confirm && <p className="finance-warning">Xác nhận đã nộp {vnd(amount)}? Khoản này sẽ giảm số dư két và được giữ trong lịch sử.</p>}
           <ConfirmButtons confirm={confirm} busy={busy} cancel={() => setConfirm(false)} label="Ghi nhận đã nộp tiền" />
         </fieldset>}
       </form>
-      <DrawerFundingPanel user={user} refreshKey={refresh} onChange={() => setRefresh((n) => n + 1)} />
+      <DrawerFundingPanel user={user} refreshKey={refresh} onChange={() => setRefresh((previousRefresh) => previousRefresh + 1)} />
       </section> : <div className="finance-columns">
         <article className="finance-card">
           <h2>Số liệu hệ thống · {displayDate(date)}</h2>
@@ -300,10 +300,10 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
             <button type="button" onClick={() => { setTab('history'); setFrom(date); setTo(date); setStatus(''); }}>Xem báo cáo đã gửi</button>
           </> : preview.closingBlocked && !canCorrect ? <p className="finance-warning">Ngày này chỉ được xem. Không được chốt lùi trước ngày {displayDate(preview.lastClosingDate)}.</p> : <fieldset disabled={busy || readOnly}>
             {canCorrect && <div className="finance-warning">
-              {saved.reviews.filter((r) => r.decision === 'NEEDS_EXPLANATION').slice(-1).map((r) => <p key={r.id}>Kế toán yêu cầu: {r.note}</p>)}
+              {saved.reviews.filter((reviewItem) => reviewItem.decision === 'NEEDS_EXPLANATION').slice(-1).map((reviewItem) => <p key={reviewItem.id}>Kế toán yêu cầu: {reviewItem.note}</p>)}
               <p>Lưu thành phiên bản mới; giữ nguyên báo cáo và minh chứng đã gửi trước đó.</p>
             </div>}
-            <label>Tiền mặt thực đếm cuối ngày *<MoneyInput required value={actual} onValueChange={(v) => { setActual(v); setConfirm(false); }} /></label>
+            <label>Tiền mặt thực đếm cuối ngày *<MoneyInput required value={actual} onValueChange={(value) => { setActual(value); setConfirm(false); }} /></label>
             {cashVariance !== null && <Difference label="Chênh lệch tiền mặt" value={cashVariance} />}
             {needsExplanation && <p className="finance-warning" role="alert">Tiền kiểm đếm chênh lệch {Math.abs(cashVariance).toLocaleString('vi-VN')} đ so với số tiền dự kiến. Vui lòng kiểm tra lại và nhập lý do chênh lệch trước khi xác nhận chốt quỹ.</p>}
             <label>Giải trình {needsExplanation ? '*' : '(không bắt buộc)'}<textarea required={needsExplanation} maxLength={2000} value={explanation} onChange={(e) => { setExplanation(e.target.value); setConfirm(false); }} /></label>
@@ -316,10 +316,10 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     </> : <div>
       <article className="finance-card finance-table-wrap"><PaginatedTable pageSize={5}>
         <thead><tr><th>Ngày / cơ sở</th><th>Thực đếm</th><th>Chênh lệch tiền mặt</th><th>Trạng thái</th><th /></tr></thead>
-        <tbody>{shown.map((r) => <tr key={r.id}>
-          <td>{displayDate(r.business_date)}<small>{r.branchName}</small></td>
-          <td>{vnd(r.actual_closing)}</td><td>{vnd(r.variance)}</td>
-          <td>{labels[r.status]}</td><td><button disabled={busy} onClick={() => open(r.id)}>Chi tiết</button></td>
+        <tbody>{shown.map((row) => <tr key={row.id}>
+          <td>{displayDate(row.business_date)}<small>{row.branchName}</small></td>
+          <td>{vnd(row.actual_closing)}</td><td>{vnd(row.variance)}</td>
+          <td>{labels[row.status]}</td><td><button disabled={busy} onClick={() => open(row.id)}>Chi tiết</button></td>
         </tr>)}</tbody>
       </PaginatedTable>{!shown.length && <p>{emptyMessage}</p>}</article>
       {detail && <div className="cash-closing-dialog-backdrop">
@@ -331,17 +331,17 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         <Line label="Tiền mặt thực đếm" value={detail.actual_closing} />
         <Difference label="Chênh lệch tiền mặt" value={detail.variance} />
         <p>Giải trình: {detail.explanation || 'Không có.'}</p>
-        {detail.evidence.map((f) => <button key={f.revision} onClick={async () => {
-          try { await api.download(base + '/' + detail.id + '/evidence?revision=' + f.revision, f.name, branch); }
+        {detail.evidence.map((evidenceFile) => <button key={evidenceFile.revision} onClick={async () => {
+          try { await api.download(base + '/' + detail.id + '/evidence?revision=' + evidenceFile.revision, evidenceFile.name, branch); }
           catch (e) { setError(message(e)); }
-        }}>Minh chứng phiên bản {f.revision || 'cũ'}: {f.name}</button>)}
+        }}>Minh chứng phiên bản {evidenceFile.revision || 'cũ'}: {evidenceFile.name}</button>)}
         <details><summary>Giao dịch nguồn lúc gửi</summary><MovementTable rows={detail.source.movements || []} /></details>
-        {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{<PaginatedList pageSize={5}>{detail.versions.map((v) => <div key={v.revision} className="finance-info">
-          <strong>Phiên bản {v.revision} · {v.username} · {new Date(v.submitted_at).toLocaleString('vi-VN')}</strong>
-          <p>Thực đếm {vnd(v.payload.actual_closing)} · Chênh lệch {vnd(v.payload.variance)}</p>
-          <p>{v.payload.explanation || 'Không có giải trình.'}</p>
+        {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{<PaginatedList pageSize={5}>{detail.versions.map((version) => <div key={version.revision} className="finance-info">
+          <strong>Phiên bản {version.revision} · {version.username} · {new Date(version.submitted_at).toLocaleString('vi-VN')}</strong>
+          <p>Thực đếm {vnd(version.payload.actual_closing)} · Chênh lệch {vnd(version.payload.variance)}</p>
+          <p>{version.payload.explanation || 'Không có giải trình.'}</p>
         </div>)}</PaginatedList>}</details>}
-        {<PaginatedList pageSize={5}>{detail.reviews.map((r) => <div className="finance-info" key={r.id}><strong>{r.decision === 'RECONCILED' ? 'Kết luận đối soát' : 'Yêu cầu bổ sung'} · {r.username}</strong><p>{r.note}</p></div>)}</PaginatedList>}
+        {<PaginatedList pageSize={5}>{detail.reviews.map((reviewItem) => <div className="finance-info" key={reviewItem.id}><strong>{reviewItem.decision === 'RECONCILED' ? 'Kết luận đối soát' : 'Yêu cầu bổ sung'} · {reviewItem.username}</strong><p>{reviewItem.note}</p></div>)}</PaginatedList>}
         {!accounting && detail.status === 'NEEDS_EXPLANATION' && !readOnly && <button className="finance-primary" onClick={() => edit(detail)}>Bổ sung báo cáo</button>}
         {accounting && detail.status === 'SUBMITTED' && <form onSubmit={(e) => { e.preventDefault(); review(false); }}>
           <label>Kết luận / nội dung cần bổ sung (không bắt buộc)<textarea maxLength={2000} value={conclusion} onChange={(e) => setConclusion(e.target.value)} /></label>
@@ -384,6 +384,6 @@ function ReportSummary({ source }) {
 function MovementTable({ rows }) {
   return <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
     <thead><tr><th>Giao dịch</th><th>Số tiền</th></tr></thead>
-    <tbody>{rows.map((r) => <tr key={r.id}><td>{r.description}<small>{new Date(r.time).toLocaleString('vi-VN')}</small></td><td>{vnd(r.amount)}</td></tr>)}</tbody>
+    <tbody>{rows.map((row) => <tr key={row.id}><td>{row.description}<small>{new Date(row.time).toLocaleString('vi-VN')}</small></td><td>{vnd(row.amount)}</td></tr>)}</tbody>
   </PaginatedTable>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
 }

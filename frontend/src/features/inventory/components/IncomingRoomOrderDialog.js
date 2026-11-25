@@ -1,6 +1,6 @@
 import { PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useRef, useState } from 'react';
-import './IncomingRoomOrderDialog.css';
+import './incoming-room-order-dialog.css';
 
 const formatVnd = (value) => new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + 'đ';
 

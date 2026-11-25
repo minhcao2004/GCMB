@@ -146,11 +146,11 @@ public class StaffService {
 
     public Map<String, Object> create(Identity actor, StaffCommand input) {
         UUID scope = scope(actor, true);
-        StaffCommand c = validate(input, null);
+        StaffCommand command = validate(input, null);
         // HuyDV / UC-77: QLCS chỉ tạo lễ tân; kiểm tra cả khi gọi API trực tiếp.
-        if (scope != null && !"RECEPTIONIST".equals(c.position())) throw denied();
+        if (scope != null && !"RECEPTIONIST".equals(command.position())) throw denied();
         UUID id = UUID.randomUUID();
-        staffRepository.create(id, c);
+        staffRepository.create(id, command);
         // UC-77/BR-52: BM creates inside the current assigned branch. UC-81/82 remain HOM-only.
         if (scope != null) staffRepository.assignment(
             id,
@@ -167,11 +167,11 @@ public class StaffService {
         var before = record(id, scope(actor, true), true);
         protectAccountantAccount(before, "sửa thông tin");
         version(before, input == null ? null : input.version());
-        StaffCommand c = validate(input, id);
+        StaffCommand command = validate(input, id);
         // HuyDV: không cho đổi vị trí sau khi tạo để vượt quyền của QLCS.
         if ("BRANCH_MANAGER".equals(actor.role()) &&
-            (protectedPosition(c.position()) || !Objects.equals(before.get("position"), c.position()))) throw denied();
-        staffRepository.update(id, c);
+            (protectedPosition(command.position()) || !Objects.equals(before.get("position"), command.position()))) throw denied();
+        staffRepository.update(id, command);
         var after = staffRepository.find(id);
         staffRepository.audit(actor.id(), id, "UPDATE_STAFF", before, after, null);
         return detailRow(after);
@@ -281,18 +281,18 @@ public class StaffService {
     }
 
     // BR-111, BR-119, BR-199; MSG02, MSG03, MSG04, MSG05, MSG88. Limits follow the existing employee schema.
-    private StaffCommand validate(StaffCommand c, UUID id) {
-        if (c == null) throw new AuthFailure(400, "form", "Vui lòng bổ sung thông tin hồ sơ.");
-        String code = AuthValidation.required(c.code(), "code", "mã nhân viên", 60, true);
-        String name = AuthValidation.required(c.fullName(), "fullName", "họ tên", 200, true);
-        String position = AuthValidation.required(c.position(), "position", "vị trí", 60, true);
+    private StaffCommand validate(StaffCommand command, UUID id) {
+        if (command == null) throw new AuthFailure(400, "form", "Vui lòng bổ sung thông tin hồ sơ.");
+        String code = AuthValidation.required(command.code(), "code", "mã nhân viên", 60, true);
+        String name = AuthValidation.required(command.fullName(), "fullName", "họ tên", 200, true);
+        String position = AuthValidation.required(command.position(), "position", "vị trí", 60, true);
         if (!POSITIONS.contains(position)) throw new AuthFailure(
             400,
             "position",
             "Vị trí nhân viên không hợp lệ."
         );
-        String phone = AuthValidation.phone(c.phone());
-        String email = optional(c.contactEmail(), "contactEmail", "Email liên hệ", 254);
+        String phone = AuthValidation.phone(command.phone());
+        String email = optional(command.contactEmail(), "contactEmail", "Email liên hệ", 254);
         if (email != null) try {
             email = AuthValidation.email(email);
         } catch (AuthFailure e) {
@@ -309,7 +309,7 @@ public class StaffService {
             "phone",
             "Số điện thoại này đã được sử dụng cho hồ sơ nhân viên khác. Vui lòng nhập số khác."
         );
-        String identity = optional(c.identityNumber(), "identityNumber", "Số định danh", 12);
+        String identity = optional(command.identityNumber(), "identityNumber", "Số định danh", 12);
         if (identity != null && !identity.matches("[0-9]{12}")) throw new AuthFailure(
             400,
             "identityNumber",
@@ -327,7 +327,7 @@ public class StaffService {
             "identityNumber",
             "Số định danh này đã được sử dụng cho hồ sơ khác."
         );
-        dates(c.hiredOn(), c.resignedOn());
+        dates(command.hiredOn(), command.resignedOn());
         return new StaffCommand(
             code,
             name,
@@ -335,11 +335,11 @@ public class StaffService {
             position,
             email,
             identity,
-            optional(c.address(), "address", "Địa chỉ", 2000),
-            Optional.ofNullable(optional(c.notes(), "notes", "Ghi chú", 4000)).orElse(""),
-            c.hiredOn(),
-            c.resignedOn(),
-            c.version()
+            optional(command.address(), "address", "Địa chỉ", 2000),
+            Optional.ofNullable(optional(command.notes(), "notes", "Ghi chú", 4000)).orElse(""),
+            command.hiredOn(),
+            command.resignedOn(),
+            command.version()
         );
     }
 

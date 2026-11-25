@@ -1,10 +1,10 @@
-import { PaginatedList, Pagination } from '../../shared/components/Pagination';
+import { PaginatedList, Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import api from '../../api/client';
-import { authApi } from '../auth/services/authApi';
-import { AppShell } from '../booking/pages/BookingManagementPage';
-import './accountantDashboard.css';
+import api from '../../../api/client';
+import { authApi } from '../../auth/services/authApi';
+import { AppShell } from '../../booking/pages/BookingManagementPage';
+import '../styles/accountant-dashboard.css';
 
 const monthNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
 const todayVn = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -212,7 +212,7 @@ export default function AccountantDashboard() {
       </div>
       <div className="accountant-dash-grid accountant-overview-secondary">
         <section className="accountant-dash-panel accountant-method-panel"><div className="accountant-panel-heading"><div><h2>Thu theo phương thức</h2></div><strong>{money(paymentTotal)}</strong></div>{activePaymentMethods.length ? <div className="accountant-method-ledger">{activePaymentMethods.map((item, index) => { const amount = Number(item.value) || 0; const share = paymentTotal ? amount / paymentTotal * 100 : 0; return <div className="accountant-method-ledger-row" key={item.label}><span className="accountant-method-index">{String(index + 1).padStart(2, '0')}</span><span className="accountant-method-name">{item.label}</span><span className="accountant-method-track"><i style={{ width: `${share}%` }} /></span><strong>{money(amount)}</strong><small>{share.toFixed(1)}%</small></div>; })}</div> : <p className="accountant-dash-empty">Không có giao dịch thu từ hóa đơn trong kỳ.</p>}</section>
-        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <PaginatedList as="div" pageSize={10} className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((a, b) => b.revenue - a.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</PaginatedList> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
+        <section className="accountant-dash-panel"><div className="accountant-panel-heading"><div><h2>Thu tiền theo cơ sở</h2><p>Theo bộ lọc ngày, kỳ và cơ sở đã chọn</p></div><Link to="/ke-toan/bao-cao">Chi tiết</Link></div>{branchRevenueRows.length ? <PaginatedList as="div" pageSize={10} className="accountant-fund-bars accountant-branch-revenue">{[...branchRevenueRows].sort((left, right) => right.revenue - left.revenue).map((row) => <div className="accountant-fund-row" key={row.id}><span title={row.name}>{row.name}</span><div><i style={{ width: `${row.revenue / branchRevenueMax * 100}%` }} /></div><strong>{money(row.revenue)}</strong></div>)}</PaginatedList> : <p className="accountant-dash-empty">Không có báo cáo doanh thu theo bộ lọc.</p>}</section>
       </div>
       <section className="accountant-dash-panel accountant-table-panel accountant-recent-panel">
         <div className="accountant-panel-heading"><div><h2>Giao dịch gần đây trong kỳ</h2><p>{recentRows.length} giao dịch · {dateFrom.slice(8, 10)}/{dateFrom.slice(5, 7)}/{dateFrom.slice(0, 4)}–{dateTo.slice(8, 10)}/{dateTo.slice(5, 7)}/{dateTo.slice(0, 4)} · {branchLabel}</p></div><div className="accountant-recent-controls"><label className="accountant-recent-date">Ngày giao dịch<input type="date" value={recentDay} min={dateFrom} max={dateTo} onChange={(event) => { setRecentDay(event.target.value); setRecentPage(1); }} /></label></div></div>

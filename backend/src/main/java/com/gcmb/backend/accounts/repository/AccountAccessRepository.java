@@ -86,11 +86,11 @@ public class AccountAccessRepository {
                 JOIN gcmb.permission p ON p.id=rp.permission_id
                 WHERE r.code=? ORDER BY p.name,p.code
                 """,
-            (rs, row) ->
+            (resultSet, row) ->
                 new PermissionView(
-                    rs.getString("code"),
-                    rs.getString("name"),
-                    rs.getString("scope")
+                    resultSet.getString("code"),
+                    resultSet.getString("name"),
+                    resultSet.getString("scope")
                 ),
             role
         );

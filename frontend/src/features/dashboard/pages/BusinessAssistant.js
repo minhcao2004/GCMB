@@ -1,10 +1,10 @@
-import { PaginatedList } from '../../shared/components/Pagination';
+import { PaginatedList } from '../../../shared/components/Pagination';
 /** HuyDV: trợ lý QLCC, lưu lịch sử riêng theo tài khoản trên trình duyệt. */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import api from '../../api/client';
-import { apiErrors } from '../auth/services/authApi';
-import './business-assistant.css';
+import api from '../../../api/client';
+import { apiErrors } from '../../auth/services/authApi';
+import '../styles/business-assistant.css';
 
 const base = '/head-office/business-assistant';
 const currentMonth = () => new Intl.DateTimeFormat('en-CA', {
@@ -23,10 +23,10 @@ function readHistory(id) {
   try {
     const data = JSON.parse(localStorage.getItem(historyKey(id)) || '[]');
     if (!Array.isArray(data)) return [];
-    return data.filter((t) => typeof t?.id === 'string' && typeof t.updatedAt === 'string' &&
-      Array.isArray(t.messages) && t.messages.length && t.messages.length <= 60 && t.messages.every((m) =>
-        ['user', 'assistant'].includes(m?.role) && typeof m.content === 'string' && m.content.length <= 24000))
-      .slice(0, 20).map((t) => ({ id: t.id, updatedAt: t.updatedAt, messages: savedMessages(t.messages) }));
+    return data.filter((item) => typeof item?.id === 'string' && typeof item.updatedAt === 'string' &&
+      Array.isArray(item.messages) && item.messages.length && item.messages.length <= 60 && item.messages.every((message) =>
+        ['user', 'assistant'].includes(message?.role) && typeof message.content === 'string' && message.content.length <= 24000))
+      .slice(0, 20).map((item) => ({ id: item.id, updatedAt: item.updatedAt, messages: savedMessages(item.messages) }));
   } catch { return []; }
 }
 function Answer({ text }) {
@@ -40,7 +40,7 @@ function Answer({ text }) {
   return <div className="business-assistant-answer">{content.split(/\n\s*\n/).filter(Boolean).map((block, index) => {
     const lines = block.split('\n');
     if (lines.every((line) => /^\s*([-*•]|\d+[.)])\s+/.test(line))) {
-      return <ul key={index}>{lines.map((line, n) => <li key={n}>{inline(line.replace(/^\s*([-*•]|\d+[.)])\s+/, ''))}</li>)}</ul>;
+      return <ul key={index}>{lines.map((line, indexItem) => <li key={indexItem}>{inline(line.replace(/^\s*([-*•]|\d+[.)])\s+/, ''))}</li>)}</ul>;
     }
     return <p key={index}>{inline(block.replace(/^#{1,6}\s+/gm, ''))}</p>;
   })}</div>;
@@ -164,7 +164,7 @@ export default function BusinessAssistant({ user }) {
         const completed = [...pending, { role: 'assistant', content: data.answer }].slice(-60);
         const id = threadId || window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         setThreadId(id); setMessages(completed);
-        saveThreads([{ id, updatedAt: new Date().toISOString(), messages: savedMessages(completed) }, ...threads.filter((t) => t.id !== id)]);
+        saveThreads([{ id, updatedAt: new Date().toISOString(), messages: savedMessages(completed) }, ...threads.filter((thread) => thread.id !== id)]);
       }
     } catch (failure) {
       if (mounted.current) {
@@ -198,10 +198,10 @@ export default function BusinessAssistant({ user }) {
         {<PaginatedList pageSize={10}>{threads.map((thread) => <div key={thread.id} className="business-assistant-history-row">
           <button type="button" aria-current={threadId === thread.id ? 'true' : undefined} onClick={() => {
             setThreadId(thread.id); setMessages(thread.messages || emptyMessages); setDraft(''); setError(''); setShowHistory(false);
-          }}><span>{thread.messages.find((m) => m.role === 'user')?.content.slice(0, 90) || 'Cuộc trò chuyện'}</span>
+          }}><span>{thread.messages.find((message) => message.role === 'user')?.content.slice(0, 90) || 'Cuộc trò chuyện'}</span>
             <time dateTime={thread.updatedAt}>{new Date(thread.updatedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</time></button>
           <button type="button" aria-label={`Xóa cuộc trò chuyện ${thread.messages[0]?.content.slice(0, 40)}`} onClick={() => {
-            saveThreads(threads.filter((t) => t.id !== thread.id)); if (thread.id === threadId) { setThreadId(null); setMessages([]); setDraft(''); setError(''); }
+            saveThreads(threads.filter((threadItem) => threadItem.id !== thread.id)); if (thread.id === threadId) { setThreadId(null); setMessages([]); setDraft(''); setError(''); }
           }}>Xóa</button>
         </div>)}</PaginatedList>}
         {storageError && <p className="business-assistant-error" role="alert">{storageError}</p>}
@@ -225,7 +225,7 @@ export default function BusinessAssistant({ user }) {
         </div>
         {busy && <p role="status" className="business-assistant-status">Đang phân tích số liệu…</p>}
         {error && <div className="business-assistant-error" role="alert"><p>{error}</p>
-          {!context && <button type="button" onClick={() => setRefresh((n) => n + 1)}>Tải lại số liệu</button>}</div>}
+          {!context && <button type="button" onClick={() => setRefresh((previousRefresh) => previousRefresh + 1)}>Tải lại số liệu</button>}</div>}
         {storageError && <p className="business-assistant-error" role="alert">{storageError}</p>}
       </div>
       <footer className="business-assistant-footer">

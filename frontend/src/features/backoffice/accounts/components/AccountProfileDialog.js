@@ -12,8 +12,8 @@ import { apiErrors } from '../../../auth/services/authApi';
 import { accountProfileApi } from '../services/accountProfileApi';
 import { roleNames } from '../services/accountAccessApi';
 import '../styles/accounts.css';
-import '../styles/accountAccess.css';
-import '../styles/accountProfile.css';
+import '../styles/account-access.css';
+import '../styles/account-profile.css';
 import ChangePasswordForm from './ChangePasswordForm';
 
 const statuses = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa', REVOKED: 'Đã thu hồi' };

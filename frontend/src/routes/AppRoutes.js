@@ -24,9 +24,9 @@ import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage
 import HomePage from '../features/landing/pages/HomePage';
 
 import AccountantFinancePage from '../features/finance/pages/AccountantFinancePage';
-import AccountantOverviewPage from '../features/dashboard/AccountantDashboard';
-import AccountantReportPage from '../features/dashboard/AccountantFinancePage';
-import ExpenseBreakdownReportPage from '../features/dashboard/ExpenseBreakdownReportPage';
+import AccountantOverviewPage from '../features/dashboard/pages/AccountantDashboard';
+import AccountantReportPage from '../features/dashboard/pages/AccountantFinancePage';
+import ExpenseBreakdownReportPage from '../features/dashboard/pages/ExpenseBreakdownReportPage';
 
 
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.

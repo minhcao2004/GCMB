@@ -1,8 +1,8 @@
 import { useEffect, useId, useState } from 'react';
-import api from '../../api/client';
-import { branchAdministrationApi } from '../branch/services/branchAdministrationApi';
+import api from '../../../api/client';
+import { branchAdministrationApi } from '../../branch/services/branchAdministrationApi';
 import DashboardPeriodControls, { initialPeriodValue } from './DashboardPeriodControls';
-import './customer-sources-chart.css';
+import '../styles/customer-sources-chart.css';
 
 const platforms = [
   ['FACEBOOK', 'Facebook', 'var(--gcmb-color-info)'],

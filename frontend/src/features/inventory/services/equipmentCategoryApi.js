@@ -20,7 +20,7 @@ async function mutate(headOffice, branchId, method, url, data) {
 export const equipmentCategoryApi = {
   list: (headOffice, branchId, filters) => apiClient.get(root(headOffice), {
     params: params(headOffice, branchId, filters), headers: headers(headOffice, branchId),
-  }).then((r) => r.data),
+  }).then((response) => response.data),
   // UC-60: Tạo danh mục dùng chung, không yêu cầu branchId.
   create: async (headOffice, branchId, body) => (await mutate(headOffice, branchId, 'post', root(headOffice), body)).data,
   // UC-62: Cập nhật thông tin nhóm trong phạm vi cơ sở.

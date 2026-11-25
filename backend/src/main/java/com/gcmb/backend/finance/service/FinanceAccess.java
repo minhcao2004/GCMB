@@ -6,19 +6,19 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import java.math.BigDecimal;
 import java.util.*;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.gcmb.backend.finance.repository.FinanceAccessRepository;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class FinanceAccess {
 
-  private final JdbcTemplate jdbcTemplate;
+  private final FinanceAccessRepository financeAccessRepository;
   private final AccountRepository accountRepository;
   private final ObjectMapper objectMapper;
 
-  public FinanceAccess(JdbcTemplate jdbcTemplate, AccountRepository accountRepository, ObjectMapper objectMapper) {
-    this.jdbcTemplate = jdbcTemplate;
+  public FinanceAccess(FinanceAccessRepository financeAccessRepository, AccountRepository accountRepository, ObjectMapper objectMapper) {
+    this.financeAccessRepository = financeAccessRepository;
     this.accountRepository = accountRepository;
     this.objectMapper = objectMapper;
   }
@@ -31,14 +31,7 @@ public class FinanceAccess {
     if (
       actor == null ||
       !role.equals(actor.role()) ||
-      !Boolean.TRUE.equals(
-        jdbcTemplate.queryForObject(
-          "SELECT EXISTS(SELECT 1 FROM gcmb.user_account u JOIN gcmb.role r ON r.id=u.role_id WHERE u.id=? AND u.status='ACTIVE' AND r.code=?)",
-          Boolean.class,
-          actor.id(),
-          role
-        )
-      )
+      !financeAccessRepository.hasActiveRole(actor.id(), role)
     ) throw new AuthFailure(403, "form", "Bạn không có quyền thực hiện thao tác này."); // MSG24.
   }
 
@@ -48,10 +41,7 @@ public class FinanceAccess {
       actor.branchId() == null || !accountRepository.manages(actor.id(), actor.branchId(), false)
     ) throw new AuthFailure(403, "form", "Bạn không có quyền xem đối với cơ sở này.");
     // HuyDV / BR-177: chỉ thao tác ghi cần giữ khóa cơ sở; FOR SHARE bị cấm trong transaction chỉ đọc.
-    var branch = jdbcTemplate.queryForMap(
-      "SELECT name,status FROM gcmb.branch WHERE id=?" + (write ? " FOR SHARE" : ""),
-      actor.branchId()
-    );
+    var branch = financeAccessRepository.findBranchStatus(actor.branchId(), write);
     if (write && !"ACTIVE".equals(branch.get("status"))) throw new AuthFailure(
       403,
       "form",
@@ -63,23 +53,22 @@ public class FinanceAccess {
   }
 
   public void lock() {
-    AccountantFund.lock(jdbcTemplate);
+    financeAccessRepository.lockAccountantFund();
   }
 
   public void audit(
     Identity actor,
-    UUID branch,
-    UUID id,
+    UUID branchId,
+    UUID entityId,
     String action,
     Object before,
     Object after
   ) {
-    jdbcTemplate.update(
-      "INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,entity_id,before_data,after_data) VALUES (?,?,?,'FINANCE',?,CAST(? AS jsonb),CAST(? AS jsonb))",
+    financeAccessRepository.insertFinanceAudit(
       actor.id(),
-      branch,
+      branchId,
       action,
-      id,
+      entityId,
       objectMapper.writeValueAsString(before),
       objectMapper.writeValueAsString(after)
     );

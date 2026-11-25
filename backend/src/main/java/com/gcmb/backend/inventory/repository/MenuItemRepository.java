@@ -64,8 +64,8 @@ public class MenuItemRepository {
             SELECT i.id,i.sku,i.name,i.category,u.name AS unit_name,i.active
             FROM gcmb.inventory_item i JOIN gcmb.unit u ON u.id=i.unit_id
             WHERE i.branch_id=? ORDER BY i.active DESC,lower(i.name),i.sku
-            """, (rs, row) -> new InventoryOption(rs.getObject("id", UUID.class), rs.getString("sku"),
-                rs.getString("name"), rs.getString("category"), rs.getString("unit_name"), rs.getBoolean("active")), branchId);
+            """, (resultSet, row) -> new InventoryOption(resultSet.getObject("id", UUID.class), resultSet.getString("sku"),
+                resultSet.getString("name"), resultSet.getString("category"), resultSet.getString("unit_name"), resultSet.getBoolean("active")), branchId);
     }
 
     public boolean activeInventory(UUID branchId, UUID inventoryItemId) {
@@ -119,8 +119,8 @@ public class MenuItemRepository {
             SELECT image_object_key,image_original_name,image_mime_type FROM gcmb.menu_item
             WHERE branch_id=? AND id=? AND deleted_at IS NULL AND image_object_key IS NOT NULL
                 AND (?=false OR active=true)
-            """, (rs, row) -> new ImageAsset(rs.getString("image_object_key"),
-                rs.getString("image_original_name"), rs.getString("image_mime_type")), branchId, id, activeOnly);
+            """, (resultSet, row) -> new ImageAsset(resultSet.getString("image_object_key"),
+                resultSet.getString("image_original_name"), resultSet.getString("image_mime_type")), branchId, id, activeOnly);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -143,10 +143,10 @@ public class MenuItemRepository {
                 AND (?='' OR strpos(lower(m.name || ' ' || m.category),lower(?))>0)
                 AND (?='' OR lower(m.category)=lower(?))
             ORDER BY lower(m.category),lower(m.name),m.code
-            """, (rs, row) -> new PublicMenuItemView(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("category"), rs.getString("kind"), rs.getBigDecimal("sale_price"),
-                rs.getBoolean("available"), rs.getString("stock_status"), rs.getString("description"),
-                rs.getString("image_url")), branchId, term, term, categoryFilter, categoryFilter);
+            """, (resultSet, row) -> new PublicMenuItemView(resultSet.getObject("id", UUID.class), resultSet.getString("name"),
+                resultSet.getString("category"), resultSet.getString("kind"), resultSet.getBigDecimal("sale_price"),
+                resultSet.getBoolean("available"), resultSet.getString("stock_status"), resultSet.getString("description"),
+                resultSet.getString("image_url")), branchId, term, term, categoryFilter, categoryFilter);
     }
 
     public ImageAsset publicImage(UUID branchId, UUID id) {
@@ -155,8 +155,8 @@ public class MenuItemRepository {
             FROM gcmb.menu_item m JOIN gcmb.branch b ON b.id=m.branch_id AND b.status='ACTIVE'
             WHERE m.branch_id=? AND m.id=? AND m.active=true AND m.deleted_at IS NULL
                 AND m.image_object_key IS NOT NULL
-            """, (rs, row) -> new ImageAsset(rs.getString("image_object_key"),
-                rs.getString("image_original_name"), rs.getString("image_mime_type")), branchId, id);
+            """, (resultSet, row) -> new ImageAsset(resultSet.getString("image_object_key"),
+                resultSet.getString("image_original_name"), resultSet.getString("image_mime_type")), branchId, id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -177,7 +177,7 @@ public class MenuItemRepository {
     }
 
     private String nextCode(UUID branchId, String prefix) {
-        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?),hashtext(?))", rs -> {}, branchId.toString(), prefix);
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?),hashtext(?))", resultSet -> {}, branchId.toString(), prefix);
         Long next = jdbcTemplate.queryForObject("""
             SELECT COALESCE(MAX(substring(code from '([0-9]+)$')::bigint),0)+1
             FROM gcmb.menu_item WHERE branch_id=? AND code ~ ?

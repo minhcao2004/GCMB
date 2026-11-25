@@ -177,10 +177,10 @@ export default function TaxInvoicePage({ accounting = false }) {
   const handlingLabel = (request) =>
     request.deliveryResult ? deliveryLabel(request.deliveryResult) : 'Chưa giao thành công';
   const handlingValue = form.deliveryResult ? `RESULT:${form.deliveryResult}` : '';
-  const visibleRows = rows.filter((r) =>
-    `${r.bookingCode} ${r.customer} ${r.branchName}`.toLowerCase().includes(search.toLowerCase())
+  const visibleRows = rows.filter((row) =>
+    `${row.bookingCode} ${row.customer} ${row.branchName}`.toLowerCase().includes(search.toLowerCase())
   );
-  const originalRequest = detail?.history?.find((h) => h.action === 'CREATE_TAX_INVOICE_REQUEST');
+  const originalRequest = detail?.history?.find((historyItem) => historyItem.action === 'CREATE_TAX_INVOICE_REQUEST');
   const customerNote = originalRequest
     ? JSON.parse(originalRequest.data).note
     : detail?.request?.version === 0
@@ -231,7 +231,7 @@ export default function TaxInvoicePage({ accounting = false }) {
             <h1>Yêu cầu hóa đơn thuế</h1>
           </div>
           <button
-            onClick={() => (bookingId ? open(null) : setRevision((v) => v + 1))}
+            onClick={() => (bookingId ? open(null) : setRevision((previousRevision) => previousRevision + 1))}
             disabled={busy}
           >
             {bookingId ? 'Danh sách yêu cầu' : 'Tải lại'}
@@ -252,7 +252,7 @@ export default function TaxInvoicePage({ accounting = false }) {
         {error && (
           <div role="alert" className="staff-banner error">
             {error}
-            <button onClick={() => setRevision((v) => v + 1)} disabled={busy}>
+            <button onClick={() => setRevision((previousRevision) => previousRevision + 1)} disabled={busy}>
               Tải lại dữ liệu
             </button>
           </div>
@@ -279,16 +279,16 @@ export default function TaxInvoicePage({ accounting = false }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((r) => (
-                    <tr key={r.bookingId}>
+                  {visibleRows.map((visibleRow) => (
+                    <tr key={visibleRow.bookingId}>
                       <td>
-                        {r.bookingCode}
-                        <small>{r.customer}</small>
+                        {visibleRow.bookingCode}
+                        <small>{visibleRow.customer}</small>
                       </td>
-                      <td>{r.branchName}</td>
-                      <td>{handlingLabel(r)}</td>
+                      <td>{visibleRow.branchName}</td>
+                      <td>{handlingLabel(visibleRow)}</td>
                       <td>
-                        <button onClick={() => open(r.bookingId)}>Chi tiết</button>
+                        <button onClick={() => open(visibleRow.bookingId)}>Chi tiết</button>
                       </td>
                     </tr>
                   ))}
@@ -467,17 +467,17 @@ export default function TaxInvoicePage({ accounting = false }) {
               {!!detail.history?.length && (
                 <div>
                   <h3>Lịch sử xử lý</h3>
-                  {<PaginatedList pageSize={5}>{detail.history.map((h, i) => (
+                  {<PaginatedList pageSize={5}>{detail.history.map((historyItem, i) => (
                     <p key={i}>
-                      {new Date(h.createdAt).toLocaleString('vi-VN')} ·{' '}
-                      {h.action === 'CREATE_TAX_INVOICE_REQUEST'
+                      {new Date(historyItem.createdAt).toLocaleString('vi-VN')} ·{' '}
+                      {historyItem.action === 'CREATE_TAX_INVOICE_REQUEST'
                         ? 'Ghi nhận yêu cầu'
                         : 'Cập nhật tiến độ'}{' '}
-                      · {statuses[JSON.parse(h.data).status]} ·{' '}
-                      {JSON.parse(h.data).deliveryResult
-                        ? deliveryLabel(JSON.parse(h.data).deliveryResult)
-                        : h.action === 'CREATE_TAX_INVOICE_REQUEST'
-                          ? JSON.parse(h.data).note
+                      · {statuses[JSON.parse(historyItem.data).status]} ·{' '}
+                      {JSON.parse(historyItem.data).deliveryResult
+                        ? deliveryLabel(JSON.parse(historyItem.data).deliveryResult)
+                        : historyItem.action === 'CREATE_TAX_INVOICE_REQUEST'
+                          ? JSON.parse(historyItem.data).note
                           : ''}
                     </p>
                   ))}</PaginatedList>}

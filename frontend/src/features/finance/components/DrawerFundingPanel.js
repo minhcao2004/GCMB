@@ -63,7 +63,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
       await api.post(base, { amount: Number(amount), reason, requestId }, branch);
       setRequestId(crypto.randomUUID());
       setNotice('Đã gửi yêu cầu cấp két. Tiền chỉ được cộng khi kế toán xác nhận đã thanh toán.');
-      setVersion((n) => n + 1);
+      setVersion((previousVersion) => previousVersion + 1);
       onChange?.();
     } catch (e) { setError(message(e)); }
     finally { setBusy(false); }
@@ -85,7 +85,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
       setSelected(null);
       setNotice(reject ? 'Đã từ chối yêu cầu cấp két.' : 'Đã ghi nhận thanh toán cho quản lý cơ sở, trừ quỹ kế toán và cộng tiền vào két cơ sở.');
       setProof(null);
-      setVersion((n) => n + 1);
+      setVersion((previousVersion) => previousVersion + 1);
       onChange?.();
     } catch (e) { setError(message(e)); }
     finally { setBusy(false); }
@@ -137,13 +137,13 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
         <p>Quỹ kế toán còn: <strong>{vnd(data.fundBalance)}</strong></p>
         <label>Cơ sở<select value={filter} onChange={(e) => { setFilter(e.target.value); setSelected(null); }}>
           <option value="">Tất cả cơ sở</option>
-          {data.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {data.branches.map((branchItem) => <option key={branchItem.id} value={branchItem.id}>{branchItem.name}</option>)}
         </select></label>
         <label>Trạng thái<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">Tất cả trạng thái</option>
           {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <button disabled={busy} onClick={() => { setSelected(null); setProof(null); setVersion((n) => n + 1); }}>Tải lại yêu cầu</button>
+        <button disabled={busy} onClick={() => { setSelected(null); setProof(null); setVersion((previousVersion) => previousVersion + 1); }}>Tải lại yêu cầu</button>
       </div> : <>
         <p>Két hiện tại: <strong>{vnd(data.drawerBalance)}</strong></p>
         <RecipientDetails recipient={data.recipient} />

@@ -43,7 +43,7 @@ export function localInput(value, timezone = 'Asia/Ho_Chi_Minh') {
       hourCycle: 'h23',
     })
       .formatToParts(new Date(value))
-      .map((p) => [p.type, p.value]),
+      .map((part) => [part.type, part.value]),
   );
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }

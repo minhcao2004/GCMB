@@ -6,7 +6,7 @@ import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, today, vnd } from '../services/financeApi';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import '../styles/finance.css';
-import '../styles/cashHandover.css';
+import '../styles/cash-handover.css';
 
 const labels = { MATCHED: 'Khớp tiền', DISCREPANCY: 'Chờ QLCS xử lý', RESOLVED: 'QLCS đã xử lý' };
 const displayDate = (value) => String(value).slice(0, 10).split('-').reverse().join('/');
