@@ -368,6 +368,10 @@ Run commands from the corresponding project directory.
 
 Thông báo lịch ca (08/11/2026): mở chi tiết/phân công, mở chấm công, mở chỉnh lịch hoặc đổi tuần/cơ sở sẽ xóa thông báo thành công của thao tác trước. Đóng hộp thoại không hiển thị thành công và không gọi API phân công. Thông báo mới chỉ được đặt sau khi API lưu thành công. File ảnh hưởng: `ShiftSchedulePage.js`. Không thêm file test theo yêu cầu; bốn kiểm tra hồi quy đã chạy đạt trước khi xóa file test tạm.
 
+- **Ghi nhận chấm công** hiển thị mỗi nhân viên một hàng với bốn cột **Nhân viên**, **Đi làm**, **Vắng mặt** và **Ghi chú**. Mở từ lịch ca hoặc từ một bản ghi trong ngày sẽ hiện toàn bộ phân công cùng ca. Nút ghi nhận trên trang ngày hiện các phân công trong ngày. Hộp thoại bỏ dropdown chọn người và tiền công ca tạm tính.
+- Chọn trạng thái và ghi chú riêng từng người, sau đó bấm **Lưu chấm công** một lần để lưu các hàng đã nhập hoặc sửa. Dòng đã chốt công hoặc chưa đến giờ bắt đầu ca chỉ xem. Phản ánh vẫn được xử lý theo từng phân công. Việc chốt bảng công tháng vẫn yêu cầu xác nhận.
+- Nút lưu gọi API ghi công lần lượt cho từng phân công. Nếu gặp lỗi giữa chừng, hộp thoại báo số bản ghi đã lưu và giữ phần đang nhập để có thể thử lại. Lỗi xung đột phiên bản yêu cầu tải lại bảng công trước khi sửa tiếp.
+
 | Check | Windows PowerShell | macOS/Linux |
 | --- | --- | --- |
 | Backend tests (`backend/`) | `.\mvnw.cmd test` | `./mvnw test` |
