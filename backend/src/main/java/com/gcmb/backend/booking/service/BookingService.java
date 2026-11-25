@@ -661,9 +661,8 @@ public class BookingService {
             if (selectedRoom.capacity() < booking.guestCount())
                 throw new BookingFailure(400, "roomId", "Phòng " + selectedRoom.code() + " chỉ phù hợp tối đa " + selectedRoom.capacity() + " khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.");
             // BR-03, BR-05, BR-155; MSG59: phòng còn khách dù đã quá giờ checkout không được gán khi check-in.
-            if (!bookingRepository.availableRoomsForEdit(branch.id(), effectiveStart, effectiveEnd, bookingId, true).stream()
-                    .anyMatch(candidate -> candidate.id().equals(selectedRoom.id())))
-                throw new BookingFailure(409, "roomId", "Phòng " + selectedRoom.code() + " chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
+            if (bookingRepository.hasRoomOverlap(selectedRoom.id(), effectiveStart, effectiveEnd, bookingId))
+                throw roomConflict(selectedRoom.code());
             insertAllocation(branch, bookingId, selectedRoom.id(), selectedRoom.code(), effectiveStart, effectiveEnd, actorId);
             allocation = bookingRepository.currentAllocationForUpdate(bookingId);
             bookingRepository.attachUnassignedCharges(bookingId, allocation.id());
@@ -676,6 +675,9 @@ public class BookingService {
         if (!"AVAILABLE".equals(allocation.operatingStatus()))
             throw new BookingFailure(409, "roomId", "Phòng " + allocation.roomCode() + " chưa sẵn sàng để nhận khách. Vui lòng kiểm tra phòng hoặc sắp xếp phòng khác.");
 
+        if (bookingRepository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
+            throw roomConflict(allocation.roomCode());
+
         var giftRequirements = bookingRepository.comboGiftRequirements(bookingId, branch.id());
         List<BookingDtos.ComboGiftItem> drinks = request == null || request.drinkItems() == null ? List.of() : request.drinkItems();
         List<BookingDtos.ComboGiftItem> food = request == null || request.foodItems() == null ? List.of() : request.foodItems();
@@ -683,10 +685,8 @@ public class BookingService {
         validateGiftChoices(food, giftRequirements.foodQuantity(), "đồ ăn");
         foodOrderService.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
 
-        // Giữ plannedStart làm giờ hẹn gốc; chỉ dời allocation và plannedEnd khi khách đến sớm.
+        // Giờ hẹn gốc được giữ trong sự kiện; booking và allocation lưu khung sử dụng thực tế.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
-        if (bookingRepository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
-            throw roomConflict(allocation.roomCode());
 
         int bookingUpdated = bookingRepository.checkInBooking(bookingId, now, effectiveEnd);
         int allocationUpdated = earlyCheckIn
@@ -698,7 +698,7 @@ public class BookingService {
         bookingRepository.event(bookingId, actorId, "BOOKING_CHECKED_IN", null, detailsMap(
             "actualCheckin", now, "roomId", allocation.roomId(), "depositBalance", deposit,
             "earlyCheckIn", earlyCheckIn, "plannedStartBeforeCheckIn", booking.plannedStart(),
-            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", booking.plannedStart(),
+            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", effectiveStart,
             "plannedEndAfterCheckIn", effectiveEnd));
         return detail(branch.id(), bookingRepository.booking(bookingId, branch.id()));
     }

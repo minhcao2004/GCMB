@@ -6,6 +6,7 @@ import BrandWordmark from '../../../shared/components/BrandWordmark';
 import BankNameInput from '../../../shared/components/BankNameInput';
 import SharedAppShell from '../../../shared/components/AppShell';
 import DashboardTopbar from '../../../shared/components/DashboardTopbar';
+import SidebarNavigationGroup from '../../../shared/components/SidebarNavigationGroup';
 import { EmptyState } from '../../../shared/components/Feedback';
 import AccountProfileDialog from '../../backoffice/accounts/components/AccountProfileDialog';
 import '../../auth/styles/dashboard.css';
@@ -23,15 +24,16 @@ import EquipmentIncidentsPage from '../../inventory/pages/EquipmentIncidentsPage
 
 const receptionBookingPath = '/le-tan/bookings';
 const navigation = [
+  ['Phòng', 'rooms'], ['Booking', 'booking'],
+  ['Order F&B', 'orders'],
   ['Ca làm việc', 'shifts'],
   ['Bàn giao tiền mặt', 'handover'],
   ['Hóa đơn thuế', 'tax'],
-  ['Phòng', 'rooms'], ['Booking', 'booking'],
   ['Thanh toán', 'payments'], ['Báo sự cố', 'issues'],
 ];
 const accountingNavigation = [
   { label: 'Tổng quan', items: [['Tổng quan tài chính', 'overview'], ['Báo cáo & thống kê', 'report']] },
-  { label: 'Thu chi & thanh toán', items: [['Thu & cấp quỹ', 'payments'], ['Chi & hoàn ứng', 'plus'], ['Hoàn tiền cọc', 'deposit'], ['Hóa đơn thuế', 'tax']] },
+  { label: 'Thu chi & thanh toán', items: [['Tiếp nhận quỹ', 'payments'], ['Chi & hoàn ứng', 'plus'], ['Hoàn tiền cọc', 'deposit'], ['Hóa đơn thuế', 'tax']] },
   { label: 'Đối soát & kiểm soát', items: [['Đối soát chốt quỹ', 'calendar']] },
   { label: 'Nhân sự & chi phí', items: [['Lương nhân viên', 'booking'], ['Báo cáo chi phí', 'orders']] },
 ];
@@ -179,7 +181,7 @@ export function AppShell({
           next.refunds = (refundResult.value.items || []).filter((item) => ['REQUESTED', 'APPROVED', 'PROCESSING'].includes(item.status)).length;
         }
         if (closingResult.status === 'fulfilled') {
-          next.closings = closingResult.value.filter((item) => item.status !== 'RECONCILED').length;
+          next.closings = closingResult.value.filter((item) => item.status === 'SUBMITTED').length;
         }
         if (recurringResult.status === 'fulfilled') next.recurring = recurringResult.value;
         return next;
@@ -212,9 +214,8 @@ export function AppShell({
           sidebarLabel="Kế toán thu chi"
           brand={<div className="manager-brand"><BrandWordmark to="/ke-toan" /></div>}
           roleLabel="KẾ TOÁN THU CHI"
-          navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--accountant" aria-label="Điều hướng kế toán thu chi">
-                {navItems.map((group) => <details className="accountant-nav-group" key={group.label} open={group.items.some(([, icon]) => icon === activeTab)}>
-                  <summary>{group.label}</summary>
+          navigation={<nav id="booking-navigation" className="manager-navigation manager-navigation--grouped" aria-label="Điều hướng kế toán thu chi">
+                {navItems.map((group) => <SidebarNavigationGroup key={group.label} label={group.label} isActive={group.items.some(([, icon]) => icon === activeTab)}>
                   {group.items.map(([label, icon, unavailable]) => {
                   const pendingCount = icon === 'payments' ? accountingPending.payments
                     : icon === 'plus' ? accountingPending.recurring
@@ -246,7 +247,7 @@ export function AppShell({
                     <Icon name={icon} /><span>{label}</span>{pendingCount > 0 && <span className="accounting-nav-badge" aria-hidden="true">{pendingCount > 99 ? '99+' : pendingCount}</span>}
                   </button>
                 );})}
-                </details>)}
+                </SidebarNavigationGroup>)}
               </nav>}
           footer={<div className="manager-sidebar-footer">
                 <strong>GenZ Cinema &amp; Music Box</strong>
@@ -919,13 +920,13 @@ export default function BookingManagementPage() {
       const recordedDeposit = Number(result.deposit?.balance ?? booking.depositBalance ?? 0);
       if (requestedDeposit > 0 && recordedDeposit < requestedDeposit) {
         setNoticeKind('warning');
-        setNotice(`Booking ${booking.code} chưa ghi nhận đủ tiền cọc (${formatVnd(recordedDeposit)} / ${formatVnd(requestedDeposit)}). Vui lòng kiểm tra khoản thu tại mục Tiền cọc.`);
+        setNotice(`Booking chưa ghi nhận đủ tiền cọc (${formatVnd(recordedDeposit)} / ${formatVnd(requestedDeposit)}). Vui lòng kiểm tra khoản thu tại mục Tiền cọc.`);
       } else if (recordedDeposit > 0) {
         setNoticeKind('success');
-        setNotice(`Đã tạo booking ${booking.code} và ghi nhận tiền cọc ${formatVnd(recordedDeposit)}.`);
+        setNotice(`Đã tạo booking và ghi nhận tiền cọc ${formatVnd(recordedDeposit)}.`);
       } else {
         setNoticeKind('success');
-        setNotice(`Đã tạo booking ${booking.code}.`);
+        setNotice('Đã tạo booking.');
       }
       navigate('/le-tan/bookings', { replace: true });
       return { ok: true };
@@ -940,11 +941,11 @@ export default function BookingManagementPage() {
     try {
       const result = await bookingApi.cancel(booking.id, cancellation);
       setCancelTarget(null);
-      let message = `Đã hủy booking ${booking.code}.`;
+      let message = 'Đã hủy booking.';
       if (result.refundRequestId) {
-        message = `Đã hủy booking ${booking.code} và tạo yêu cầu hoàn ${formatVnd(result.depositAmount)} cho Kế toán.`;
+        message = `Đã hủy booking và tạo yêu cầu hoàn ${formatVnd(result.depositAmount)} cho Kế toán.`;
       } else if (result.depositOutcome === 'NON_REFUNDABLE') {
-        message = `Đã hủy booking ${booking.code}; ${formatVnd(result.depositAmount)} đã chuyển thành cọc không hoàn.`;
+        message = `Đã hủy booking; ${formatVnd(result.depositAmount)} đã chuyển thành cọc không hoàn.`;
       }
       setNoticeKind('success');
       setNotice(message);
@@ -964,8 +965,8 @@ export default function BookingManagementPage() {
       setNoticeKind('success');
       const checkoutWasExtended = new Date(result.booking.plannedEnd).getTime() > new Date(booking.plannedEnd).getTime();
       setNotice(checkoutWasExtended
-        ? `Đã check-in booking ${booking.code}; giờ hẹn ${timeText(result.booking.plannedStart, timezone)} được giữ nguyên, giờ trả dự kiến dời đến ${timeText(result.booking.plannedEnd, timezone)} để bảo đảm đủ thời lượng.`
-        : `Đã check-in booking ${booking.code}.`);
+        ? `Đã check-in thành công; giờ hẹn ${timeText(result.booking.plannedStart, timezone)} được giữ nguyên, giờ trả dự kiến dời đến ${timeText(result.booking.plannedEnd, timezone)} để bảo đảm đủ thời lượng.`
+        : 'Đã check-in thành công.');
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
     } catch (requestError) { const errors = apiErrors(requestError); setCheckInError(errors.form || Object.values(errors)[0]); }
@@ -981,7 +982,7 @@ export default function BookingManagementPage() {
       setSelectedDate(toLocalDateInput(new Date(updated.plannedStart)));
       setSelectedId(updated.id);
       setNoticeKind('success');
-      setNotice(`Đã cập nhật booking ${updated.code}. Giá mới: ${formatVnd(updated.expectedAmount)}; tiền cọc đã ghi được giữ nguyên.`);
+      setNotice(`Đã cập nhật booking. Giá mới: ${formatVnd(updated.expectedAmount)}; tiền cọc đã ghi được giữ nguyên.`);
       setReload((value) => value + 1);
       navigate('/le-tan/bookings', { replace: true });
       return { ok: true };

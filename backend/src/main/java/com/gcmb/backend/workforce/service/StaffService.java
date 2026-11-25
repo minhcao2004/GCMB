@@ -76,6 +76,13 @@ public class StaffService {
         return "ACCOUNTANT".equals(position) || "HEAD_OFFICE_MANAGER".equals(position);
     }
 
+    private static void protectAccountantAccount(Map<String, Object> row, String action) {
+        // MSG24: hồ sơ liên kết cung cấp họ tên và liên hệ cho tài khoản kế toán; không cho quản lý sửa gián tiếp.
+        if ("ACCOUNTANT".equals(row.get("accountRole"))) throw new AuthFailure(
+            403, "form", "Bạn không có quyền " + action + " đối với hồ sơ nhân viên của tài khoản kế toán."
+        );
+    }
+
     private void version(Map<String, Object> row, Long version) {
         if (
             version == null || version != ((Number) row.get("version")).longValue()
@@ -158,6 +165,7 @@ public class StaffService {
 
     public Map<String, Object> update(Identity actor, UUID id, StaffCommand input) {
         var before = record(id, scope(actor, true), true);
+        protectAccountantAccount(before, "sửa thông tin");
         version(before, input == null ? null : input.version());
         StaffCommand c = validate(input, id);
         // HuyDV: không cho đổi vị trí sau khi tạo để vượt quyền của QLCS.
@@ -172,6 +180,7 @@ public class StaffService {
     // UC-80, BR-171, BR-199: status, automatic account lock (DB trigger), tokens and audit share the transaction.
     public Map<String, Object> status(Identity actor, UUID id, StatusCommand input) {
         var before = record(id, scope(actor, true), true);
+        protectAccountantAccount(before, "đổi trạng thái");
         if (input == null) throw new AuthFailure(400, "form", "Vui lòng bổ sung trạng thái hồ sơ.");
         version(before, input.version());
         if (!input.active() && actor.id().equals(before.get("userId"))) throw new AuthFailure(
@@ -214,6 +223,7 @@ public class StaffService {
     ) {
         if (scope(actor, true) != null) throw denied(); // UC-81/82: only Head Office Manager.
         var before = record(id, null, true);
+        protectAccountantAccount(before, "phân công");
         if (input == null || input.branchId() == null) throw new AuthFailure(
             400,
             "branchId",

@@ -1,4 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+
+const TOAST_AUTO_DISMISS_MS = 7000;
 
 function variantClass(variant) {
   return ['primary', 'info', 'success', 'warning', 'danger'].includes(variant)
@@ -32,15 +35,38 @@ export function Toast({
   message,
   children,
   onClose,
+  autoDismissMs = TOAST_AUTO_DISMISS_MS,
   closeLabel = 'Đóng thông báo',
   className,
 }) {
+  const toastRef = useRef(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    if (!open || !autoDismissMs) return undefined;
+    const toast = toastRef.current;
+    const dismiss = () => closeRef.current?.();
+    const dismissAfterFocus = (event) => {
+      if (!toast?.contains(event.relatedTarget)) dismiss();
+    };
+    const timeout = window.setTimeout(() => {
+      if (toast?.contains(document.activeElement)) toast.addEventListener('focusout', dismissAfterFocus);
+      else dismiss();
+    }, autoDismissMs);
+    return () => {
+      window.clearTimeout(timeout);
+      toast?.removeEventListener('focusout', dismissAfterFocus);
+    };
+  }, [open, autoDismissMs, message, children]);
+
   if (!open) return null;
 
   const toastVariant = variantClass(variant);
 
   return (
     <div
+      ref={toastRef}
       className={[
         'gcmb-ui-toast',
         `gcmb-ui-toast--${toastVariant}`,

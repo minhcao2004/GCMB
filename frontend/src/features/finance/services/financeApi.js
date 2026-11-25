@@ -90,6 +90,9 @@ export const financeApi = {
   createRequest: (values) => mutate('post','/branch-management/finance/requests',values),
   uploadRequestAttachment: (id, kind, file) => mutate('post',`/branch-management/finance/requests/${id}/attachments?kind=${kind}`,form({file}),true),
   review: (role, id, approve, note='') => mutate('post',`${route[role]}/requests/${id}/review`,{ approve, note }),
+  approveAndPay: (id, note, reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart) => mutate('post',`/accounting/finance/requests/${id}/approve-and-pay`,form({
+    note, reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart,
+  }),true),
   pay: (id, reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart) => mutate('post',`/accounting/finance/requests/${id}/pay`,form({
     reference, proof, paymentMethod, bankAccount, bankName, allocationMonths, allocationStart,
   }),true),

@@ -180,7 +180,7 @@ function RefundDetails({ item, busy, error, onComplete, onBackToQueue }) {
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/><path d="M9 12h12"/></svg>
           Danh sách yêu cầu
         </button>
-        <div><h2>Chi tiết yêu cầu</h2><strong>{item.bookingCode} · {item.customerName}</strong></div>
+        <div><h2>Chi tiết yêu cầu</h2><strong>{item.customerName}</strong></div>
         <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span>
       </header>
       <section className="deposit-details-amount">
@@ -298,7 +298,7 @@ export default function AccountantRefundPage() {
       setFilter('all');
       const proofNotice = image ? ' và lưu tệp minh chứng.'
         : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
-      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} cho đặt phòng ${item.bookingCode}${proofNotice}`);
+      setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} tiền cọc${proofNotice}`);
       setReload((value) => value + 1);
     } catch (error) { setMutationError(errorText(error, 'Không thể ghi nhận hoàn cọc. Dữ liệu đã nhập vẫn được giữ để bạn thử lại.')); }
     finally { setBusy(false); }
@@ -346,14 +346,14 @@ export default function AccountantRefundPage() {
         </div>
         <label className="accounting-refund-search">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.4 4.4"/></svg>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã đặt phòng, khách hàng, cơ sở, SĐT, ngân hàng, số tài khoản" aria-label="Tìm theo mã đặt phòng, khách hàng, cơ sở, số điện thoại, ngân hàng hoặc số tài khoản" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Khách hàng, cơ sở, SĐT, ngân hàng, số tài khoản" aria-label="Tìm theo khách hàng, cơ sở, số điện thoại, ngân hàng hoặc số tài khoản" />
         </label>
       </div>
       <div className="accounting-refund-content-grid" data-mobile-view={mobileView}>
         <section className="deposit-table-card" aria-label="Danh sách yêu cầu hoàn cọc">
           <div className="deposit-table-scroll accounting-refund-desktop-list">
             <table className="deposit-table accounting-refund-table">
-              <thead><tr><th>Mã đặt phòng · cơ sở · thời điểm gửi</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
+              <thead><tr><th>Cơ sở · thời điểm gửi</th><th>Khách hàng</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
               <tbody>
                 {loading && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message" colSpan="4" role="status">Đang tải yêu cầu hoàn cọc…</td></tr>}
                 {!loading && loadError && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message deposit-table-message--error" colSpan="4">Danh sách chưa tải được.</td></tr>}
@@ -363,7 +363,7 @@ export default function AccountantRefundPage() {
                 {!loading && refundPagination.items.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
                   onClick={() => selectRequest(item.id)} tabIndex={0} aria-selected={item.id === selectedId}
                   onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectRequest(item.id); } }}>
-                  <td><strong>{item.bookingCode}</strong><small><b>Cơ sở</b> · {item.branchName || '—'}</small><small><b>Gửi lúc</b> · {dateTimeText(item.requestedAt)}</small></td>
+                  <td><small><b>Cơ sở</b> · {item.branchName || '—'}</small><small><b>Gửi lúc</b> · {dateTimeText(item.requestedAt)}</small></td>
                   <td><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></td>
                   <td><small className="accounting-refund-row-label">Số tiền hoàn</small><strong>{formatVnd(item.amount)}</strong></td>
                   <td><span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></td>
@@ -378,7 +378,7 @@ export default function AccountantRefundPage() {
             {!loading && refundPagination.items.map((item) => <button key={item.id} type="button"
               className={`accounting-refund-mobile-card${item.id === selectedId ? ' is-selected' : ''}`}
               aria-pressed={item.id === selectedId} onClick={() => selectRequest(item.id)}>
-              <span className="accounting-refund-mobile-card-heading"><strong>{item.bookingCode}</strong>
+              <span className="accounting-refund-mobile-card-heading">
                 <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></span>
               <span className="accounting-refund-mobile-customer"><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></span>
               <span className="accounting-refund-mobile-amount"><small>Số tiền hoàn</small><strong>{formatVnd(item.amount)}</strong></span>
@@ -386,7 +386,7 @@ export default function AccountantRefundPage() {
               <span className="accounting-refund-mobile-meta accounting-refund-mobile-requested"><small>Gửi lúc</small>{dateTimeText(item.requestedAt)}</span>
             </button>)}
           </div>
-          <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>
+          {(loading || visibleItems.length <= refundPagination.pageSize) && <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>}
           <Pagination {...refundPagination} onPageChange={refundPagination.setPage} disabled={loading}
             label="Phân trang hoàn tiền cọc" />
         </section>

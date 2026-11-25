@@ -14,6 +14,7 @@ import './equipment-management.css';
 
 export default function EquipmentManagementPage({ user, headOffice = false, initialSection = '', initialIncidentId = '', initialBranchId = '' }) {
   const [section, setSection] = useState(() => ['assets', 'categories', 'incidents', 'transfers'].includes(initialSection) ? initialSection : 'assets');
+  const selectSection = setSection;
   useEffect(() => {
     if (['assets', 'categories', 'incidents', 'transfers'].includes(initialSection)) setSection(initialSection);
   }, [initialSection]);

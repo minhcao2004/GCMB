@@ -325,6 +325,42 @@ public class CashClosingService {
     return rows;
   }
 
+  @Transactional(readOnly = true)
+  public List<Map<String,Object>> statuses(Identity actor,LocalDate date,UUID branchId) {
+    financeAccess.accountant(actor);
+    LocalDate selected=date==null?LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")):date;
+    if(selected.isAfter(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")))) throw bad("Không thể xem trạng thái báo cáo trong tương lai.");
+    return jdbcTemplate.queryForList("""
+      SELECT b.id AS "branchId",b.name AS "branchName",?::date AS "businessDate",c.id AS "closingId",
+        CASE WHEN c.state='NEEDS_EXPLANATION' THEN 'NEEDS_EXPLANATION'
+             WHEN c.state IS NULL THEN 'NOT_SUBMITTED' ELSE 'SUBMITTED' END AS status,
+        c.submitted_at AS "submittedAt"
+      FROM gcmb.branch b LEFT JOIN LATERAL (
+        SELECT d.id,coalesce(r.state,d.status) state,coalesce(v.submitted_at,d.submitted_at) submitted_at
+        FROM gcmb.daily_cash_closing d
+        LEFT JOIN gcmb.cash_closing_report r ON r.closing_id=d.id
+        LEFT JOIN gcmb.cash_closing_report_revision v ON v.closing_id=r.closing_id AND v.revision=r.revision
+        WHERE d.branch_id=b.id AND d.business_date=?
+        ORDER BY d.submitted_at DESC,d.id DESC LIMIT 1
+      ) c ON true
+      WHERE (CAST(? AS uuid) IS NULL OR b.id=?) ORDER BY b.name,b.id
+      """,selected,selected,branchId,branchId);
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String,Object>> notifications(Identity actor) {
+    financeAccess.accountant(actor);
+    return jdbcTemplate.queryForList("""
+      SELECT n.id,n.closing_id AS "closingId",n.report_version AS "reportVersion",
+        n.created_at AS "sentAt",b.name AS "branchName",c.business_date AS "businessDate",
+        'Báo cáo chốt quỹ ngày' AS "reportType"
+      FROM gcmb.cash_closing_notification n
+      JOIN gcmb.daily_cash_closing c ON c.id=n.closing_id
+      JOIN gcmb.branch b ON b.id=c.branch_id
+      WHERE n.recipient_id=? ORDER BY n.created_at DESC LIMIT 100
+      """,actor.id());
+  }
+
   public Map<String,Object> detail(Identity actor,UUID id) {
     var rows=jdbcTemplate.queryForList("""
       SELECT c.*,b.name AS "branchName",u.username AS "submittedBy"

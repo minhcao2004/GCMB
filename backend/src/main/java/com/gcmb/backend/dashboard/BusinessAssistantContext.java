@@ -190,8 +190,8 @@ public class BusinessAssistantContext {
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
   public Map<String, Object> popularity(Identity actor, String kind, String start, String end, UUID branchId, int limit) {
     authorize(actor);
-    if (!Set.of("ROOM_COMBO", "FNB_ITEM").contains(kind))
-      throw new AuthFailure(400, "kind", "Chọn thống kê combo phòng hoặc món ăn, đồ uống.");
+    if (!Set.of("ROOM_COMBO", "FNB_ITEM", "BOOKING_CHANNEL").contains(kind))
+      throw new AuthFailure(400, "kind", "Chọn thống kê combo phòng, món ăn/đồ uống hoặc nguồn khách đặt phòng.");
     if (limit < 1 || limit > 20) throw new AuthFailure(400, "limit", "Chỉ lấy từ 1 đến 20 mục đứng đầu.");
     var today = LocalDate.now(FinancialPeriodService.ZONE);
     YearMonth from, to;
@@ -203,7 +203,8 @@ public class BusinessAssistantContext {
       throw new AuthFailure(400, "month", "Khoảng tháng tra cứu không hợp lệ hoặc thuộc tương lai.");
     if (branchId != null && !Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM gcmb.branch WHERE id=?)", Boolean.class, branchId)))
       throw new AuthFailure(400, "branchId", "Không tìm thấy cơ sở cần tra cứu.");
-    LocalDate until = to.plusMonths(1).atDay(1).isAfter(today.plusDays(1)) ? today.plusDays(1) : to.plusMonths(1).atDay(1);
+    LocalDate until = to.plusMonths(1).atDay(1);
+    if (!"BOOKING_CHANNEL".equals(kind) && until.isAfter(today.plusDays(1))) until = today.plusDays(1);
     Object[] args = { from.atDay(1), until, branchId, branchId };
     Object[] rankedArgs = { from.atDay(1), until, branchId, branchId, limit };
     Map<String, Object> coverage;
@@ -240,6 +241,36 @@ public class BusinessAssistantContext {
         FROM grouped ORDER BY "bookingCount" DESC,"comboName","roomTypeName",mode LIMIT ?
         """, rankedArgs);
       notes = "Xếp theo số booking khác nhau có dòng combo còn hiệu lực, theo ngày dự kiến sử dụng đã đến; loại bản nháp, hủy và không đến. Một booking có nhiều combo khác nhau có thể được tính ở mỗi combo. Tỷ trọng là tỷ trọng lượt chọn combo, không phải toàn bộ booking. Gộp phiên bản cùng mã, tên và hạng phòng; đổi tên tách riêng. Tiền dòng combo đã tất toán chưa phân bổ giảm giá hoặc hoàn tiền, không phải doanh thu thuần. Không có dữ liệu đánh giá sở thích khách; chỉ đo mức độ được đặt. Hạng phòng/loại hình tham chiếu danh mục hiện tại.";
+    } else if ("BOOKING_CHANNEL".equals(kind)) {
+      String scoped = """
+        WITH scoped AS (
+          SELECT b.status,CASE WHEN upper(trim(b.channel)) IN
+            ('FACEBOOK','TIKTOK','ZALO','INSTAGRAM','WALK_IN','PHONE','OTHER')
+            THEN upper(trim(b.channel)) ELSE 'UNKNOWN' END AS channel
+          FROM gcmb.booking b JOIN gcmb.branch br ON br.id=b.branch_id
+          WHERE b.status<>'CANCELLED'
+            AND b.planned_start >= (CAST(? AS timestamp) AT TIME ZONE br.timezone)
+            AND b.planned_start < (CAST(? AS timestamp) AT TIME ZONE br.timezone)
+            AND (?::uuid IS NULL OR b.branch_id=?)
+        )
+        """;
+      coverage = db.queryForMap(scoped + """
+        SELECT count(*) AS "eligibleBookings",
+          count(*) FILTER (WHERE channel<>'UNKNOWN') AS "bookingsWithKnownChannel",
+          count(*) FILTER (WHERE channel='UNKNOWN') AS "bookingsWithoutKnownChannel" FROM scoped
+        """, args);
+      ranking = db.queryForList(scoped + """
+        , grouped AS (
+          SELECT CASE channel WHEN 'FACEBOOK' THEN 'Facebook' WHEN 'TIKTOK' THEN 'TikTok'
+            WHEN 'ZALO' THEN 'Zalo' WHEN 'INSTAGRAM' THEN 'Instagram' WHEN 'WALK_IN' THEN 'Khách đến trực tiếp'
+            WHEN 'PHONE' THEN 'Điện thoại' WHEN 'OTHER' THEN 'Khác' ELSE 'Chưa xác định' END AS "channelName",
+            count(*) AS "bookingCount",count(*) FILTER (WHERE status='COMPLETED') AS "completedBookingCount"
+          FROM scoped GROUP BY channel
+        )
+        SELECT *,round("bookingCount"*100.0/nullif(sum("bookingCount") OVER (),0),2) AS "bookingSharePercent"
+        FROM grouped ORDER BY "bookingCount" DESC,"channelName" LIMIT ?
+        """, rankedArgs);
+      notes = "Xếp nguồn khách theo số booking chưa hủy, tính theo ngày nhận phòng dự kiến trong múi giờ cơ sở, cùng cách đếm của biểu đồ Nguồn khách. Bao gồm cả booking đã đặt cho ngày sắp tới trong kỳ. Ngoài Facebook, TikTok, Zalo và Instagram, thống kê này còn có khách đến trực tiếp, điện thoại/khác của dữ liệu cũ và nhóm chưa xác định; vì vậy mẫu số tỷ trọng có thể khác biểu đồ chỉ bốn kênh mạng xã hội. Một booking tính đúng một lần, không phải số khách duy nhất hay mức hài lòng. Tỷ trọng chia cho toàn bộ booking trong phạm vi trước khi giới hạn số kênh. Nhóm chưa xác định không được coi là một kênh thu hút khách; nếu nhóm này đứng đầu phải nêu giới hạn và so sánh riêng các kênh đã biết. Không suy ra hiệu quả quảng cáo hoặc doanh thu từ số lượt đặt.";
     } else {
       String scoped = """
         WITH scoped AS (
@@ -272,7 +303,7 @@ public class BusinessAssistantContext {
       notes = "Xếp món ăn/đồ uống theo số lượng trên hóa đơn đã tất toán, theo ngày tất toán; chỉ đơn đã xác nhận hoặc phục vụ. Loại món tặng/miễn phí hoặc đã gồm trong combo và đơn bị hủy/từ chối/chờ xác nhận. Gộp theo tên món đã lưu và danh mục hiện tại; không gộp thành combo F&B nếu hệ thống chỉ lưu từng món. Giá trị dòng hóa đơn chưa phân bổ giảm giá hoặc hoàn tiền. Bán nhiều không đồng nghĩa khách đánh giá yêu thích nhất.";
     }
     return Map.ofEntries(Map.entry("kind", kind), Map.entry("startMonth", from.toString()), Map.entry("endMonth", to.toString()),
-        Map.entry("asOfDate", until.minusDays(1).toString()), Map.entry("coverage", coverage), Map.entry("ranking", ranking),
+        Map.entry("asOfDate", (until.minusDays(1).isAfter(today) ? today : until.minusDays(1)).toString()), Map.entry("coverage", coverage), Map.entry("ranking", ranking),
         Map.entry("hasData", !ranking.isEmpty()), Map.entry("notes", notes + " Chỉ đọc booking, đơn hàng và hóa đơn vận hành; chưa hợp nhất các dòng nhập file chưa liên kết vào nghiệp vụ để tránh đếm trùng. Kết quả rỗng chỉ là chưa ghi nhận giao dịch phù hợp trong phạm vi tra cứu, không có nghĩa hệ thống không lưu chi tiết."));
   }
 }

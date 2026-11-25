@@ -222,13 +222,12 @@
   flex-shrink: 0;
 }
 
-.manager-navigation--accountant .accountant-nav-group { border-bottom: 1px solid #edf0f4; padding-bottom: 4px; }
-.manager-navigation--accountant .accountant-nav-group summary { min-height: 40px; padding: 12px 10px 6px; color: #8993a3; cursor: pointer; list-style: none; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.manager-navigation--accountant .accountant-nav-group summary::-webkit-details-marker { display: none; }
-.manager-navigation--accountant .accountant-nav-group summary::after { content: '⌄'; float: right; font-size: 14px; transition: transform .15s ease; }
-.manager-navigation--accountant .accountant-nav-group[open] summary::after { transform: rotate(180deg); }
-.manager-navigation--accountant .accountant-nav-group button { min-height: 40px; padding: 9px 10px; }
-.manager-navigation--accountant .accountant-nav-group button span:not(.accounting-nav-badge) { flex: 1; }
+.manager-navigation--grouped .manager-nav-group { border-bottom: 1px solid #edf0f4; padding-bottom: 4px; }
+.manager-navigation--grouped .manager-nav-group__toggle { min-height: 40px; padding: 12px 10px 6px; color: #8993a3; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.manager-navigation--grouped .manager-nav-group__toggle::after { content: '⌄'; margin-left: auto; font-size: 14px; transition: transform .15s ease; }
+.manager-navigation--grouped .manager-nav-group__toggle[aria-expanded='true']::after { transform: rotate(180deg); }
+.manager-navigation--grouped .manager-nav-group__content :is(button, a) { min-height: 40px; padding: 9px 10px; }
+.manager-navigation--grouped .manager-nav-group__content :is(button, a) span:not(.accounting-nav-badge) { flex: 1; }
 
 .manager-sidebar-footer {
   margin: auto 6px 0;

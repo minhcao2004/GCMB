@@ -1,5 +1,4 @@
 import { PaginatedTable, Pagination } from '../../../shared/components/Pagination';
-import MoneyInput from '../../../shared/components/MoneyInput';
 import { ToastStack } from '../../../shared/components/Feedback';
 /**
  * Copyright (c) 2026 SEP490-G12.
@@ -11,6 +10,7 @@ import { ToastStack } from '../../../shared/components/Feedback';
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import MoneyInput from '../../../shared/components/MoneyInput';
 import { catalogError, roomCatalogApi } from '../services/roomCatalogApi';
 import '../styles/room-catalog.css';
 const tabs = ['Hạng phòng', 'Giá theo thời gian', 'Combo'];
@@ -114,11 +114,6 @@ export default function RoomCatalogPage() {
   useEffect(() => {
     refresh();
   }, []);
-  useEffect(() => {
-    if (!notice) return undefined;
-    const timeout = window.setTimeout(() => setNotice(''), 4500);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
   const visibleRooms = useMemo(() => rooms.filter(room => `${room.code} ${room.name}`.toLowerCase().includes(query.toLowerCase()) && (service === 'ALL' || room.serviceType === service) && matchesStatus(room.active, statusFilter)), [rooms, query, service, statusFilter]);
   const visibleRules = useMemo(() => rules.filter(rule => (!roomFilterId || rule.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(r => r.id === rule.roomTypeId)?.serviceType === service) && matchesStatus(rule.active, statusFilter) && `${rule.code} ${rule.name} ${rule.roomTypeName}`.toLowerCase().includes(query.toLowerCase())), [rules, roomFilterId, service, statusFilter, rooms, query]);
   const visibleCombos = useMemo(() => prices.filter(price => price.kind === 'COMBO' && (!roomFilterId || price.roomTypeId === roomFilterId) && (service === 'ALL' || rooms.find(r => r.id === price.roomTypeId)?.serviceType === service) && matchesStatus(price.active, statusFilter) && `${price.code} ${price.name} ${price.roomTypeName} ${price.description}`.toLowerCase().includes(query.toLowerCase())), [prices, roomFilterId, service, statusFilter, rooms, query]);

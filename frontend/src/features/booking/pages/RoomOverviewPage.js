@@ -518,14 +518,14 @@ export default function RoomOverviewPage() {
     setOrderSubmitting(true);
     setOrderError('');
     try {
-      const order = await foodOrderApi.addStaffOrder({
+      await foodOrderApi.addStaffOrder({
         bookingId: currentBooking.id,
         assignedEmployeeId: orderEmployeeId,
         idempotencyKey: orderRequestKey.current,
         items: orderLines.map((item) => ({ menuItemId: item.id, quantity: orderQuantities[item.id] })),
       });
       setOrderDialogOpen(false);
-      setNotice(`Đã ghi nhận ${order.code || 'order'} cho phòng ${selected.code}. Phí và tồn kho đã được cập nhật.`);
+      setNotice('Đã ghi nhận yêu cầu món. Phí và tồn kho đã được cập nhật.');
       setReload((value) => value + 1);
     } catch (error) {
       setOrderError(errorText(error));
@@ -684,7 +684,7 @@ export default function RoomOverviewPage() {
         </div>
       </aside>
     </div>
-    {walkInOpen && selected && <WalkInDialog room={selected} options={options} onClose={() => { setWalkInOpen(false); setReload((value) => value + 1); }} onOpened={(booking) => { setWalkInOpen(false); setNotice(`Đã check-in booking ${booking.code}.`); setReload((value) => value + 1); }} />}
+    {walkInOpen && selected && <WalkInDialog room={selected} options={options} onClose={() => { setWalkInOpen(false); setReload((value) => value + 1); }} onOpened={() => { setWalkInOpen(false); setNotice('Đã check-in thành công.'); setReload((value) => value + 1); }} />}
     <dialog ref={scheduleDialogRef} className="room-schedule-dialog" aria-labelledby="room-schedule-title" onClose={() => setScheduleOpen(false)}>
       <header><div><h2 id="room-schedule-title">Lịch phòng {selected?.code}</h2><p>{dateInputText(date)} · các booking trong ngày</p></div><button type="button" aria-label="Đóng lịch phòng" onClick={() => setScheduleOpen(false)}>×</button></header>
       {selectedRoomBookings.length ? <PaginatedList as="ol" pageSize={5} className="room-schedule-list">{selectedRoomBookings.map((booking) => <li key={booking.id}>

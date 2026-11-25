@@ -100,7 +100,7 @@
 .accounting-refund-filters button { min-height: 42px; font-size: 12px; }
 .accounting-refund-search input { font-size: 14px; }
 .accounting-refund-content-grid { width: 100%; min-width: 0; grid-template-columns: minmax(0, 1.45fr) minmax(360px, .95fr); }
-.accounting-refund-page .deposit-table-card { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #e5e8ed; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); }
+.accounting-refund-page .deposit-table-card { width: 100%; min-width: 0; min-height: 0; align-self: start; box-sizing: border-box; border: 1px solid #e5e8ed; box-shadow: 0 1px 2px rgb(26 26 46 / 5%); }
 .accounting-refund-page .deposit-table-scroll { min-width: 0; }
 .accounting-refund-table { min-width: 640px; }
 .accounting-refund-table th { height: 46px; font-size: 11px; }
@@ -166,7 +166,7 @@
   .accounting-refund-mobile-card:hover { border-color: #c8d5dd; background: #fbfdfe; }
   .accounting-refund-mobile-card.is-selected { border-color: var(--booking-cyan); background: #f1fbfd; box-shadow: 0 0 0 1px var(--booking-cyan); }
   .accounting-refund-mobile-card:focus-visible { outline: 3px solid var(--booking-cyan); outline-offset: 2px; }
-  .accounting-refund-mobile-card-heading { min-width: 0; grid-area: heading; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .accounting-refund-mobile-card-heading { min-width: 0; grid-area: heading; display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px; }
   .accounting-refund-mobile-card-heading > strong { min-width: 0; flex: 1 1 auto; padding-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
   .accounting-refund-mobile-card-heading .deposit-status { flex: 0 0 auto; }
   .accounting-refund-mobile-customer { min-width: 0; grid-area: customer; display: flex; flex-direction: column; gap: 3px; }

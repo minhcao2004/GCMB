@@ -1,7 +1,7 @@
 import { PaginatedTable, PaginatedList, Pagination } from '../../shared/components/Pagination';
-import MoneyInput from '../finance/components/MoneyInput';
+import MoneyInput from '../../shared/components/MoneyInput';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { authApi } from '../auth/services/authApi';
 import { AppShell } from '../booking/pages/BookingManagementPage';
@@ -345,7 +345,6 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       <ImportedSourceReport month={month} range={reportRange} branchId={branchId} reportTotals={data.totals} financialReport={operatingReport} operationalTransactions={sourceTransactions} />
       <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} from={reportRange.from} to={reportRange.to} compact onReportData={setOperatingReport} />
     </>}
-    {!reportsOnly && tab === 'report' && <p className="finance-shortcuts"><span>Nghiệp vụ liên quan</span><Link to="/ke-toan/hoan-coc">Yêu cầu hoàn cọc</Link><Link to="/ke-toan/hoa-don-thue">Hóa đơn thuế</Link></p>}
     {!reportsOnly && tab === 'periods' && !loading && !error && <>
       <section className="finance-period-readiness" aria-labelledby="period-readiness-title">
         <div className="finance-close-head"><div className="finance-close-title"><span>KỲ TÀI CHÍNH</span><h2 id="period-readiness-title">Chốt kỳ {formatMonth(month)}</h2><p>Rà soát điều kiện trước khi khóa sổ.</p></div>

@@ -19,15 +19,15 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 final class MonthlyPerformanceExport {
   private MonthlyPerformanceExport() {}
 
-  static final List<String> KEYS = List.of("name","billRevenue","heldDeposits","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue","expenses","salary","investment","profit","margin","netCashFlow","bookingCount","completedBookings","cancelledNoShowBookings","occupancyRate","periodStatus");
-  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu hóa đơn hoàn tất","Cọc đang giữ cuối kỳ","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Chi đầu tư","Lợi nhuận vận hành (Thu nhập vận hành − chi phí vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng");
+  static final List<String> KEYS = List.of("name","billRevenue","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue","expenses","salary","investment","profit","margin","netCashFlow","bookingCount","completedBookings","cancelledNoShowBookings","occupancyRate","periodStatus");
+  static final List<String> HEADERS = List.of("Cơ sở","Doanh thu hóa đơn hoàn tất","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác (phụ phí/giảm giá)","Chi phí vận hành","Lương và ứng lương","Chi đầu tư","Lợi nhuận vận hành (Thu nhập vận hành − chi phí vận hành)","Biên lợi nhuận vận hành (%)","Dòng tiền thuần","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng");
   private static final String[] SUMMARY_HEADERS = {
-    "Cơ sở","Mã cơ sở","Doanh thu hóa đơn hoàn tất","Cọc đang giữ cuối kỳ","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác",
+    "Cơ sở","Mã cơ sở","Doanh thu hóa đơn hoàn tất","Cọc bị tịch thu","Thu nhập vận hành","Tiền phòng","Đồ ăn và thức uống","Phụ phí quá giờ","Khác",
     "Chi phí vận hành đã thanh toán","Lương và ứng lương","Tổng chi phí vận hành","Chi đầu tư","Lợi nhuận vận hành","Biên lợi nhuận vận hành (%)",
     "Dòng tiền thuần","Số hóa đơn","Số lượt đặt","Lượt đặt hoàn tất","Lượt hủy hoặc không đến","Lấp đầy (%)","Tháng","Trạng thái kỳ"
   };
   private static final String[] SUMMARY_KEYS = {
-    "name","code","billRevenue","heldDeposits","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue",
+    "name","code","billRevenue","forfeitedDeposits","revenue","roomRevenue","fnbRevenue","overtimeRevenue","otherRevenue",
     "operatingExpense","salary","expenses","investment","profit","margin","netCashFlow","billCount","bookingCount",
     "completedBookings","cancelledNoShowBookings","occupancyRate","month","periodStatus"
   };
@@ -58,7 +58,7 @@ final class MonthlyPerformanceExport {
       int lastColumn = headers.length - 1;
       title(sheet, "BÁO CÁO THU NHẬP VẬN HÀNH · " + report.get("from") + " – " + report.get("to"), lastColumn, styles.title);
       note(sheet, "Kỳ so sánh: " + report.get("comparisonFrom") + " – " + report.get("comparisonTo")
-        + " · Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất; cọc bị tịch thu và cọc còn giữ trình bày riêng. Chi đầu tư không trừ vào lợi nhuận vận hành.", lastColumn, styles.note);
+        + " · Thu nhập vận hành gồm doanh thu hóa đơn hoàn tất và cọc bị tịch thu; chi đầu tư trình bày riêng, không trừ vào lợi nhuận vận hành.", lastColumn, styles.note);
       Row header = sheet.createRow(3);
       for (int c = 0; c < headers.length; c++) set(header, c, headers[c], styles.header);
       List<Map<String,Object>> rows = overviewRows(report);
@@ -67,8 +67,8 @@ final class MonthlyPerformanceExport {
         List<Object> values = overviewValues(rows.get(i), report);
         for (int c = 0; c < values.size(); c++) {
           Object value = values.get(c);
-          CellStyle style = c == 17 || c == 13 ? styles.percent : c >= 4 && c <= 16 ? styles.money : styles.text;
-          if ((c == 13 || c == 17) && value != null) value = percentValue(value);
+          CellStyle style = c == 16 || c == 12 ? styles.percent : c >= 4 && c <= 15 ? styles.money : styles.text;
+          if ((c == 12 || c == 16) && value != null) value = percentValue(value);
           set(row, c, value, style);
         }
       }
@@ -76,7 +76,7 @@ final class MonthlyPerformanceExport {
       sheet.setAutoFilter(new CellRangeAddress(3, lastDataRow, 0, lastColumn));
       sheet.createFreezePane(1, 4);
       sheet.setZoom(85);
-      int[] widths = {28,14,14,14,18,18,18,18,18,18,18,18,18,18,18,18,18,18};
+      int[] widths = {28,14,14,14,18,18,18,18,18,18,18,18,18,18,18,18,18};
       for (int c = 0; c < widths.length; c++) sheet.setColumnWidth(c, widths[c] * 256);
       wb.write(out);
       return out.toByteArray();
@@ -84,7 +84,7 @@ final class MonthlyPerformanceExport {
   }
 
   private static String[] overviewHeaders() {
-    return new String[]{"Cơ sở", "Từ ngày", "Đến ngày", "Kỳ so sánh", "Doanh thu hóa đơn hoàn tất", "Cọc đang giữ cuối kỳ", "Cọc bị tịch thu", "Thu nhập vận hành",
+    return new String[]{"Cơ sở", "Từ ngày", "Đến ngày", "Kỳ so sánh", "Doanh thu hóa đơn hoàn tất", "Cọc bị tịch thu", "Thu nhập vận hành",
       "Chi phí vận hành đã thanh toán", "Lương và ứng lương", "Tổng chi phí vận hành", "Chi đầu tư", "Lợi nhuận vận hành", "Biên lợi nhuận vận hành",
       "Thu nhập kỳ so sánh", "Chi phí kỳ so sánh", "Lợi nhuận kỳ so sánh", "Biên lợi nhuận kỳ so sánh"};
   }
@@ -103,7 +103,7 @@ final class MonthlyPerformanceExport {
 
   private static List<Object> overviewValues(Map<String,Object> row, Map<String,Object> report) {
     return Arrays.asList(row.get("name"), report.get("from"), report.get("to"),
-      report.get("comparisonFrom") + " – " + report.get("comparisonTo"), row.get("billRevenue"), row.get("heldDeposits"), row.get("forfeitedDeposits"),
+      report.get("comparisonFrom") + " – " + report.get("comparisonTo"), row.get("billRevenue"), row.get("forfeitedDeposits"),
       row.get("revenue"), row.get("operatingExpense"), row.get("salary"), row.get("expenses"), row.get("investment"),
       row.get("profit"), row.get("margin"), row.get("comparisonRevenue"), row.get("comparisonExpenses"),
       row.get("comparisonProfit"), row.get("comparisonMargin"));
@@ -126,8 +126,8 @@ final class MonthlyPerformanceExport {
                                    String periodStatus, Styles styles) {
     int lastColumn = SUMMARY_HEADERS.length - 1;
     title(sheet, "BÁO CÁO HIỆU QUẢ · " + month, lastColumn, styles.title);
-      note(sheet, "Kỳ: " + month + " · Phạm vi: " + scope + " · Trạng thái kỳ: " + status(periodStatus)
-      + " · Thu nhập vận hành chỉ gồm doanh thu hóa đơn hoàn tất; cọc tịch thu trình bày riêng. Tổng chi phí vận hành gồm chi phí đã thanh toán, lương và ứng lương; chi đầu tư trình bày riêng.", lastColumn, styles.note);
+    note(sheet, "Kỳ: " + month + " · Phạm vi: " + scope + " · Trạng thái kỳ: " + status(periodStatus)
+      + " · Tổng chi phí vận hành gồm chi phí vận hành đã thanh toán, lương và ứng lương; chi đầu tư trình bày riêng, không trừ vào lợi nhuận vận hành.", lastColumn, styles.note);
     Row header = sheet.createRow(3);
     for (int c = 0; c < SUMMARY_HEADERS.length; c++) set(header, c, SUMMARY_HEADERS[c], styles.header);
     for (int i = 0; i < rows.size(); i++) {
@@ -152,7 +152,7 @@ final class MonthlyPerformanceExport {
     sheet.setAutoFilter(new CellRangeAddress(3, lastDataRow, 0, lastColumn));
     sheet.createFreezePane(2, 4);
     sheet.setZoom(85);
-    int[] widths = {28,14,18,18,18,18,16,14,18,18,20,18,18,18,20,16,18,12,14,14,16,16,14,16};
+    int[] widths = {28,14,18,18,18,16,14,18,18,20,18,18,18,20,16,18,12,14,14,16,16,14,16};
     for (int c = 0; c < widths.length; c++) sheet.setColumnWidth(c, widths[c] * 256);
   }
 
@@ -244,15 +244,15 @@ final class MonthlyPerformanceExport {
   }
 
   private static CellStyle summaryStyle(int column, boolean total, Styles styles) {
-    if (total) return column == 15 || column == 21 ? styles.totalPercent : isMoneyColumn(column) ? styles.totalMoney : isCountColumn(column) ? styles.totalInteger : styles.totalText;
-    if (column == 15 || column == 21) return styles.percent;
+    if (total) return column == 14 || column == 20 ? styles.totalPercent : isMoneyColumn(column) ? styles.totalMoney : isCountColumn(column) ? styles.totalInteger : styles.totalText;
+    if (column == 14 || column == 20) return styles.percent;
     if (isMoneyColumn(column)) return styles.money;
     if (isCountColumn(column)) return styles.integer;
     return styles.text;
   }
 
-  private static boolean isMoneyColumn(int column) { return column >= 2 && column <= 14 || column == 16; }
-  private static boolean isCountColumn(int column) { return column >= 17 && column <= 20; }
+  private static boolean isMoneyColumn(int column) { return column >= 2 && column <= 13 || column == 15; }
+  private static boolean isCountColumn(int column) { return column >= 16 && column <= 19; }
 
   private static void title(Sheet sheet, String value, int lastColumn, CellStyle style) {
     Row row = sheet.createRow(0); set(row, 0, value, style);
