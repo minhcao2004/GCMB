@@ -1,0 +1,87 @@
+.co-print-receipt { display: none; }
+
+@media print {
+  @page checkout-receipt {
+    margin: 0;
+  }
+
+  body:has(> .co-print-receipt) {
+    margin: 0;
+    min-height: 0;
+    background: #fff;
+  }
+
+  body:has(> .co-print-receipt) > :not(.co-print-receipt) { display: none !important; }
+
+  .co-print-receipt {
+    page: checkout-receipt;
+    display: block;
+    box-sizing: border-box;
+    width: 76mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 3mm 4mm;
+    background: #fff;
+    color: #000;
+    font: 9pt/1.25 Arial, 'Segoe UI', sans-serif;
+    overflow-wrap: anywhere;
+  }
+
+  .co-print-receipt :is(p, dl, dd, h2, h3) { margin: 0; }
+  .co-print-receipt :is(header, section, footer, tr, .co-print-amounts > div) { break-inside: avoid; }
+  .co-print-brand { display: grid; justify-items: center; gap: 0.5mm; text-align: center; }
+  .co-print-brand img { width: 24mm; height: auto; filter: grayscale(1); }
+  .co-print-branch { font-size: 10pt; }
+  .co-print-details { margin: 2.5mm 0 1.5mm; }
+  .co-print-customer { text-align: center; }
+  .co-print-id {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+    align-items: center;
+    gap: 2mm;
+    margin: 2mm 0;
+    text-align: center;
+  }
+  .co-print-id h2 { font-size: 11pt; line-height: 1.2; }
+  .co-print-room { padding: 1mm; border: 1px solid; border-radius: 3mm; }
+  .co-print-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2mm; }
+  .co-print-times small { display: block; font-size: 8pt; }
+  .co-print-times > :last-child { text-align: right; }
+
+  .co-print-lines {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-bottom: 1px solid;
+    font-size: 8.5pt;
+    font-variant-numeric: tabular-nums;
+  }
+  .co-print-lines col:nth-child(1) { width: 41%; }
+  .co-print-lines col:nth-child(2) { width: 21%; }
+  .co-print-lines col:nth-child(3) { width: 10%; }
+  .co-print-lines col:nth-child(4) { width: 28%; }
+  .co-print-lines th { border-bottom: 1px solid; }
+  .co-print-lines :is(th, td) { padding: 0.8mm 0 0.8mm 1mm; vertical-align: top; text-align: right; }
+  .co-print-lines :is(th, td):first-child { padding-left: 0; text-align: left; }
+  .co-print-lines :is(th, td):nth-child(3) { text-align: center; }
+
+  .co-print-amounts > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 2mm;
+    padding: 0.45mm 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .co-print-amounts dd { font-weight: 700; text-align: right; }
+  .co-print-total { border-top: 1px solid; font-size: 11pt; font-weight: 700; }
+  .co-print-payment { margin-top: 2mm; }
+  .co-print-payment h3 { font-size: 9pt; }
+  .co-print-footer {
+    margin-top: 2.5mm;
+    padding: 1.5mm 0;
+    border-block: 1px dashed;
+    text-align: center;
+    font-style: italic;
+  }
+  .co-print-footer p + p { margin-top: 1.5mm; }
+}

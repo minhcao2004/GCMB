@@ -89,6 +89,7 @@ public class CheckoutRepository {
     public List<Map<String, Object>> findBill(UUID billId, UUID branchId) {
         return jdbcTemplate.queryForList("""
             SELECT b.id,b.booking_id AS "bookingId",b.number,b.status,b.net_amount AS amount,
+                br.name AS "branchName",br.phone AS "branchPhone",br.timezone AS "branchTimezone",
                 b.gross_amount AS "grossAmount",b.discount_amount AS "discountAmount",
                 b.checkout_rounding_adjustment AS "roundingAdjustment",
                 b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
@@ -98,7 +99,9 @@ public class CheckoutRepository {
                 COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
                     WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
                 COALESCE((SELECT sum(p.amount) FROM gcmb.payment p WHERE p.bill_id=b.id AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)),0) AS paid
-            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id WHERE b.id=? AND b.branch_id=?
+            FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id
+            JOIN gcmb.branch br ON br.id=b.branch_id
+            WHERE b.id=? AND b.branch_id=?
             """, billId, branchId);
     }
 

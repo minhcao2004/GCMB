@@ -511,6 +511,11 @@ Hợp nhất giao diện (25/10/2026): `BookingManagementPage` giữ khung chi t
 - Trước khi lập hóa đơn, Lễ tân nhập mức giảm giá đã được duyệt từ 0% đến 100%, tối đa hai chữ số thập phân. Mức giảm áp dụng trên tổng tiền phòng, F&B và phụ phí, làm tròn tiền giảm đến đồng theo HALF_UP. Hệ thống trừ cọc khỏi tổng sau giảm giá rồi làm tròn khoản còn phải thu đến nghìn đồng. Nếu cọc vượt tổng sau giảm, Lễ tân cần xử lý cọc trước khi lập hóa đơn.
 - `POST /api/v1/reception/bookings/{id}/checkout` nhận thêm `discountPercent` tùy chọn, mặc định 0%. Backend tính lại giảm giá và đối chiếu số phải thu trước khi lưu. Chi tiết bill và hóa đơn thuế trả thêm `grossAmount` và `discountAmount`. Trường `amount` là tổng sau giảm giá. Lịch sử lập bill ghi tỷ lệ và tiền giảm giá. Triển khai frontend và backend cùng nhau để dùng ô giảm giá.
 
+### Phiếu tính tiền in từ màn Thanh toán
+
+- Lễ tân mở chi tiết bill đã thanh toán và chọn **In hóa đơn**. Trình duyệt in mẫu phiếu đen trắng cho giấy nhiệt 80 mm với logo GenZ, tên và hotline của cơ sở lập bill. Chọn khổ 80 mm trong cài đặt máy in.
+- API chi tiết bill trả thêm `branchName`, `branchPhone` và `branchTimezone` từ cơ sở trên hóa đơn. Phiếu in dùng giờ vào/ra theo múi giờ cơ sở, các dòng hàng đã chốt, chiết khấu, làm tròn và số tiền theo từng phương thức, gồm cọc đã áp dụng. Tổng cộng bằng tổng sau chiết khấu cộng điều chỉnh làm tròn.
+
 ### Tạo tài khoản và thông báo theo Expected UT (02/11/2026)
 
 - UC-04 tạo tài khoản từ các trường được quản lý xác nhận: `employeeId`, `username`, `email`, `password`, `role`, `branchId`. Form có email chỉnh sửa được và dropdown vai trò/cơ sở; chọn nhân viên chỉ gợi ý giá trị ban đầu, backend không ghi đè request bằng hồ sơ. Vai trò toàn chuỗi không nhận `branchId`; vai trò tại cơ sở bắt buộc chọn cơ sở ACTIVE. Giữ kiểm tra nhân viên ACTIVE chưa có tài khoản, email/username duy nhất và chính sách mật khẩu. Không thay dữ liệu tài khoản đã tạo hay thêm migration.

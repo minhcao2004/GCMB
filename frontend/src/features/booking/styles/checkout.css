@@ -68,14 +68,3 @@
   .co-card { padding: 15px; }
   .co-total, .co-amount-banner { padding: 16px; }
 }
-@media print {
-  body:has(.checkout-page .co-print) .gcmb-ui-app-shell__sidebar,
-  body:has(.checkout-page .co-print) .manager-topbar,
-  .checkout-page:has(.co-print) > :not(.co-grid),
-  .checkout-page .co-grid:has(.co-print) > :not(.co-print) {
-    display: none !important;
-  }
-  .checkout-page .co-grid:has(.co-print) { display: block; }
-  .checkout-page .co-print { position: static; width: 100%; box-sizing: border-box; border: 0; }
-  body:has(.checkout-page .co-print) .booking-main { padding: 0; }
-}

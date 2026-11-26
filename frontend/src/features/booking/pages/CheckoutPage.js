@@ -7,6 +7,7 @@ import { PaginatedTable } from '../../../shared/components/Pagination';
  * Updated: 15/10/2026 - Hiển thị cọc đã áp dụng và phần tiền còn phải thu.
  */
 import CheckoutReceipt, { Info, Lines, Summary } from '../components/CheckoutReceipt';
+import CheckoutPrintReceipt from '../components/CheckoutPrintReceipt';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -609,7 +610,8 @@ export default function CheckoutPage() {
                     <div className="co-success">
                       Đã hoàn tất hóa đơn. Phòng đã trở về Trống và sẵn sàng nhận khách tiếp theo.
                     </div>
-                    <button onClick={() => window.print()}>In hóa đơn</button>
+                    <button type="button" onClick={() => window.print()}>In hóa đơn</button>
+                    <CheckoutPrintReceipt data={data} fallbackBranchName={user.branchName} />
                   </>
                 ) : paymentDue === 0 && !planned ? (
                   <>
@@ -831,7 +833,7 @@ export default function CheckoutPage() {
                   </>
                 )}
               </section>
-              <div className="co-card co-summary co-print">
+              <div className="co-card co-summary">
                 <CheckoutReceipt data={data} className="co-receipt-body" />
                 {roundingAdjustment !== 0 && (
                   <dl className="co-totals">
