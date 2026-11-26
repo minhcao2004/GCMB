@@ -4,11 +4,15 @@ import com.gcmb.backend.inventory.dto.FoodOrderDtos.ActiveBooking;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ComboGiftOption;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderItem;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderView;
+import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderRoom;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServingEmployee;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -191,6 +195,12 @@ public class FoodOrderRepository {
 
     public UUID servingUser(UUID employeeId) {
         List<UUID> rows = jdbcTemplate.query("SELECT user_id FROM gcmb.employee WHERE id=?", (rs, row) -> rs.getObject(1, UUID.class), employeeId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public UUID employeeForUser(UUID userId) {
+        List<UUID> rows = jdbcTemplate.query("SELECT id FROM gcmb.employee WHERE user_id=?",
+            (rs, row) -> rs.getObject(1, UUID.class), userId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -386,25 +396,46 @@ public class FoodOrderRepository {
             """, orderId, branchId);
     }
 
-    public List<OrderView> orders(UUID branchId, String status) {
-        return loadOrders("o.branch_id=?", new Object[]{branchId}, status, 200);
+    public List<OrderRoom> orderRooms(UUID branchId) {
+        return jdbcTemplate.query("""
+            SELECT r.id,r.name FROM gcmb.room r
+            WHERE r.branch_id=?
+            ORDER BY lower(r.name),r.id
+            """, (rs, row) -> new OrderRoom(rs.getObject("id", UUID.class), rs.getString("name")), branchId);
+    }
+
+    public List<OrderView> orders(UUID branchId, String status, LocalDate date, UUID roomId) {
+        String predicate = "o.branch_id=?";
+        List<Object> args = new ArrayList<>();
+        args.add(branchId);
+        if (roomId != null) {
+            predicate += " AND r.id=?";
+            args.add(roomId);
+        }
+        if (date != null) {
+            ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
+            predicate += " AND o.created_at>=? AND o.created_at<?";
+            args.add(Timestamp.from(date.atStartOfDay(zone).toInstant()));
+            args.add(Timestamp.from(date.plusDays(1).atStartOfDay(zone).toInstant()));
+        }
+        return loadOrders(predicate, args.toArray(), status, 200, true);
     }
 
     public List<OrderView> qrOrders(UUID sessionId) {
-        return loadOrders("o.qr_session_id=?", new Object[]{sessionId}, null, 100);
+        return loadOrders("o.qr_session_id=?", new Object[]{sessionId}, null, 100, false);
     }
 
     public OrderView order(UUID orderId, UUID branchId) {
-        List<OrderView> rows = loadOrders("o.id=? AND o.branch_id=?", new Object[]{orderId, branchId}, null, 1);
+        List<OrderView> rows = loadOrders("o.id=? AND o.branch_id=?", new Object[]{orderId, branchId}, null, 1, false);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public OrderView qrOrder(UUID orderId, UUID sessionId) {
-        List<OrderView> rows = loadOrders("o.id=? AND o.qr_session_id=?", new Object[]{orderId, sessionId}, null, 1);
+        List<OrderView> rows = loadOrders("o.id=? AND o.qr_session_id=?", new Object[]{orderId, sessionId}, null, 1, false);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    private List<OrderView> loadOrders(String predicate, Object[] predicateArgs, String status, int limit) {
+    private List<OrderView> loadOrders(String predicate, Object[] predicateArgs, String status, int limit, boolean prioritizeActive) {
         // BR-28, BR-29: thành tiền từng dòng bằng số lượng xác nhận nhân đơn giá; tổng order bằng tổng các dòng.
         String statusClause = status == null ? "" : " AND o.status=?";
         Object[] args = status == null ? predicateArgs : append(predicateArgs, status);
@@ -418,7 +449,9 @@ public class FoodOrderRepository {
             JOIN gcmb.room_allocation a ON a.id=o.allocation_id
             JOIN gcmb.room r ON r.id=a.room_id
             LEFT JOIN gcmb.employee e ON e.id=o.assigned_employee_id
-            """ + " WHERE " + predicate + statusClause + " ORDER BY o.created_at DESC,o.id DESC LIMIT ?",
+            """ + " WHERE " + predicate + statusClause
+                + (prioritizeActive ? " ORDER BY CASE o.status WHEN 'PENDING' THEN 0 WHEN 'ACCEPTED' THEN 1 ELSE 2 END," : " ORDER BY ")
+                + "o.created_at DESC,o.id DESC LIMIT ?",
             (rs, row) -> new OrderHeader(rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
                 rs.getString("booking_code"), rs.getString("room_code"), rs.getString("room_name"),
                 rs.getString("contact_name"), rs.getString("channel"), rs.getString("status"),

@@ -21,6 +21,11 @@ const kindLabels = {
 
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)}đ`;
 const groupPriceDigits = (value) => String(value ?? '').replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const newMenuDraft = (categories, inventoryItem) => ({
+  name: inventoryItem?.name || '', category: inventoryItem?.category || categories[0] || '',
+  kind: 'PACKAGED', inventoryItemId: inventoryItem?.id || '', salePrice: '', active: true,
+  description: '', removeImage: false, imageUrl: '', imageOriginalName: '', imageMimeType: '',
+});
 function MenuSaleStatus({ item }) {
   let status = { label: 'Sẵn bán', tone: 'active' };
   if (!item.active) status = { label: 'Ngừng bán', tone: 'inactive' };
@@ -31,7 +36,7 @@ function MenuSaleStatus({ item }) {
 const quantity = (value) => value == null ? 'Chưa ghi nhận' : new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(value);
 const displayError = (error) => error.response?.data?.message || error.response?.data?.detail || error.message || 'Không thể hoàn tất thao tác.';
 
-export default function MenuItemsPage({ user }) {
+export default function MenuItemsPage({ user, menuSeedId, onMenuSeedConsumed, onMenuLinked }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [inventoryOptions, setInventoryOptions] = useState([]);
@@ -83,6 +88,27 @@ export default function MenuItemsPage({ user }) {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    if (!menuSeedId || loading || error) return;
+    const linked = items.find((item) => item.inventoryItemId === menuSeedId);
+    const inventoryItem = inventoryOptions.find((item) => item.id === menuSeedId);
+    if (linked) {
+      setSelectedId(linked.id);
+      setDetailOpen(true);
+      setToast('Mặt hàng đã có trong thực đơn.');
+      onMenuLinked(menuSeedId);
+    } else if (inventoryItem?.active && !user.readOnly) {
+      editorReturnFocusRef.current = 'create-menu';
+      setDraft(newMenuDraft(categories, inventoryItem));
+      setImageFile(null);
+      setReviewingSave(false);
+      setEditorMode('create');
+      window.requestAnimationFrame(() => editorPanelRef.current?.querySelector('#menu-item-price')?.focus());
+    } else {
+      setToast('Mặt hàng kho không còn khả dụng để thêm vào thực đơn.');
+    }
+    onMenuSeedConsumed();
+  }, [menuSeedId, loading, error, items, inventoryOptions, categories, user.readOnly, onMenuSeedConsumed, onMenuLinked]);
   useEffect(() => {
     if (!detailOpen && !deleteId && !pendingStatus) return;
     const confirmation = confirmationRef.current;
@@ -173,11 +199,7 @@ export default function MenuItemsPage({ user }) {
     setDeleteId(null);
     setPendingStatus(null);
     setEditorItemId(null);
-    setDraft({
-      name: '', category: categories[0] || '', kind: 'PACKAGED', inventoryItemId: '',
-      salePrice: '', active: true, description: '', removeImage: false,
-      imageUrl: '', imageOriginalName: '', imageMimeType: '',
-    });
+    setDraft(newMenuDraft(categories));
     setImageFile(null);
     setReviewingSave(false);
     setEditorMode('create');
@@ -338,6 +360,7 @@ export default function MenuItemsPage({ user }) {
         .sort((left, right) => left.name.localeCompare(right.name, 'vi')));
       setCategories((current) => current.includes(saved.category)
         ? current : [...current, saved.category].sort((left, right) => left.localeCompare(right, 'vi')));
+      if (saved.inventoryItemId) onMenuLinked(saved.inventoryItemId);
       setSelectedId(null);
       setToast(editorMode === 'create' ? 'Đã tạo món.' : 'Đã cập nhật món.');
       setEditorMode(null);
