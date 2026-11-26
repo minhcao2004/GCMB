@@ -3,6 +3,9 @@ spring:
     name: backend
   autoconfigure:
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  flyway:
+    locations: classpath:db/migration,classpath:db/migration-equipment-first
+    fail-on-missing-locations: true
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}

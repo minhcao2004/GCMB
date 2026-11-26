@@ -18,6 +18,8 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class BusinessAssistantService {
   private static final Logger log = LoggerFactory.getLogger(BusinessAssistantService.class);
+  private static final String STAFF_TENURE_TOOL = "read_staff_tenure";
+  private static final String STAFF_TENURE_READY = "Kết quả tra cứu thâm niên được hiển thị riêng trong GCMB.";
   public record Turn(String role, String content) {}
   public record Question(String month, UUID branchId, String message, List<Turn> history) {}
   private final BusinessAssistantContext context;
@@ -82,6 +84,7 @@ public class BusinessAssistantService {
       int[] retries = { 1 };
       var response = send(request, deadline, retries);
       int toolCalls = 0;
+      String tenureAnswer = null;
       for (int round = 0; round < 4; round++) {
         var content = json.readTree(response.body()).path("candidates").path(0).path("content");
         var calls = new ArrayList<tools.jackson.databind.JsonNode>();
@@ -96,10 +99,22 @@ public class BusinessAssistantService {
         for (var call : calls) {
           toolCalls++;
           var function = new LinkedHashMap<String, Object>();
-          function.put("name", call.path("name").asText());
+          String name = call.path("name").asText();
+          var arguments = call.path("args");
+          function.put("name", name);
           if (call.has("id")) function.put("id", call.path("id").asText());
-          try { function.put("response", Map.of("result", businessData(readTool(actor, call.path("name").asText(), call.path("args"))))); }
-          catch (AuthFailure failure) {
+          try {
+            if (STAFF_TENURE_TOOL.equals(name)) {
+              // Render personal fields in GCMB without placing them in a Gemini tool response or chat history sent to the model.
+              tenureAnswer = context.staffTenureAnswer(actor, branchArgument(arguments));
+              if (calls.size() == 1 && toolCalls == 1) {
+                return Map.of("answer", STAFF_TENURE_READY, "displayAnswer", tenureAnswer, "context", snapshot);
+              }
+              function.put("response", Map.of("result", STAFF_TENURE_READY));
+            } else {
+              function.put("response", Map.of("result", businessData(readTool(actor, name, arguments))));
+            }
+          } catch (AuthFailure failure) {
             if (failure.status() == 403) throw failure;
             function.put("response", Map.of("error", failure.getMessage()));
           }
@@ -128,7 +143,11 @@ public class BusinessAssistantService {
         answer = answerText(response.body());
         if (genericGreeting(answer)) throw new AuthFailure(502, "form", "Gemini chưa trả lời đúng câu hỏi. Vui lòng thử lại sau.");
       }
-      return Map.of("answer", businessText(answer), "context", snapshot);
+      String safeAnswer = businessText(answer);
+      if (tenureAnswer != null) {
+        return Map.of("answer", safeAnswer, "displayAnswer", tenureAnswer + "\n\n" + safeAnswer, "context", snapshot);
+      }
+      return Map.of("answer", safeAnswer, "context", snapshot);
     } catch (HttpTimeoutException failure) {
       throw new AuthFailure(504, "form", "Trợ lý phản hồi quá lâu. Vui lòng thử lại sau.");
     } catch (InterruptedException failure) {
@@ -170,15 +189,18 @@ public class BusinessAssistantService {
 
   private Map<String, Object> readTool(Identity actor, String name, tools.jackson.databind.JsonNode args) {
     context.authorize(actor);
-    if (!Set.of("read_business_reports", "read_business_snapshot", "read_popularity").contains(name))
+    if (!Set.of("read_business_reports", "read_business_snapshot", "read_daily_business_report", "read_popularity",
+        "read_staff_headcount", "read_workforce_activity").contains(name))
       throw new AuthFailure(400, "form", "Trợ lý chỉ được tra cứu báo cáo kinh doanh đã cho phép.");
-    UUID branchId = null;
-    if (!args.path("branch_id").asText().isBlank()) {
-      try { branchId = UUID.fromString(args.path("branch_id").asText()); }
-      catch (IllegalArgumentException failure) { throw new AuthFailure(400, "branchId", "Mã cơ sở tra cứu không hợp lệ."); }
-    }
+    UUID branchId = branchArgument(args);
     Map<String, Object> result;
-    if ("read_popularity".equals(name)) {
+    if ("read_staff_headcount".equals(name)) {
+      result = context.staffHeadcount(actor, branchId);
+    } else if ("read_workforce_activity".equals(name)) {
+      result = context.workforceActivity(actor, branchId, args.path("start_date").asText(), args.path("end_date").asText());
+    } else if ("read_daily_business_report".equals(name)) {
+      result = context.dailyReport(actor, args.path("start_date").asText(), args.path("end_date").asText(), branchId);
+    } else if ("read_popularity".equals(name)) {
       result = context.popularity(actor, args.path("kind").asText(), args.path("start_month").asText(),
           args.path("end_month").asText(), branchId, args.has("limit") ? args.path("limit").asInt() : 10);
     } else if ("read_business_snapshot".equals(name)) {
@@ -197,8 +219,32 @@ public class BusinessAssistantService {
     return result;
   }
 
+  private static UUID branchArgument(tools.jackson.databind.JsonNode args) {
+    var branch = args.path("branch_id");
+    if (branch.isMissingNode() || branch.isNull() || (branch.isTextual() && branch.asText().isBlank())) return null;
+    try {
+      return UUID.fromString(branch.asText());
+    } catch (IllegalArgumentException failure) {
+      throw new AuthFailure(400, "branchId", "Mã cơ sở tra cứu không hợp lệ.");
+    }
+  }
+
   private static final Map<String, Object> BRANCH_ARGUMENT = Map.of("type", "STRING", "description", "UUID cơ sở đúng theo danh mục; bỏ trống nếu toàn chuỗi. Không tự đoán khi tên cơ sở gần giống nhau.");
   private static final List<Map<String, Object>> FUNCTIONS = List.of(
+      Map.of("name", STAFF_TENURE_TOOL, "description", "Xác định nhân viên đang làm việc có ngày vào làm sớm nhất (thâm niên công ty cao nhất), theo cơ sở chính hiện tại hoặc toàn hệ thống. Gọi khi hỏi ai làm lâu năm nhất, ai vào làm sớm nhất hoặc ai có thâm niên cao nhất. Kết quả chi tiết được GCMB hiển thị riêng.",
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of("branch_id", BRANCH_ARGUMENT))),
+      Map.of("name", "read_staff_headcount", "description", "Tra cứu số nhân viên hiện tại theo cơ sở, vị trí, trạng thái hồ sơ và số chưa phân công. PHẢI gọi khi hỏi số lượng, cơ cấu hay cơ sở nhiều/ít nhân viên nhất. Nếu không truyền branch_id, một lần gọi trả cả số toàn hệ thống và bảng từng cơ sở đã xếp theo số đang làm việc. Dùng cùng cách đếm với màn Nhân sự.",
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of("branch_id", BRANCH_ARGUMENT))),
+      Map.of("name", "read_workforce_activity", "description", "Tra cứu tổng hợp ca đã lên lịch, chỗ còn trống, lượt phân ca, đi làm/vắng, giờ công, thiếu chấm công, chốt công và phản ánh theo ngày hoặc khoảng ngày. Một lần gọi có cả số toàn hệ thống và từng cơ sở nếu bỏ branch_id. Tối đa 31 ngày; hỗ trợ lịch ca tương lai.",
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of(
+              "start_date", Map.of("type", "STRING", "description", "Ngày bắt đầu YYYY-MM-DD. Bỏ trống lấy ngày hiện tại theo giờ Việt Nam."),
+              "end_date", Map.of("type", "STRING", "description", "Ngày cuối YYYY-MM-DD, tính cả ngày này. Bỏ trống để xem một ngày."),
+              "branch_id", BRANCH_ARGUMENT))),
+      Map.of("name", "read_daily_business_report", "description", "Tra cứu chỉ đọc doanh thu, tiền phòng/F&B/phụ phí, chi phí, lương, đầu tư, lợi nhuận, số hóa đơn và chi tiết từng ngày theo cơ sở hoặc toàn chuỗi. PHẢI gọi khi hỏi hôm nay, hôm qua, một ngày cụ thể hoặc từng ngày; không lấy tổng tháng làm số liệu ngày. Tối đa 31 ngày mỗi lần, có đối chiếu trọn khoảng liền trước; ngày hiện tại chưa đủ ngày.",
+          "parameters", Map.of("type", "OBJECT", "properties", Map.of(
+              "start_date", Map.of("type", "STRING", "description", "Ngày bắt đầu YYYY-MM-DD. Tính hôm nay/hôm qua theo Ngày hiện tại và Múi giờ do backend cung cấp; không tự đoán từ tháng báo cáo."),
+              "end_date", Map.of("type", "STRING", "description", "Ngày cuối YYYY-MM-DD, tính cả ngày này; bỏ trống để xem đúng ngày bắt đầu. Không chọn tương lai."),
+              "branch_id", BRANCH_ARGUMENT), "required", List.of("start_date"))),
       Map.of("name", "read_business_reports", "description", "Tra cứu chỉ đọc lịch sử doanh thu, chi phí, lợi nhuận, lượt đặt phòng theo bất kỳ khoảng tháng đã lưu, kể cả cơ sở ngừng hoạt động. Bỏ trống khoảng tháng để lấy toàn bộ lịch sử có ghi nhận. Không giới hạn bốn tháng.",
           "parameters", Map.of("type", "OBJECT", "properties", Map.of(
               "start_month", Map.of("type", "STRING", "description", "Tháng bắt đầu YYYY-MM; bỏ trống để lấy từ tháng đầu tiên có dữ liệu."),
@@ -233,6 +279,23 @@ public class BusinessAssistantService {
 
   private static final Map<String, String> LABELS = Map.ofEntries(
       Map.entry("month", "Kỳ báo cáo"), Map.entry("generatedAt", "Thời điểm lấy dữ liệu"),
+      Map.entry("staffTotal", "Tổng số hồ sơ nhân sự hiện tại"), Map.entry("activeStaff", "Số nhân viên đang làm việc"),
+      Map.entry("inactiveStaff", "Số hồ sơ ngừng hoạt động"), Map.entry("resignedStaff", "Số hồ sơ nghỉ việc"),
+      Map.entry("branchStaffing", "Nhân sự từng cơ sở theo số người đang làm việc giảm dần"),
+      Map.entry("staffByPosition", "Nhân sự theo vị trí"), Map.entry("unassignedStaff", "Hồ sơ chưa có cơ sở chính"),
+      Map.entry("branchWorkforceActivity", "Ca làm và chấm công từng cơ sở"),
+      Map.entry("scheduledShifts", "Số ca đã lên lịch"), Map.entry("shiftsBelowCapacity", "Số ca còn chỗ theo chỉ tiêu"),
+      Map.entry("vacantShiftSlots", "Số chỗ còn trống trong các ca"), Map.entry("confirmedAssignments", "Lượt phân ca đã xác nhận"),
+      Map.entry("attendanceRecords", "Lượt có bản ghi chấm công"), Map.entry("missingAttendance", "Lượt ca đã kết thúc còn thiếu chấm công"),
+      Map.entry("invalidAttendance", "Lượt chấm công chưa hợp lệ"), Map.entry("workedAttendances", "Lượt đi làm hợp lệ"),
+      Map.entry("absences", "Lượt vắng mặt hợp lệ"),
+      Map.entry("workedMinutes", "Tổng phút công hợp lệ"), Map.entry("closedAttendance", "Lượt chấm công đã chốt"),
+      Map.entry("openAttendanceIssues", "Phản ánh chấm công chưa xử lý"),
+      Map.entry("currentDate", "Ngày hiện tại"), Map.entry("timeZone", "Múi giờ"), Map.entry("incompleteDay", "Ngày chưa kết thúc"),
+      Map.entry("startDate", "Từ ngày"), Map.entry("endDate", "Đến hết ngày"), Map.entry("date", "Ngày"),
+      Map.entry("dailyHistory", "Chi tiết từng ngày"), Map.entry("categoryName", "Hạng mục chi phí"),
+      Map.entry("comparisonStartDate", "Ngày đầu kỳ đối chiếu"), Map.entry("comparisonEndDate", "Ngày cuối kỳ đối chiếu"),
+      Map.entry("comparisonTotals", "Tổng trọn kỳ đối chiếu liền trước"),
       Map.entry("incompleteMonth", "Tháng chưa đủ kỳ"), Map.entry("periodStatus", "Trạng thái chốt kỳ"),
       Map.entry("totals", "Tổng trong phạm vi báo cáo"), Map.entry("previousTotals", "Tổng cả tháng trước trong cùng phạm vi"),
       Map.entry("monthlyHistory", "Báo cáo từng tháng đã truy vấn"),
@@ -255,7 +318,7 @@ public class BusinessAssistantService {
       Map.entry("billRevenue", "Doanh thu hóa đơn"), Map.entry("roomRevenue", "Doanh thu phòng"),
       Map.entry("fnbRevenue", "Doanh thu đồ ăn và đồ uống"), Map.entry("overtimeRevenue", "Doanh thu phụ phí quá giờ"),
       Map.entry("otherRevenue", "Doanh thu khác"), Map.entry("operatingExpense", "Chi phí vận hành"),
-      Map.entry("salary", "Chi lương"), Map.entry("investment", "Chi đầu tư"), Map.entry("netCashFlow", "Dòng tiền thuần"),
+      Map.entry("salary", "Chi lương và ứng lương"), Map.entry("investment", "Chi đầu tư"), Map.entry("netCashFlow", "Dòng tiền thuần"),
       Map.entry("forfeitedDeposits", "Thu từ cọc tịch thu"), Map.entry("billCount", "Số hóa đơn"),
       Map.entry("completedBookings", "Số đặt phòng hoàn thành"), Map.entry("cancelledNoShowBookings", "Số đặt phòng hủy hoặc không đến"),
       Map.entry("expenseCount", "Số khoản chi"), Map.entry("branchCount", "Số cơ sở"), Map.entry("lossBranches", "Số cơ sở lỗ"),
@@ -352,6 +415,28 @@ public class BusinessAssistantService {
     trong dữ liệu ban đầu, PHẢI gọi công cụ tra cứu trước khi trả lời, không từ chối vì chỉ nhìn thấy một vài tháng.
     Khi hỏi toàn bộ lịch sử, gọi công cụ báo cáo và bỏ trống tháng bắt đầu/kết thúc; khi hỏi một năm hoặc N tháng
     thì tính đúng khoảng tháng và tra cứu. Nếu đã nêu tên cơ sở ở lượt trước thì tiếp tục dùng cơ sở đó.
+    Khi hỏi nhân viên nào làm lâu năm nhất, có thâm niên cao nhất hoặc vào công ty sớm nhất, PHẢI gọi read_staff_tenure.
+    Bỏ branch_id khi hỏi toàn hệ thống, chọn đúng cơ sở khi người dùng nêu tên. Nếu tra thêm chỉ tiêu khác cùng câu, tóm tắt các chỉ tiêu đó;
+    GCMB sẽ hiển thị phần thâm niên riêng. Không tự suy đoán tên nhân viên hoặc coi ngày vào công ty là ngày chuyển đến cơ sở.
+    Khi hỏi số nhân viên, vị trí, trạng thái hồ sơ hoặc quy mô nhân sự hiện tại, PHẢI gọi read_staff_headcount; với một cơ sở thì dùng đúng mã theo danh mục.
+    Khi xếp hạng hoặc so sánh các cơ sở, gọi read_staff_headcount MỘT LẦN và bỏ branch_id, dùng danh sách nhân sự từng cơ sở trả về để trả lời ngay.
+    Khi hỏi cơ sở đông/ít nhân viên nhất, mặc định xét cơ sở đang hoạt động, đếm hồ sơ đang làm việc, nêu trường hợp đồng hạng. Dùng cơ cấu vị trí để xếp hạng theo vị trí nếu được hỏi.
+    Trả lời số nhân viên đang làm việc theo hồ sơ và phân công cơ sở chính hiện tại; ghi rõ nếu người dùng hỏi tổng hồ sơ hoặc nhân sự chưa được phân công.
+    Số toàn hệ thống gồm cả hồ sơ chưa được phân công. Không suy ra số người từ chi phí lương, tài khoản đăng nhập hoặc số người trong một ca.
+    Số lượng theo hồ sơ là số hiện tại. Khi hỏi quân số tại một mốc quá khứ, nêu giới hạn và chỉ đưa số hiện tại nếu ghi rõ.
+    Khi hỏi phân ca, ca còn chỗ, giờ công, vắng, thiếu chấm công, chốt công hoặc phản ánh, gọi read_workforce_activity đúng ngày hoặc khoảng ngày.
+    Với các chỉ số này dùng lượt ca/lượt phân ca theo nhãn, không diễn giải thành số nhân viên duy nhất. Phút công có thể đổi sang giờ và phút.
+    Dùng báo cáo ngày/tháng theo phạm vi được hỏi cho chi phí nhân sự đã ghi sổ. Chỉ tiêu chi lương và ứng lương gộp cả hai, không gọi đó là lương thực nhận, bảng lương từng người hoặc số dư phải trả.
+    Khi hỏi doanh thu/chi phí/lợi nhuận hoặc tình hình kinh doanh hôm nay, hôm qua, một ngày cụ thể hay từng ngày,
+    PHẢI gọi read_daily_business_report với đúng ngày và cơ sở, không dùng tổng tháng để thay thế.
+    Xác định hôm nay/hôm qua theo Ngày hiện tại và Múi giờ từ backend, không theo ngày trong lịch sử chat hoặc tháng báo cáo.
+    Ngày viết dd/MM/yyyy đổi thành YYYY-MM-DD; nếu chỉ ghi ngày/tháng thì dùng năm của Ngày hiện tại khi không có ngữ cảnh khác,
+    và nêu rõ năm đang tra cứu; nếu mơ hồ quan trọng thì hỏi lại. Tra cứu tối đa 31 ngày mỗi lần, chia nhỏ khi cần chi tiết dài hơn.
+    Câu tiếp nối 'còn hôm qua', 'ngày đó', 'cơ sở đó' phải giữ đúng cơ sở/chủ đề của lượt trước nhưng tra cứu lại ngày tương ứng.
+    Nêu số liệu ngày hiện tại là tạm tính đến Thời điểm lấy dữ liệu; không so trọn hôm qua với hôm nay chưa kết thúc như hai kỳ đủ ngày.
+    Chi phí phân bổ tháng ghi ở ngày đầu kỳ không đồng nghĩa tiền đã chi đúng ngày đó; không tự rải chi phí tháng để bịa lợi nhuận ngày.
+    Không lấy danh mục phòng hay sự cố hiện tại làm ảnh chụp của một ngày quá khứ. Công cụ ngày không chứa chi tiết cá nhân hoặc dòng giao dịch,
+    nên không suy ra số khách, số booking, tỷ lệ lấp đầy hoặc kênh bán theo ngày từ số hóa đơn; cần dữ liệu đúng phạm vi cho những câu đó.
     Dùng số liệu từng cơ sở trong từng kỳ, không lấy tổng chuỗi thay số liệu cơ sở. Nếu tên gần giống nhiều cơ sở,
     phân biệt đầy đủ tên; chưa xác định được thì hỏi lại một lần, không tự gộp Nguyễn Lương Bằng với Nguyễn Lương Bằng 86-88.
     Nếu chưa tra cứu đủ thì dùng công cụ để tra cứu tiếp; nếu sau tra cứu vẫn thiếu thì nêu đúng phạm vi đã kiểm tra,

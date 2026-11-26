@@ -14,10 +14,12 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.auth.service.AuthValidation;
 import com.gcmb.backend.workforce.dto.StaffDtos.*;
+import com.gcmb.backend.workforce.repository.AttendanceRepository;
 import com.gcmb.backend.workforce.repository.StaffRepository;
 import java.time.LocalDate;
 import java.util.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -26,10 +28,12 @@ public class StaffService {
 
     private final StaffRepository staffRepository;
     private final AccountRepository accountRepository;
+    private final AttendanceRepository attendanceRepository;
 
-    public StaffService(StaffRepository staffRepository, AccountRepository accountRepository) {
+    public StaffService(StaffRepository staffRepository, AccountRepository accountRepository, AttendanceRepository attendanceRepository) {
         this.staffRepository = staffRepository;
         this.accountRepository = accountRepository;
+        this.attendanceRepository = attendanceRepository;
     }
 
     public static final Set<String> POSITIONS = Set.of(
@@ -125,6 +129,92 @@ public class StaffService {
             page,
             size
         );
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Map<String, Object> headcount(Identity actor, UUID branchId) {
+        UUID selectedBranch = reportBranch(actor, branchId);
+        var branches = reportBranches(selectedBranch);
+        var rows = staffRepository.headcount(selectedBranch);
+        var result = summarizeStaff(rows);
+        result.put("branchName", selectedBranch == null ? "Toàn hệ thống" : branches.get(0).get("name"));
+        if (selectedBranch == null) {
+            result.put("unassignedStaff", summarizeStaff(rows.stream().filter(row -> row.get("branchId") == null).toList()));
+            var byBranch = branches.stream().map(branch -> {
+                var summary = summarizeStaff(rows.stream().filter(row -> branch.get("id").equals(row.get("branchId"))).toList());
+                summary.put("branchName", branch.get("name"));
+                summary.put("status", branch.get("status"));
+                return summary;
+            }).sorted(Comparator.comparingLong((Map<String, Object> row) -> ((Number) row.get("activeStaff")).longValue()).reversed()).toList();
+            result.put("branchStaffing", byBranch);
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
+    public Map<String, Object> workforceActivity(Identity actor, UUID branchId, LocalDate from, LocalDate through) {
+        UUID selectedBranch = reportBranch(actor, branchId);
+        var branches = reportBranches(selectedBranch);
+        var labels = new HashMap<UUID, Object>();
+        branches.forEach(branch -> labels.put((UUID) branch.get("id"), branch.get("name")));
+        var byBranch = new ArrayList<Map<String, Object>>();
+        Map<String, Object> totals = Map.of();
+        for (var row : attendanceRepository.workforceActivity(selectedBranch, from, through.plusDays(1))) {
+            var fields = new LinkedHashMap<>(row);
+            UUID id = (UUID) fields.remove("branchId");
+            if (id == null) totals = fields;
+            else {
+                fields.put("branchName", labels.get(id));
+                byBranch.add(fields);
+            }
+        }
+        return Map.of("branchName", selectedBranch == null ? "Toàn hệ thống" : labels.get(selectedBranch),
+            "startDate", from.toString(), "endDate", through.toString(), "totals", totals,
+            "branchWorkforceActivity", byBranch,
+            "notes", "Tính theo cơ sở và ngày của ca, kể cả ca quá khứ của người đã chuyển cơ sở. Số chỗ còn trống là chênh lệch với sức chứa được cấu hình của ca. Chỉ tính thiếu chấm công với ca đã kết thúc. Ca có bản ghi chấm công vẫn giữ lịch sử khi phân công bị hủy.");
+    }
+
+    public record TenureResult(String scopeName, List<StaffRepository.SeniorEmployee> employees) {}
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
+    public TenureResult longestServingEmployees(Identity actor, UUID branchId, LocalDate asOf) {
+        UUID selectedBranch = reportBranch(actor, branchId);
+        var branches = reportBranches(selectedBranch);
+        String scopeName = selectedBranch == null ? "toàn hệ thống" : (String) branches.get(0).get("name");
+        return new TenureResult(scopeName, staffRepository.longestServingEmployees(selectedBranch, asOf));
+    }
+
+    private UUID reportBranch(Identity actor, UUID branchId) {
+        UUID scope = scope(actor, false);
+        if (scope != null && branchId != null && !scope.equals(branchId)) throw denied();
+        return scope == null ? branchId : scope;
+    }
+
+    private List<Map<String, Object>> reportBranches(UUID branchId) {
+        var branches = staffRepository.branches(branchId);
+        if (branchId != null && branches.isEmpty()) throw new AuthFailure(400, "branchId", "Không tìm thấy cơ sở cần tra cứu.");
+        return branches;
+    }
+
+    private static final List<String> STAFF_COUNT_FIELDS = List.of("staffTotal", "activeStaff", "inactiveStaff", "resignedStaff");
+
+    private static Map<String, Object> summarizeStaff(List<Map<String, Object>> rows) {
+        var summary = new LinkedHashMap<String, Object>();
+        var byPosition = new TreeMap<String, Map<String, Long>>();
+        for (var row : rows) {
+            String position = switch (Objects.toString(row.get("position"), "")) {
+                case "RECEPTIONIST" -> "Lễ tân";
+                case "BRANCH_MANAGER" -> "Quản lý cơ sở";
+                case "HEAD_OFFICE_MANAGER" -> "Quản lý cấp cao";
+                case "ACCOUNTANT" -> "Kế toán";
+                default -> "Khác";
+            };
+            var counts = byPosition.computeIfAbsent(position, ignored -> new LinkedHashMap<>());
+            STAFF_COUNT_FIELDS.forEach(field -> counts.merge(field, ((Number) row.get(field)).longValue(), Long::sum));
+        }
+        STAFF_COUNT_FIELDS.forEach(field -> summary.put(field, byPosition.values().stream().mapToLong(counts -> counts.get(field)).sum()));
+        summary.put("staffByPosition", byPosition);
+        return summary;
     }
 
     @Transactional(readOnly = true)

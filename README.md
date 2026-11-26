@@ -107,7 +107,9 @@ GCMB/
 │   │   ├── application.yaml
 │   │   ├── application-dev.yml
 │   │   ├── application-prod.yml
-│   │   └── db/migration/
+│   │   ├── db/migration/
+│   │   ├── db/migration-equipment-first/
+│   │   └── db/migration-notifications-first/
 │   ├── src/test/
 │   ├── .mvn/wrapper/
 │   ├── pom.xml
@@ -273,7 +275,8 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 | PowerShell blocks `npm.ps1` | Use `npm.cmd` as shown above. |
 | Backend cannot connect to PostgreSQL | Check the database service, port, database name, username, and password. For `127.0.0.1:55433`, see the [Windows startup settings for the restored database](docs/Local%20Database%20Reset%202026-11-13.md#khởi-động-cụm-dữ-liệu-đã-khôi-phục-trên-windows). |
 | Backend reports a missing table | Confirm the database migrations have been configured and applied. |
-| Flyway reports more than one migration with the same version after a migration was renamed or renumbered | Preserve migration versions that have already been applied, then run `cd backend; .\\mvnw.cmd clean spring-boot:run` on Windows (or `./mvnw clean spring-boot:run` on macOS/Linux) to remove stale migration files from `target/classes` and rebuild. If the duplicate is still reported, check `src/main/resources/db/migration/` for duplicate version prefixes. |
+| Flyway reports duplicate migration versions | Start with `npm.cmd start` from `frontend/` to rebuild only the generated migration resource directory. Load the shared location plus exactly one V66/V67 history. Avoid Maven `clean` when PostgreSQL data lives under `backend/target/`. |
+| Flyway reports a checksum mismatch for V66/V67 | Read `public.flyway_schema_history` and select the matching migration locations using the [V66/V67 compatibility guide](docs/Flyway%20V66-V67%20Compatibility.md). Keep validation enabled and preserve the recorded history. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
 | `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
@@ -312,13 +315,13 @@ Keep database passwords and SePay, email, and cloud-storage credentials outside 
 
 ### Database migrations
 
-Store schema changes under `backend/src/main/resources/db/migration/`. For Flyway, use names such as `V1__create_initial_schema.sql` and `V2__add_booking_indexes.sql`.
+Store shared schema changes under `backend/src/main/resources/db/migration/`. For Flyway, use names such as `V1__create_initial_schema.sql` and `V2__add_booking_indexes.sql`. V66/V67 are preserved separately for two published histories; all new shared versions start at V68. See the [compatibility guide](docs/Flyway%20V66-V67%20Compatibility.md).
 
 Migration ownership: V21 and V22 are the F&B menu migrations; V30 and V31 are the equipment category and asset migrations. V30/V31 use idempotent DDL because some development databases already contain those schema changes from the earlier V21/V22 numbering. For those existing databases, reconcile Flyway history before startup; do not reset the schema or change domain data. The `npm start` launcher removes only the generated `backend/target/classes/db/migration/` copy before Maven starts, so renamed source migrations cannot remain as stale duplicate files.
 
-V66 initializes equipment code counters from history by branch code. The first asset in an uninitialized series requires a starting code or number. Later assets receive their `ASSET-{BRANCH_CODE}-{SERIAL}` automatically when saved. See [equipment asset management](docs/Equipment%20Assets%20UC65-UC69.md#quy-tắc-cấp-mã-thiết-bị).
+In the default `db/migration-equipment-first` history, V66 initializes equipment code counters from history by branch code. The first asset in an uninitialized series requires a starting code or number. Later assets receive their `ASSET-{BRANCH_CODE}-{SERIAL}` automatically when saved. See [equipment asset management](docs/Equipment%20Assets%20UC65-UC69.md#quy-tắc-cấp-mã-thiết-bị).
 
-V67 creates cash-closing notification storage. Keep V66 assigned to equipment counters because development databases have already applied that migration; do not reuse its version for another change. The earlier cash-closing notification migration was moved from V59 because that version is occupied by salary payment evidence.
+V67 in that default history creates cash-closing notification storage. Some existing databases applied V66 notifications and V67 equipment instead; they must select `db/migration-notifications-first` through `SPRING_FLYWAY_LOCATIONS`. Preserve the script versions and contents recorded by each database rather than renumbering them. The earlier cash-closing notification migration was moved from V59 because that version is occupied by salary payment evidence.
 
 The directory alone does not run migrations. If the team selects Flyway, configure its compatible dependencies in `pom.xml`, including PostgreSQL support where required. With Flyway enabled, migrations can run at backend startup. Keep schema generation under migration control; use Hibernate `ddl-auto: validate` when the migrated schema is ready.
 
@@ -421,6 +424,7 @@ The detailed project references are:
 - [Room Pricing and Room Management Validation](docs/Room%20Pricing%20and%20Room%20Management%20Validation.md) — backend validation behavior for room types, pricing rules, combo packages, and rooms.
 - [Finance Fund and Expense Workflow](docs/Finance%20Fund%20and%20Expense%20Workflow.md) — fund receipt confirmation, category maintenance, branch expense requests, approval thresholds, payment, reimbursement, and evidence access.
 - [UI Pagination](docs/UI%20Pagination.md) — quy tắc 5/10 mục mỗi trang, các màn đã tích hợp và phạm vi kiểm tra.
+- [Business Assistant](docs/Business%20Assistant.md) — trợ lý QLCC tra cứu báo cáo theo ngày, nhân sự toàn chuỗi, ca làm và chấm công.
 - [Merge resolution 23/11/2026](docs/Merge%20Resolution%202026-11-23.md) — cách giữ naming convention, kết hợp các luồng và kết quả kiểm tra sau gộp main/Huy.
 
 

@@ -12,6 +12,7 @@ package com.gcmb.backend.workforce.repository;
 import com.gcmb.backend.workforce.dto.StaffDtos.StaffCommand;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -90,6 +91,37 @@ public class StaffRepository {
             args.toArray()
         );
         return Map.of("items", rows, "total", total, "page", page, "size", size);
+    }
+
+    public List<Map<String, Object>> headcount(UUID branchId) {
+        return jdbcTemplate.queryForList("""
+            SELECT home.branch_id AS "branchId", e.position,
+                   count(*) AS "staffTotal",
+                   count(*) FILTER (WHERE e.status='ACTIVE') AS "activeStaff",
+                   count(*) FILTER (WHERE e.status='INACTIVE') AS "inactiveStaff",
+                   count(*) FILTER (WHERE e.status='RESIGNED') AS "resignedStaff"
+            """ + FROM + """
+            WHERE (CAST(? AS uuid) IS NULL OR home.branch_id=?)
+            GROUP BY home.branch_id, e.position
+            ORDER BY e.position
+            """, branchId, branchId);
+    }
+
+    public record SeniorEmployee(String name, String branchName, LocalDate hiredOn, long tiedEmployees) {}
+
+    public List<SeniorEmployee> longestServingEmployees(UUID branchId, LocalDate asOf) {
+        return jdbcTemplate.query("""
+            WITH eligible AS (
+                SELECT e.id, e.full_name, b.name AS branch_name, e.hired_on,
+                       min(e.hired_on) OVER () AS earliest_hire
+                """ + FROM + """
+                WHERE e.status='ACTIVE' AND e.hired_on<=? AND (CAST(? AS uuid) IS NULL OR home.branch_id=?)
+            )
+            SELECT full_name, branch_name, hired_on, count(*) OVER () AS tied_employees
+            FROM eligible WHERE hired_on=earliest_hire
+            ORDER BY full_name, id LIMIT 20
+            """, (row, index) -> new SeniorEmployee(row.getString("full_name"), row.getString("branch_name"),
+                row.getObject("hired_on", LocalDate.class), row.getLong("tied_employees")), asOf, branchId, branchId);
     }
 
     public List<Map<String, Object>> branches(UUID scope) {

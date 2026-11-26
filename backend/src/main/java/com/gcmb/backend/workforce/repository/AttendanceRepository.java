@@ -55,6 +55,50 @@ public class AttendanceRepository {
         return rows(branch, from, until, null);
     }
 
+    public List<Map<String, Object>> workforceActivity(UUID branch, LocalDate from, LocalDate until) {
+        return jdbcTemplate.queryForList("""
+            WITH shift_records AS (
+              SELECT s.branch_id, s.id, s.capacity, s.status <> 'CANCELLED' scheduled,
+                s.ends_at <= CURRENT_TIMESTAMP finished,
+                sa.status = 'CONFIRMED' confirmed, sa.employee_id, s.work_date,
+                a.id attendance_id, a.worked_minutes,
+                CASE WHEN a.status='WORKED' THEN a.actual_out>a.actual_in
+                    AND a.break_minutes=0 AND a.actual_out-a.actual_in=a.worked_minutes*interval '1 minute'
+                    AND (a.actual_out<=CURRENT_TIMESTAMP OR (s.starts_at<=CURRENT_TIMESTAMP
+                        AND a.actual_in=s.starts_at AND a.actual_out=s.ends_at))
+                  ELSE a.status='ABSENT' AND a.actual_in IS NULL AND a.actual_out IS NULL AND a.worked_minutes=0 END valid,
+                a.status='ABSENT' absent
+              FROM gcmb.scheduled_shift s
+              LEFT JOIN gcmb.shift_assignment sa ON sa.shift_id=s.id
+              LEFT JOIN gcmb.attendance a ON a.assignment_id=sa.id
+              WHERE (CAST(? AS uuid) IS NULL OR s.branch_id=?) AND s.work_date>=? AND s.work_date<?
+                AND (s.status<>'CANCELLED' OR a.id IS NOT NULL)
+            ), per_shift AS (
+              SELECT branch_id, id, capacity, scheduled,
+                count(*) FILTER (WHERE scheduled AND confirmed) assigned,
+                count(*) FILTER (WHERE scheduled AND confirmed AND finished AND attendance_id IS NULL) missing,
+                count(attendance_id) recorded,
+                count(*) FILTER (WHERE attendance_id IS NOT NULL AND valid IS NOT TRUE) invalid,
+                count(*) FILTER (WHERE NOT absent AND valid) worked,
+                count(*) FILTER (WHERE absent AND valid) absent,
+                sum(worked_minutes) FILTER (WHERE valid) minutes,
+                count(*) FILTER (WHERE attendance_id IS NOT NULL AND gcmb.employee_month_closed(branch_id,employee_id,work_date)) closed,
+                sum((SELECT count(*) FROM gcmb.attendance_issue i WHERE i.attendance_id=r.attendance_id AND i.status='OPEN')) issues
+              FROM shift_records r GROUP BY branch_id, id, capacity, scheduled
+            )
+            SELECT branch_id AS "branchId", count(*) FILTER (WHERE scheduled) AS "scheduledShifts",
+              count(*) FILTER (WHERE scheduled AND assigned<capacity) AS "shiftsBelowCapacity",
+              COALESCE(sum(greatest(capacity-assigned,0)) FILTER (WHERE scheduled),0) AS "vacantShiftSlots",
+              COALESCE(sum(assigned),0) AS "confirmedAssignments", COALESCE(sum(recorded),0) AS "attendanceRecords",
+              COALESCE(sum(missing),0) AS "missingAttendance", COALESCE(sum(invalid),0) AS "invalidAttendance",
+              COALESCE(sum(worked),0) AS "workedAttendances", COALESCE(sum(absent),0) AS "absences",
+              COALESCE(sum(minutes),0) AS "workedMinutes",
+              COALESCE(sum(closed),0) AS "closedAttendance", COALESCE(sum(issues),0) AS "openAttendanceIssues"
+            FROM per_shift GROUP BY GROUPING SETS ((branch_id), ())
+            ORDER BY branch_id NULLS FIRST
+            """, branch, branch, from, until);
+    }
+
     public List<Map<String, Object>> personalRows(UUID employee, LocalDate from, LocalDate until) {
         // BR-60: UUID này do service lấy từ phiên, không nhận mã nhân viên từ request.
         java.util.Objects.requireNonNull(employee);
