@@ -475,9 +475,11 @@ Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_
 ### Bộ lọc tổng quan quản lý cơ sở (23/11/2026)
 
 - Phần tiêu đề **Tổng quan cơ sở** hiển thị tên cơ sở và kỳ báo cáo.
-- Trang Tổng quan có phạm vi báo cáo theo tháng (Tháng 1–12 và năm), năm hoặc khoảng ngày; doanh thu, giao dịch, F&B, hiệu suất hạng phòng và khung giờ cao điểm bám theo phạm vi này.
+- Trang Tổng quan có phạm vi báo cáo theo ngày, tháng (Tháng 1–12 và năm), năm hoặc khoảng ngày. Doanh thu, giao dịch, F&B, hiệu suất hạng phòng và khung giờ cao điểm bám theo phạm vi này.
+- Các thẻ **Doanh thu**, **Tổng giao dịch** và **Doanh thu F&B** hiển thị phần trăm tăng giảm so với ngày, tháng hoặc năm liền trước của cùng cơ sở. Kỳ tháng hoặc năm đang diễn ra đối chiếu theo thời gian tương ứng của kỳ trước. Khoảng ngày tùy chọn đối chiếu với khoảng ngay trước đó có cùng số ngày. Dấu **—** biểu thị kỳ trước thiếu giá trị gốc hoặc có giá trị bằng 0.
 - Biểu đồ xu hướng doanh thu có bộ lọc riêng theo tháng, năm hoặc khoảng ngày. Biểu đồ vùng có tooltip theo ngày/tháng; khoảng ngày dài được gom theo tháng để dễ đọc. Khoảng ngày tùy chọn tối đa 366 ngày.
 - API `/api/v1/branch-management/dashboard` nhận `scopePeriod`, `scopeFrom`, `scopeTo` cho phạm vi tổng quan và `revenuePeriod`, `revenueDate`, `revenueFrom`, `revenueTo` riêng cho biểu đồ; hai bộ lọc không ghi đè nhau. File ảnh hưởng: `frontend/src/features/branch/components/BranchOverviewDashboard.js`, `frontend/src/features/branch/components/branch-dashboard.css`, `backend/src/main/java/com/gcmb/backend/dashboard/DashboardController.java`.
+- API tổng quan hỗ trợ `scopePeriod=DAY` với `scopeFrom` và `scopeTo` cùng ngày. `reportComparison` trả về `from`, `to` và `summary` của kỳ đối chiếu. `summary` gồm `revenue`, `billCount` và `fnbRevenue` theo cùng cách tính với `reportSummary`.
 
 ### Nguồn khách và điều hướng Tổng quan (24/11/2026)
 

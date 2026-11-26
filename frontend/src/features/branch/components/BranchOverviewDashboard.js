@@ -5,6 +5,8 @@ import {
 } from 'recharts';
 import api from '../../../api/client';
 import CustomerSourcesChart from '../../dashboard/components/CustomerSourcesChart';
+import KpiComparison, { percentChange } from '../../dashboard/components/KpiComparison';
+import { vietnamToday } from '../../dashboard/components/DashboardPeriodControls';
 import './branch-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
@@ -19,8 +21,6 @@ const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Th�
 const shiftNames = { NIGHT: 'Ca đêm', MORNING: 'Ca sáng', AFTERNOON: 'Ca chiều', EVENING: 'Ca tối' };
 const localDate = (value) => String(value || '').slice(0, 10);
 const localTime = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date); };
-const todayDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const currentMonth = () => todayDate().slice(0, 7);
 const monthStart = (year, month) => `${year}-${String(month).padStart(2, '0')}-01`;
 const monthEnd = (year, month) => `${year}-${String(month).padStart(2, '0')}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(2, '0')}`;
 const addDays = (value, count) => { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10); };
@@ -47,6 +47,7 @@ function selectedRange(period, month, year, from, to, today) {
 }
 
 function rangeLabel(period, selectedMonth, selectedYear, from, to) {
+  if (period === 'DAY') return `Ngày ${dateLabel(from)}`;
   if (period === 'YEAR') return `Năm ${selectedYear}`;
   if (period === 'RANGE') return `${dateLabel(from)} – ${dateLabel(to)}`;
   return `Tháng ${Number(selectedMonth)}/${selectedYear}`;
@@ -89,11 +90,14 @@ function RevenueChart({ series, chartKey, hasRevenue }) {
   </div>;
 }
 
-function PeriodControls({ idPrefix, period, onPeriodChange, month, onMonthChange, year, onYearChange, from, to, onFromChange, onToChange, years, today }) {
+function PeriodControls({ idPrefix, period, onPeriodChange, day, onDayChange, month, onMonthChange, year, onYearChange, from, to, onFromChange, onToChange, years, today }) {
   return <div className="bm-period-controls">
     <label htmlFor={`${idPrefix}-period`}>Xem theo<select id={`${idPrefix}-period`} value={period} onChange={(event) => onPeriodChange(event.target.value)}>
+      {onDayChange && <option value="DAY">Ngày</option>}
       <option value="MONTH">Tháng</option><option value="YEAR">Năm</option><option value="RANGE">Khoảng ngày</option>
     </select></label>
+    {period === 'DAY' && <label htmlFor={`${idPrefix}-day`}>Ngày<input id={`${idPrefix}-day`} type="date" required value={day} max={today}
+      onChange={(event) => { if (event.target.value && event.target.validity.valid) onDayChange(event.target.value); }} /></label>}
     {period === 'MONTH' && <>
       <label htmlFor={`${idPrefix}-month`}>Tháng<select id={`${idPrefix}-month`} value={month} onChange={(event) => onMonthChange(event.target.value)}>{months.map((name, index) => <option key={name} value={String(index + 1).padStart(2, '0')}>{name}</option>)}</select></label>
       <label htmlFor={`${idPrefix}-year`}>Năm<select id={`${idPrefix}-year`} value={year} onChange={(event) => onYearChange(event.target.value)}>{years.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
@@ -111,9 +115,10 @@ function DataTable({ headings, rows, labels }) {
 }
 
 export default function BranchOverviewDashboard({ user }) {
-  const today = todayDate();
-  const initialMonth = currentMonth();
+  const today = vietnamToday();
+  const initialMonth = today.slice(0, 7);
   const [scopePeriod, setScopePeriod] = useState('MONTH');
+  const [scopeDay, setScopeDay] = useState(today);
   const [scopeMonth, setScopeMonth] = useState(initialMonth.slice(5, 7));
   const [scopeYear, setScopeYear] = useState(initialMonth.slice(0, 4));
   const [scopeFrom, setScopeFrom] = useState(`${initialMonth}-01`);
@@ -128,7 +133,8 @@ export default function BranchOverviewDashboard({ user }) {
   const [error, setError] = useState('');
   const currentYear = today.slice(0, 4);
   const availableYears = Array.from({ length: Math.max(1, Number(currentYear) - 2019) }, (_, index) => String(Number(currentYear) - index));
-  const reportRange = selectedRange(scopePeriod, scopeMonth, scopeYear, scopeFrom, scopeTo, today);
+  const reportRange = scopePeriod === 'DAY' ? { from: scopeDay, to: scopeDay }
+    : selectedRange(scopePeriod, scopeMonth, scopeYear, scopeFrom, scopeTo, today);
   const chartRange = selectedRange(chartPeriod, chartMonth, chartYear, chartFrom, chartTo, today);
   const reportRangeLabel = rangeLabel(scopePeriod, scopeMonth, scopeYear, reportRange.from, reportRange.to);
   const chartRangeLabel = rangeLabel(chartPeriod, chartMonth, chartYear, chartRange.from, chartRange.to);
@@ -196,6 +202,9 @@ export default function BranchOverviewDashboard({ user }) {
     return { ...row, date, dateLabel: date.split('-').reverse().join('/'), dayLabel: date === today ? 'Hôm nay' : 'Ngày mai', shiftLabel: shiftNames[row.shift] || row.shift };
   });
   const reportSummary = data?.reportSummary || {};
+  const reportMatchesScope = result.id === user.branchId && data?.scopePeriod === scopePeriod
+    && data.scopeFrom === reportRange.from && data.scopeTo === reportRange.to;
+  const reportComparison = reportMatchesScope ? data.reportComparison : null;
   const chartSummary = data?.revenueSummary || {};
   const fnbRevenue = Number(reportSummary.fnbRevenue ?? result.fnbRevenue) || 0;
   const selectedRevenue = Number(reportSummary.revenue ?? result.revenue) || 0;
@@ -225,18 +234,26 @@ export default function BranchOverviewDashboard({ user }) {
     <section className="bm-report-filter" aria-label="Phạm vi báo cáo tổng quan">
       <div className="bm-filter-summary"><span>PHẠM VI BÁO CÁO</span><strong>{reportRangeLabel}</strong></div>
       <PeriodControls idPrefix="bm-scope" period={scopePeriod} onPeriodChange={setScopePeriod}
+        day={scopeDay} onDayChange={setScopeDay}
         month={scopeMonth} onMonthChange={setScopeMonth} year={scopeYear} onYearChange={setScopeYear}
         from={scopeFrom} to={scopeTo} onFromChange={(value) => adjustRangeStart(value, setScopeFrom, scopeTo, setScopeTo)}
         onToChange={(value) => adjustRangeEnd(value, scopeFrom, setScopeFrom, setScopeTo)} years={availableYears} today={today} />
     </section>
-    <div className="bm-kpis" aria-label="Các chỉ số vận hành chính">{[
-      ['revenue', 'Doanh thu', money(kpis.revenue), reportRangeLabel], ['transactions', 'Tổng giao dịch', new Intl.NumberFormat('vi-VN').format(kpis.transactions), 'Hóa đơn đã hoàn tất'],
-      ['rooms', 'Phòng đang sử dụng', `${kpis.occupied} / ${kpis.roomTotal}`, 'Trạng thái phòng hiện tại'], ['fnb', 'Doanh thu F&B', money(kpis.fnbRevenue), reportRangeLabel],
+    <div className="bm-kpis" role="group" aria-label="Các chỉ số vận hành chính">{[
+      ['revenue', 'Doanh thu', reportMatchesScope ? money(kpis.revenue) : '—', reportRangeLabel, 'revenue'],
+      ['transactions', 'Tổng giao dịch', reportMatchesScope ? new Intl.NumberFormat('vi-VN').format(kpis.transactions) : '—', 'Hóa đơn đã hoàn tất', 'billCount'],
+      ['rooms', 'Phòng đang sử dụng', `${kpis.occupied} / ${kpis.roomTotal}`, 'Trạng thái phòng hiện tại'],
+      ['fnb', 'Doanh thu F&B', reportMatchesScope ? money(kpis.fnbRevenue) : '—', reportRangeLabel, 'fnbRevenue'],
       ['inventory', 'Mặt hàng tồn thấp', new Intl.NumberFormat('vi-VN').format(ops.lowStockItems ?? 0), 'Dưới định mức tối thiểu'],
       ['staff', 'Nhân viên đi làm hôm nay', `${ops.staffPresent ?? '—'} / ${ops.staffTotal ?? '—'}`, 'Đã vào ca / được phân ca'],
-    ].map(([tone, label, value, note]) => <article className={`bm-kpi is-${tone}`} key={label}>
+    ].map(([tone, label, value, note, summaryKey]) => <article className={`bm-kpi is-${tone}`} key={label}>
       <span className="bm-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{tone === 'revenue' ? <><path d="M4 19V5m0 14h16"/><path d="m7 15 4-4 3 2 5-6"/></> : tone === 'transactions' ? <><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6m-6 4h6"/></> : tone === 'rooms' ? <><path d="M3 20V8l9-5 9 5v12"/><path d="M7 20v-6h10v6M8 9h.01M12 9h.01M16 9h.01"/></> : tone === 'fnb' ? <><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18m8-18v18m0-18c3 2 4 5 4 9h-4"/></> : tone === 'inventory' ? <><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7m-9 4v10"/></> : <><circle cx="9" cy="8" r="4"/><path d="M2 21v-2a7 7 0 0 1 14 0v2m3-13a4 4 0 0 1 0 8m3 5v-2a7 7 0 0 0-3-5.7"/></>}</svg></span>
-      <div className="bm-kpi-copy"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+      <div className="bm-kpi-copy">
+        <span>{label}</span><strong>{value}</strong><small>{note}</small>
+        {summaryKey && reportComparison && <KpiComparison periodType={scopePeriod}
+          from={reportComparison.from} to={reportComparison.to}
+          change={percentChange(reportSummary[summaryKey], reportComparison.summary?.[summaryKey])} />}
+      </div>
     </article>)}</div>
 
     <div className="bm-grid bm-grid-lead">
