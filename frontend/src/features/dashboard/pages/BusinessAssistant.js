@@ -17,7 +17,12 @@ const suggestions = [
 ];
 const emptyMessages = [];
 const historyKey = (id) => `gcmb-business-chats-v1:${id}`;
-const savedMessages = (messages) => messages.slice(-60).map(({ role, content }) => ({ role, content }));
+const savedMessages = (messages) => messages.slice(-60).map(({ role, content, displayAnswer }) => {
+  if (role === 'assistant' && typeof displayAnswer === 'string' && displayAnswer.length <= 24000) {
+    return { role, content, displayAnswer };
+  }
+  return { role, content };
+});
 function readHistory(id) {
   if (!id) return [];
   try {
@@ -146,6 +151,7 @@ export default function BusinessAssistant({ user }) {
     sending.current = true; setBusy(true); setError(''); setDraft('');
     const history = [];
     let used = 0;
+    // displayAnswer is for the local conversation only. Model history uses content.
     for (const message of messages.slice(-8).reverse()) {
       const content = message.content.slice(0, message.role === 'user' ? 2000 : 4000);
       if (used + content.length > 12000) break;
@@ -161,7 +167,7 @@ export default function BusinessAssistant({ user }) {
       });
       if (mounted.current) {
         setContext(data.context);
-        const completed = [...pending, { role: 'assistant', content: data.answer }].slice(-60);
+        const completed = savedMessages([...pending, { role: 'assistant', content: data.answer, displayAnswer: data.displayAnswer }]);
         const id = threadId || window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         setThreadId(id); setMessages(completed);
         saveThreads([{ id, updatedAt: new Date().toISOString(), messages: savedMessages(completed) }, ...threads.filter((thread) => thread.id !== id)]);
@@ -219,7 +225,7 @@ export default function BusinessAssistant({ user }) {
         <div className="business-assistant-messages" aria-live="polite" aria-relevant="additions">
           {messages.map((message, index) => <article key={index} className={`business-assistant-message ${message.role}`}>
             <span>{message.role === 'user' ? 'Bạn' : 'GenZ AI'}</span>
-            {message.role === 'assistant' ? <Answer text={message.content} /> : <p>{message.content}</p>}
+            {message.role === 'assistant' ? <Answer text={message.displayAnswer || message.content} /> : <p>{message.content}</p>}
 
           </article>)}
         </div>

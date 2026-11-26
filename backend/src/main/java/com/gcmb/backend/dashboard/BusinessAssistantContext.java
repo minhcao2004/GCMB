@@ -4,7 +4,9 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.dashboard.repository.BusinessAssistantRepository;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
+import com.gcmb.backend.workforce.service.StaffService;
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,15 +17,64 @@ import org.springframework.transaction.annotation.Isolation;
 public class BusinessAssistantContext {
   private final BusinessAssistantRepository businessAssistantRepository;
   private final MonthlyPerformanceService performance;
+  private final StaffService staffService;
 
-  public BusinessAssistantContext(BusinessAssistantRepository businessAssistantRepository, MonthlyPerformanceService performance) {
+  public BusinessAssistantContext(BusinessAssistantRepository businessAssistantRepository, MonthlyPerformanceService performance,
+      StaffService staffService) {
     this.businessAssistantRepository = businessAssistantRepository;
     this.performance = performance;
+    this.staffService = staffService;
   }
 
   public void authorize(Identity actor) {
     if (actor == null || !"HEAD_OFFICE_MANAGER".equals(actor.role()) || !businessAssistantRepository.isActiveHeadOfficeManager(actor.id()))
       throw new AuthFailure(403, "form", "Chỉ quản lý cấp cao đang hoạt động được sử dụng trợ lý kinh doanh.");
+  }
+
+  public Map<String, Object> staffHeadcount(Identity actor, UUID branchId) {
+    authorize(actor);
+    return staffService.headcount(actor, branchId);
+  }
+
+  public String staffTenureAnswer(Identity actor, UUID branchId) {
+    authorize(actor);
+    var today = LocalDate.now(FinancialPeriodService.ZONE);
+    var result = staffService.longestServingEmployees(actor, branchId, today);
+    var employees = result.employees();
+    if (employees.isEmpty()) return "Chưa có hồ sơ nhân viên đang làm việc tại " + result.scopeName() + ".";
+
+    var first = employees.get(0);
+    var duration = Period.between(first.hiredOn(), today);
+    var formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    var answer = new StringBuilder("**Thâm niên cao nhất tại ").append(result.scopeName()).append("**\n\n");
+    answer.append("Ngày vào làm: ").append(first.hiredOn().format(formatter))
+        .append(" · Thâm niên: ").append(duration.getYears()).append(" năm ")
+        .append(duration.getMonths()).append(" tháng ").append(duration.getDays()).append(" ngày.\n\n");
+    for (var employee : employees) {
+      answer.append("- ").append(employee.name()).append(" · ")
+          .append(Objects.requireNonNullElse(employee.branchName(), "Chưa có cơ sở chính")).append('\n');
+    }
+    if (first.tiedEmployees() > employees.size()) {
+      answer.append("\nHiển thị ").append(employees.size()).append(" trên ").append(first.tiedEmployees())
+          .append(" nhân viên có cùng ngày vào làm sớm nhất.\n");
+    }
+    return answer.append("\nThâm niên tính từ ngày vào làm tại công ty. Cơ sở hiển thị là cơ sở chính hiện tại.").toString();
+  }
+
+  public Map<String, Object> workforceActivity(Identity actor, UUID branchId, String start, String end) {
+    authorize(actor);
+    LocalDate from, through;
+    try {
+      from = start == null || start.isBlank() ? LocalDate.now(FinancialPeriodService.ZONE) : LocalDate.parse(start);
+      through = end == null || end.isBlank() ? from : LocalDate.parse(end);
+    } catch (java.time.DateTimeException failure) {
+      throw new AuthFailure(400, "date", "Ngày tra cứu phải có định dạng YYYY-MM-DD.");
+    }
+    if (from.getYear() < 2000 || through.getYear() > 9998 || through.isBefore(from))
+      throw new AuthFailure(400, "date", "Khoảng ngày tra cứu nhân sự không hợp lệ.");
+    if (java.time.temporal.ChronoUnit.DAYS.between(from, through) >= 31)
+      throw new AuthFailure(400, "date", "Chi tiết ca làm và chấm công hỗ trợ tối đa 31 ngày mỗi lần.");
+    return staffService.workforceActivity(actor, branchId, from, through);
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -44,6 +95,8 @@ public class BusinessAssistantContext {
     result.put("month", month.toString());
     result.put("branchId", branchId);
     result.put("generatedAt", Instant.now().toString());
+    result.put("currentDate", today.toString());
+    result.put("timeZone", FinancialPeriodService.ZONE.getId());
     result.put("incompleteMonth", month.equals(YearMonth.from(today)));
     result.put("periodStatus", report.get("periodStatus"));
     result.put("branches", businessAssistantRepository.findActiveBranches());
@@ -134,6 +187,65 @@ public class BusinessAssistantContext {
     return new LinkedHashMap<>(Map.of("startMonth", from.toString(), "endMonth", to.toString(),
         "monthlyHistory", periods, "branchSummary", new ArrayList<>(summaries.values()), "hasData", !periods.isEmpty(),
         "notes", "Chỉ liệt kê tháng có hoạt động ghi nhận trong phạm vi; tháng không xuất hiện không có nghĩa database chưa được lưu. Không coi tháng dở dang tương đương tháng đầy đủ. Danh mục phòng và tỷ lệ lấp đầy dùng năng lực phòng hiện tại, không phải ảnh chụp lịch sử cấu hình phòng."));
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
+  @SuppressWarnings("unchecked")
+  public Map<String, Object> dailyReport(Identity actor, String start, String end, UUID branchId) {
+    authorize(actor);
+    var today = LocalDate.now(FinancialPeriodService.ZONE);
+    LocalDate from, to;
+    try {
+      from = start == null || start.isBlank() ? today : LocalDate.parse(start);
+      to = end == null || end.isBlank() ? from : LocalDate.parse(end);
+    } catch (RuntimeException failure) { throw new AuthFailure(400, "date", "Ngày tra cứu phải có định dạng YYYY-MM-DD."); }
+    if (from.getYear() < 2000 || from.isAfter(to) || to.isAfter(today))
+      throw new AuthFailure(400, "date", "Chọn khoảng ngày từ năm 2000 đến hôm nay, ngày bắt đầu không sau ngày kết thúc.");
+    if (java.time.temporal.ChronoUnit.DAYS.between(from, to) >= 31)
+      throw new AuthFailure(400, "date", "Chi tiết theo ngày hỗ trợ tối đa 31 ngày mỗi lần. Vui lòng chia nhỏ khoảng ngày.");
+    if (branchId != null && !businessAssistantRepository.branchExists(branchId))
+      throw new AuthFailure(400, "branchId", "Không tìm thấy cơ sở cần tra cứu.");
+
+    var report = performance.overview(actor, from, to, branchId == null ? List.of() : List.of(branchId), "prev", "day");
+    var revenueRows = performance.dailyRevenue(from, to.plusDays(1), branchId);
+    var revenueByDay = new HashMap<String, Map<String, Object>>();
+    revenueRows.forEach(row -> revenueByDay.put(String.valueOf(row.get("date")), row));
+    var moneyFields = List.of("revenue", "billRevenue", "forfeitedDeposits", "operatingExpense", "salary", "expenses", "investment", "profit");
+    var revenueFields = List.of("roomRevenue", "fnbRevenue", "overtimeRevenue", "otherRevenue", "billCount");
+    var series = (List<Map<String, Object>>) report.get("series");
+    var days = new ArrayList<Map<String, Object>>();
+    for (int i = 0; !from.plusDays(i).isAfter(to); i++) {
+      String date = from.plusDays(i).toString();
+      var values = i < series.size() ? series.get(i) : Map.<String, Object>of();
+      var row = new LinkedHashMap<String, Object>();
+      row.put("date", date);
+      for (var field : moneyFields) row.put(field, values.getOrDefault(field, java.math.BigDecimal.ZERO));
+      var revenue = revenueByDay.getOrDefault(date, Map.of());
+      for (var field : revenueFields) row.put(field, revenue.getOrDefault(field, java.math.BigDecimal.ZERO));
+      days.add(row);
+    }
+    var totalFields = new ArrayList<>(moneyFields); totalFields.add("margin");
+    var totals = fields((Map<String, Object>) report.get("totals"), totalFields);
+    for (var field : revenueFields) totals.put(field, days.stream()
+        .map(day -> new java.math.BigDecimal(day.get(field).toString())).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
+    var branchFields = new ArrayList<>(totalFields); branchFields.addAll(List.of("name", "code", "status"));
+    return Map.ofEntries(Map.entry("startDate", from.toString()), Map.entry("endDate", to.toString()),
+        Map.entry("currentDate", today.toString()), Map.entry("timeZone", FinancialPeriodService.ZONE.getId()),
+        Map.entry("generatedAt", Instant.now().toString()), Map.entry("incompleteDay", to.equals(today)),
+        Map.entry("totals", totals), Map.entry("dailyHistory", days),
+        Map.entry("branchPerformance", ((List<Map<String, Object>>) report.get("branches")).stream().map(row -> fields(row, branchFields)).toList()),
+        Map.entry("expenseGroups", ((List<Map<String, Object>>) report.get("categories")).stream().map(row ->
+            Map.of("categoryName", row.get("categoryName"), "amount", row.get("current"))).toList()),
+        Map.entry("comparisonStartDate", report.get("comparisonFrom")), Map.entry("comparisonEndDate", report.get("comparisonTo")),
+        Map.entry("comparisonTotals", fields((Map<String, Object>) report.get("comparisonTotals"), totalFields)),
+        Map.entry("hasData", Boolean.TRUE.equals(report.get("hasData")) || ((java.math.BigDecimal)totals.get("billCount")).signum() > 0),
+        Map.entry("notes", "Số liệu theo ngày địa phương của từng cơ sở, dùng cùng báo cáo Tổng quan tài chính: doanh thu là hóa đơn đã tất toán cộng cọc tịch thu; không tính cọc đang giữ hoặc cấp quỹ. Chi phí gồm chi phí vận hành được ghi nhận và lương/ứng lương, đầu tư tách riêng khỏi lợi nhuận. Chi phí phân bổ theo tháng nằm ở ngày ghi nhận của kỳ (thường đầu tháng), không tự chia đều sang từng ngày. Tiền phòng/F&B/phụ phí là thành phần dòng hóa đơn trước phân bổ giảm giá chung; doanh thu khác có thể âm do giảm giá. Số hóa đơn không phải số booking hoặc số khách. Chỉ dữ liệu vận hành, không cộng các file nguồn chưa liên kết. Hôm nay là số tạm tính đến thời điểm lấy dữ liệu; kỳ đối chiếu là trọn khoảng ngày liền trước nên không suy ra tỷ lệ tăng/giảm tương đương khi ngày hiện tại chưa kết thúc. Ngày không có phát sinh hiển thị 0 trong báo cáo này, không có nghĩa toàn hệ thống không lưu dữ liệu."));
+  }
+
+  private static Map<String, Object> fields(Map<String, Object> row, List<String> names) {
+    var result = new LinkedHashMap<String, Object>();
+    names.forEach(name -> { if (row.containsKey(name)) result.put(name, row.get(name)); });
+    return result;
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, timeout = 30)
