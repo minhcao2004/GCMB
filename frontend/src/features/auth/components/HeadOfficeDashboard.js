@@ -81,6 +81,7 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
       params.set('screen', alert.id.includes('profit') ? 'Báo cáo chi phí' : 'Báo cáo kinh doanh');
       if (alert.from && alert.to) { params.set('from', alert.from); params.set('to', alert.to); }
       if (alert.from) params.set('month', alert.from.slice(0, 7));
+      if (alert.periodType) params.set('period', alert.periodType);
       if (alert.branchId) params.set('branchId', alert.branchId);
     } else if (alert.kind === 'Sự cố thiết bị') {
       params.set('screen', 'Thiết bị'); params.set('equipmentTab', 'incidents');

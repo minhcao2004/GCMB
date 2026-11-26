@@ -26,8 +26,16 @@ public final class CheckoutDtos {
         boolean unservedConfirmed,
         Instant quotedAt,
         String quoteToken,
-        BigDecimal payableAmount
-    ) {}
+        BigDecimal payableAmount,
+        BigDecimal discountPercent
+    ) {
+        public Issue(boolean inspected, String inspectionNote, List<Surcharge> surcharges, boolean overtimeConfirmed,
+                     BigDecimal overtimeAmount, boolean unservedConfirmed, Instant quotedAt, String quoteToken,
+                     BigDecimal payableAmount) {
+            this(inspected, inspectionNote, surcharges, overtimeConfirmed, overtimeAmount, unservedConfirmed,
+                quotedAt, quoteToken, payableAmount, null);
+        }
+    }
 
     public record Overtime(
         Instant from,

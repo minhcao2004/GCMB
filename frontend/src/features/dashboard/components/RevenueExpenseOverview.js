@@ -120,9 +120,9 @@ function budgetValue(budgets, categoryKey, branchIds) {
 }
 
 /** budgets: [{ categoryKey, amount, branchId? }] or { [categoryKey]: amount }. */
-export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '', from = '', to = '', compact = false, onReportData }) {
+export default function RevenueExpenseOverview({ role, budgets = {}, month, branchId = '', from = '', to = '', compact = false, onReportData, periodType }) {
   const navigate = useNavigate();
-  const [range, setRange] = useState(() => from && to ? { from, to } : month ? monthRange(month) : initialRange());
+  const [internalRange, setRange] = useState(() => from && to ? { from, to } : month ? monthRange(month) : initialRange());
   const [branchIds, setBranchIds] = useState(() => branchId ? [branchId] : []);
   const [branchOptions, setBranchOptions] = useState([]);
   const [granularity, setGranularity] = useState('day');
@@ -135,28 +135,31 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   const [revision, setRevision] = useState(0);
   const [exporting, setExporting] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
-  const selectedBranchIds = useMemo(() => branchId ? [branchId] : branchIds, [branchId, branchIds]);
+  const range = compact && from && to ? { from, to } : internalRange;
+  const selectedBranchIds = useMemo(() => branchId ? [branchId] : compact ? [] : branchIds, [branchId, branchIds, compact]);
+  const compareMode = periodType ? `previous-${periodType.toLowerCase()}` : comparison;
+  const reportGranularity = periodType === 'YEAR' ? 'month' : granularity;
+  const params = useMemo(() => ({
+    from: range.from, to: range.to, compare: compareMode, granularity: reportGranularity,
+    ...(selectedBranchIds.length ? { branchIds: selectedBranchIds } : {}),
+  }), [range.from, range.to, selectedBranchIds, compareMode, reportGranularity]);
 
   useEffect(() => {
-    if (!range.from || !range.to || range.from > range.to) {
+    if (!params.from || !params.to || params.from > params.to) {
       setRangeError('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
       setData(null); setLoading(false); return undefined;
     }
-    if (range.to > vietnamToday()) {
+    if (params.to > vietnamToday()) {
       setRangeError('Không thể chọn ngày trong tương lai.');
       setData(null); setLoading(false); return undefined;
     }
-    if (dateDiffDays(range.from, range.to) > MAX_RANGE_DAYS) {
+    if (dateDiffDays(params.from, params.to) > MAX_RANGE_DAYS) {
       setRangeError(`Khoảng ngày tối đa là ${MAX_RANGE_DAYS} ngày.`);
       setData(null); setLoading(false); return undefined;
     }
     setRangeError('');
     let active = true;
     setLoading(true); setError('');
-    const params = {
-      from: range.from, to: range.to, compare: comparison, granularity,
-      ...(selectedBranchIds.length ? { branchIds: selectedBranchIds } : {}),
-    };
     financeApi.financialOverview(params).then((result) => {
       if (!active) return;
       setData(result);
@@ -166,12 +169,8 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
       if (active) { setData(null); onReportData?.(null); setError(requestError(cause)); }
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [range.from, range.to, selectedBranchIds, comparison, granularity, revision, onReportData]);
+  }, [params, revision, onReportData]);
 
-  const params = useMemo(() => ({
-    from: range.from, to: range.to, compare: comparison, granularity,
-    ...(selectedBranchIds.length ? { branchIds: selectedBranchIds } : {}),
-  }), [range.from, range.to, selectedBranchIds, comparison, granularity]);
   const rows = data?.series || EMPTY_ROWS;
   const totals = data?.totals || {};
   const previous = data?.comparisonTotals || {};
@@ -196,15 +195,16 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
   const selectedMeta = categories.find((item) => item.categoryKey === selectedCategory);
 
   useEffect(() => {
+    if (compact && from && to) return;
     if (from && to) { setRange({ from, to }); setMonthFilter(''); return; }
     if (!month) return;
     setRange(monthRange(month));
     setMonthFilter(month);
-  }, [month, from, to]);
+  }, [compact, month, from, to]);
 
   useEffect(() => {
-    setBranchIds(branchId ? [branchId] : []);
-  }, [branchId]);
+    if (!compact) setBranchIds(branchId ? [branchId] : []);
+  }, [compact, branchId]);
 
   function validateRange(next) {
     setRange(next);

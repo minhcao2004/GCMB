@@ -12,7 +12,8 @@ export default function CheckoutReceipt({ data, className = 'co-card' }) {
   const amount = Number(data.amount);
   const depositAmount = Number(data.depositApplied || 0);
   const settled = data.status === 'SETTLED';
-  const paymentDue = Number(data.remaining ?? amount - depositAmount - Number(data.paid || 0));
+  const paymentDue = Number(data.remaining ??
+    amount + Number(data.roundingAdjustment || 0) - depositAmount - Number(data.paid || 0));
   return (
     <aside className={className}>
       <h2 className="co-invoice-title">
@@ -32,6 +33,8 @@ export default function CheckoutReceipt({ data, className = 'co-card' }) {
       <Lines lines={data.lines} />
       <Summary
         lines={data.lines}
+        grossAmount={Number(data.grossAmount ?? amount)}
+        discountAmount={Number(data.discountAmount || 0)}
         amount={amount}
         depositAmount={depositAmount}
         paid={Number(data.paid || 0)}
@@ -80,6 +83,8 @@ export function Summary({
   lines,
   extra = 0,
   amount,
+  grossAmount = amount,
+  discountAmount = 0,
   depositAmount,
   paid = 0,
   paymentDue,
@@ -106,7 +111,11 @@ export function Summary({
             )}
           />
         ))}
-        <Info label="Tổng hóa đơn (gồm phụ phí)" value={formatVnd(amount)} />
+        <Info label="Tổng hóa đơn (gồm phụ phí)" value={formatVnd(grossAmount)} />
+        {discountAmount > 0 && <>
+          <Info label="Giảm giá" value={`−${formatVnd(discountAmount)}`} />
+          <Info label="Tổng sau giảm giá" value={formatVnd(amount)} />
+        </>}
         <Info
           label={preview ? 'Tiền cọc sẽ áp dụng' : 'Tiền cọc đã áp dụng'}
           value={depositAmount > 0 ? `−${formatVnd(depositAmount)}` : formatVnd(0)}

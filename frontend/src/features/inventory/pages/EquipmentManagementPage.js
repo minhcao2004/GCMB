@@ -19,7 +19,7 @@ export default function EquipmentManagementPage({ user, headOffice = false, init
     if (['assets', 'categories', 'incidents', 'transfers'].includes(initialSection)) setSection(initialSection);
   }, [initialSection]);
   // UC-61/UC-66: Cho phép người dùng chuyển giữa quản lý nhóm và danh sách thiết bị trong cùng phân hệ.
-  return <div className="equipment-management">
+  return <div className={`equipment-management${!headOffice && user?.role === 'BRANCH_MANAGER' ? ' equipment-management--branch' : ''}`}>
     <nav className="em-tabs" aria-label="Quản lý thiết bị">
       <button className={section === 'assets' ? 'active' : ''} aria-current={section === 'assets' ? 'page' : undefined} onClick={() => selectSection('assets')}>Danh sách thiết bị</button>
       {headOffice && <button className={section === 'categories' ? 'active' : ''} aria-current={section === 'categories' ? 'page' : undefined} onClick={() => selectSection('categories')}>Nhóm thiết bị</button>}

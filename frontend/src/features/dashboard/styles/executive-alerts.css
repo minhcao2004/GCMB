@@ -1,0 +1,145 @@
+.executive-alerts {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+  color: var(--gcmb-color-ink);
+  font-family: var(--gcmb-font-family);
+  line-height: var(--gcmb-line-height);
+}
+
+.executive-alerts *,
+.executive-alerts *::before,
+.executive-alerts *::after { box-sizing: border-box; }
+
+.executive-alerts :focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: 2px;
+}
+
+.executive-alert-bell {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: var(--executive-bell-size);
+  height: var(--executive-bell-size);
+  padding: 0;
+  border: 1px solid #b87314;
+  border-radius: 50%;
+  background: #ffcf57;
+  color: #533200;
+  box-shadow: 0 5px 16px rgb(86 54 0 / 22%);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.executive-alert-bell:active { cursor: grabbing; }
+.executive-alert-bell:hover,
+.executive-alert-bell[aria-expanded="true"] { border-color: #805112; }
+.executive-alert-bell svg { width: 24px; height: 24px; }
+.executive-alert-bell.is-unread { animation: executive-alert-pulse 1.8s ease-in-out infinite; }
+
+@keyframes executive-alert-pulse {
+  0%, 100% {
+    background-color: #ffcf57;
+    box-shadow: 0 5px 16px rgb(86 54 0 / 22%), 0 0 0 0 rgb(255 183 46 / 45%);
+  }
+  50% {
+    background-color: #ffe58c;
+    box-shadow: 0 5px 16px rgb(86 54 0 / 22%), 0 0 0 8px rgb(255 183 46 / 18%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .executive-alert-bell.is-unread { animation: none; }
+}
+
+.executive-alert-count {
+  position: absolute;
+  inset-block-start: -4px;
+  inset-inline-end: -4px;
+  min-width: 21px;
+  padding: 2px 4px;
+  border: 2px solid var(--gcmb-color-panel);
+  border-radius: 999px;
+  background: #533200;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.executive-alert-panel {
+  position: absolute;
+  overflow: auto;
+  padding: 0 12px 12px;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
+  box-shadow: var(--gcmb-shadow-lg);
+  overscroll-behavior: contain;
+  scroll-padding-top: 56px;
+  pointer-events: auto;
+}
+
+.executive-alert-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 3px;
+  background: var(--gcmb-color-panel);
+}
+
+.executive-alert-heading h2 { margin: 0; font-size: 15px; }
+.executive-alert-close {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--gcmb-radius-control);
+  background: transparent;
+  color: var(--gcmb-color-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.executive-alert-close:hover { background: var(--gcmb-color-bg); }
+.executive-alert-list { display: grid; gap: 6px; margin: 0; padding: 3px; list-style: none; }
+
+.executive-alert-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--gcmb-color-line);
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-bg);
+  color: var(--gcmb-color-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.executive-alert-item:hover { border-color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); }
+.executive-alert-item > svg { width: 16px; height: 16px; }
+.executive-alert-item-copy { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.executive-alert-item-copy strong { color: var(--gcmb-color-ink); font-size: 13px; }
+.executive-alert-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.executive-alert-level {
+  padding: 2px 6px;
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-warning-soft);
+  color: var(--gcmb-color-ink);
+  font-weight: 700;
+}
+.executive-alert-level.is-critical { background: var(--gcmb-color-danger-soft); color: var(--gcmb-color-danger); }

@@ -74,20 +74,11 @@ public class MonthlyPerformanceService {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xem báo cáo đến ngày trong tương lai.");
     String comparison = compare == null ? "prev" : compare.toLowerCase(Locale.ROOT);
     String bucket = granularity == null ? "day" : granularity.toLowerCase(Locale.ROOT);
-    if (!List.of("prev", "yoy").contains(comparison)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kỳ so sánh không hợp lệ.");
     if (!List.of("day", "week", "month").contains(bucket)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cách gom nhóm không hợp lệ.");
+    DateRange priorRange = comparisonRange(from, to, comparison);
     List<UUID> branchIds = validateReportBranchIds(requestedBranchIds);
-
-    LocalDate comparisonFrom;
-    LocalDate comparisonTo;
-    if ("yoy".equals(comparison)) {
-      comparisonFrom = from.minusYears(1);
-      comparisonTo = to.minusYears(1);
-    } else {
-      long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
-      comparisonTo = from.minusDays(1);
-      comparisonFrom = comparisonTo.minusDays(days - 1);
-    }
+    LocalDate comparisonFrom = priorRange.from();
+    LocalDate comparisonTo = priorRange.to();
     Map<String, Object> current = readOverview(from, to, branchIds, bucket);
     Map<String, Object> previous = readOverview(comparisonFrom, comparisonTo, branchIds, bucket);
     @SuppressWarnings("unchecked") List<Map<String, Object>> currentBranches = (List<Map<String, Object>>) current.get("branches");
@@ -99,6 +90,8 @@ public class MonthlyPerformanceService {
     @SuppressWarnings("unchecked") List<Map<String, Object>> currentCategorySeries = (List<Map<String, Object>>) current.get("categorySeries");
     @SuppressWarnings("unchecked") List<Map<String, Object>> previousCategorySeries = (List<Map<String, Object>>) previous.get("categorySeries");
 
+    if (comparison.startsWith("previous-") && previousSeries.size() > currentSeries.size())
+      previousSeries = previousSeries.subList(0, currentSeries.size());
     Map<String, Object> currentTotals = totalsForOverview(currentBranches);
     Map<String, Object> previousTotals = totalsForOverview(previousBranches);
     List<Map<String, Object>> branchOptions = monthlyPerformanceRepository.findBranchOptions();
@@ -115,6 +108,26 @@ public class MonthlyPerformanceService {
       Map.entry("hasData", hasOverviewData(currentTotals))
     );
   }
+
+  private static DateRange comparisonRange(LocalDate from, LocalDate to, String comparison) {
+    return switch (comparison) {
+      case "prev" -> {
+        long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
+        yield new DateRange(from.minusDays(days), from.minusDays(1));
+      }
+      case "previous-day" -> new DateRange(from.minusDays(1), to.minusDays(1));
+      case "previous-month" -> {
+        LocalDate start = from.minusMonths(1);
+        LocalDate end = to.minusMonths(1);
+        if (from.getDayOfMonth() == 1 && to.getDayOfMonth() == to.lengthOfMonth()) end = end.withDayOfMonth(end.lengthOfMonth());
+        yield new DateRange(start, end);
+      }
+      case "previous-year", "yoy" -> new DateRange(from.minusYears(1), to.minusYears(1));
+      default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kỳ so sánh không hợp lệ.");
+    };
+  }
+
+  private record DateRange(LocalDate from, LocalDate to) {}
 
   List<UUID> validateReportBranchIds(List<UUID> requestedBranchIds) {
     List<UUID> branchIds = requestedBranchIds == null ? List.of() : requestedBranchIds.stream().filter(Objects::nonNull).distinct().toList();

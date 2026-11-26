@@ -45,6 +45,10 @@
 .co-methods .selected { border-color: var(--gcmb-color-info); background: var(--gcmb-color-info-soft); color: var(--gcmb-color-info); }
 .co-field { display: grid; gap: 9px; margin: 18px 0; color: var(--gcmb-color-text); }
 .co-field input { font-size: 23px !important; font-weight: 650 !important; }
+.co-discount-field { display: grid; gap: 6px; margin-bottom: 14px; font-weight: 600; }
+.co-discount-field small { font-weight: 400; }
+.checkout-page .co-discount-field input[aria-invalid="true"] { border-color: var(--gcmb-color-danger); }
+.co-discount-field small[role="alert"] { color: var(--gcmb-color-danger); }
 .co-success, .co-warning, .co-error { padding: 16px; border-radius: 9px; margin: 16px 0; font-size: 12px; }
 .co-success { background: var(--gcmb-color-success-soft); color: #087b50; }
 .co-warning { background: var(--gcmb-color-warning-soft); color: #946513; }

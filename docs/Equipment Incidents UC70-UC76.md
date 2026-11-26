@@ -32,6 +32,11 @@
 - Sau khi cơ sở nguồn xác nhận bàn giao, danh sách tự cập nhật mỗi 15 giây hoặc khi người dùng quay lại tab. Với phiếu `IN_TRANSIT`, nút tiếp nhận hoạt động khi đã chọn phòng thuộc cơ sở đích.
 - Bấm **Xác nhận tiếp nhận** gọi API UC-76; backend kiểm tra phòng thuộc cơ sở đích và chưa ở trạng thái `INACTIVE`. Chỉ sau khi xác nhận thành công, cơ sở và vị trí của thiết bị mới chuyển sang cơ sở đích.
 
+## Bố cục Thiết bị & sự cố của Quản lý cơ sở
+
+- Danh sách thiết bị, sự cố và điều chuyển hiển thị tối đa 10 bản ghi mỗi trang với khoảng cách dòng gọn. Các bộ lọc co theo chiều rộng màn hình. Bảng có vùng cuộn ngang riêng khi chiều rộng hẹp.
+- Danh sách sự cố trình bày mã sự cố và tên thiết bị. Mở **Chi tiết sự cố** để đọc mô tả. Số bản ghi trong bộ lọc phản ánh cả ngày báo cáo đang chọn.
+
 ## Ghi chú
 
 

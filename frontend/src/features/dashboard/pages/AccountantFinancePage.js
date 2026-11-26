@@ -1,11 +1,12 @@
 import { PaginatedTable, PaginatedList, Pagination } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../../api/client';
 import { authApi } from '../../auth/services/authApi';
 import { AppShell } from '../../booking/pages/BookingManagementPage';
 import BranchFilterSelect from '../components/BranchFilterSelect';
+import { initialPeriodValue, periodNames, periodRange } from '../components/DashboardPeriodControls';
 import '../styles/dashboard.css';
 import RevenueExpenseOverview from '../components/RevenueExpenseOverview';
 import ImportedSourceReport from '../components/ImportedSourceReport';
@@ -21,6 +22,12 @@ const monthDateRange = (value) => {
   return { from: `${value}-01`, to: value === monthNow && lastDay > today ? today : lastDay };
 };
 const monthNames = Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1).padStart(2, '0'), label: `Tháng ${index + 1}` }));
+const dateKey = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/;
+const validDate = (value) => {
+  if (!dateKey.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value || 0)} ₫`;
 const formatMonth = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
 const formatDate = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
@@ -50,16 +57,17 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const queryMonth = searchParams.get('month') || '';
   const queryFrom = searchParams.get('from') || '';
   const queryTo = searchParams.get('to') || '';
+  const queryPeriod = searchParams.get('period');
+  const [reportPeriod, setReportPeriod] = useState(() => reportsOnly && Object.hasOwn(periodNames, queryPeriod) ? queryPeriod : 'MONTH');
   const validQueryMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(queryMonth) && queryMonth <= monthNow;
-  const rangeMonth = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryFrom) && queryFrom <= currentVnDate() ? queryFrom.slice(0, 7) : '';
+  const rangeMonth = validDate(queryFrom) && queryFrom <= currentVnDate() ? queryFrom.slice(0, 7) : '';
   const initialMonth = validQueryMonth ? queryMonth : rangeMonth || monthNow;
   const [month, setMonth] = useState(initialMonth);
   const [reportRange, setReportRange] = useState(() => {
-    const validDates = /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryFrom)
-      && /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(queryTo)
-      && queryFrom <= queryTo && queryTo <= currentVnDate()
-      && queryFrom.slice(0, 7) === queryTo.slice(0, 7) && queryFrom.slice(0, 7) === initialMonth;
-    return validDates ? { from: queryFrom, to: queryTo } : monthDateRange(initialMonth);
+    const bounds = reportPeriod === 'DAY' ? periodRange('DAY', rangeMonth ? queryFrom : currentVnDate())
+      : reportPeriod === 'YEAR' ? periodRange('YEAR', initialMonth.slice(0, 4)) : monthDateRange(initialMonth);
+    const validRange = rangeMonth && validDate(queryTo) && queryFrom >= bounds.from && queryFrom <= queryTo && queryTo <= bounds.to;
+    return validRange ? { from: queryFrom, to: queryTo } : bounds;
   });
   const [data, setData] = useState(null);
   const [revenueSummary, setRevenueSummary] = useState(null);
@@ -96,6 +104,12 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   const [closingMonth, setClosingMonth] = useState(null);
   const [closeNote, setCloseNote] = useState('');
   const adjustmentFormRef = useRef(null);
+  const reportKey = `${reportPeriod}/${reportRange.from}/${reportRange.to}/${branchId}`;
+  const handleOperatingReport = useCallback((report) => {
+    setOperatingReport({ key: reportKey, report });
+    if (reportsOnly && report) setBranchOptions(report.branchOptions || []);
+  }, [reportKey, reportsOnly]);
+  const currentOperatingReport = operatingReport?.key === reportKey ? operatingReport.report : null;
 
   function selectTab(next) {
     setTab(next);
@@ -132,6 +146,7 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
   }, [navigate, reportsOnly]);
 
   useEffect(() => {
+    if (reportsOnly) return undefined;
     let live = true;
     setError(''); setData(null); setDataTab(null); setRows([]); setLoading(true);
     const path = tab === 'report' ? '/accounting/reports/monthly'
@@ -150,26 +165,23 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         : result;
       if (tab === 'periods' || tab === 'transactions') setRows(result);
       else { setData(report); setDataTab(tab); }
-      if (tab === 'report' && !reportsOnly && !branchId) setBranchOptions(report.results);
+      if (tab === 'report' && !branchId) setBranchOptions(report.results);
     })
       .catch((e) => { if (live) setError(errorText(e)); }).finally(() => { if (live) setLoading(false); });
-    if (tab === 'report' && reportsOnly) api.get('/head-office/dashboard', { params: { month } })
-      .then(({ data: dashboard }) => { if (live) setBranchOptions(dashboard.branches || []); })
-      .catch(() => { if (live) setBranchOptions([]); });
-    if (tab === 'report' && !reportsOnly && branchId) api.get('/accounting/reports/monthly', { params: { month } })
+    if (tab === 'report' && branchId) api.get('/accounting/reports/monthly', { params: { month } })
       .then(({ data: report }) => { if (live) setBranchOptions(report.results || []); })
       .catch(() => { if (live) setBranchOptions([]); });
     return () => { live = false; };
   }, [tab, month, branchId, revision, transactionKind, transactionQuery, reportsOnly]);
 
   useEffect(() => {
-    if (tab !== 'report') { setSourceTransactions([]); return undefined; }
+    if (tab !== 'report' || reportsOnly) { setSourceTransactions([]); return undefined; }
     let live = true;
     api.get('/accounting/transactions', { params: { month, ...(branchId ? { branchId } : {}) } })
       .then(({ data: result }) => { if (live) setSourceTransactions(result || []); })
       .catch(() => { if (live) setSourceTransactions([]); });
     return () => { live = false; };
-  }, [tab, month, branchId, revision]);
+  }, [tab, month, branchId, revision, reportsOnly]);
 
   useEffect(() => {
     if (tab !== 'transactions' || reportsOnly) { setSepayExceptions([]); return undefined; }
@@ -298,7 +310,18 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
     setReportRange(monthDateRange(nextMonth));
   }
 
+  function updateReportPeriod(type, value = initialPeriodValue(type)) {
+    setReportPeriod(type);
+    if (type === 'MONTH') {
+      updateReportMonth(value.slice(0, 4), value.slice(5, 7));
+      return;
+    }
+    setReportRange(periodRange(type, value));
+  }
+
   const reportYears = Array.from({ length: Number(monthNow.slice(0, 4)) - 2020 + 1 }, (_, index) => String(Number(monthNow.slice(0, 4)) - index));
+  const reportYear = reportPeriod === 'YEAR' ? reportRange.from.slice(0, 4) : month.slice(0, 4);
+  const dateBounds = reportPeriod === 'YEAR' ? periodRange('YEAR', reportYear) : monthDateRange(month);
   const selectedBranchName = branchId
     ? branchOptions.find((branch) => String(branch.id) === String(branchId))?.name || 'Cơ sở đã chọn'
     : 'Toàn chuỗi';
@@ -311,22 +334,42 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
       <div className="finance-heading-copy">{tab === 'report' && <span className="finance-heading-eyebrow">KẾ TOÁN · BÁO CÁO</span>}<h1 id="finance-title">Tài chính &amp; báo cáo</h1></div>
       {tab !== 'report' && <div className="finance-filters" aria-label="Kỳ báo cáo"><label className="finance-month">Tháng<input aria-label="Chọn tháng báo cáo" type="month" value={month} max={currentVnMonth()} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} /></label></div>}
     </header>
-    {tab === 'report' && <div className="finance-report-filters" aria-label="Bộ lọc báo cáo">
-      <label className="finance-report-filter-field">Kỳ báo cáo<select value={month.slice(5, 7)} onChange={(event) => updateReportMonth(month.slice(0, 4), event.target.value)} aria-label="Chọn kỳ báo cáo">
+    {tab === 'report' && <div className={`finance-report-filters${reportsOnly ? ' finance-report-filters--business' : ''}`} aria-label="Bộ lọc báo cáo">
+      {reportsOnly && <label className="finance-report-filter-field">Xem theo<select value={reportPeriod} onChange={(event) => updateReportPeriod(event.target.value)}>
+        {Object.entries(periodNames).map(([type, name]) => <option key={type} value={type}>{name}</option>)}
+      </select></label>}
+      {reportPeriod === 'MONTH' && <label className="finance-report-filter-field">Kỳ báo cáo<select value={month.slice(5, 7)} onChange={(event) => updateReportMonth(month.slice(0, 4), event.target.value)} aria-label="Chọn kỳ báo cáo">
         {monthNames.map((item) => <option key={item.value} value={item.value} disabled={`${month.slice(0, 4)}-${item.value}` > currentVnMonth()}>{item.label}</option>)}
-      </select></label>
-      <label className="finance-report-filter-field">Năm<select value={month.slice(0, 4)} onChange={(event) => updateReportMonth(event.target.value, month.slice(5, 7))} aria-label="Chọn năm báo cáo">
+      </select></label>}
+      {reportPeriod !== 'DAY' && <label className="finance-report-filter-field">Năm<select value={reportYear} onChange={(event) => {
+        if (reportPeriod === 'YEAR') updateReportPeriod('YEAR', event.target.value);
+        else {
+          const year = event.target.value;
+          const selectedMonth = month.slice(5, 7);
+          updateReportMonth(year, reportsOnly && `${year}-${selectedMonth}` > currentVnMonth() ? currentVnMonth().slice(5, 7) : selectedMonth);
+        }
+      }} aria-label="Chọn năm báo cáo">
         {reportYears.map((year) => <option key={year} value={year}>{year}</option>)}
-      </select></label>
-      <label className="finance-report-filter-field">Từ ngày<input type="date" required value={reportRange.from} min={`${month}-01`} max={monthDateRange(month).to} onChange={(event) => { if (event.target.value) setReportRange((current) => ({ from: event.target.value, to: current.to < event.target.value ? event.target.value : current.to })); }} /></label>
-      <label className="finance-report-filter-field">Đến ngày<input type="date" required value={reportRange.to} min={reportRange.from} max={monthDateRange(month).to} onChange={(event) => { if (event.target.value) setReportRange((current) => ({ ...current, to: event.target.value })); }} /></label>
+      </select></label>}
+      {reportPeriod === 'DAY' ? <label className="finance-report-filter-field">Ngày<input type="date" required value={reportRange.from} max={currentVnDate()} onChange={(event) => {
+        if (event.target.validity.valid) updateReportPeriod('DAY', event.target.value);
+      }} /></label> : <>
+        <label className="finance-report-filter-field">Từ ngày<input type="date" required value={reportRange.from} min={dateBounds.from} max={dateBounds.to} onChange={(event) => {
+          const { value, validity } = event.target;
+          if (validity.valid) setReportRange((current) => ({ from: value, to: current.to < value ? value : current.to }));
+        }} /></label>
+        <label className="finance-report-filter-field">Đến ngày<input type="date" required value={reportRange.to} min={reportRange.from} max={dateBounds.to} onChange={(event) => {
+          const { value, validity } = event.target;
+          if (validity.valid) setReportRange((current) => ({ ...current, to: value }));
+        }} /></label>
+      </>}
       <div className="finance-report-filter-field"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} value={branchId} onChange={setBranchId} /></div>
-      <span className="finance-report-scope-summary">{selectedBranchName}</span>
+      {!reportsOnly && <span className="finance-report-scope-summary">{selectedBranchName}</span>}
     </div>}
-    <nav className="finance-tabs" aria-label="Nghiệp vụ tài chính">{Object.entries(label).filter(([key]) => availableTabs.includes(key)).map(([key, value]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => selectTab(key)}>{value}</button>)}</nav>
+    {!reportsOnly && <nav className="finance-tabs" aria-label="Nghiệp vụ tài chính">{Object.entries(label).map(([key, value]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => selectTab(key)}>{value}</button>)}</nav>}
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải dữ liệu…</p>}
-    {tab === 'report' && dataTab === 'report' && data && <>
+    {tab === 'report' && (reportsOnly || (dataTab === 'report' && data)) && <>
       {!reportsOnly && <section className={`finance-period${periodInfo?.status === 'CLOSED' ? ' is-closed' : Number(periodInfo?.unreconciledClosings) > 0 ? ' is-blocked' : ''}`} aria-labelledby="finance-period-title">
         <div>
           <h2 id="finance-period-title">Tình trạng kỳ {formatMonth(month)}</h2>
@@ -342,8 +385,10 @@ export default function AccountantFinancePage({ reportsOnly = false }) {
         </div>
         <button type="button" onClick={() => selectTab('periods')}>Xem kỳ tài chính</button>
       </section>}
-      <ImportedSourceReport month={month} range={reportRange} branchId={branchId} reportTotals={data.totals} financialReport={operatingReport} operationalTransactions={sourceTransactions} />
-      <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} from={reportRange.from} to={reportRange.to} compact onReportData={setOperatingReport} />
+      <ImportedSourceReport range={reportRange} branchId={branchId} reportTotals={data?.totals} financialReport={currentOperatingReport}
+        operationalTransactions={sourceTransactions} periodType={reportsOnly ? reportPeriod : undefined} />
+      <RevenueExpenseOverview role={user?.role} month={month} branchId={branchId} from={reportRange.from} to={reportRange.to}
+        periodType={reportsOnly ? reportPeriod : undefined} compact onReportData={handleOperatingReport} />
     </>}
     {!reportsOnly && tab === 'periods' && !loading && !error && <>
       <section className="finance-period-readiness" aria-labelledby="period-readiness-title">

@@ -89,6 +89,7 @@ public class CheckoutRepository {
     public List<Map<String, Object>> findBill(UUID billId, UUID branchId) {
         return jdbcTemplate.queryForList("""
             SELECT b.id,b.booking_id AS "bookingId",b.number,b.status,b.net_amount AS amount,
+                b.gross_amount AS "grossAmount",b.discount_amount AS "discountAmount",
                 b.checkout_rounding_adjustment AS "roundingAdjustment",
                 b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
                 b.planned_cash AS "plannedCash",b.planned_cash_tendered AS "plannedCashTendered",
@@ -133,13 +134,15 @@ public class CheckoutRepository {
             """, bookingId, reason, amount, amount, reason);
     }
 
-    public void insertBill(UUID billId, UUID bookingId, UUID branchId, String number, BigDecimal amount,
-                           BigDecimal roundingAdjustment, Timestamp checkoutAt, String inspectionNote, UUID issuedBy) {
+    public void insertBill(UUID billId, UUID bookingId, UUID branchId, String number, BigDecimal grossAmount,
+                           BigDecimal discountAmount, BigDecimal netAmount, BigDecimal roundingAdjustment,
+                           Timestamp checkoutAt, String inspectionNote, UUID issuedBy) {
         jdbcTemplate.update("""
             INSERT INTO gcmb.bill(id,booking_id,branch_id,number,status,gross_amount,discount_amount,net_amount,checkout_rounding_adjustment,
-                issued_at,checkout_at,inspection_note,issued_by)
-            VALUES (?,?,?,?,'ISSUED',?,0,?,?,CURRENT_TIMESTAMP,?,?,?)
-            """, billId, bookingId, branchId, number, amount, amount, roundingAdjustment, checkoutAt, inspectionNote, issuedBy);
+                issued_at,checkout_at,inspection_note,issued_by,discount_by)
+            VALUES (?,?,?,?,'ISSUED',?,?,?,?,CURRENT_TIMESTAMP,?,?,?,?)
+            """, billId, bookingId, branchId, number, grossAmount, discountAmount, netAmount, roundingAdjustment,
+            checkoutAt, inspectionNote, issuedBy, discountAmount.signum() > 0 ? issuedBy : null);
     }
 
     public void insertBillLine(UUID billId, Object chargeId, Object orderLineId, Object description,

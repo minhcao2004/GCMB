@@ -1,6 +1,7 @@
 import { Pagination } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import api from '../../../api/client';
+import KpiComparison, { percentChange } from './KpiComparison';
 import '../styles/imported-source-report.css';
 
 const tabs = [
@@ -9,6 +10,7 @@ const tabs = [
 ];
 const money = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const dateLabel = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
+const periodLabel = (date, monthly) => monthly ? `${date.slice(5, 7)}/${date.slice(0, 4)}` : `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 const reportNames = {
   cashflow: 'Báo cáo thu chi theo thời gian', revenue: 'Doanh thu theo thời gian',
   cost: 'Chi phí theo thời gian', method: 'Khoản thu theo phương thức thanh toán',
@@ -23,7 +25,7 @@ function paymentMethod(row) {
   return 'Chưa ghi phương thức';
 }
 
-function SourceChart({ type, rows, financialReport }) {
+function SourceChart({ type, rows, financialReport, monthly }) {
   if (type === 'cost') {
     const data = (financialReport?.series || []).map((row) => ({ day: row.label, value: Number(row.expenses) || 0 }));
     if (!data.length) return <div className="isr-empty-chart">Chưa có khoản chi vận hành trong kỳ đã chọn.</div>;
@@ -64,7 +66,7 @@ function SourceChart({ type, rows, financialReport }) {
   if (type === 'cashflow') {
     const daily = new Map();
     rows.filter((row) => row.recordType === 'KIOT_INVOICE').forEach((row) => {
-      const label = `${row.businessDate.slice(8, 10)}/${row.businessDate.slice(5, 7)}`;
+      const label = periodLabel(row.businessDate, monthly);
       const item = daily.get(label) || { income: 0, expense: 0 };
       item.income += Number(row.paidAmount || 0);
       daily.set(label, item);
@@ -83,7 +85,7 @@ function SourceChart({ type, rows, financialReport }) {
     const y = (value) => top + innerHeight - value / max * innerHeight;
     const points = (key) => data.map((item, index) => `${x(index)},${y(item[1][key])}`).join(' ');
     const tickEvery = Math.max(1, Math.ceil(data.length / 8));
-    return <div className="isr-line-chart-scroll"><div className="isr-chart-legend"><span><i className="isr-income-dot" />Tiền thu</span><span><i className="isr-expense-dot" />Chi phí vận hành</span></div><svg viewBox={`0 0 ${width} ${height}`} className="isr-line-chart" role="img" aria-label="Tiền thu và chi phí vận hành theo ngày">
+    return <div className="isr-line-chart-scroll"><div className="isr-chart-legend"><span><i className="isr-income-dot" />Tiền thu</span><span><i className="isr-expense-dot" />Chi phí vận hành</span></div><svg viewBox={`0 0 ${width} ${height}`} className="isr-line-chart" role="img" aria-label={`Tiền thu và chi phí vận hành theo ${monthly ? 'tháng' : 'ngày'}`}>
       {[0, 1, 2, 3].map((tick) => { const value = max * (3 - tick) / 3; const lineY = top + innerHeight * tick / 3; return <g key={tick}><line x1={left} x2={width - right} y1={lineY} y2={lineY} /><text x={left - 8} y={lineY + 4} textAnchor="end">{new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text></g>; })}
       <polyline className="isr-line-income" points={points('income')} /><polyline className="isr-line-expense" points={points('expense')} />
       {data.map(([day, values], index) => <g key={day}><circle className="isr-point-income" cx={x(index)} cy={y(values.income)} r="3.5"><title>{day} · Thu {money(values.income)}</title></circle><circle className="isr-point-expense" cx={x(index)} cy={y(values.expense)} r="3.5"><title>{day} · Chi {money(values.expense)}</title></circle>{(index % tickEvery === 0 || index === data.length - 1) && <text x={x(index)} y={height - 10} textAnchor="middle">{day}</text>}</g>)}
@@ -94,7 +96,7 @@ function SourceChart({ type, rows, financialReport }) {
   if (!invoiceRows.length) return <div className="isr-empty-chart">Chưa có hóa đơn nguồn trong khoảng thời gian đã chọn.</div>;
   const daily = new Map();
   invoiceRows.forEach((row) => {
-    const day = row.businessDate;
+    const day = monthly ? `${row.businessDate.slice(0, 7)}-01` : row.businessDate;
     daily.set(day, (daily.get(day) || 0) + Number(type === 'revenue' ? row.amount : row.paidAmount));
   });
   const data = [...daily.entries()].sort((leftItem, rightItem) => leftItem[0].localeCompare(rightItem[0]));
@@ -105,35 +107,53 @@ function SourceChart({ type, rows, financialReport }) {
   const y = (value) => top + innerHeight - value / max * innerHeight;
   const points = data.map((item, index) => `${x(index)},${y(item[1])}`).join(' ');
   const tickEvery = Math.max(1, Math.ceil(data.length / 8));
-  return <div className="isr-line-chart-scroll"><svg viewBox={`0 0 ${width} ${height}`} className="isr-line-chart" role="img" aria-label={type === 'revenue' ? 'Doanh thu hóa đơn KiotViet theo ngày' : 'Tiền khách đã thanh toán theo ngày'}>
+  return <div className="isr-line-chart-scroll"><svg viewBox={`0 0 ${width} ${height}`} className="isr-line-chart" role="img" aria-label={`Doanh thu hóa đơn theo ${monthly ? 'tháng' : 'ngày'}`}>
     {[0, 1, 2, 3].map((tick) => { const value = max * (3 - tick) / 3; const lineY = top + innerHeight * tick / 3; return <g key={tick}><line x1={left} x2={width - right} y1={lineY} y2={lineY} /><text x={left - 8} y={lineY + 4} textAnchor="end">{new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</text></g>; })}
     <polyline points={points} />
-    {data.map(([day, value], index) => <g key={day}><circle cx={x(index)} cy={y(value)} r="4"><title>{dateLabel(day)} · {money(value)}</title></circle>{(index % tickEvery === 0 || index === data.length - 1) && <text x={x(index)} y={height - 10} textAnchor="middle">{day.slice(8, 10)}/{day.slice(5, 7)}</text>}</g>)}
-  </svg><p className="isr-chart-caption">{type === 'revenue' ? 'Doanh thu sau giảm giá theo ngày ghi trên hóa đơn.' : 'Số khách đã trả theo ngày ghi trên hóa đơn.'}</p></div>;
+    {data.map(([day, value], index) => <g key={day}><circle cx={x(index)} cy={y(value)} r="4"><title>{monthly ? periodLabel(day, true) : dateLabel(day)} · {money(value)}</title></circle>{(index % tickEvery === 0 || index === data.length - 1) && <text x={x(index)} y={height - 10} textAnchor="middle">{periodLabel(day, monthly)}</text>}</g>)}
+  </svg><p className="isr-chart-caption">Doanh thu sau giảm giá theo ngày ghi trên hóa đơn.</p></div>;
 }
 
-export default function ImportedSourceReport({ month, range, branchId, reportTotals, financialReport, operationalTransactions = [] }) {
+export default function ImportedSourceReport({ range, branchId, reportTotals, financialReport, operationalTransactions = [], periodType }) {
   const [reportType, setReportType] = useState('cashflow');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [source, setSource] = useState(null);
+  const [comparisonSource, setComparisonSource] = useState(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const { from, to } = range;
+  const sourceKey = `${from}/${to}/${branchId}`;
+  const currentSource = source?.key === sourceKey ? source : null;
+  const loading = currentSource == null;
+  const error = currentSource?.error;
 
-  useEffect(() => { setPage(1); }, [month, range.from, range.to, branchId]);
+  useEffect(() => { setPage(1); }, [sourceKey]);
   useEffect(() => {
     let active = true;
-    setLoading(true); setError(''); setData(null);
-    api.get('/accounting/reports/source-imports', { params: { ...range, ...(branchId ? { branchId } : {}) } })
-      .then(({ data: result }) => { if (active) setData(result); })
-      .catch((cause) => { if (active) setError(cause.response?.data?.detail || cause.response?.data?.message || 'Không tải được dữ liệu nguồn.'); })
-      .finally(() => { if (active) setLoading(false); });
+    api.get('/accounting/reports/source-imports', { params: { from, to, ...(branchId ? { branchId } : {}) } })
+      .then(({ data }) => { if (active) setSource({ key: sourceKey, data }); })
+      .catch((cause) => {
+        if (active) setSource({ key: sourceKey, error: cause.response?.data?.detail || cause.response?.data?.message || 'Không tải được dữ liệu nguồn.' });
+      });
     return () => { active = false; };
-  }, [range, branchId]);
+  }, [from, to, branchId, sourceKey]);
 
-  const incomeAvailable = !loading && !error && data != null;
-  const allRows = incomeAvailable ? data.rows || [] : [];
+  const comparisonFrom = financialReport?.comparisonFrom;
+  const comparisonTo = financialReport?.comparisonTo;
+  const comparisonKey = `${comparisonFrom}/${comparisonTo}/${branchId}`;
+  const previous = comparisonSource?.key === comparisonKey ? comparisonSource.data : null;
+  useEffect(() => {
+    if (!periodType || !comparisonFrom || !comparisonTo) return undefined;
+    let active = true;
+    api.get('/accounting/reports/source-imports', {
+      params: { from: comparisonFrom, to: comparisonTo, summaryOnly: true, ...(branchId ? { branchId } : {}) },
+    }).then(({ data }) => { if (active) setComparisonSource({ key: comparisonKey, data }); })
+      .catch(() => { if (active) setComparisonSource({ key: comparisonKey, data: null }); });
+    return () => { active = false; };
+  }, [periodType, comparisonFrom, comparisonTo, branchId, comparisonKey]);
+
+  const incomeAvailable = currentSource?.data != null;
+  const allRows = currentSource?.data?.rows || [];
   const invoices = allRows.filter((row) => row.recordType === 'KIOT_INVOICE');
   const receipts = invoices.reduce((sum, row) => sum + Number(row.paidAmount || 0), 0);
   const expenses = Number(financialReport?.totals?.expenses ?? reportTotals?.expenses ?? 0);
@@ -143,6 +163,11 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
     branchName: row.branchName || 'Toàn chuỗi', recordType: 'OPERATING_EXPENSE', paymentMethod: row.method || '—',
     paidAmount: row.amount, amount: row.amount, sourceSystem: 'LEDGER', reason: row.reason,
   }));
+  const profit = incomeAvailable && expenseAvailable ? receipts - expenses : null;
+  const previousExpenses = financialReport?.comparisonTotals?.expenses;
+  const previousProfit = previous?.receipts != null && previousExpenses != null ? previous.receipts - previousExpenses : null;
+  const transactionCount = incomeAvailable ? allRows.length + ledgerExpenses.length : null;
+  const comparison = { periodType, from: comparisonFrom, to: comparisonTo };
   const rowsByType = reportType === 'revenue' || reportType === 'branch'
     ? allRows.filter((row) => row.recordType === 'KIOT_INVOICE')
     : reportType === 'method' ? allRows.filter((row) => row.recordType === 'BOOKING' || row.recordType === 'KIOT_INVOICE')
@@ -158,19 +183,29 @@ export default function ImportedSourceReport({ month, range, branchId, reportTot
   const visibleRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
   const amountLabel = reportType === 'method' ? 'Tiền khách trả' : reportType === 'revenue' || reportType === 'branch' ? 'Doanh thu' : 'Số tiền';
 
-  return <section className="imported-source-report" aria-labelledby="isr-title" aria-busy={loading}>
+  return <section className={`imported-source-report${periodType ? ' imported-source-report--business' : ''}`} aria-labelledby="isr-title" aria-busy={loading}>
     <header className="isr-heading"><div><span className="isr-eyebrow">SỔ KẾ TOÁN</span><h2 id="isr-title">Báo cáo &amp; thống kê</h2></div></header>
     {allRows.some((row) => row.sourceSystem === 'SYNTHETIC_DEMO') && <p className="isr-data-notice" role="status"><strong>Báo cáo có dữ liệu mô phỏng.</strong> Các dòng mô phỏng được ghi nhãn trong bảng chi tiết.</p>}
     <nav className="isr-tabs" aria-label="Loại báo cáo">{tabs.map(([key, title]) => <button type="button" key={key} aria-pressed={reportType === key} onClick={() => { setReportType(key); setPage(1); }}>{title}</button>)}</nav>
     <div className="isr-kpis" aria-label="Tổng hợp báo cáo">
-      <article><span>Thu khách hàng</span><strong>{incomeAvailable ? money(receipts) : '—'}</strong><small>{incomeAvailable ? `${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa tải được số liệu thu'}</small></article>
-      <article><span>Chi vận hành</span><strong>{expenseAvailable ? money(expenses) : '—'}</strong><small>Đã thanh toán</small></article>
-      <article><span>Thuần vận hành</span><strong>{incomeAvailable && expenseAvailable ? money(receipts - expenses) : '—'}</strong><small>Thu − chi</small></article>
-      <article><span>Giao dịch</span><strong>{incomeAvailable ? (allRows.length + ledgerExpenses.length).toLocaleString('vi-VN') : '—'}</strong><small>{incomeAvailable ? `${allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · ${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa đủ dữ liệu'}</small></article>
+      <article><span>{periodType ? 'Doanh Thu' : 'Thu khách hàng'}</span><strong>{incomeAvailable ? money(receipts) : '—'}</strong>
+        {periodType ? <KpiComparison {...comparison} change={percentChange(incomeAvailable ? receipts : null, previous?.receipts)} />
+          : <small>{incomeAvailable ? `${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa tải được số liệu thu'}</small>}
+      </article>
+      <article><span>{periodType ? 'Chi phí vận hành' : 'Chi vận hành'}</span><strong>{expenseAvailable ? money(expenses) : '—'}</strong>
+        {periodType ? <KpiComparison {...comparison} change={percentChange(expenseAvailable ? expenses : null, previousExpenses)} lowerIsBetter /> : <small>Đã thanh toán</small>}
+      </article>
+      <article><span>{periodType ? 'Lợi Nhuận' : 'Thuần vận hành'}</span><strong>{profit == null ? '—' : money(profit)}</strong>
+        {periodType ? <KpiComparison {...comparison} change={percentChange(profit, previousProfit)} /> : <small>Thu − chi</small>}
+      </article>
+      <article><span>Giao dịch</span><strong>{transactionCount?.toLocaleString('vi-VN') ?? '—'}</strong>
+        {periodType ? <KpiComparison {...comparison} change={percentChange(transactionCount, previous?.recordCount)} />
+          : <small>{incomeAvailable ? `${allRows.filter((row) => row.recordType === 'BOOKING').length.toLocaleString('vi-VN')} booking · ${invoices.length.toLocaleString('vi-VN')} hóa đơn` : 'Chưa đủ dữ liệu'}</small>}
+      </article>
     </div>
     <article className="isr-card">
-      <div className="isr-card-heading"><div><h3>{reportNames[reportType]}</h3><p>{reportType === 'cost' ? 'Chi phí vận hành theo kỳ đã chọn.' : 'Dữ liệu theo ngày và cơ sở đang chọn.'}</p></div><span>{reportType === 'cost' ? `${money(expenses)} chi phí` : `${filteredRows.length.toLocaleString('vi-VN')} giao dịch`}</span></div>
-      {error ? <div className="isr-state isr-error" role="alert">{error}</div> : loading ? <div className="isr-state" role="status">Đang tải báo cáo…</div> : <SourceChart type={reportType} rows={allRows} financialReport={financialReport} />}
+      <div className="isr-card-heading"><div><h3>{reportNames[reportType]}</h3><p>{reportType === 'cost' ? 'Chi phí vận hành theo kỳ đã chọn.' : 'Dữ liệu theo kỳ và cơ sở đang chọn.'}</p></div><span>{reportType === 'cost' ? `${money(expenses)} chi phí` : `${filteredRows.length.toLocaleString('vi-VN')} giao dịch`}</span></div>
+      {error ? <div className="isr-state isr-error" role="alert">{error}</div> : loading ? <div className="isr-state" role="status">Đang tải báo cáo…</div> : <SourceChart type={reportType} rows={allRows} financialReport={financialReport} monthly={periodType === 'YEAR'} />}
     </article>
     <article className="isr-card isr-table-card">
       <div className="isr-card-heading"><div><h3>Chi tiết giao dịch</h3></div><span>{filteredRows.length.toLocaleString('vi-VN')} dòng</span></div>

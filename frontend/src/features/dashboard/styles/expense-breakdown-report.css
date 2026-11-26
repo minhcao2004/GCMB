@@ -41,6 +41,61 @@
 
 .expense-report-filters > .expense-report-search { flex: 1.4 1 240px; }
 
+.expense-report-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gcmb-space-3);
+}
+
+.expense-report-summary .expense-report-filters {
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid var(--expense-line);
+  border-radius: var(--gcmb-radius-panel, 12px);
+  background: var(--gcmb-color-panel, #fff);
+}
+
+.expense-report-total {
+  min-height: clamp(132px, 14vw, 180px);
+  margin: 0;
+  padding: clamp(16px, 3vw, 28px);
+  border-inline-start: 4px solid var(--gcmb-color-primary);
+  border-radius: var(--gcmb-radius-panel, 12px);
+  background:
+    radial-gradient(circle at 96% 0%, transparent 88px, rgb(255 255 255 / 9%) 89px 90px, transparent 91px 119px, rgb(255 255 255 / 7%) 120px 121px, transparent 122px),
+    linear-gradient(115deg, var(--expense-ink) 25%, #482040);
+  color: #fff;
+  box-shadow: var(--gcmb-shadow-sm);
+}
+
+.expense-report-total dt {
+  color: var(--gcmb-color-primary-soft);
+  font-size: var(--gcmb-font-size-md);
+  font-weight: 650;
+}
+.expense-report-total dd {
+  margin: 6px 0 0;
+  font-size: clamp(26px, 4vw, 48px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.expense-report-total small {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 12%);
+  color: var(--gcmb-color-primary-soft);
+  font-size: var(--gcmb-font-size-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
 .expense-report-totals {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

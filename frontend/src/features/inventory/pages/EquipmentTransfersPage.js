@@ -149,7 +149,7 @@ export default function EquipmentTransfersPage({ user, headOffice = false }) {
     {error && <p className="ei-error" role="alert">{error}</p>}
     <section className="ei-transfer-records" aria-labelledby="ei-transfer-list-title">
       <div className="ei-transfer-records-heading"><div><h2 id="ei-transfer-list-title">Phiếu điều chuyển</h2><p>{rows.length} phiếu trong phạm vi đang xem</p></div></div>
-      <div className="ei-table-wrap"><PaginatedTable pageSize={5}>
+      <div className="ei-table-wrap"><PaginatedTable pageSize={!headOffice && user?.role === 'BRANCH_MANAGER' ? 10 : 5}>
       <thead><tr><th>Phiếu / thiết bị</th><th>Nguồn → đích</th><th>Lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
       <tbody>
         {rows.map((item) => <tr key={item.id}>

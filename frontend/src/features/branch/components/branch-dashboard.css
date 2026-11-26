@@ -2,11 +2,9 @@
 .bm-dashboard * { box-sizing:border-box; }
 .bm-dashboard ::selection { color:var(--bm-ink); background:var(--gcmb-color-primary-soft); }
 .bm-dashboard :focus-visible { outline:2px solid var(--gcmb-color-info); outline-offset:2px; }
-.bm-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.bm-heading { display:flex; align-items:center; margin-bottom:16px; }
 .bm-heading h1 { margin:0 0 6px; font-size:var(--gcmb-font-size-2xl); line-height:1.25; letter-spacing:-.02em; }
 .bm-heading p { margin:0; color:var(--bm-copy); font-size:14px; }
-.bm-live { display:flex; align-items:center; gap:8px; color:var(--bm-copy); font-size:var(--gcmb-font-size-xs); font-weight:700; white-space:nowrap; }
-.bm-live i { width:8px; height:8px; border-radius:50%; background:var(--gcmb-color-warning); }
 .bm-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin-bottom:16px; border:1px solid var(--bm-line); border-radius:var(--gcmb-radius-panel); background:var(--bm-panel); overflow:hidden; }
 .bm-kpi { min-width:0; min-height:108px; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:15px 16px; border-right:1px solid var(--bm-line); }
 .bm-kpi:last-child { border-right:0; }
@@ -58,7 +56,7 @@
 .bm-disclaimer { margin:1px 0 12px; color:var(--bm-muted); font-size:11px; }
 @media(max-width:1280px) { .bm-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }.bm-kpi:nth-child(3) { border-right:0; }.bm-kpi:nth-child(-n+3) { border-bottom:1px solid var(--bm-line); } }
 @media(max-width:850px) { .bm-dashboard { padding:18px; }.bm-room-panel,.bm-revenue-panel,.bm-heat-panel,.bm-grid-tables>.bm-panel { grid-column:span 12; }.bm-room-content { gap:30px; }.bm-kpi { padding:14px; } }
-@media(max-width:600px) { .bm-dashboard { padding:16px 12px; }.bm-heading { align-items:flex-start; }.bm-heading h1 { font-size:var(--gcmb-font-size-xl); }.bm-live { font-size:10px; }.bm-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.bm-kpi:nth-child(odd) { border-right:1px solid var(--bm-line); }.bm-kpi:nth-child(even) { border-right:0; }.bm-kpi:nth-child(4) { border-bottom:1px solid var(--bm-line); }.bm-kpi strong { font-size:19px; }.bm-room-content { flex-direction:column; gap:18px; padding-bottom:20px; }.bm-legend { width:100%; }.bm-heatmap { gap:4px; padding:2px 11px 0; grid-template-columns:36px repeat(7,minmax(10px,1fr)); }.bm-heat-row>i { height:13px; }.bm-table { min-width:520px; }.bm-panel-head,.bm-dashboard .bm-panel-head { padding:14px 13px 11px !important; } }
+@media(max-width:600px) { .bm-dashboard { padding:16px 12px; }.bm-heading { align-items:flex-start; }.bm-heading h1 { font-size:var(--gcmb-font-size-xl); }.bm-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.bm-kpi:nth-child(odd) { border-right:1px solid var(--bm-line); }.bm-kpi:nth-child(even) { border-right:0; }.bm-kpi:nth-child(4) { border-bottom:1px solid var(--bm-line); }.bm-kpi strong { font-size:19px; }.bm-room-content { flex-direction:column; gap:18px; padding-bottom:20px; }.bm-legend { width:100%; }.bm-heatmap { gap:4px; padding:2px 11px 0; grid-template-columns:36px repeat(7,minmax(10px,1fr)); }.bm-heat-row>i { height:13px; }.bm-table { min-width:520px; }.bm-panel-head,.bm-dashboard .bm-panel-head { padding:14px 13px 11px !important; } }
 @media(prefers-reduced-motion:reduce) { .bm-dashboard *, .bm-dashboard *:before, .bm-dashboard *:after { scroll-behavior:auto!important; transition:none!important; animation:none!important; } }
 
 /* Branch overview refresh, aligned with the executive analytics workspace. */
@@ -81,8 +79,6 @@
 }
 .bm-heading h1 { margin-bottom:7px; font-size:clamp(24px,2vw,30px); letter-spacing:-.035em; }
 .bm-heading p { color:#586879; }
-.bm-live { padding:7px 10px; border:1px solid #d4ebe5; border-radius:999px; background:#f0faf7; color:#176b58; }
-.bm-live i { background:#18936d; box-shadow:0 0 0 3px rgba(24,147,109,.12); }
 .bm-kpis { gap:11px; margin-bottom:16px; border:0; border-radius:0; background:transparent; overflow:visible; }
 .bm-kpi {
   min-height:122px;
@@ -120,7 +116,7 @@
 }
 @media(max-width:600px) {
   .bm-dashboard { padding:0 0 20px; }
-  .bm-heading { gap:12px; padding:16px; border-radius:12px; }
+  .bm-heading { padding:16px; border-radius:12px; }
   .bm-heading h1 { font-size:23px; }
   .bm-kpis { gap:8px; }
   .bm-kpi { min-height:108px; padding:12px; border-radius:11px; }
