@@ -42,7 +42,6 @@ export default function PayrollPage() {
     [reviewed, setReviewed] = useState(false);
   const [payment, setPayment] = useState({
     employeeId: '',
-    accountId: '',
     amount: '',
     result: 'PENDING',
     reference: '',
@@ -138,7 +137,7 @@ export default function PayrollPage() {
   const submitPayments = () => {
     const command = {
       version: data.version,
-      payments: selected.map((employeeId) => ({ ...results[employeeId], employeeId, accountId: payment.accountId })),
+      payments: selected.map((employeeId) => ({ ...results[employeeId], employeeId })),
     };
     let body = command;
     if (selected.some((id) => evidence[id])) {
@@ -195,6 +194,12 @@ export default function PayrollPage() {
     <section className="finance-page">
       <h1>Lương nhân viên</h1>
       <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
+      {!loading && data && options && (
+        <div className="finance-info">
+          <span>{rows.length} nhân viên</span>
+          <strong className="finance-total">Còn phải trả: {vnd(totalDue)}</strong>
+        </div>
+      )}
       <div className="finance-toolbar">
         <label>
           Tháng lương
@@ -232,13 +237,6 @@ export default function PayrollPage() {
         options &&
         (
           <>
-            <div className="finance-info">
-              <span>
-                {rows.length}{' '}
-                nhân viên
-              </span>
-              <strong className="finance-total">Còn phải trả: {vnd(totalDue)}</strong>
-            </div>
             <div className="finance-actions payroll-list-actions">
               <label className="finance-branch-filter">
                 Cơ sở
@@ -261,7 +259,6 @@ export default function PayrollPage() {
                   setDialog('advance');
                   setPayment({
                     employeeId: '',
-                    accountId: '',
                     amount: '',
                     result: 'PENDING',
                     reference: '',
@@ -285,7 +282,6 @@ export default function PayrollPage() {
                 onClick={() => {
                   setDialog('payments');
                   setEvidence({});
-                  setPayment((previousPayment) => ({ ...previousPayment, accountId: '' }));
                   setReviewed(false);
                   setResults(
                     Object.fromEntries(
@@ -359,11 +355,6 @@ export default function PayrollPage() {
                     <div className="finance-grid">
                       {employeeInput(payment, setPayment)}
                       {moneyInput('amount', 'Số tiền ứng *', payment, setPayment)}
-                      <FundInput
-                        options={options}
-                        value={payment.accountId}
-                        onChange={(accountId) => setPayment({ ...payment, accountId })}
-                      />
                     </div>
                     {available && (
                       <p className="finance-info">
@@ -389,11 +380,6 @@ export default function PayrollPage() {
                       submitPayments();
                     }}
                   >
-                    <FundInput
-                      options={options}
-                      value={payment.accountId}
-                      onChange={(accountId) => setPayment({ ...payment, accountId })}
-                    />
                     {<PaginatedList pageSize={5}>{selected.map((id) => {
                       const row = data.rows.find((row) => row.employee_id === id);
                       return (
@@ -588,26 +574,6 @@ function SalaryBankDetails({ entry }) {
   );
 }
 
-function FundInput({ options, value, onChange }) {
-  return (
-    <label>
-      Quỹ kế toán chi tiền *
-      <select required value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Chọn quỹ</option>
-        {options.funds.map((fund) => (
-          <option key={fund.id} value={fund.id}>
-            {fund.name} · Còn {vnd(fund.balance)}
-          </option>
-        ))}
-      </select>
-      {!options.funds.length && (
-        <small>
-          Chưa có quỹ kế toán được cấu hình. Cần thiết lập nguồn quỹ trước khi ghi nhận chi tiền.
-        </small>
-      )}
-    </label>
-  );
-}
 function ResultInputs({ value, onChange, hasEvidence = false }) {
   return (
     <div className="finance-grid">

@@ -556,7 +556,6 @@ public class PayrollService {
     if (
       payment == null ||
       payment.employeeId() == null ||
-      payment.accountId() == null ||
       payment.requestId() == null ||
       !payment.requestId().matches("[A-Za-z0-9-]{10,100}") ||
       payment.result() == null ||
@@ -693,7 +692,8 @@ public class PayrollService {
     UUID branch
   ) {
     var accounts = payrollRepository.lockActiveCentralFund(account);
-    if (accounts.isEmpty()) throw bad("Vui lòng chọn quỹ kế toán đang hoạt động.");
+    if (accounts.isEmpty()) throw bad("Chưa có quỹ kế toán đang hoạt động để ghi nhận chi tiền.");
+    UUID accountId = (UUID) accounts.get(0).get("id");
     BigDecimal balance = payrollRepository.accountantFundBalance();
     if (balance.compareTo(amount) < 0) throw conflict(
       "Quỹ " +
@@ -709,7 +709,7 @@ public class PayrollService {
     var period = payrollRepository.shareFinancialPeriod(today.withDayOfMonth(1));
     if (!"OPEN".equals(period.get("status"))) throw conflict("Kỳ tài chính hiện tại đã đóng.");
     UUID transaction = UUID.randomUUID();
-    payrollRepository.insertPayrollOutflow(transaction, period.get("id"), today, advance, id, actor.id(), account, branch, amount); // BR-83: paid movements only.
+    payrollRepository.insertPayrollOutflow(transaction, period.get("id"), today, advance, id, actor.id(), accountId, branch, amount); // BR-83: paid movements only.
   }
 
   public List<Map<String, Object>> export(Identity actor, String value) {
