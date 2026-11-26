@@ -443,13 +443,20 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
 .inv-receipt-create-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .inv-receipt-create-actions small { max-width: 52ch; color: var(--inv-copy); font-size: 11px; line-height: 1.45; }
 .inv-receipt-line .inv-remove-line { grid-column: 3; grid-row: 1; justify-self: end; align-self: end; }
-.inv-line-quantity, .inv-line-unit, .inv-line-cost { grid-row: 2; }
-.inv-line-expiry { grid-column: 1 / -1; grid-row: 3; }
-.inv-line-custom-unit, .inv-line-conversion, .inv-line-result { grid-column: 1 / -1; }
+.inv-line-unit { grid-column: 1; grid-row: 2; }
+.inv-line-conversion { grid-column: 2; grid-row: 2; }
+.inv-line-quantity { grid-column: 3; grid-row: 2; }
+.inv-receipt-base-unit .inv-line-quantity { grid-column: 2 / -1; }
+.inv-line-expiry { grid-column: 1 / 3; grid-row: 3; }
+.inv-line-cost { grid-column: 3; grid-row: 3; }
+.inv-line-result { grid-column: 1 / -1; }
+.inv-receipt-custom-unit .inv-line-custom-unit { grid-column: 2; grid-row: 2; }
+.inv-receipt-custom-unit .inv-line-conversion { grid-column: 1 / 3; grid-row: 3; }
+.inv-receipt-custom-unit .inv-line-quantity { grid-row: 3; }
+.inv-receipt-custom-unit .inv-line-expiry,
+.inv-receipt-custom-unit .inv-line-cost { grid-row: 4; }
 .inv-pack-size { display: flex; align-items: center; gap: 9px; color: var(--inv-ink); font-size: 13px; font-weight: 600; }
 .inv-pack-size input { flex: 0 1 150px; min-width: 70px; }
-.inv-line-conversion small { color: var(--inv-copy); font-size: 11px; font-weight: 400; }
-.inv-line-quantity > small { color: var(--inv-copy); font-size: 11px; font-weight: 400; line-height: 1.4; }
 .inv-line-quantity input:disabled { color: #7b8796; background: #f4f6f8; cursor: not-allowed; }
 .inv-line-result { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; border-radius: 9px; padding: 10px 12px; background: #f5f8fa; }
 .inv-line-stock { display: grid; gap: 3px; min-width: 0; color: var(--inv-copy); font-size: 11px; }
@@ -457,19 +464,24 @@ body:has(.branch-manager-dashboard.has-inventory) { margin: 0; }
 .inv-line-stock small { color: var(--inv-copy); font-size: 11px; overflow-wrap: anywhere; }
 .inv-line-stock .inv-danger-text { color: #a43c4b; }
 .inv-line-result .inv-line-total { min-height: 0; text-align: right; }
+.inv-receipt-followup { display: grid; gap: 12px; }
+.inv-receipt-followup h2, .inv-receipt-followup p { margin: 0; }
+.inv-receipt-followup p { color: var(--inv-copy); font-size: 12px; }
+.inv-receipt-followup-items { display: grid; gap: 8px; }
+.inv-receipt-followup-items > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inv-receipt-followup-items > div > span { color: var(--inv-ink); font-size: 12px; }
 
 @media (max-width: 640px) {
-  .inv-receipt-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .inv-receipt-line .inv-line-product { grid-column: 1 / -1; grid-row: 1; }
+  .inv-receipt-line { grid-template-columns: minmax(0, 1fr); }
+  .inv-receipt-line .inv-line-product,
+  .inv-receipt-line .inv-remove-line,
+  .inv-receipt-line > .inv-field,
+  .inv-receipt-line .inv-line-result { grid-column: 1; grid-row: auto; }
   .inv-receipt-create-grid { grid-template-columns: minmax(0, 1fr); }
   .inv-receipt-create-actions { align-items: stretch; flex-direction: column; }
   .inv-receipt-create-actions .inv-button { width: 100%; }
-  .inv-receipt-line .inv-remove-line { grid-column: 2; grid-row: 2; }
-  .inv-line-unit { grid-column: 1; grid-row: 2; }
-  .inv-line-quantity { grid-column: 1; grid-row: 3; }
-  .inv-line-cost { grid-column: 2; grid-row: 3; }
-  .inv-line-expiry { grid-column: 1 / -1; grid-row: 4; }
   .inv-pack-size { flex-wrap: wrap; }
+  .inv-receipt-followup-items > div { align-items: stretch; flex-direction: column; }
 }
 
 /* Backoffice token alignment for stock, receipt and adjustment states. */

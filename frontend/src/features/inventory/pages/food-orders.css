@@ -113,11 +113,19 @@
 .food-staff-heading h1 { margin: 0; font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.03em; }
 .food-staff-heading p { margin: 8px 0 0; color: var(--food-copy); font-size: 14px; }
 .food-staff-heading-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 8px; }
+.food-staff-heading-actions > button { min-height: 40px; }
 .food-secondary { min-height: 40px; border: 1px solid #cfdee2; border-radius: 9px; padding: 0 13px; color: var(--food-cyan); background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
 .food-secondary:disabled { color: #687485; background: #edf0f1; cursor: not-allowed; }
 .food-sound-toggle.is-enabled { border-color: #b7ddcc; color: #205d43; background: #eff9f3; }
 .food-sound-note { margin: -9px 0 16px; color: var(--food-muted); font-size: 12px; }
 .food-staff-add,.food-staff-queue { margin-bottom: 20px; border: 1px solid var(--food-line); border-radius: 14px; padding: 20px; background: #fff; }
+.food-order-dialog { box-sizing: border-box; width: min(800px, calc(100% - 28px)); max-width: none; max-height: 92dvh; overflow: auto; border: 0; border-radius: 16px; padding: 24px; color: var(--food-ink); background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
+.food-order-dialog::backdrop { background: rgb(26 38 56 / 42%); }
+.food-order-dialog .food-staff-add { margin: 0; border: 0; padding: 0; }
+.food-order-dialog .food-section-title { flex-direction: row; align-items: flex-start; }
+.food-order-dialog .food-dialog-close { flex: 0 0 auto; min-width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
+.food-order-dialog-error { margin-bottom: 14px; border-radius: 8px; padding: 11px 13px; color: #8e2e44; background: #fff1f3; font-size: 12px; }
+.food-order-dialog .food-add-footer { position: sticky; bottom: -24px; z-index: 1; padding: 15px 0 24px; background: #fff; }
 .food-staff-add .food-section-title > div > h2,.food-staff-queue .food-section-title > div > h2 { margin: 0; font-size: 20px; }
 .food-staff-add .food-section-title > div > p,.food-staff-queue .food-section-title > div > p { margin: 5px 0 0; color: var(--food-muted); font-size: 12px; }
 .food-form-row { display: grid; grid-template-columns: minmax(180px,1.2fr) minmax(180px,1fr) minmax(180px,1fr) auto; align-items: end; gap: 11px; }
@@ -131,6 +139,14 @@
 .food-add-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 15px; border-top: 1px solid var(--food-line); padding-top: 15px; color: var(--food-copy); font-size: 13px; }
 .food-add-footer strong { margin-left: 7px; color: var(--food-ink); font-size: 16px; font-variant-numeric: tabular-nums; }
 .food-empty-inline { border-radius: 9px; padding: 14px; color: #5d5960; background: #fff5f8; font-size: 13px; }
+.food-queue-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+.food-queue-filters label { display: grid; gap: 5px; color: var(--food-copy); font-size: 12px; font-weight: 700; }
+.food-queue-filters select,.food-queue-filters input { min-height: 40px; border: 1px solid var(--food-line); border-radius: 8px; padding: 0 10px; color: var(--food-ink); background: #fff; font: inherit; font-weight: 400; }
+.food-queue-filters select { min-width: 170px; }
+.food-room-filter-note { margin: -5px 0 14px; color: var(--food-muted); font-size: 12px; }
+@media (max-width: 1150px) {
+  .food-staff-queue > .food-section-title { align-items: stretch; flex-direction: column; }
+}
 .food-filter-tabs { display: flex; flex-wrap: wrap; gap: 5px; }
 .food-filter-tabs button { min-height: 34px; border: 1px solid #e0e5e8; border-radius: 999px; padding: 0 11px; color: var(--food-copy); background: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
 .food-filter-tabs button.is-active { border-color: var(--food-cyan); color: #fff; background: var(--food-cyan); }
@@ -179,6 +195,8 @@
   .food-staff-heading { flex-direction: column; }
   .food-staff-heading-actions { width: 100%; }
   .food-staff-heading-actions button { flex: 1 1 auto; }
+  .food-order-dialog { padding: 18px; }
+  .food-order-dialog .food-add-footer { bottom: -18px; padding-bottom: 18px; }
   .food-alert--incoming { align-items: flex-start; flex-direction: column; }
   .food-alert--incoming button { align-self: flex-start; }
   .food-staff-add,.food-staff-queue { padding: 15px; }

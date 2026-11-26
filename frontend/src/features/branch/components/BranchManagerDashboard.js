@@ -54,6 +54,8 @@ const icons = [
 export default function BranchManagerDashboard({ user, busy, onLogout, onProfile, onBranchChange }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const contentRef = useRef(null);
+  const [recentReceipt, setRecentReceipt] = useState(null);
+  const [menuSeedId, setMenuSeedId] = useState(null);
   const activeIndex = screenIds.indexOf(searchParams.get('screen'));
   const active = branchNav[activeIndex] || 'Tổng quan';
   const activeGroup = groups.find((group) => group.items.includes(active))?.id;
@@ -70,6 +72,7 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
   const [loadingBranches, setLoadingBranches] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [branchError, setBranchError] = useState('');
+  useEffect(() => { setRecentReceipt(null); setMenuSeedId(null); }, [user.branchId]);
   const readOnly = user.readOnly || branches.some((branch) => branch.id === user.branchId && branch.status === 'SUSPENDED');
   useEffect(() => {
     document.body.classList.add('branch-manager-open');
@@ -111,6 +114,13 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
       return next;
     });
   };
+  const addReceiptItemToMenu = (inventoryItemId) => {
+    setMenuSeedId(inventoryItemId);
+    selectScreen('Thực đơn F&B');
+  };
+  const markMenuLinked = (inventoryItemId) => setRecentReceipt((current) => current ? {
+    ...current, linkedInventoryIds: [...new Set([...(current.linkedInventoryIds || []), inventoryItemId])],
+  } : current);
   const renderItem = (label) => <button key={label} type="button" className="branch-nav__item" aria-label={label} title={label}
     aria-current={active === label ? 'page' : undefined} onClick={() => selectScreen(label)}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[branchNav.indexOf(label)]} /></svg><span>{label}</span>
@@ -161,8 +171,8 @@ export default function BranchManagerDashboard({ user, busy, onLogout, onProfile
             : active === 'Nhân sự' ? <StaffPage user={user} branchScope={user.branchId} readOnly={readOnly} onAccounts={(username) => { setAccountSearch(username); selectScreen('Tài khoản'); }} />
               : active === 'Ca làm & chấm công' ? <WorkforcePage user={user} branchScope={user.branchId} readOnly={readOnly} />
                 : active === 'Phòng' ? <BranchRoomsPage user={{ ...user, readOnly }} search={search} onSearchChange={setSearch} />
-                  : active === 'Thực đơn F&B' ? <MenuItemsPage user={{ ...user, readOnly }} />
-                    : active === 'Kho hàng' ? <InventoryPage user={{ ...user, readOnly }} />
+                  : active === 'Thực đơn F&B' ? <MenuItemsPage user={{ ...user, readOnly }} menuSeedId={menuSeedId} onMenuSeedConsumed={() => setMenuSeedId(null)} onMenuLinked={markMenuLinked} />
+                    : active === 'Kho hàng' ? <InventoryPage user={{ ...user, readOnly }} recentReceipt={recentReceipt} onReceiptConfirmed={setRecentReceipt} onAddToMenu={addReceiptItemToMenu} />
                       : active === 'Thiết bị & sự cố' ? <EquipmentManagementPage user={{ ...user, readOnly }} />
                         : active === 'Chi phí & đề nghị' ? <FinancePage user={{ ...user, readOnly }} />
                         : <div className="br-placeholder"><h1>{active}</h1><p>Chức năng này sẽ hiển thị trong phạm vi cơ sở {user.branchName || 'được phân quyền'}.</p></div>}

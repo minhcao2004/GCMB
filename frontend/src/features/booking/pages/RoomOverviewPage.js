@@ -710,7 +710,7 @@ export default function RoomOverviewPage() {
           </label>
         </div>
         <p className="room-order-result-count" role="status">Hiển thị {visibleOrderMenu.length}/{orderMenu.length} món · Đã chọn {orderLines.length} món</p>
-        <PaginatedList as="div" pageSize={10} className="room-order-items" id="room-order-items">{visibleOrderMenu.length === 0 ? <div className="room-order-no-results">
+        <PaginatedList as="div" pageSize={4} className="room-order-items" id="room-order-items">{visibleOrderMenu.length === 0 ? <div className="room-order-no-results">
           {/* MSG01: thông báo khi không có món khớp từ khóa và bộ lọc. */}
           <p>Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>
           <button type="button" disabled={orderSubmitting} onClick={() => { setOrderSearch(''); setOrderCategory('all'); }}>Đặt lại bộ lọc</button>

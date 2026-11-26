@@ -6,6 +6,7 @@ import com.gcmb.backend.inventory.dto.FoodOrderDtos.ActiveBooking;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ConfirmRequest;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ComboGiftOption;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderView;
+import com.gcmb.backend.inventory.dto.FoodOrderDtos.OrderRoom;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServiceStatusCommand;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServingEmployee;
 import com.gcmb.backend.inventory.dto.FoodOrderDtos.StaffOrderRequest;
@@ -13,6 +14,7 @@ import com.gcmb.backend.inventory.dto.MenuItemDtos.PublicMenuItemView;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,8 +38,15 @@ public class ReceptionOrderController {
 
     @GetMapping
     public List<OrderView> list(@AuthenticationPrincipal Identity actor,
-            @RequestParam(required = false) String status) {
-        return foodOrderService.list(actor, status);
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) LocalDate date,
+            @RequestParam(required = false) UUID roomId) {
+        return foodOrderService.list(actor, status, date, roomId);
+    }
+
+    @GetMapping("/rooms")
+    public List<OrderRoom> rooms(@AuthenticationPrincipal Identity actor) {
+        return foodOrderService.rooms(actor);
     }
 
     @GetMapping("/active-bookings")

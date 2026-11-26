@@ -28,6 +28,7 @@ public final class FoodOrderDtos {
                                  BigDecimal total, List<GuestOrderLine> items) {}
     public record ActiveBooking(UUID id, String code, String roomCode, String roomName,
                                 String customerName, Instant checkInAt) {}
+    public record OrderRoom(UUID id, String name) {}
     public record ServingEmployee(UUID id, String fullName) {}
     public record OrderItem(UUID id, UUID menuItemId, String name, BigDecimal quantity,
                             BigDecimal unitPrice, BigDecimal amount, boolean includedInCombo) {}

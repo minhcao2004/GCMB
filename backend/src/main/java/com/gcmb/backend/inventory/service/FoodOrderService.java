@@ -16,6 +16,7 @@ import com.gcmb.backend.inventory.repository.MenuItemRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -102,13 +103,18 @@ public class FoodOrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderView> list(Identity actor, String status) {
+    public List<OrderView> list(Identity actor, String status, LocalDate date, UUID roomId) {
         UUID branchId = branch(actor);
         String normalized = status == null || status.isBlank() || "ALL".equalsIgnoreCase(status) ? null : status.trim().toUpperCase();
         if (normalized != null && !List.of("PENDING", "ACCEPTED", "SERVED", "REJECTED", "CANCELLED").contains(normalized)) {
             throw bad("Trạng thái order không hợp lệ.");
         }
-        return foodOrderRepository.orders(branchId, normalized);
+        return foodOrderRepository.orders(branchId, normalized, date, roomId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderRoom> rooms(Identity actor) {
+        return foodOrderRepository.orderRooms(branch(actor));
     }
 
     @Transactional(readOnly = true)
@@ -318,14 +324,15 @@ public class FoodOrderService {
     }
 
     @Transactional
-    // BR-123: chỉ lễ tân được phân công cho đơn mới cập nhật được tiến độ phục vụ.
+    // Quy trình ca hiện tại: lễ tân đang làm ca tại cùng cơ sở có thể xác nhận đã phục vụ.
     public OrderView updateServiceStatus(Identity actor, UUID orderId, ServiceStatusCommand command) {
         UUID branchId = branch(actor);
         OrderLock order = lockOrder(orderId, branchId);
         if (order == null) throw notFound("Không tìm thấy order tại cơ sở này.");
-        if (order.assignedUserId() == null || !order.assignedUserId().equals(actor.id())) {
+        UUID actingEmployeeId = foodOrderRepository.employeeForUser(actor.id());
+        if (actingEmployeeId == null || !foodOrderRepository.eligibleOnShift(actingEmployeeId, branchId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Chỉ lễ tân được phân công phụ trách đơn này mới có thể cập nhật tiến độ phục vụ.");
+                "Chỉ lễ tân đang làm ca hiện tại tại cơ sở của booking mới có thể cập nhật tiến độ phục vụ.");
         }
         if (command == null || !"SERVED".equals(command.status())) throw bad("Chọn trạng thái phục vụ hợp lệ.");
         if ("SERVED".equals(order.status())) return requiredOrder(orderId, branchId);
