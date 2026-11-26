@@ -109,7 +109,7 @@ public class MonthlyPerformanceService {
     );
   }
 
-  private static DateRange comparisonRange(LocalDate from, LocalDate to, String comparison) {
+  static DateRange comparisonRange(LocalDate from, LocalDate to, String comparison) {
     return switch (comparison) {
       case "prev" -> {
         long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
@@ -127,7 +127,7 @@ public class MonthlyPerformanceService {
     };
   }
 
-  private record DateRange(LocalDate from, LocalDate to) {}
+  record DateRange(LocalDate from, LocalDate to) {}
 
   List<UUID> validateReportBranchIds(List<UUID> requestedBranchIds) {
     List<UUID> branchIds = requestedBranchIds == null ? List.of() : requestedBranchIds.stream().filter(Objects::nonNull).distinct().toList();

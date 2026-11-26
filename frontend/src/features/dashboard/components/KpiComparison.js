@@ -15,7 +15,7 @@ export function percentChange(current, previous) {
 }
 
 export default function KpiComparison({ change, periodType, from, to, lowerIsBetter = false }) {
-  const period = `${periodNames[periodType].toLowerCase()} trước`;
+  const period = `${periodNames[periodType]?.toLowerCase() || 'kỳ'} trước`;
   const hasChange = Number.isFinite(change);
   let direction = 'flat';
   let tone = 'neutral';

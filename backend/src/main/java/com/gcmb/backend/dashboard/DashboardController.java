@@ -67,6 +67,12 @@ public class DashboardController {
         Map<String,Object> revenueSummary = revenueSummary(dailyRevenue);
         List<Map<String,Object>> reportDailyRevenue = monthlyPerformanceService.dailyRevenue(selectedReport.from(), selectedReport.toExclusive(), actor.branchId());
         Map<String,Object> reportSummary = revenueSummary(reportDailyRevenue);
+        var previousReport = selectedReport.previous();
+        Map<String,Object> reportComparison = Map.of(
+            "from", previousReport.from().toString(),
+            "to", previousReport.to().toString(),
+            "summary", revenueSummary(monthlyPerformanceService.dailyRevenue(
+                previousReport.from(), previousReport.toExclusive(), actor.branchId())));
         return Map.ofEntries(
             Map.entry("month", month),
             Map.entry("scopePeriod", selectedReport.period()),
@@ -78,6 +84,7 @@ public class DashboardController {
             Map.entry("revenueDate", selectedRevenue.date()),
             Map.entry("revenueSummary", revenueSummary),
             Map.entry("reportSummary", reportSummary),
+            Map.entry("reportComparison", reportComparison),
             Map.entry("dailyRevenue", dailyRevenue),
             Map.entry("revenueMix", dashboardRepository.revenueMix(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
             Map.entry("hourlyOccupancy", dashboardRepository.hourlyOccupancy(selectedReport.from(), selectedReport.toExclusive(), actor.branchId())),
@@ -186,14 +193,17 @@ public class DashboardController {
             LocalDate to;
             if (hasTo) {
                 to = LocalDate.parse(toValue.trim());
+            } else if ("DAY".equals(selectedPeriod)) {
+                to = from;
             } else {
                 LocalDate monthEnd = defaultMonth.plusMonths(1).minusDays(1);
                 to = !defaultMonth.isAfter(today) && monthEnd.isAfter(today) ? today : monthEnd;
             }
-            if (!List.of("MONTH", "YEAR", "RANGE").contains(selectedPeriod)
+            if (!List.of("DAY", "MONTH", "YEAR", "RANGE").contains(selectedPeriod)
                     || from.isAfter(to)
                     || java.time.temporal.ChronoUnit.DAYS.between(from, to) >= 366
-                    || ("RANGE".equals(selectedPeriod) && to.isAfter(today)))
+                    || (List.of("DAY", "RANGE").contains(selectedPeriod) && to.isAfter(today))
+                    || ("DAY".equals(selectedPeriod) && !from.equals(to)))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phạm vi báo cáo không hợp lệ hoặc vượt quá 366 ngày.");
             return new ReportRange(selectedPeriod, from, to);
         } catch (java.time.DateTimeException ex) {
@@ -221,6 +231,17 @@ public class DashboardController {
     private record RevenueRange(String period, String date, LocalDate from, LocalDate to) {}
     private record ReportRange(String period, LocalDate from, LocalDate to) {
         LocalDate toExclusive() { return to.plusDays(1); }
+
+        ReportRange previous() {
+            String comparison = switch (period) {
+                case "DAY" -> "previous-day";
+                case "MONTH" -> "previous-month";
+                case "YEAR" -> "previous-year";
+                default -> "prev";
+            };
+            var range = MonthlyPerformanceService.comparisonRange(from, to, comparison);
+            return new ReportRange(period, range.from(), range.to());
+        }
     }
 
     private List<Map<String, Object>> revenueMix(LocalDate start, UUID branchId) {
