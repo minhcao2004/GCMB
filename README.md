@@ -399,6 +399,8 @@ Draw.io files (`*.drawio`), their companion files (`*.drawio.*`), and all genera
 
 ## Documentation
 
+- [GCMB database design through V67](docs/database-design/README.md) — full PostgreSQL ERD, editable Draw.io file, and views by business area.
+
 Local database reset (13/11/2026): database `gcmb` trên máy phát triển đã được nạp lại seed V1–V58 theo xác nhận của người dùng, còn 18 cơ sở, 108 phòng và 6 tài khoản; mật khẩu hiện tại của sáu tài khoản được giữ nguyên. Xem [biên bản và vị trí bản sao lưu](docs/Local%20Database%20Reset%202026-11-13.md). Đây là thao tác local, không phải yêu cầu reset các môi trường khác.
 
 Dashboard preview data (22/11/2026): the local `gcmb` database has a clearly marked `PV-DASH` fixture for `qlcs.hoabang`, including linked room/F&B bills and payments, low stock, attendance, and one pending approval. It changes local financial reports and the local approval queue; never run it against production. See [the local database record](docs/Local%20Database%20Reset%202026-11-13.md#bộ-dữ-liệu-xem-trước-dashboard-quản-lý-cơ-sở-và-cấp-cao-22112026) and `backend/scripts/seed_branch_dashboard_preview.sql`.

@@ -239,7 +239,7 @@ export default function RevenueExpenseOverview({ role, budgets = {}, month, bran
     }
     const query = new URLSearchParams();
     query.set('from', range.from); query.set('to', range.to);
-    query.set('costType', 'OPEX'); query.set('categoryId', category.categoryKey);
+    query.set('categoryId', category.categoryKey);
     selectedBranchIds.forEach((id) => query.append('branchIds', id));
     if (role === 'HEAD_OFFICE_MANAGER') {
       query.set('screen', 'Báo cáo chi phí');

@@ -37,4 +37,6 @@ Thumbs.db
 # Local Draw.io diagrams and companion files
 *.drawio
 *.drawio.*
+!docs/database-design/gcmb-erd-v67.drawio
+!docs/database-design/features/*.drawio
 /output/sequence-diagrams/

@@ -422,7 +422,11 @@ public class PayrollRepository {
 
   public List<Map<String, Object>> lockActiveCentralFund(UUID accountId) {
     return jdbcTemplate.queryForList(
-      "SELECT id,name FROM gcmb.financial_account WHERE id=? AND active AND kind='CENTRAL_FUND' FOR UPDATE", accountId);
+      """
+      SELECT id,name FROM gcmb.financial_account
+      WHERE active AND kind='CENTRAL_FUND' AND (CAST(? AS uuid) IS NULL OR id=?)
+      ORDER BY code,id LIMIT 1 FOR UPDATE
+      """, accountId, accountId);
   }
 
   public BigDecimal accountantFundBalance() {
