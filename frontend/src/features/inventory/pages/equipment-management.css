@@ -15,3 +15,73 @@
 .equipment-management .em-tabs button.active:after { background: var(--em-primary); }
 .equipment-management .em-tabs button:focus-visible { outline-color: var(--gcmb-color-info); }
 @media (prefers-reduced-motion: reduce) { .equipment-management .em-tabs button { transition: none; } }
+
+.equipment-management--branch {
+  --em-content-gutter: clamp(10px, 1.5vw, 18px);
+  width: 100%;
+}
+.branch-manager-dashboard .equipment-management--branch .em-tabs {
+  padding: 8px var(--em-content-gutter) 0;
+  flex-wrap: wrap;
+}
+.branch-manager-dashboard .equipment-management--branch > :is(.equipment-assets, .equipment-incidents) {
+  padding: 12px var(--em-content-gutter) 20px;
+}
+.equipment-management--branch :is(.ea-heading, .ei-heading),
+.equipment-management--branch .ei-transfer-page .ei-heading {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.equipment-management--branch :is(.ea-filters, .ei-filters) {
+  align-items: end;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+.equipment-management--branch .ea-filters {
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+}
+.equipment-management--branch .ei-filters {
+  grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(0, 1fr));
+}
+.equipment-management--branch :is(.ea-filters, .ei-filters) label { min-width: 0; }
+.equipment-management--branch :is(.ea-filters, .ei-filters) :is(input, select) { min-width: 0; }
+.equipment-management--branch .ea-table-wrap table { min-width: 620px; }
+.equipment-management--branch .ei-table-wrap table { min-width: 680px; }
+.equipment-management--branch .ei-transfer-records .ei-table-wrap table { min-width: 700px; }
+.equipment-management--branch :is(.ea-table-wrap, .ei-table-wrap) :is(td, th),
+.equipment-management--branch .ei-transfer-records .ei-table-wrap :is(td, th) {
+  padding: 8px 12px;
+}
+.equipment-management--branch .ei-table-wrap td:first-child { min-width: 0; }
+.equipment-management--branch .ei-table-wrap td small { margin-top: 2px; }
+.equipment-management--branch .ei-table-wrap tbody tr:focus-visible {
+  outline: 2px solid var(--gcmb-color-info);
+  outline-offset: -2px;
+}
+.equipment-management--branch :is(.ea-footnote, .ei-footnote) { margin-top: 10px; }
+.equipment-management--branch .gcmb-pagination { padding: 8px 12px; }
+.equipment-management--branch .ei-transfer-summary { margin-bottom: 12px; }
+.equipment-management--branch .ei-transfer-summary article { min-height: 60px; padding: 9px 12px; }
+.equipment-management--branch .ei-transfer-records-heading { padding: 11px 12px; }
+
+@media (max-width: 950px) {
+  .equipment-management--branch :is(.ea-filters, .ei-filters) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .equipment-management--branch .ei-filters label:first-child { grid-column: 1 / -1; }
+  .equipment-management--branch .ei-transfer-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .equipment-management--branch .ei-transfer-summary article {
+    min-height: 60px;
+    gap: 5px;
+    padding: 6px;
+  }
+  .equipment-management--branch .ei-transfer-summary article div { min-width: 0; }
+  .equipment-management--branch .ei-transfer-summary small { overflow-wrap: anywhere; }
+  .equipment-management--branch .ei-summary-mark { width: 5px; flex-basis: 5px; }
+}

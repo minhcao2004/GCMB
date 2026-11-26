@@ -59,13 +59,15 @@ public class FinancialController {
                                                    @RequestParam String from,
                                                    @RequestParam String to,
                                                    @RequestParam(required = false) UUID branchId,
-                                                   @RequestParam(defaultValue = "ALL") String source) {
+                                                   @RequestParam(defaultValue = "ALL") String source,
+                                                   @RequestParam(defaultValue = "false") boolean summaryOnly) {
         requireOverviewRole(actor);
         LocalDate start = date(from), end = date(to);
         if (start.isAfter(end)) throw bad("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
         if (end.isAfter(LocalDate.now(FinancialPeriodService.ZONE))) throw bad("Không thể xem báo cáo đến ngày trong tương lai.");
-        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > 62)
-            throw bad("Khoảng ngày báo cáo nguồn tối đa là 62 ngày.");
+        int maxDays = "HEAD_OFFICE_MANAGER".equals(actor.role()) ? 366 : 62;
+        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1 > maxDays)
+            throw bad("Khoảng ngày báo cáo nguồn tối đa là " + maxDays + " ngày.");
         String selectedSource = source == null ? "ALL" : source.toUpperCase(java.util.Locale.ROOT);
         if (!List.of("ALL", "SOURCE_FILES", "SYNTHETIC_DEMO").contains(selectedSource))
             throw bad("Nguồn dữ liệu báo cáo không hợp lệ.");
@@ -75,6 +77,11 @@ public class FinancialController {
         if ("ALL".equals(selectedSource)) {
             List<Map<String, Object>> operationalBills = financialReportRepository.operationalBillRows(start, end, branchId);
             rows.addAll(operationalBills);
+        }
+        if (summaryOnly) {
+            BigDecimal receipts = rows.stream().filter(row -> "KIOT_INVOICE".equals(row.get("recordType")))
+                .map(row -> (BigDecimal) row.get("paidAmount")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            return Map.of("receipts", receipts, "recordCount", rows.size());
         }
         rows.sort(java.util.Comparator.comparing((Map<String, Object> row) -> String.valueOf(row.get("businessDate"))).reversed()
             .thenComparing(row -> String.valueOf(row.get("branchName"))));

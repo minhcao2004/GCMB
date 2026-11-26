@@ -167,29 +167,38 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
 
   if (!user) return <main className="booking-auth-state"><p>Đang kiểm tra phiên đăng nhập…</p></main>;
 
-  // BR-103/107: tổng OPEX và CAPEX luôn được tính, hiển thị riêng theo loại đã chốt.
+  const isHeadOfficeManager = user.role === 'HEAD_OFFICE_MANAGER';
   const rows = currentData?.rows || [];
+  const filters = <div className="finance-filters expense-report-filters" role="group" aria-label="Bộ lọc báo cáo chi phí">
+    {hasDateRange ? <>
+      <label className="finance-month">Từ ngày<input type="date" required value={from} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
+      <label className="finance-month">Đến ngày<input type="date" required value={to} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
+    </> : <label className="finance-month">Kỳ báo cáo<input type="month" value={month} onChange={(event) => event.target.value && updateFilter('month', event.target.value)} /></label>}
+    <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} multiple value={branchIds.length ? branchIds : branchId ? [branchId] : []} onChange={updateBranches} /></div>
+    <label className="finance-month">Nhóm chi<select value={costType} onChange={(event) => updateFilter('costType', event.target.value)}><option value="">Tất cả nhóm</option><option value="OPEX">Chi phí vận hành</option><option value="CAPEX">Chi đầu tư (mua sắm, sửa chữa lớn)</option></select></label>
+    <label className="finance-month">Danh mục<select value={categoryId} onChange={(event) => updateFilter('categoryId', event.target.value)}><option value="">Tất cả danh mục</option>{(currentData?.categories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+    <label className="finance-month expense-report-search">Tìm kiếm<input type="search" value={query} maxLength={100} placeholder="Mã chi, mô tả, danh mục, cơ sở…" onChange={(event) => updateFilter('q', event.target.value)} /></label>
+  </div>;
   const content = <section className="performance-dashboard accountant-finance expense-breakdown-report" aria-labelledby="expense-report-title" aria-busy={loading}>
     <header className="finance-heading expense-report-heading">
       <div><h1 id="expense-report-title">Báo cáo chi phí</h1></div>
-      <div className="finance-filters expense-report-filters">
-        {hasDateRange ? <>
-          <label className="finance-month">Từ ngày<input type="date" required value={from} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
-          <label className="finance-month">Đến ngày<input type="date" required value={to} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
-        </> : <label className="finance-month">Kỳ báo cáo<input type="month" value={month} onChange={(event) => event.target.value && updateFilter('month', event.target.value)} /></label>}
-        <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} multiple value={branchIds.length ? branchIds : branchId ? [branchId] : []} onChange={updateBranches} /></div>
-        <label className="finance-month">Nhóm chi<select value={costType} onChange={(event) => updateFilter('costType', event.target.value)}><option value="">Tất cả nhóm</option><option value="OPEX">Chi phí vận hành</option><option value="CAPEX">Chi đầu tư (mua sắm, sửa chữa lớn)</option></select></label>
-        <label className="finance-month">Danh mục<select value={categoryId} onChange={(event) => updateFilter('categoryId', event.target.value)}><option value="">Tất cả danh mục</option>{(currentData?.categories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-        <label className="finance-month expense-report-search">Tìm kiếm<input type="search" value={query} maxLength={100} placeholder="Mã chi, mô tả, danh mục, cơ sở…" onChange={(event) => updateFilter('q', event.target.value)} /></label>
-      </div>
+      {isHeadOfficeManager ? <div className="expense-report-summary">
+        <dl className="expense-report-total">
+          <dt>Tổng chi phí</dt>
+          <dd>{currentData ? money(totals.opex + totals.capex) : '—'}
+            {currentData && <small>{(totals.opexCount + totals.capexCount).toLocaleString('vi-VN')} khoản chi</small>}
+          </dd>
+        </dl>
+        {filters}
+      </div> : filters}
     </header>
 
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải báo cáo chi phí…</p>}
-    <dl className="expense-report-totals" aria-label="Tổng tiền đã chi theo nhóm">
+    {!isHeadOfficeManager && <dl className="expense-report-totals" aria-label="Tổng tiền đã chi theo nhóm">
       <div className="is-opex"><dt>Tiền đã chi cho vận hành</dt><dd>{money(totals.opex)}</dd><small>{totals.opexCount} khoản chi · không gồm chi đầu tư</small></div>
       <div className="is-capex"><dt>Tiền đã chi cho đầu tư</dt><dd>{money(totals.capex)}</dd><small>{totals.capexCount} khoản chi · trình bày riêng</small></div>
-    </dl>
+    </dl>}
 
     {!loading && !error && currentData && rows.length === 0 && <p className="expense-report-empty" role="status">{noResults}</p>}
     {rows.length > 0 && <div className="expense-report-table-scroll"><PaginatedTable pageSize={10} className="expense-report-table">
@@ -221,10 +230,10 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
         </Fragment>;
       })}</tbody>
     </PaginatedTable></div>}
-    <p className="expense-report-footer">{user.role !== 'HEAD_OFFICE_MANAGER' && <Link to="/ke-toan/bao-cao">Quay lại báo cáo hiệu quả tháng</Link>}<button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Tải lại</button></p>
+    <p className="expense-report-footer">{!isHeadOfficeManager && <Link to="/ke-toan/bao-cao">Quay lại báo cáo hiệu quả tháng</Link>}<button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Tải lại</button></p>
     {preview && <div className="expense-report-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><section className="expense-report-preview" role="dialog" aria-modal="true" aria-labelledby="expense-preview-title"><header><h2 id="expense-preview-title">{preview.name}</h2><button type="button" autoFocus onClick={() => setPreview(null)}>Đóng</button></header>{preview.type?.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <iframe src={preview.url} title={preview.name} /> }<a href={preview.url} download={preview.name}>Tải chứng từ</a></section></div>}
   </section>;
 
-  if (user.role === 'HEAD_OFFICE_MANAGER') return content;
+  if (isHeadOfficeManager) return content;
   return <AppShell user={user} branchName="toàn chuỗi" busy={logoutBusy} onLogout={logout} breadcrumb="Báo cáo chi phí" activeTab="orders" audience="accountant" hideSearch showCurrentMonth={false}>{content}</AppShell>;
 }

@@ -34,6 +34,8 @@ Accountant creates and updates shared categories such as food purchases, beverag
 
 The Branch Manager submits the branch, category, expense date (or planned date), amount, description, beneficiary, bank account and bank name. Request metadata is saved first; invoice/expense evidence and (for payment requests) the quote or bank-transfer document are uploaded separately to the backend's local attachment directory. An upload failure therefore does not discard the request: the manager can retry missing uploads from the request history. A reimbursement request is for an expense already paid personally by the Branch Manager and requires its supporting invoice.
 
+Trong **Chi phí & đề nghị** của Quản lý cơ sở, cả **Đề nghị thanh toán** và **Hoàn ứng tiền đã chi** trình bày thông tin hạng mục ngay trong ô chọn. Yêu cầu hóa đơn hiển thị tại ô đính kèm **Hóa đơn/ảnh chứng minh**.
+
 - At **3,000,000 VND or less**, the request enters the Accountant queue.
 - Above **3,000,000 VND**, it enters the Head Office Manager approval queue first; after approval, the Accountant pays it.
 - Rejection records the actor, time, and reason. The review screen asks the Accountant to confirm or cancel before approval/rejection is submitted. Missing evidence does not block the review; approval does not reduce the fund.
@@ -48,9 +50,17 @@ The Accountant sidebar groups destinations under **Tổng quan**, **Thu chi & th
 
 The Head Office Manager workspace combines pending fund requests and transfer history in one **Cấp quỹ** tab. A **Tạo yêu cầu chuyển tiền** action opens a centered dialog for the amount, transfer date, bank reference, and optional receipt; submitting sends the request to the Accountant for confirmation. The same tab shows each transfer as one horizontal row with fixed sender, sent date, amount, bank reference/receipt, and status columns; the list scrolls vertically with its header fixed. Date-only values are formatted independently from timestamps to prevent browser locale parsing errors. Chain-wide payment/reimbursement requests remain a separate tab and can be filtered by branch before high-value requests are reviewed.
 
-On the Head Office Manager overview, operational alerts appear directly below the page heading as a translucent, severity-colored bubble. The **Việc cần làm** list links each pending approval to **Phê duyệt chi → Đề nghị thanh toán và hoàn ứng** so the manager can continue in the relevant queue.
+Trên **Tổng quan** của Quản lý cấp cao, chuông vàng nổi trên màn hình và nhấp nháy khi có cảnh báo chưa đọc. Có thể kéo chuông hoặc dùng phím mũi tên khi nút được chọn. Bấm chuông để xem mức độ, phạm vi và nội dung cảnh báo. Mỗi trang cảnh báo được đánh dấu đã đọc khi mở. Đóng bảng bằng nút **Đóng**, bấm ra ngoài hoặc nhấn **Escape**. Chuông tự ẩn khi đã đọc hết và hiện lại khi báo cáo tải được cảnh báo mới hoặc nội dung cảnh báo thay đổi. Trạng thái đã đọc được lưu theo tài khoản trên trình duyệt. Chế độ giảm chuyển động hiển thị chuông vàng tĩnh cùng số cảnh báo chưa đọc. Danh sách **Việc cần làm** mở đề nghị tại **Phê duyệt chi → Đề nghị thanh toán và hoàn ứng**.
 
-The overview has day, month, and year selectors for its totals, branch revenue chart, and revenue/profit trend. The branch chart can show the full chain or one selected branch. The trend compares the selected period with the immediately preceding period. Executive alerts include negative profit and revenue/profit declines of at least 20% versus that comparison period; the severity-colored alert pill can be dragged, opened to browse alerts, and each selected alert links to its related report, branch detail, or equipment incident. The payment mix separates cash, bank transfers, and forfeited deposits by actual payment amount; branch ranking and occupancy lists scroll vertically.
+The overview has day, month, and year selectors for its totals, branch revenue chart, and revenue/profit trend. The branch chart can show the full chain or one selected branch. The trend compares the selected period with the immediately preceding period. Alerts include negative profit and revenue/profit declines of at least 20% versus that comparison period. Selecting an alert opens its related report, branch detail, or equipment incident. The payment mix separates cash, bank transfers, and forfeited deposits by actual payment amount. Branch ranking and occupancy lists scroll vertically.
+
+### So sánh chỉ số của Quản lý cấp cao
+
+- **Tổng quan** hiển thị bốn thẻ Thu nhập vận hành, Tỷ lệ lấp đầy, Chi phí vận hành và Lợi nhuận vận hành. Ba chỉ số tài chính có mũi tên và tỷ lệ thay đổi theo kỳ đang chọn, mặc định so với tháng trước.
+- **Báo cáo kinh doanh** mở thẳng phần Báo cáo & thống kê. Bộ lọc **Xem theo** cho phép chọn Ngày, Tháng hoặc Năm. Có thể thu hẹp khoảng ngày trong tháng hoặc năm. Bốn thẻ Doanh Thu, Chi phí vận hành, Lợi Nhuận và Giao dịch đều so với kỳ liền trước trên cùng phạm vi cơ sở.
+- Doanh Thu của báo cáo lấy tiền khách đã trả trên hóa đơn nguồn hoặc hóa đơn vận hành đã tất toán theo quy tắc nguồn ở trên. Lợi Nhuận lấy khoản thu này trừ chi phí vận hành đã thanh toán. Giao dịch đếm các dòng booking và hóa đơn trong báo cáo nguồn. Các kỳ dùng cùng cách tính.
+- Kỳ ngày so với ngày liền trước. Tháng đầy đủ so với cả tháng trước. Khoảng ngày trong tháng hoặc năm được lùi theo lịch và giới hạn ở ngày cuối của tháng tương ứng nếu cần. Tỷ lệ được tính bằng chênh lệch chia cho trị tuyệt đối của giá trị kỳ trước. Dấu **—** biểu thị thiếu số liệu hoặc giá trị kỳ trước bằng 0. Chi phí giảm dùng màu xanh, chi phí tăng dùng màu đỏ.
+- API `GET /api/v1/accounting/reports/financial-overview` hỗ trợ thêm `compare=previous-day|previous-month|previous-year` cho các kỳ theo lịch. API `GET /api/v1/accounting/reports/source-imports` cho phép Quản lý cấp cao xem tối đa 366 ngày. Tham số `summaryOnly=true` trả về `receipts` và `recordCount` để đối chiếu kỳ trước theo cùng quy tắc chọn nguồn.
 
 ## API overview
 
@@ -66,5 +76,7 @@ V40 adds finance transfers, categories, requests, attachments and request histor
 ### Bộ lọc và danh sách phê duyệt quản lý cấp cao
 
 Hai tab Cấp quỹ và Đề nghị thanh toán/hoàn ứng có bộ lọc khoảng ngày; bảng kết quả hiển thị dạng danh sách cuộn trong khung có tiêu đề cột cố định. Báo cáo chi phí của quản lý cấp cao không có liên kết quay lại báo cáo hiệu quả tháng; bảng tiền đã chi hiển thị 10 dòng mỗi trang. Biểu mẫu chi và hoàn ứng chỉ cho chọn hạng mục chi vận hành, không liệt kê nhóm CAPEX/Đầu tư.
+
+Trong **Báo cáo chi phí** của Quản lý cấp cao, thẻ **Tổng chi phí** cộng số tiền đã thanh toán cho vận hành và đầu tư theo bộ lọc đang chọn. Số tiền hiển thị cỡ lớn trên thẻ nền tím đậm, cùng số khoản chi. Các bộ lọc nằm trong khung ngay bên dưới thẻ. Bảng chi tiết tiếp tục hiển thị nhóm chi của từng khoản.
 
 Hai tab phê duyệt cấp quỹ và đề nghị chi dùng chung ngôn ngữ giao diện: tiêu đề phân cấp theo vai trò, tóm tắt số liệu, bộ lọc nằm trong một vùng riêng, bảng cuộn có tiêu đề cố định và thao tác rõ ràng. Trên màn hình nhỏ, bộ lọc và chỉ số chuyển thành một cột để tránh tràn ngang.

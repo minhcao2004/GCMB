@@ -494,6 +494,7 @@
 @media(max-width:1100px) { .accountant-finance .finance-report-filters { grid-template-columns: repeat(3,minmax(0,1fr)); }.accountant-finance .finance-report-scope-summary { grid-column: 1/-1; justify-self: end; padding: 0 2px; } }
 @media(max-width:600px) { .accountant-finance .finance-report-filters { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 12px; }.accountant-finance .finance-report-scope-summary { grid-column: 1/-1; justify-self: start; }.accountant-finance .finance-heading--report h1 { font-size: 24px; } }
 @media(max-width:380px) { .accountant-finance .finance-report-filters { grid-template-columns: 1fr; }.accountant-finance .finance-report-scope-summary { grid-column: auto; } }
+.accountant-finance .finance-report-filters--business { grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr)); }
 @media(max-width:950px) { .accountant-finance .finance-heading--report .finance-filters--report { grid-template-columns: minmax(150px,1fr) minmax(160px,1fr) minmax(200px,1.2fr); }.finance-close-head { align-items: flex-start; flex-direction: column; }.finance-close-summary { justify-content: flex-start; } }
 @media(max-width:600px) {
   .accountant-finance .finance-heading--report .finance-filters--report { grid-template-columns: repeat(2,minmax(0,1fr)); }

@@ -158,7 +158,7 @@ GCMB/
 | `booking` | Reservations by room type with the physical room selected at check-in, walk-in check-in, room sessions, deposits and deposit refund processing, checkout bills, customer payments, and tax invoice request tracking. |
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts with supplier and item expiry dates, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
-| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and draggable severity-colored operational alerts linked to related reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
+| `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and a draggable notification bell for unread operational alerts linked to the relevant reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
 | `finance` (frontend) | Accountant fund and expense workflows with cash or bank payment selection, receipt-linked reimbursements, configurable expense categories, one-time direct expenses, recurring expense templates and idempotent monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
 | `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with recorded payment methods, receipt-linked reimbursements, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, cash reconciliation, financial transactions, and period closing. |
 
@@ -468,6 +468,7 @@ Checkout sớm và đặt lại phòng (24/10/2026): V17__release_finished_room_
 
 ### Bộ lọc tổng quan quản lý cơ sở (23/11/2026)
 
+- Phần tiêu đề **Tổng quan cơ sở** hiển thị tên cơ sở và kỳ báo cáo.
 - Trang Tổng quan có phạm vi báo cáo theo tháng (Tháng 1–12 và năm), năm hoặc khoảng ngày; doanh thu, giao dịch, F&B, hiệu suất hạng phòng và khung giờ cao điểm bám theo phạm vi này.
 - Biểu đồ xu hướng doanh thu có bộ lọc riêng theo tháng, năm hoặc khoảng ngày. Biểu đồ vùng có tooltip theo ngày/tháng; khoảng ngày dài được gom theo tháng để dễ đọc. Khoảng ngày tùy chọn tối đa 366 ngày.
 - API `/api/v1/branch-management/dashboard` nhận `scopePeriod`, `scopeFrom`, `scopeTo` cho phạm vi tổng quan và `revenuePeriod`, `revenueDate`, `revenueFrom`, `revenueTo` riêng cho biểu đồ; hai bộ lọc không ghi đè nhau. File ảnh hưởng: `frontend/src/features/branch/components/BranchOverviewDashboard.js`, `frontend/src/features/branch/components/branch-dashboard.css`, `backend/src/main/java/com/gcmb/backend/dashboard/DashboardController.java`.
@@ -496,6 +497,11 @@ Hợp nhất giao diện (25/10/2026): `BookingManagementPage` giữ khung chi t
 - API preview checkout bổ sung `overtime: [{from,to,minutes,hourlyPrice,amount,priceRuleId}]` và `overtimeAmount`; `lines` và `amount` đã bao gồm các khoản này. Preview chỉ đọc, chưa ghi phí. Request lập bill bổ sung `overtimeConfirmed` và `overtimeAmount`. Backend tính lại bằng giờ máy chủ trong giao dịch có khóa booking; thiếu xác nhận hoặc số tiền thay đổi trả 409, không ghi phí/bill. Gửi lại booking đã có bill trả bill hiện hữu, không thu trùng.
 - Màn Checkout hiển thị từng khoảng giờ, đơn giá, tiền phát sinh và ô xác nhận bắt buộc; có nút **Cập nhật tiền phòng**. Khi lập bill gặp 409, tải lại preview và bỏ chọn xác nhận để lễ tân kiểm tra lại. Cần triển khai frontend/backend cùng nhau. Không thêm migration; không tính lại hóa đơn đã lập.
 - File ảnh hưởng: `CheckoutDtos.java`, `BookingService.java`, `CheckoutService.java`, `CheckoutPage.js`. Các file test tạo trong đợt sửa này đã được xóa theo yêu cầu; giữ nguyên các test có sẵn.
+
+### Giảm giá theo phần trăm khi checkout
+
+- Trước khi lập hóa đơn, Lễ tân nhập mức giảm giá đã được duyệt từ 0% đến 100%, tối đa hai chữ số thập phân. Mức giảm áp dụng trên tổng tiền phòng, F&B và phụ phí, làm tròn tiền giảm đến đồng theo HALF_UP. Hệ thống trừ cọc khỏi tổng sau giảm giá rồi làm tròn khoản còn phải thu đến nghìn đồng. Nếu cọc vượt tổng sau giảm, Lễ tân cần xử lý cọc trước khi lập hóa đơn.
+- `POST /api/v1/reception/bookings/{id}/checkout` nhận thêm `discountPercent` tùy chọn, mặc định 0%. Backend tính lại giảm giá và đối chiếu số phải thu trước khi lưu. Chi tiết bill và hóa đơn thuế trả thêm `grossAmount` và `discountAmount`. Trường `amount` là tổng sau giảm giá. Lịch sử lập bill ghi tỷ lệ và tiền giảm giá. Triển khai frontend và backend cùng nhau để dùng ô giảm giá.
 
 ### Tạo tài khoản và thông báo theo Expected UT (02/11/2026)
 

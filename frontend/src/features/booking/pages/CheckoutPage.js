@@ -39,6 +39,15 @@ const roundToNearestThousand = (amount) => {
   const remainder = value % 1000n;
   return Number(value - remainder + (remainder >= 500n ? 1000n : 0n));
 };
+const discountInputError = 'Nhập mức giảm từ 0% đến 100%, tối đa hai chữ số thập phân.';
+function discountBasisPoints(input) {
+  const value = input.trim();
+  if (!value) return 0;
+  const match = /^(\d{1,3})(?:[.,](\d{0,2}))?$/.exec(value);
+  if (!match) return null;
+  const points = Number(match[1]) * 100 + Number((match[2] || '').padEnd(2, '0'));
+  return points <= 10000 ? points : null;
+}
 export default function CheckoutPage() {
   const { bookingId, billId } = useParams();
   const navigate = useNavigate();
@@ -52,6 +61,7 @@ export default function CheckoutPage() {
   const [unservedConfirmed, setUnservedConfirmed] = useState(false);
   const [inspectionNote, setInspectionNote] = useState('');
   const [fees, setFees] = useState([]);
+  const [discountInput, setDiscountInput] = useState('');
   const [method, setMethod] = useState('CASH');
   const [cashTendered, setCashTendered] = useState('');
   useEffect(() => {
@@ -62,6 +72,7 @@ export default function CheckoutPage() {
     setOvertimeConfirmed(false);
     setUnservedConfirmed(false);
     setFees([]);
+    setDiscountInput('');
     setInspectionNote('');
     authApi
       .me()
@@ -133,6 +144,7 @@ export default function CheckoutPage() {
   }
   function issue(event) {
     event.preventDefault();
+    if (discountError) return;
     for (const fee of fees) {
       if (!fee.reason.trim()) {
         setError('Vui lòng bổ sung lý do phụ phí.');
@@ -153,7 +165,6 @@ export default function CheckoutPage() {
     }
     run(async () => {
       let result;
-      const payableAmount = roundToNearestThousand(Math.max(0, amount - depositAmount));
       try {
         result = await api.issue(bookingId, {
           inspected,
@@ -163,7 +174,8 @@ export default function CheckoutPage() {
           unservedConfirmed,
           quotedAt: data.checkoutAt,
           quoteToken: data.quoteToken,
-          payableAmount,
+          payableAmount: paymentDue,
+          ...(discountPoints > 0 ? { discountPercent: discountPoints / 100 } : {}),
           surcharges: fees.map((fee) => ({
             reason: fee.reason,
             amount: Number(fee.amount),
@@ -241,7 +253,13 @@ export default function CheckoutPage() {
   const planned = Boolean(data?.request || Number(data?.plannedCash) > 0 || data?.payments?.length);
   const settled = data?.status === 'SETTLED';
   const extra = fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
-  const amount = Number(data?.amount || 0) + (bookingId ? extra : 0);
+  const grossAmount = Number(data?.amount || 0) + (bookingId ? extra : 0);
+  const discountPoints = discountBasisPoints(discountInput);
+  const discountError = discountPoints == null ? discountInputError
+    : discountPoints > 0 && !Number.isSafeInteger(grossAmount) ? 'Tổng tiền không hợp lệ để áp dụng giảm giá.' : '';
+  const discountAmount = bookingId && discountPoints > 0 && !discountError
+    ? Number((window.BigInt(grossAmount) * window.BigInt(discountPoints) + 5000n) / 10000n) : 0;
+  const amount = grossAmount - discountAmount;
   const depositAmount = Number(data?.depositApplied ?? data?.depositBalance ?? 0);
   const rawPreviewDue = Math.max(0, amount - depositAmount);
   const paymentDue = Number(data?.remaining ?? roundToNearestThousand(rawPreviewDue));
@@ -520,9 +538,28 @@ export default function CheckoutPage() {
             </div>
             <aside className="co-card co-summary">
               <h2>Tóm tắt thanh toán</h2>
+              <div className="co-discount-field">
+                <label htmlFor="co-discount-percent">Giảm giá (%)</label>
+                <input
+                  id="co-discount-percent"
+                  name="discountPercent"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={discountInput}
+                  disabled={user.readOnly || busy}
+                  aria-invalid={Boolean(discountError)}
+                  aria-describedby="co-discount-help"
+                  onChange={(event) => setDiscountInput(event.target.value)}
+                />
+                <small id="co-discount-help" role={discountError ? 'alert' : undefined}>
+                  {discountError || 'Nhập tỷ lệ giảm giá đã được duyệt.'}
+                </small>
+              </div>
               <Summary
                 lines={data.lines}
                 extra={extra}
+                grossAmount={grossAmount}
+                discountAmount={discountAmount}
                 amount={amount}
                 depositAmount={depositAmount}
                 paymentDue={paymentDue}
@@ -542,6 +579,7 @@ export default function CheckoutPage() {
                 disabled={
                   user.readOnly ||
                   busy ||
+                  Boolean(discountError) ||
                   !inspected ||
                   (data.overtime?.length > 0 && !overtimeConfirmed) ||
                   data.hasPendingRefund ||
@@ -576,7 +614,7 @@ export default function CheckoutPage() {
                 ) : paymentDue === 0 && !planned ? (
                   <>
                     <div className="co-success">
-                      Bill không còn khoản phải thu sau khi áp dụng cọc.
+                      Số tiền còn phải thu là 0 đ. Bạn có thể hoàn tất hóa đơn.
                     </div>
                     <button
                       className="co-primary"

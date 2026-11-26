@@ -16,6 +16,7 @@ import com.gcmb.backend.booking.repository.CheckoutRepository;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -161,7 +162,7 @@ public class CheckoutService {
         return checkoutRepository.findRecentBills(branch(actor));
     }
 
-    // BR-01/13/20/21/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-22 tạm hoãn; BR-125 được theo dõi độc lập trong TaxInvoiceService).
+    // BR-01/13/20/21/22/23/24/141/142/158/160/164/182/185/218/232; UC-41 (BR-125 được theo dõi độc lập trong TaxInvoiceService).
     @Transactional
     public Map<String, Object> issue(Identity actor, UUID bookingId, Issue input) {
         UUID branchId = branch(actor);
@@ -178,6 +179,7 @@ public class CheckoutService {
             400,
             "Ghi chú kiểm tra phòng chỉ được chứa tối đa 2000 ký tự."
         );
+        BigDecimal discountPercent = validateDiscountPercent(input.discountPercent());
         UUID depositId = bookingRepository.lockDeposit(bookingId);
         if (hasPendingRefund(bookingId)) throw fail(
             409,
@@ -249,7 +251,10 @@ public class CheckoutService {
         }
         List<Map<String, Object>> lines = sourceLines(bookingId);
         if (lines.isEmpty()) throw fail(409, "Booking chưa có giá đã xác nhận.");
-        BigDecimal amount = total(lines);
+        BigDecimal grossAmount = total(lines);
+        money(grossAmount);
+        BigDecimal discountAmount = grossAmount.multiply(discountPercent).movePointLeft(2).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal amount = grossAmount.subtract(discountAmount);
         BigDecimal heldDeposit = bookingRepository.depositBalance(bookingId);
         if (heldDeposit.signum() < 0 || heldDeposit.compareTo(amount) > 0) {
             throw fail(
@@ -273,6 +278,8 @@ public class CheckoutService {
             bookingId,
             branchId,
             billNumber,
+            grossAmount,
+            discountAmount,
             amount,
             roundingAdjustment,
             Timestamp.from(quotedAt),
@@ -304,6 +311,12 @@ public class CheckoutService {
                 billId,
                 "amount",
                 amount,
+                "grossAmount",
+                grossAmount,
+                "discountPercent",
+                discountPercent,
+                "discountAmount",
+                discountAmount,
                 "roundingAdjustment",
                 roundingAdjustment,
                 "payableAmount",
@@ -783,6 +796,15 @@ public class CheckoutService {
             .stream()
             .map(line -> (BigDecimal) line.get("amount"))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static BigDecimal validateDiscountPercent(BigDecimal percent) {
+        if (percent == null) return BigDecimal.ZERO;
+        if (percent.signum() >= 0 && percent.compareTo(BigDecimal.valueOf(100)) <= 0) {
+            BigDecimal normalized = percent.stripTrailingZeros();
+            if (normalized.scale() <= 2) return normalized;
+        }
+        throw fail(400, "Giảm giá phải từ 0% đến 100%, tối đa hai chữ số thập phân.");
     }
 
     private static BigDecimal roundToNearestThousand(BigDecimal amount) {

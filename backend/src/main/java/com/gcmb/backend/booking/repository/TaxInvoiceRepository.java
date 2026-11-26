@@ -56,6 +56,8 @@ public class TaxInvoiceRepository {
     public List<Map<String, Object>> findBillsForBooking(UUID bookingId) {
         return jdbcTemplate.queryForList("""
             SELECT b.id,b.number,b.status,b.net_amount AS amount,b.checkout_at AS "checkoutAt",
+                b.gross_amount AS "grossAmount",b.discount_amount AS "discountAmount",
+                b.checkout_rounding_adjustment AS "roundingAdjustment",
                 k.contact_name AS customer,k.actual_checkin AS checkin,
                 COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
                     WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,

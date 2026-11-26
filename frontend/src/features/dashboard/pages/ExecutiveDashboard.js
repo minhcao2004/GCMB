@@ -1,5 +1,5 @@
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../../api/client';
 import { financeApi } from '../../finance/services/financeApi';
 import {
@@ -7,24 +7,15 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import CustomerSourcesChart from '../components/CustomerSourcesChart';
-import PeriodControls, { initialPeriodValue, vietnamToday } from '../components/DashboardPeriodControls';
+import PeriodControls, { initialPeriodValue, periodRange, vietnamToday } from '../components/DashboardPeriodControls';
+import KpiComparison from '../components/KpiComparison';
+import OperationalAlerts from '../components/OperationalAlerts';
 import '../styles/executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
 const percent = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(Number(value) * 100)}%`;
-const changeText = (value) => value == null ? 'Chưa có doanh thu kỳ trước để so sánh' : `${value >= 0 ? '+' : ''}${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)}% so kỳ trước`;
 const tooltipMoney = (value) => money(value);
 const axisMoney = (value) => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value / 1_000_000)} tr`;
-
-function periodRange(type, value) {
-  const today = vietnamToday();
-  if (type === 'DAY') return { from: value, to: value };
-  if (type === 'YEAR') return { from: `${value}-01-01`, to: `${value === today.slice(0, 4) ? today : `${value}-12-31`}` };
-  const start = new Date(`${value}-01T00:00:00Z`);
-  start.setUTCMonth(start.getUTCMonth() + 1);
-  const end = new Date(start.getTime() - 86400000).toISOString().slice(0, 10);
-  return { from: `${value}-01`, to: end > today ? today : end };
-}
 
 function periodDescription(type, value) {
   return type === 'DAY' ? `ngày ${value}` : type === 'YEAR' ? `năm ${value}` : `tháng ${value}`;
@@ -35,7 +26,7 @@ function financialWarnings(overview, type, value, scope = 'Toàn chuỗi', branc
   const changes = overview?.changes || {};
   const period = periodDescription(type, value);
   const range = periodRange(type, value);
-  const context = { branchId, from: range.from, to: range.to };
+  const context = { branchId, from: range.from, to: range.to, periodType: type };
   const warnings = [];
   const revenueChange = Number(changes.revenue);
   const profitChange = Number(changes.profit);
@@ -47,7 +38,7 @@ function financialWarnings(overview, type, value, scope = 'Toàn chuỗi', branc
 
 function overviewParams(type, value, branchId) {
   const range = periodRange(type, value);
-  return { ...range, compare: 'prev', granularity: type === 'YEAR' ? 'month' : 'day', ...(branchId ? { branchIds: [branchId] } : {}) };
+  return { ...range, compare: `previous-${type.toLowerCase()}`, granularity: type === 'YEAR' ? 'month' : 'day', ...(branchId ? { branchIds: [branchId] } : {}) };
 }
 
 function ChartTooltip({ active, payload, label }) {
@@ -61,84 +52,23 @@ function PanelHeading({ title, description, trailing }) {
   return <div className="executive-panel-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{trailing}</div>;
 }
 
-function Metric({ label, value, footnote, tone = '', icon }) {
+function Metric({ label, value, footnote, comparison, negative = false, icon }) {
   const iconPaths = {
     revenue: <><path d="M4 19V5m0 14h16"/><path d="m7 15 4-4 3 2 5-6"/></>,
-    booking: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m4 5h.01M9 15h.01"/></>,
     occupancy: <><path d="M3 20V8l9-5 9 5v12"/><path d="M7 20v-6h10v6M8 9h.01M12 9h.01M16 9h.01"/></>,
     cost: <><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.7-.8-1.7-1.2-3-1.2-1.6 0-2.6.8-2.6 2 0 3.1 5.2 1.3 5.2 4.5 0 1.3-1.1 2.2-2.8 2.2-1.3 0-2.5-.5-3.3-1.4M12 6v12"/></>,
     profit: <><path d="M4 18 9 13l3 2 7-8"/><path d="M14 7h5v5M4 21h16"/></>,
-    branches: <><path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 8h.01M12 8h.01M16 8h.01M8 11h.01M12 11h.01M16 11h.01"/></>,
   };
-  return <article className={`executive-metric${tone ? ` is-${tone}` : ''}`}>
-    <span className="executive-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{iconPaths[icon]}</svg></span>
-    <div className="executive-metric-copy"><h2>{label}</h2><strong>{value}</strong><p>{footnote}</p></div>
+  return <article className={`executive-metric executive-metric--${icon}${negative ? ' is-negative' : ''}`}>
+    <div className="executive-metric-heading">
+      <span className="executive-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{iconPaths[icon]}</svg></span>
+      <h2>{label}</h2>
+    </div>
+    <div className="executive-metric-copy"><strong>{value}</strong>
+      {comparison && <KpiComparison {...comparison} />}
+      {footnote && <p>{footnote}</p>}
+    </div>
   </article>;
-}
-
-function OperationalAlertBubble({ warnings, onAlertNavigate }) {
-  const [expanded, setExpanded] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [position, setPosition] = useState(null);
-  const bubbleRef = useRef(null);
-  const dragRef = useRef(null);
-  const suppressClickRef = useRef(false);
-  const index = activeIndex % warnings.length;
-  const alert = warnings[index];
-  const handlePointerDown = (event) => {
-    const bounds = bubbleRef.current?.getBoundingClientRect();
-    if (!bounds) return;
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: bounds.left, top: bounds.top, moved: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const handlePointerMove = (event) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
-    if (!drag.moved) return;
-    const bounds = bubbleRef.current?.getBoundingClientRect();
-    const width = bounds?.width || 340;
-    const height = bounds?.height || 60;
-    setPosition({
-      x: Math.max(8, Math.min(window.innerWidth - width - 8, drag.left + dx)),
-      y: Math.max(8, Math.min(window.innerHeight - height - 8, drag.top + dy)),
-    });
-  };
-  const handlePointerUp = (event) => {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
-    suppressClickRef.current = dragRef.current.moved;
-    dragRef.current = null;
-  };
-  const handlePillClick = () => {
-    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
-    setExpanded((open) => !open);
-  };
-  useEffect(() => {
-    if (!position || !bubbleRef.current) return undefined;
-    const bounds = bubbleRef.current.getBoundingClientRect();
-    const x = Math.max(8, Math.min(window.innerWidth - bounds.width - 8, position.x));
-    const y = Math.max(8, Math.min(window.innerHeight - bounds.height - 8, position.y));
-    if (x !== position.x || y !== position.y) setPosition({ x, y });
-    return undefined;
-  }, [expanded, position]);
-  if (!warnings.length) return null;
-  return <aside ref={bubbleRef} id="executive-alert-panel" className={`executive-alert-float is-${alert.level}${position ? ' is-moved' : ''}`} style={position ? { left: position.x, top: position.y } : undefined} aria-label="Cảnh báo vận hành toàn chuỗi">
-    <button type="button" className="executive-alert-pill" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onClick={handlePillClick} aria-expanded={expanded} aria-controls="executive-alert-details" title="Kéo để di chuyển · chạm để xem cảnh báo">
-      <span className="executive-alert-pill-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2.8 19h18.4L12 3Z"/><path d="M12 9v4m0 3h.01"/></svg></span>
-      <span className="executive-alert-pill-copy"><small>{alert.level === 'critical' ? 'CẢNH BÁO KHẨN' : 'CẢNH BÁO VẬN HÀNH'}</small><strong>{alert.kind}</strong></span>
-      <span className="executive-alert-pill-count">{warnings.length}</span><span className="executive-alert-pill-chevron" aria-hidden="true">{expanded ? '−' : '+'}</span>
-    </button>
-    {expanded && <div id="executive-alert-details" className="executive-alert-card" role={alert.level === 'critical' ? 'alert' : 'status'} aria-live={alert.level === 'critical' ? 'assertive' : 'polite'} aria-atomic="true" key={alert.id}>
-      <span className="executive-alert-tail" aria-hidden="true" />
-      <PaginatedList as="div" pageSize={5} className="executive-alert-list" aria-label="Danh sách cảnh báo">{warnings.map((item, itemIndex) => <button type="button" key={item.id} className={itemIndex === index ? 'is-active' : ''} onClick={() => { setActiveIndex(itemIndex); onAlertNavigate?.(item); }} aria-label={`Mở cảnh báo ${item.kind} tại ${item.branch}`}>
-        <i className={item.level === 'critical' ? 'is-critical' : ''} aria-hidden="true" /><span><strong>{item.kind}</strong><small>{item.branch}</small><em>{item.detail}</em></span><b aria-hidden="true">→</b>
-      </button>)}</PaginatedList>
-      <div className="executive-alert-message"><strong>{alert.branch}</strong><p>{alert.detail}</p></div>
-      <footer className="executive-alert-footer"><span>{index + 1} / {warnings.length}</span><span>Chọn cảnh báo để mở</span></footer>
-    </div>}
-  </aside>;
 }
 
 function RankingTable({ rows, emptyMessage }) {
@@ -154,7 +84,7 @@ function RankingTable({ rows, emptyMessage }) {
   </PaginatedTable></div>;
 }
 
-export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
+export default function ExecutiveDashboard({ user, onNavigate, onAlertNavigate }) {
   const [periodType, setPeriodType] = useState('MONTH');
   const [periodValue, setPeriodValue] = useState(() => initialPeriodValue('MONTH'));
   const [incomePeriodType, setIncomePeriodType] = useState('MONTH');
@@ -209,7 +139,13 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
           bookings: monthlyRow.bookingCount || 0, cost: Number(row.expenses) || 0 };
       });
       setData({
-        kpis: { revenue: totals.revenue, billRevenue: totals.billRevenue, forfeitedDeposits: totals.forfeitedDeposits, revenueChange: overview.changes?.revenue, bookings: monthlyTotals.bookingCount, occupancy: monthlyTotals.occupancyRate == null ? null : Number(monthlyTotals.occupancyRate) / 100, cost: totals.expenses, grossProfit: totals.profit, activeBranches: branches.filter((row) => row.status === 'ACTIVE').length, suspendedBranches: branches.filter((row) => row.status !== 'ACTIVE').length, branchTotal: branches.length, contextMonth: operationsMonth },
+        kpis: {
+          revenue: totals.revenue, cost: totals.expenses, grossProfit: totals.profit,
+          occupancy: monthlyTotals.occupancyRate == null ? null : Number(monthlyTotals.occupancyRate) / 100,
+          activeBranches: branches.filter((row) => row.status === 'ACTIVE').length, contextMonth: operationsMonth,
+        },
+        changes: overview.changes,
+        comparison: { from: overview.comparisonFrom, to: overview.comparisonTo },
         revenueByBranch: revenueRows,
         occupancyByBranch: monthlyBranches.map((row) => ({ ...row, occupancy: row.occupancyRate == null ? 0 : Number(row.occupancyRate) / 100 })),
         revenueByDay: (overview.series || []).map((row) => ({ ...row, label: row.label, roomRevenue: Number(row.revenue) || 0, fnbRevenue: Number(row.profit) || 0, overtimeRevenue: 0, otherRevenue: 0 })),
@@ -263,22 +199,20 @@ export default function ExecutiveDashboard({ onNavigate, onAlertNavigate }) {
 
   return <section className="manager-content executive-dashboard" aria-labelledby="executive-title" aria-busy={loading}>
     <header className="executive-heading">
-      <div className="executive-heading-copy"><span className="executive-eyebrow">TRUNG TÂM ĐIỀU HÀNH</span><h1 id="executive-title">Tổng quan toàn chuỗi</h1><p>Hiệu suất, doanh thu và ưu tiên trong kỳ.</p><span className="executive-data-status"><i /> Số liệu vận hành</span></div>
+      <div className="executive-heading-copy"><span className="executive-eyebrow">TRUNG TÂM ĐIỀU HÀNH</span><h1 id="executive-title" tabIndex={-1}>Tổng quan toàn chuỗi</h1><p>Hiệu suất, doanh thu và ưu tiên trong kỳ.</p><span className="executive-data-status"><i /> Số liệu vận hành</span></div>
       <div className="executive-filters">
         <PeriodControls id="tổng quan" type={periodType} value={periodValue} onTypeChange={setPeriodType} onValueChange={setPeriodValue} />
         <label className="executive-period">Phạm vi báo cáo<select value={reportBranchId} onChange={(event) => setReportBranchId(event.target.value)}><option value="">Toàn chuỗi</option>{branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       </div>
     </header>
-    <OperationalAlertBubble warnings={safeData.warnings} onAlertNavigate={onAlertNavigate} />
+    <OperationalAlerts key={user?.id} accountId={user?.id} warnings={safeData.warnings} onAlertNavigate={onAlertNavigate} />
     {loading && <p role="status">Đang tải báo cáo…</p>}{error && <p role="alert">{error}</p>}
 
     <div className="executive-kpis" aria-label="Chỉ số chính">
-      <Metric icon="revenue" label="Thu nhập vận hành" value={data ? money(kpis.revenue) : '—'} footnote={data ? `${changeText(kpis.revenueChange)} · hóa đơn và cọc` : 'Chưa có dữ liệu'} tone={kpis.revenueChange == null ? '' : kpis.revenueChange >= 0 ? 'positive' : 'negative'} />
-      <Metric icon="booking" label="Lượt đặt không hủy" value={data ? new Intl.NumberFormat('vi-VN').format(kpis.bookings || 0) : '—'} footnote={`Tháng ${kpis.contextMonth || ''}`} />
+      <Metric icon="revenue" label="Thu nhập vận hành" value={money(kpis.revenue)} comparison={{ ...data?.comparison, periodType, change: data?.changes?.revenue }} />
       <Metric icon="occupancy" label="Tỷ lệ lấp đầy" value={data ? percent(kpis.occupancy) : '—'} footnote={`Tháng ${kpis.contextMonth || ''}`} />
-      <Metric icon="cost" label="Chi phí vận hành" value={data ? money(kpis.cost) : '—'} footnote="Các khoản chi đã thanh toán" />
-      <Metric icon="profit" label="Lợi nhuận vận hành" value={data ? money(kpis.grossProfit) : '—'} footnote="Thu nhập trừ chi phí vận hành" tone={!data ? '' : kpis.grossProfit >= 0 ? 'positive' : 'negative'} />
-      <Metric icon="branches" label="Cơ sở hoạt động" value={data ? `${kpis.activeBranches} / ${kpis.branchTotal}` : '—'} footnote={data ? `${kpis.suspendedBranches} cơ sở tạm ngừng` : 'Chưa có dữ liệu'} />
+      <Metric icon="cost" label="Chi phí vận hành" value={money(kpis.cost)} comparison={{ ...data?.comparison, periodType, change: data?.changes?.expenses, lowerIsBetter: true }} />
+      <Metric icon="profit" label="Lợi nhuận vận hành" value={money(kpis.grossProfit)} negative={kpis.grossProfit < 0} comparison={{ ...data?.comparison, periodType, change: data?.changes?.profit }} />
     </div>
 
     <section className="executive-insights" aria-label="Tóm tắt điều hành">

@@ -18,8 +18,9 @@ Danh sách đã được chia trang từ API hoặc từ state của màn hình 
 
 Các nhóm màn hình sử dụng thành phần dùng chung gồm tài khoản/nhật ký, đặt phòng và thu/hoàn cọc, cơ sở/phòng, báo cáo, quỹ/chi phí/bàn giao, kho/F&B/thiết bị và nhân sự/công/lương. Đây là phân trang hiển thị; không thay đổi hợp đồng API thành phân trang phía máy chủ.
 
-- Kho hàng gộp quản lý danh mục và tồn kho trong một bảng, 5 mặt hàng/trang. Thêm/sửa và xem lịch sử đều quay lại màn Kho hàng.
+- Kho hàng gộp quản lý danh mục và tồn kho trong một bảng, 5 mặt hàng/trang. Ô **Tìm kiếm mặt hàng** nhận mã, tên, nhóm hoặc đơn vị và hỗ trợ tiếng Việt có dấu hoặc không dấu. Từ khóa kết hợp với các bộ lọc trước khi chia trang. Thêm/sửa và xem lịch sử đều quay lại màn Kho hàng.
 - Giao dịch kế toán: 5 giao dịch/trang, giữ bộ lọc và định dạng bảng của nhánh main. Lịch sử điều chỉnh dài: 5 lần/trang.
+- **Thiết bị & sự cố** của Quản lý cơ sở dùng 10 bản ghi/trang cho danh sách thiết bị, sự cố và phiếu điều chuyển.
 - Chọn quà combo dùng chung cho đặt phòng và khách đang sử dụng phòng: 10 lựa chọn/trang, giữ kiểm tra tồn và số lượng đã chọn.
 - Bảng chi phí: 5 yêu cầu/trang; chi tiết phân bổ: 10 tháng/trang.
 - Booking Lễ tân: vùng dòng đặt phòng cuộn độc lập trên desktop. Thanh phân trang nằm dưới bảng và chỉ chiếm chiều cao nội dung của chính nó. Đã kiểm tra với 7 booking, hiển thị 5 dòng ở trang đầu và 2 dòng ở trang sau.

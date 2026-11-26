@@ -17,6 +17,8 @@ const dateTimeLabel = (value) => value ? new Intl.DateTimeFormat('vi-VN', {
   day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
 }).format(new Date(value)) : '—';
 const dateLabel = (value) => value ? value.split('-').reverse().join('/') : '—';
+const normalizeInventorySearch = (value) => value.toLocaleLowerCase('vi-VN').normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 const trackingLabel = (mode) => mode === 'AUTO_ON_SALE' ? 'Tự trừ khi bán' : 'Theo dõi thủ công';
 const stockLabel = (item) => {
   if (!item.active) return 'Ngừng sử dụng';
@@ -128,10 +130,10 @@ export default function InventoryPage({ user }) {
 
   const activeItems = useMemo(() => items.filter((item) => item.active), [items]);
   const visibleItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase('vi-VN');
+    const terms = normalizeInventorySearch(search).split(/\s+/).filter(Boolean);
     return items.filter((item) => {
-      const matchesSearch = !term || `${item.sku} ${item.name} ${item.category} ${item.unitName}`
-        .toLocaleLowerCase('vi-VN').includes(term);
+      const searchableText = terms.length ? normalizeInventorySearch([item.sku, item.name, item.category, item.unitName].join(' ')) : '';
+      const matchesSearch = terms.every((term) => searchableText.includes(term));
       const matchesCategory = category === 'all' || item.category.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN');
       const matchesStatus = stockStatus === 'all' || item.stockStatus === stockStatus;
       const matchesUsage = itemStatus === 'all' || (itemStatus === 'archived' ? !item.active : item.active);
@@ -642,13 +644,16 @@ export default function InventoryPage({ user }) {
       <><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-quiet" onClick={openReceipt} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button><button type="button" className="inv-button inv-button-primary" disabled={busy || user.readOnly} onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
     {feedbackNotice}
     <section className="inv-filter-panel inv-unified-filters" aria-label="Tìm và lọc kho hàng">
-      <label className="inv-search"><span className="inv-sr-only">Tìm mặt hàng</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã hoặc tên mặt hàng..." /></label>
+      <label className="inv-field inv-search">
+        <span>Tìm kiếm mặt hàng</span>
+        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã, tên, nhóm hoặc đơn vị" />
+      </label>
       <label className="inv-field"><span>Nhóm hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       <label className="inv-field"><span>Tình trạng tồn</span><select value={stockStatus} onChange={(event) => setStockStatus(event.target.value)}>
         <option value="all">Tình trạng tồn</option><option value="AVAILABLE">Còn hàng</option><option value="LOW_STOCK">Sắp hết</option><option value="OUT_OF_STOCK">Hết hàng</option>
       </select></label>
       <label className="inv-field"><span>Trạng thái sử dụng</span><select value={itemStatus} onChange={(event) => setItemStatus(event.target.value)}><option value="active">Đang sử dụng</option><option value="archived">Ngừng sử dụng</option><option value="all">Tất cả</option></select></label>
-      <small>Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải dữ liệu…' : `${visibleItems.length} mặt hàng`}</small>
+      <small role="status">Phạm vi: {user.branchName || 'cơ sở được phân quyền'} · {loading ? 'Đang tải dữ liệu…' : `${visibleItems.length} mặt hàng`}</small>
     </section>
     <section className="inv-table-card" aria-label="Mặt hàng và tồn kho">
       {loading ? <div className="inv-loading-rows" aria-label="Đang tải"><i /><i /><i /><i /></div> : visibleItems.length ? <div className="inv-table-scroll"><PaginatedTable pageSize={5} className="inv-table inv-items-table inv-unified-table" resetKey={`${search}:${category}:${stockStatus}:${itemStatus}`} paginationLabel="Phân trang kho hàng">

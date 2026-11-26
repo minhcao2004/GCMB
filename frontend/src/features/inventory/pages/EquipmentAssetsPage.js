@@ -190,7 +190,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
       <small>Phạm vi: {branchName} · {rows.length} thiết bị</small>
     </section>
     {error && !drawer && <p className="ea-error" role="alert">{error}</p>}
-    <div className="ea-table-wrap"><PaginatedTable pageSize={5}><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
+    <div className="ea-table-wrap"><PaginatedTable pageSize={!headOffice && user?.role === 'BRANCH_MANAGER' ? 10 : 5}><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
       <tbody>{rows.map((item) => <tr key={item.id} onClick={() => openDrawer(item)} tabIndex="0" onKeyDown={(e) => e.key === 'Enter' && openDrawer(item)}>
         <td><strong>{item.code} · {item.name}</strong></td><td>{item.categoryName}</td><td>{item.roomCode ? `${item.roomCode}${item.roomName ? ` · ${item.roomName}` : ''}` : item.locationNote || '—'}</td><td>{formatDate(item.warrantyExpiry)}</td>
         <td>{statusName(item.status)}</td><td>{item.active ? 'Đang sử dụng' : 'Ngừng sử dụng'}</td>
