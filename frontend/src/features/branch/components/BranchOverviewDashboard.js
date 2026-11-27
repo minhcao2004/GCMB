@@ -220,7 +220,7 @@ export default function BranchOverviewDashboard({ user }) {
   const gradient = `conic-gradient(#16855b 0 ${slices[0]}%, #2586a0 ${slices[0]}% ${slices[0] + slices[1]}%, #a91669 ${slices[0] + slices[1]}% ${slices[0] + slices[1] + slices[2]}%, #bf6744 ${slices[0] + slices[1] + slices[2]}% 100%)`;
   const shiftRows = dataView.shifts;
   return <main className="bm-dashboard" aria-labelledby="bm-title">
-    <div className="bm-heading"><div><span className="bm-eyebrow">QUẢN TRỊ VẬN HÀNH</span><h1 id="bm-title">Tổng quan cơ sở</h1><p>{user.branchName || 'Cơ sở đang quản lý'} · {reportRangeLabel}</p></div><span className="bm-live"><i /> Dữ liệu trực tiếp</span></div>
+    <div className="bm-heading"><div><span className="bm-eyebrow">QUẢN TRỊ VẬN HÀNH</span><h1 id="bm-title">Tổng quan cơ sở</h1><p>{user.branchName || 'Cơ sở đang quản lý'} · {reportRangeLabel}</p></div></div>
     {error && <p role="alert">{error}</p>}{loading && <p role="status">Đang cập nhật…</p>}
     <section className="bm-report-filter" aria-label="Phạm vi báo cáo tổng quan">
       <div className="bm-filter-summary"><span>PHẠM VI BÁO CÁO</span><strong>{reportRangeLabel}</strong></div>
