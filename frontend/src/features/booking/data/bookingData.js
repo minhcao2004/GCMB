@@ -37,6 +37,13 @@ export function isValidTimeInput(value) {
 }
 
 // Ghép ngày và giờ nhập hợp lệ thành Date theo múi giờ máy.
+// Đổi số giờ thập phân sang phút, bỏ qua sai số nhỏ của phép nhân số thực.
+export function hourlyRentalMinutes(hours) {
+  const value = Number(hours) * 60;
+  const minutes = Math.round(value);
+  return minutes >= 1 && minutes <= 1440 && Math.abs(value - minutes) < 1e-8 ? minutes : null;
+}
+
 export function fromDateAndTime(date, time) {
   if (!date || !isValidTimeInput(time)) return null;
   const value = new Date(`${date}T${time}:00`);

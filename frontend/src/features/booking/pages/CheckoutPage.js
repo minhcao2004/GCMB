@@ -261,7 +261,9 @@ export default function CheckoutPage() {
   const discountAmount = bookingId && discountPoints > 0 && !discountError
     ? Number((window.BigInt(grossAmount) * window.BigInt(discountPoints) + 5000n) / 10000n) : 0;
   const amount = grossAmount - discountAmount;
-  const depositAmount = Number(data?.depositApplied ?? data?.depositBalance ?? 0);
+  const depositBalance = Number(data?.depositBalance ?? 0);
+  const depositAmount = bookingId ? Math.min(Math.max(0, depositBalance), amount) : Number(data?.depositApplied ?? 0);
+  const refundAmount = bookingId ? Math.max(0, depositBalance - depositAmount) : Number(data?.depositRefundAmount ?? 0);
   const rawPreviewDue = Math.max(0, amount - depositAmount);
   const paymentDue = Number(data?.remaining ?? roundToNearestThousand(rawPreviewDue));
   const roundingAdjustment = bookingId
@@ -530,9 +532,9 @@ export default function CheckoutPage() {
                     Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill.
                   </div>
                 )}
-                {depositAmount > amount && (
+                {depositBalance < 0 && (
                   <div className="co-warning">
-                    Số dư cọc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán.
+                    Số dư cọc không hợp lệ. Cần kiểm tra cọc trước khi thanh toán.
                   </div>
                 )}
               </section>
@@ -566,6 +568,9 @@ export default function CheckoutPage() {
                 paymentDue={paymentDue}
                 preview
               />
+              {refundAmount > 0 && (
+                <p className="co-warning" role="status">Cọc dư {formatVnd(refundAmount)} sẽ được gửi Kế toán hoàn khi hoàn tất bill.</p>
+              )}
               {roundingAdjustment !== 0 && (
                 <dl className="co-totals">
                   <Info
@@ -584,7 +589,7 @@ export default function CheckoutPage() {
                   !inspected ||
                   (data.overtime?.length > 0 && !overtimeConfirmed) ||
                   data.hasPendingRefund ||
-                  depositAmount > amount ||
+                  depositBalance < 0 ||
                   (!!data.pendingOrders?.length && !unservedConfirmed)
                 }
               >
@@ -610,6 +615,14 @@ export default function CheckoutPage() {
                     <div className="co-success">
                       Đã hoàn tất hóa đơn. Phòng đã trở về Trống và sẵn sàng nhận khách tiếp theo.
                     </div>
+                    {refundAmount > 0 && (
+                      <p className="co-warning" role="status">
+                        {data.depositRefundStatus === 'PAID' ? 'Đã hoàn cọc'
+                          : data.depositRefundStatus === 'FAILED' ? 'Hoàn cọc thất bại'
+                          : data.depositRefundStatus === 'REJECTED' ? 'Yêu cầu hoàn cọc bị từ chối'
+                          : 'Chờ hoàn cọc'} · {formatVnd(refundAmount)}
+                      </p>
+                    )}
                     <button type="button" onClick={() => window.print()}>In hóa đơn</button>
                     <CheckoutPrintReceipt data={data} fallbackBranchName={user.branchName} />
                   </>
@@ -618,6 +631,9 @@ export default function CheckoutPage() {
                     <div className="co-success">
                       Số tiền còn phải thu là 0 đ. Bạn có thể hoàn tất hóa đơn.
                     </div>
+                    {refundAmount > 0 && (
+                      <p className="co-warning" role="status">Cọc dư {formatVnd(refundAmount)} sẽ được gửi Kế toán hoàn khi hoàn tất bill.</p>
+                    )}
                     <button
                       className="co-primary"
                       disabled={busy}

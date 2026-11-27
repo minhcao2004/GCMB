@@ -22,6 +22,38 @@ API giữ nguyên đường dẫn và cấu trúc phản hồi. Điều chuyển
 - Theo yêu cầu trực tiếp: toàn bộ thông báo và nghiệp vụ thu/hoàn cọc giữ nguyên, bao gồm xác nhận chuyển khoản thủ công và cách làm tròn cọc.
 - Tạo mặt hàng kho vẫn tự sinh mã; nhóm thiết bị chỉ quản lý cấp cao được ghi.
 - Không mở thêm quyền báo sự cố/ghi kết quả sửa chữa cho quản lý cấp cao.
-- Đánh giá sự cố vẫn cho phép `NO_ACTION`; công bố ca vẫn chỉ cho tuần hiện tại. DEF-UT-544 không thuộc thay đổi thông báo này.
+- Đánh giá sự cố vẫn cho phép `NO_ACTION`. DEF-UT-544 không thuộc thay đổi thông báo này.
 
 Các test case còn dựa trên quy tắc cũ cần được rà soát riêng; chỉ cập nhật Fixed sau khi retest. Bộ kiểm tra `InventorySystemMessagesTest` xác minh thông báo, phạm vi quyền và các nhánh từ chối không ghi dữ liệu.
+
+## Cập nhật ngày 27/11/2026
+
+- BR-119 và MSG04 áp dụng cho hồ sơ tài khoản, nhân viên, cơ sở và số liên hệ của booking. Sau khi bỏ khoảng trắng ở hai đầu, số điện thoại gồm một hoặc nhiều chữ số và có thể có một dấu `+` ở đầu. Giới hạn lưu trữ là 30 ký tự, tính cả dấu `+`. Ví dụ hợp lệ gồm `1234567` và `+84901234567`.
+- Khi phân công quản lý hoặc đổi trạng thái cơ sở, thông báo phân biệt thiếu tài khoản, tài khoản không đủ điều kiện, cơ sở ngừng hoạt động và lý do thiếu hoặc quá dài.
+- Quy tắc giá nêu rõ lỗi ngày áp dụng, khoảng ngày hiệu lực và mã trùng. Combo thiếu thời lượng và thiết bị đầu tiên thiếu mã dùng thông báo trường bắt buộc.
+- Lỗi đổi combo nêu tên combo khi xác định được. Thông báo từ chối hủy booking hoặc thu cọc nêu đúng thao tác. Gửi lại yêu cầu hoàn cọc đang chờ trả về MSG74.
+- Khi điều chỉnh ca, số chỗ bằng 0 và số chỗ thấp hơn số người đã đăng ký có thông báo riêng. Khi sửa công đã chốt, thông báo nêu tháng và năm.
+- MSG24 cho thao tác tạo, xem danh sách và sửa booking được kiểm tra tại dịch vụ. Các thao tác này yêu cầu tài khoản Lễ tân có phân công cơ sở.
+- MSG67 và BR-157 yêu cầu kế toán nhập mã giao dịch hoặc tải tệp minh chứng khi ghi nhận đã hoàn cọc, áp dụng cho booking đã hủy và hoàn cọc dư từ checkout.
+- MSG95 và BR-90 yêu cầu chứng từ thanh toán khi kế toán duyệt và ghi nhận chi trong cùng một lần xác nhận.
+
+## Ngày hiệu lực và trùng quy tắc giá phòng
+
+- Theo BR-146, ngày kết thúc có hiệu lực đến hết ngày đã chọn. Có thể lưu giá cho một ngày bằng cách chọn ngày bắt đầu và kết thúc giống nhau. PostgreSQL vẫn lưu biên kết thúc loại trừ, nên quy tắc đã lưu tiếp tục áp dụng cho các ngày trước đây. API quản lý giá trả ngày áp dụng cuối cùng.
+- Theo BR-228, khi tạo hoặc sửa quy tắc giá toàn hệ thống, hệ thống kiểm tra quy tắc đang hoạt động của cùng hạng phòng. Chỉ báo trùng khi có ít nhất một ngày cùng áp dụng và hai khung giờ giao nhau. Hai khung giờ liền nhau có thể cùng tồn tại. Lỗi trả HTTP 409 và nêu tên mức giá bị trùng. Nếu sửa bị từ chối, phiên bản đang dùng vẫn hoạt động.
+- Báo giá và tra đơn giá theo giờ dùng các ngày trong tuần đã cấu hình. Quy tắc giá riêng theo cơ sở tiếp tục được ưu tiên theo cơ chế hiện có.
+
+## Đặt phòng theo giờ, combo và đổi phòng
+
+- BR-153 và MSG62 áp dụng khung giờ bắt đầu được cấu hình cho combo theo múi giờ của cơ sở. Giờ bắt đầu nằm trong khung, kể cả khung qua nửa đêm. Giờ kết thúc có thể nằm ngoài khung. Màn gia hạn dùng danh sách combo phù hợp do backend trả về.
+- Theo BR-151, đặt phòng tính giờ cho phép thời lượng dưới một giờ và vẫn giới hạn tối đa 24 giờ. Giao diện tạo, sửa và nhận khách vãng lai nhập số giờ tương ứng với số phút nguyên. Ví dụ, 0,5 giờ tương ứng 30 phút. Bước làm tròn tiền thuê lấy từ quy tắc giá.
+- Khi đổi phòng, lễ tân chọn nguyên nhân và nhập lý do cụ thể. Nếu lý do thiếu hoặc chỉ có khoảng trắng, backend trả MSG02 trước khi ghi nhận chặng phòng hoặc phí đổi phòng.
+
+## Gọi lặp lệnh xuất kho quà combo
+
+- Nếu thao tác xuất kho được gọi lại cho quà combo đã xuất, hệ thống trả HTTP 409 với thông báo **“Quà combo đã được xuất kho. Vui lòng kiểm tra kết quả hiện có.”** trước khi ghi thêm dòng xuất. Yêu cầu hoàn tất checkout gửi lại cho bill đã tất toán vẫn trả về bill hiện có.
+
+## Chỉnh ca tuần tới
+
+- Lịch tuần tới tự mở các ca còn thiếu khi được xem lần đầu. Quản lý cơ sở có thể mở hoặc đóng đăng ký cho ca của tuần hiện tại và tuần tới. Khi xem tuần tới, dùng nút **Chỉnh tuần tới**.
+- Mỗi ca giữ 3 chỗ. Tắt đăng ký giữ lại những người đã đăng ký. Điều kiện khóa ca đã kết thúc, có chấm công hoặc thuộc kỳ công đã chốt áp dụng cho cả hai tuần.

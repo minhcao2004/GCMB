@@ -9,6 +9,7 @@ import { PaginatedTable, Pagination, PaginatedList } from '../../../shared/compo
 import { useEffect, useRef, useState } from 'react';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { branchAdministrationApi as api, branchError } from '../services/branchAdministrationApi';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 import { actionNames } from '../../backoffice/accounts/services/accountAccessApi';
 import './branch-administration.css';
 
@@ -41,10 +42,7 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
   const selected = branches.find((branch) => branch.branchId === selectedId);
   const selectedManager = managers?.find((manager) => manager.userId === managerId);
   const isStatus = modal === 'SUSPENDED' || modal === 'ACTIVE';
-  const phoneError =
-    form.phone.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim())
-      ? 'Số điện thoại phải có từ 7 đến 15 chữ số, bắt đầu bằng 0; không được chứa dấu + hoặc ký tự định dạng.'
-      : '';
+  const phoneError = phoneFormatError(form.phone);
 
   async function refresh() {
     setLoading(true);
@@ -492,8 +490,8 @@ export default function BranchManagementPage({ onAccounts, initialBranchId = '',
                     Điện thoại liên hệ
                     <input
                       type="tel"
-                      inputMode="numeric"
-                      maxLength="15"
+                      inputMode="tel"
+                      maxLength="30"
                       value={form.phone}
                       aria-invalid={!!phoneError}
                       aria-describedby={phoneError ? 'branch-phone-error' : undefined}

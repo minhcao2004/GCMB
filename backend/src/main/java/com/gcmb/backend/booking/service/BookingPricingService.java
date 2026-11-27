@@ -36,7 +36,7 @@ public class BookingPricingService {
             throw new BookingFailure(400, "plannedEnd", "Thời gian kết thúc phải sau thời gian bắt đầu.");
         String normalizedMode = mode == null || mode.isBlank() ? "HOURLY" : mode.trim().toUpperCase();
         if ("COMBO".equals(normalizedMode)) {
-            var result = comboQuote(roomTypeId, branchId, start, end, comboId);
+            var result = comboQuote(roomTypeId, branchId, timezone, start, end, comboId);
             return new BookingDtos.PriceQuote(result.pricingMode(), result.expectedAmount(), depositFor(result.expectedAmount()), result.charges());
         }
         if (!"HOURLY".equals(normalizedMode)) throw new BookingFailure(400, "pricingMode", "Hình thức tính giá không hợp lệ");
@@ -65,13 +65,13 @@ public class BookingPricingService {
     }
 
     // BR-13: lưu giá và điều khoản combo hiện hành vào snapshot của booking.
-    private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, UUID branchId, Instant start, Instant end, UUID comboId) {
+    private BookingDtos.PriceQuote comboQuote(UUID roomTypeId, UUID branchId, ZoneId timezone, Instant start, Instant end, UUID comboId) {
         if (comboId == null) throw new BookingFailure(400, "comboId", "Vui lòng chọn combo");
         ComboRow combo = bookingRepository.combo(comboId, branchId);
         if (combo == null) throw new BookingFailure(400, "comboId", "Vui lòng bổ sung combo phù hợp.");
         if (!roomTypeId.equals(combo.roomTypeId()))
             throw new BookingFailure(400, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
-        if (combo.validFrom().isAfter(start) || (combo.validTo() != null && !start.isBefore(combo.validTo())))
+        if (!comboAvailableAt(combo, start, timezone))
             throw new BookingFailure(409, "comboId", "Combo " + combo.name() + " không áp dụng cho hạng phòng hoặc giờ bắt đầu đã chọn. Vui lòng chọn combo phù hợp.");
         long expectedSeconds = combo.durationMinutes() * 60L;
         if (!Duration.between(start, end).equals(Duration.ofSeconds(expectedSeconds)))
@@ -86,6 +86,16 @@ public class BookingPricingService {
         BookingDtos.ChargeLine line = new BookingDtos.ChargeLine("COMBO", combo.name(), BigDecimal.ONE,
             combo.price(), combo.price(), null, combo.id(), snapshot);
         return new BookingDtos.PriceQuote("COMBO", combo.price(), combo.depositRequired(), List.of(line));
+    }
+
+    // BR-153: áp dụng khung giờ bắt đầu tại cơ sở, kể cả khung qua nửa đêm.
+    static boolean comboAvailableAt(ComboRow combo, Instant start, ZoneId timezone) {
+        if (start.isBefore(combo.validFrom()) || (combo.validTo() != null && !start.isBefore(combo.validTo()))) return false;
+        var local = start.atZone(timezone);
+        int minute = local.getHour() * 60 + local.getMinute();
+        if (combo.minuteFrom() > combo.minuteTo())
+            return minute >= combo.minuteFrom() || minute < combo.minuteTo();
+        return minute >= combo.minuteFrom() && minute < combo.minuteTo();
     }
 
     // BR-13: chia khoảng theo price rule và lưu snapshot của từng phần giá đã chốt.
@@ -162,12 +172,17 @@ public class BookingPricingService {
 
     // Kiểm tra price rule có áp dụng cho ngày và phút địa phương hiện tại không.
     private static boolean applies(PricingRule rule, LocalDate date, int minute) {
+        return minute >= rule.minuteFrom() && minute < rule.minuteTo() && appliesOn(rule, date);
+    }
+
+    private static boolean appliesOn(PricingRule rule, LocalDate date) {
         if (date.isBefore(rule.validFrom()) || (rule.validTo() != null && !date.isBefore(rule.validTo()))) return false;
-        if (minute < rule.minuteFrom() || minute >= rule.minuteTo()) return false;
+        int weekday = date.getDayOfWeek().getValue();
+        if (!rule.weekdays().contains(weekday)) return false;
         return switch (rule.dayKind()) {
             case "SPECIFIC" -> date.equals(rule.specificDate());
-            case "WEEKEND" -> date.getDayOfWeek().getValue() >= 6;
-            case "WEEKDAY" -> date.getDayOfWeek().getValue() < 6;
+            case "WEEKEND" -> weekday >= 6;
+            case "WEEKDAY" -> weekday < 6;
             case "ALL" -> true;
             // Schema hiện chưa có lịch ngày lễ để xác định một ngày thuộc loại HOLIDAY.
             case "HOLIDAY" -> false;
@@ -190,7 +205,7 @@ public class BookingPricingService {
                                         List<PricingRule> rules, ZoneId timezone) {
         Instant next = date.plusDays(1).atStartOfDay(timezone).toInstant();
         for (PricingRule rule : rules) {
-            if (!date.isBefore(rule.validFrom()) && (rule.validTo() == null || date.isBefore(rule.validTo()))) {
+            if (appliesOn(rule, date)) {
                 for (int minute : new int[]{rule.minuteFrom(), rule.minuteTo()}) {
                     if (minute > currentMinute && minute < 1440) {
                         Instant boundary = LocalDateTime.of(date, LocalTime.MIDNIGHT).plusMinutes(minute).atZone(timezone).toInstant();

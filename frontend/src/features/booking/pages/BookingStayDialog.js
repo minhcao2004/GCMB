@@ -35,22 +35,8 @@ function durationText(minutes) {
   return [hours ? `${hours} giờ` : '', remainder ? `${remainder} phút` : ''].filter(Boolean).join(' ') || 'Dưới 1 phút';
 }
 
-// Chỉ hiện combo ngày/đêm khi giờ bắt đầu đáp ứng quy tắc backend.
-function comboCanStartAt(combo, value, timezone) {
-  const name = String(combo?.name || '').toLocaleLowerCase('vi-VN');
-  if (!name.includes('ngày') && !name.includes('ngay') && !name.includes('day')
-      && !name.includes('đêm') && !name.includes('dem') && !name.includes('night')) return true;
-  if (!value) return false;
-  const localTime = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).format(new Date(value));
-  return name.includes('ngày') || name.includes('ngay') || name.includes('day')
-    ? localTime === '07:00'
-    : localTime === '23:00';
-}
-
 // Báo giá và thực hiện đổi phòng hoặc gia hạn khi khách đang sử dụng.
-export default function BookingStayDialog({ booking, detail, bookingOptions, initialMode = 'change', onClose, onSave, busy = false, timezone = 'Asia/Ho_Chi_Minh' }) {
+export default function BookingStayDialog({ booking, detail, initialMode = 'change', onClose, onSave, busy = false, timezone = 'Asia/Ho_Chi_Minh' }) {
   const [mode, setMode] = useState(initialMode);
   const [options, setOptions] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,18 +107,13 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
       if (!active) return;
       setOptions(result);
       setTargetRoomId(result.availableRooms?.[0]?.id || '');
-      const roomType = bookingOptions?.roomTypes?.find((type) =>
-        (result.currentRoomTypeId && type.id === result.currentRoomTypeId)
-        || (result.currentRoomTypeName && type.name === result.currentRoomTypeName)
-        || (booking.roomTypeName && type.name === booking.roomTypeName));
-      const configuredCombos = result.extensionCombos?.length ? result.extensionCombos : roomType?.combos || [];
-      const eligibleCombos = configuredCombos.filter((combo) => comboCanStartAt(combo, result.plannedEnd || booking.plannedEnd, timezone));
+      const eligibleCombos = result.extensionCombos || [];
       setComboId(eligibleCombos[0]?.id || '');
-      setPricingMode(meter?.status ? 'HOURLY' : eligibleCombos.length ? 'COMBO' : 'HOURLY');
+      setPricingMode(eligibleCombos.length ? 'COMBO' : 'HOURLY');
     }).catch((requestErrorValue) => { if (active) setError(requestError(requestErrorValue)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [booking.id, bookingOptions, booking.plannedEnd, booking.roomTypeName, timezone, meter]);
+  }, [booking.id, booking.plannedEnd, meter]);
 
   useEffect(() => {
     if (meter || !targetRoomId || !cause || mode !== 'change') { setRoomQuote(null); return undefined; }
@@ -163,13 +144,17 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
   // Gửi thao tác được chọn; tiền đồng hồ hiển thị chỉ là tạm tính.
   const submit = async (event) => {
     event.preventDefault();
+    if (mode === 'change' && !reason.trim()) {
+      setError('Vui lòng bổ sung lý do đổi phòng.');
+      return;
+    }
     setError('');
     setSubmitting(true);
     try {
       let result;
       if (mode === 'change') {
         operationKeys.current.change ||= window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-        result = await onSave('change', { targetRoomId, cause, reason: reason.trim() || null,
+        result = await onSave('change', { targetRoomId, cause, reason: reason.trim(),
           idempotencyKey: operationKeys.current.change });
       } else if (meterAction) {
         result = await onSave(meterAction);
@@ -212,12 +197,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
     : null;
   const currentDuration = options?.currentDurationMinutes ?? allocationDuration;
   const currentBooking = currentDetail?.booking || bookingSummary;
-  const configuredRoomType = bookingOptions?.roomTypes?.find((type) =>
-    (options?.currentRoomTypeId && type.id === options.currentRoomTypeId)
-    || (options?.currentRoomTypeName && type.name === options.currentRoomTypeName)
-    || (booking.roomTypeName && type.name === booking.roomTypeName));
-  const comboChoices = options?.extensionCombos?.length ? options.extensionCombos : configuredRoomType?.combos || [];
-  const extensionCombos = comboChoices.filter((combo) => comboCanStartAt(combo, options?.plannedEnd || booking.plannedEnd, timezone));
+  const extensionCombos = options?.extensionCombos || [];
   const selectedCombo = extensionCombos.find((combo) => combo.id === comboId);
   const giftDrinkQuantity = pricingMode === 'COMBO' ? Number(selectedCombo?.includedFnbQuantity || 0) : 0;
   const giftFoodQuantity = pricingMode === 'COMBO' ? Number(selectedCombo?.includedFoodQuantity || 0) : 0;
@@ -280,7 +260,7 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
       </div>
       {loading ? <p className="booking-stay-loading" role="status">Đang tải thông tin phòng và giá…</p> : <>
         {mode === 'change' ? <>
-          <label className="booking-stay-field"><span>Lý do đổi phòng</span>
+          <label className="booking-stay-field"><span>Nguyên nhân đổi phòng *</span>
             <select value={cause} onChange={(event) => setCause(event.target.value)} required>
               <option value="">Chọn lý do đổi phòng</option>
               <option value="BRANCH_FAULT">Lỗi phòng/thiết bị từ phía cơ sở</option>
@@ -299,8 +279,8 @@ export default function BookingStayDialog({ booking, detail, bookingOptions, ini
             </select>
             {!options?.availableRooms?.length && <small>Hiện không có phòng phù hợp còn trống đến giờ trả.</small>}
           </label>
-          <label className="booking-stay-field"><span>Ghi chú (không bắt buộc)</span>
-            <textarea aria-label="Ghi chú đổi phòng" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} rows={2} placeholder="Thêm ghi chú cho lần đổi phòng này…" />
+          <label className="booking-stay-field"><span>Lý do cụ thể *</span>
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} rows={2} placeholder="Mô tả lý do đổi phòng…" required />
           </label>
           {roomQuote && <section className="booking-stay-quote" aria-live="polite">
             <div><span>Đã dùng ở phòng hiện tại</span><strong>{formatVnd(roomQuote.usedSegmentAmount)}</strong></div>

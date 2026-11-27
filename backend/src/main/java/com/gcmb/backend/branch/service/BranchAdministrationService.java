@@ -90,8 +90,11 @@ public class BranchAdministrationService {
                 || !List.of("SUSPENDED", "CLOSED").contains(input.status())) {
             throw failure(HttpStatus.BAD_REQUEST, "Chọn Tạm ngừng hoặc Đã đóng.");
         }
-        if (clean(input.reason()).isEmpty() || clean(input.reason()).length() > 2000) {
-            throw failure(HttpStatus.BAD_REQUEST, "Nhập lý do thay đổi trạng thái (tối đa 2000 ký tự).");
+        if (clean(input.reason()).isEmpty()) {
+            throw failure(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung lý do thay đổi trạng thái.");
+        }
+        if (clean(input.reason()).length() > 2000) {
+            throw failure(HttpStatus.BAD_REQUEST, "Lý do thay đổi trạng thái chỉ được chứa tối đa 2000 ký tự.");
         }
         lock(id);
         String current = (String) get(id).get("status");
@@ -133,16 +136,17 @@ public class BranchAdministrationService {
 
     private Map<String, Object> assign(UUID branchId, UUID userId, UUID actorId, String actorRole) {
         if (userId == null) {
-            throw failure(HttpStatus.BAD_REQUEST, "Chọn tài khoản quản lý cơ sở.");
+            throw failure(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung tài khoản quản lý cơ sở.");
         }
         // Dùng cùng khóa với phân quyền tài khoản, tránh gán người vừa bị thu hồi quyền.
         branchRepository.lockManagerAssignments();
         if (!branchRepository.lockActiveManagerAccount(userId)) {
-            throw failure(HttpStatus.CONFLICT, "Quản lý phải có tài khoản đang hoạt động và vai trò Quản lý cơ sở.");
+            throw failure(HttpStatus.CONFLICT, "Tài khoản được chọn không đủ điều kiện làm Quản lý cơ sở. Vui lòng chọn tài khoản Quản lý cơ sở khả dụng.");
         }
         lock(branchId);
-        if (!"ACTIVE".equals(get(branchId).get("status"))) {
-            throw failure(HttpStatus.CONFLICT, "Chỉ gán quản lý cho cơ sở đang hoạt động.");
+        var branch = get(branchId);
+        if (!"ACTIVE".equals(branch.get("status"))) {
+            throw failure(HttpStatus.CONFLICT, "Cơ sở " + branch.get("branchName") + " hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công.");
         }
         if (branchRepository.findManagedBranchIds(userId).contains(branchId)) return get(branchId);
         if (branchRepository.countManagers(branchId) >= 2) {

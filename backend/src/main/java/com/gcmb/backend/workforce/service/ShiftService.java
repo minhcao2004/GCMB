@@ -97,6 +97,10 @@ public class ShiftService {
         }
     }
 
+    private static boolean isEditableWeek(LocalDate week, LocalDate current) {
+        return week.equals(current) || week.equals(current.plusWeeks(1));
+    }
+
     private boolean registrationOpen(LocalDate week, Map<String, Object> branch) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of((String) branch.get("timezone")));
         LocalDate monday = now.toLocalDate().with(DayOfWeek.MONDAY);
@@ -106,13 +110,14 @@ public class ShiftService {
 
     private Map<String, Object> weekly(Identity actor, LocalDate week, Map<String, Object> branch) {
         boolean manager = "BRANCH_MANAGER".equals(actor.role());
+        LocalDate current = currentWeek(branch);
         UUID employee = manager ? null : shiftRepository.linkedEmployee(actor.id());
         if (!manager && employee == null) throw denied();
         // BR-60: lễ tân chỉ nhận phân công của mình; các ô đăng ký chỉ lộ số chỗ, không lộ tên đồng nghiệp.
         var result = new LinkedHashMap<String, Object>();
         result.put("week", week.toString());
-        result.put("currentWeek", currentWeek(branch).toString());
-        result.put("nextWeek", currentWeek(branch).plusWeeks(1).toString());
+        result.put("currentWeek", current.toString());
+        result.put("nextWeek", current.plusWeeks(1).toString());
         result.put("registrationOpen", registrationOpen(week, branch));
         result.put("branchName", branch.get("name"));
         var templates = shiftRepository.templates();
@@ -124,7 +129,7 @@ public class ShiftService {
         if (
             manager &&
             "ACTIVE".equals(branch.get("status")) &&
-            week.equals(currentWeek(branch))
+            isEditableWeek(week, current)
         ) {
             var closed = shiftRepository.closedMonths(actor.branchId(), week);
             var zone = ZoneId.of((String) branch.get("timezone"));
@@ -175,14 +180,14 @@ public class ShiftService {
             "Vui lòng bổ sung ngày và ca làm việc hợp lệ."
         );
         LocalDate targetWeek = first.date().with(DayOfWeek.MONDAY);
-        if (!targetWeek.equals(current)) {
-            throw bad("slots", "Chỉ chỉnh ca trong tuần hiện tại.");
+        if (!isEditableWeek(targetWeek, current)) {
+            throw bad("slots", "Chỉ chỉnh ca trong tuần hiện tại hoặc tuần tới.");
         }
         Map<UUID, Map<String, Object>> templates = new HashMap<>();
         for (var t : shiftRepository.templates()) templates.put((UUID) t.get("id"), t);
         var seen = new HashSet<String>();
         for (var slot : input.slots()) {
-            // UC-85 mở rộng tuần hiện tại; BR-53/111/203, MSG02/44: ca cố định, sức chứa nguyên dương.
+            // UC-85 / BR-53: mỗi ca phải thuộc đúng tuần cần lưu và một trong bốn khung giờ cố định.
             if (
                 slot == null ||
                 slot.date() == null ||
@@ -198,10 +203,7 @@ public class ShiftService {
             );
             var old = shiftRepository.slot(actor.branchId(), slot.templateId(), slot.date());
             if (old == null && !slot.open()) continue;
-            if (slot.capacity() == null || slot.capacity() != 3) throw bad(
-                "capacity",
-                "Mỗi ca làm việc có sức chứa 3 nhân viên."
-            );
+            if (slot.capacity() == null || slot.capacity() <= 0) throw bad("capacity", "Số chỗ phải là số nguyên lớn hơn 0.");
             if (
                 old == null
                     ? slot.version() != null
@@ -219,6 +221,7 @@ public class ShiftService {
                     registered +
                     "."
             );
+            if (slot.capacity() != 3) throw bad("capacity", "Mỗi ca làm việc có sức chứa 3 nhân viên.");
             if (shiftRepository.closedPeriod(actor.branchId(), slot.date())) throw locked();
             var t = templates.get(slot.templateId());
             int start = ((Number) t.get("startMinute")).intValue(),

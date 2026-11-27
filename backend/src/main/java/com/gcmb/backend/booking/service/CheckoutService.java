@@ -64,8 +64,8 @@ public class CheckoutService {
     }
 
     private Map<String, Object> depositStatus(Identity actor, UUID bookingId) {
-        UUID branchId = branch(actor);
-        lockBooking(bookingId, branchId);
+        UUID branchId = branch(actor, "thu tiền cọc");
+        lockBooking(bookingId, branchId, "thu tiền cọc");
         var booking = bookingRepository.booking(bookingId, branchId);
         BigDecimal received = bookingRepository.depositReceivedAmount(bookingId);
         var result = new LinkedHashMap<String, Object>();
@@ -80,8 +80,8 @@ public class CheckoutService {
     // HuyDV: lễ tân xác nhận cọc chuyển khoản ngoài hệ thống, giữ mức cọc 30%.
     @Transactional
     public Map<String, Object> confirmDeposit(Identity actor, UUID bookingId, String reference, BigDecimal reviewedAmount) {
-        UUID branchId = branch(actor);
-        lockBooking(bookingId, branchId);
+        UUID branchId = branch(actor, "thu tiền cọc");
+        lockBooking(bookingId, branchId, "thu tiền cọc");
         bookingRepository.requireActiveBranch(branchId);
         var booking = bookingRepository.booking(bookingId, branchId);
         if (bookingRepository.depositReceivedAmount(bookingId).signum() > 0) {
@@ -256,14 +256,10 @@ public class CheckoutService {
         BigDecimal discountAmount = grossAmount.multiply(discountPercent).movePointLeft(2).setScale(0, RoundingMode.HALF_UP);
         BigDecimal amount = grossAmount.subtract(discountAmount);
         BigDecimal heldDeposit = bookingRepository.depositBalance(bookingId);
-        if (heldDeposit.signum() < 0 || heldDeposit.compareTo(amount) > 0) {
-            throw fail(
-                409,
-                "Số dư cọc không hợp lệ hoặc vượt tổng bill. Cần kiểm tra cọc trước khi thanh toán."
-            );
-        }
+        if (heldDeposit.signum() < 0) throw fail(409, "Số dư cọc không hợp lệ. Cần kiểm tra cọc trước khi thanh toán.");
+        BigDecimal depositApplied = heldDeposit.min(amount);
         // BR-24: chỉ điều chỉnh khoản phải thu sau khi trừ cọc; net_amount và bill_line giữ nguyên giá trị hóa đơn.
-        BigDecimal rawPayable = amount.subtract(heldDeposit);
+        BigDecimal rawPayable = amount.subtract(depositApplied);
         BigDecimal payableAmount = roundToNearestThousand(rawPayable);
         BigDecimal roundingAdjustment = payableAmount.subtract(rawPayable);
         money(payableAmount);
@@ -298,8 +294,8 @@ public class CheckoutService {
             );
         }
         // Dùng bút toán APPLY; không sửa tiền cọc gốc và không tạo khoản thu lần hai.
-        if (heldDeposit.signum() > 0) {
-            checkoutRepository.insertDepositApplication(depositId, heldDeposit, billId, actor.id(), "CHECKOUT-DEPOSIT-" + billId);
+        if (depositApplied.signum() > 0) {
+            checkoutRepository.insertDepositApplication(depositId, depositApplied, billId, actor.id(), "CHECKOUT-DEPOSIT-" + billId);
         }
         audit(
             actor.id(),
@@ -322,7 +318,7 @@ public class CheckoutService {
                 "payableAmount",
                 payableAmount,
                 "depositAmount",
-                heldDeposit,
+                depositApplied,
                 "unservedConfirmed",
                 input.unservedConfirmed(),
                 "unservedItemCount",
@@ -336,6 +332,10 @@ public class CheckoutService {
         var rows = checkoutRepository.findBill(billId, branch(actor));
         if (rows.isEmpty()) throw fail(404, "Không tìm thấy bill trong cơ sở của bạn.");
         var result = new LinkedHashMap<>(rows.get(0));
+        if ("ISSUED".equals(result.get("status")) && decimal(result, "amount").compareTo(decimal(result, "depositApplied")) == 0) {
+            var depositBalance = bookingRepository.depositBalance((UUID) result.get("bookingId"));
+            result.put("depositRefundAmount", depositBalance.max(BigDecimal.ZERO));
+        }
         result.put("lines", checkoutRepository.findBillLines(billId));
         result.put(
             "remaining",
@@ -451,6 +451,7 @@ public class CheckoutService {
                 .compareTo(decimal(bill, "amount").add(decimal(bill, "roundingAdjustment"))) != 0
         ) throw fail(409, "Bill chưa được thanh toán đủ; chờ SePay xác nhận hoặc nhập tiền mặt.");
         UUID bookingId = (UUID) bill.get("bookingId");
+        UUID branchId = branch(actor);
         var allocation = bookingRepository.currentAllocationForUpdate(bookingId);
         if (allocation == null || !"OCCUPIED".equals(allocation.state())) throw fail(
             409,
@@ -462,7 +463,7 @@ public class CheckoutService {
         if (plannedCash.signum() > 0) {
             BigDecimal cashTendered = decimal(bill, "plannedCashTendered");
             checkoutRepository.insertCashPayment(
-                branch(actor),
+                branchId,
                 bookingId,
                 billId,
                 plannedCash,
@@ -477,7 +478,17 @@ public class CheckoutService {
         Timestamp checkoutAt = (Timestamp) bill.get("checkoutAt");
         checkoutRepository.finishAllocation(allocation.id(), checkoutAt);
         checkoutRepository.completeBooking(bookingId, checkoutAt);
-        checkoutRepository.releaseRoomAfterCheckout(allocation.roomId(), branch(actor), allocation.operatingStatus(), actor.id());
+        checkoutRepository.releaseRoomAfterCheckout(allocation.roomId(), branchId, allocation.operatingStatus(), actor.id());
+        BigDecimal refundable = BigDecimal.ZERO;
+        if (decimal(bill, "depositRefundAmount").signum() > 0) {
+            UUID depositId = bookingRepository.lockDeposit(bookingId);
+            refundable = bookingRepository.depositBalance(bookingId);
+            if (refundable.signum() > 0) {
+                if (depositId == null) throw fail(409, "Không tìm thấy tài khoản tiền cọc để tạo yêu cầu hoàn.");
+                bookingRepository.createDepositRefundRequest(branchId, bookingId, depositId, refundable,
+                    "Hoàn cọc dư khi checkout", (String) bill.get("customer"), "", "", actor.id(), billId);
+            }
+        }
         bookingRepository.event(
             bookingId,
             actor.id(),
@@ -487,7 +498,7 @@ public class CheckoutService {
         );
         audit(
             actor.id(),
-            branch(actor),
+            branchId,
             bookingId,
             "CHECKOUT_BOOKING",
             Map.of(
@@ -498,7 +509,9 @@ public class CheckoutService {
                 "roundingAdjustment",
                 decimal(bill, "roundingAdjustment"),
                 "depositAmount",
-                decimal(bill, "depositApplied")
+                decimal(bill, "depositApplied"),
+                "depositRefundAmount",
+                refundable
             )
         );
         return bill(actor, billId);
@@ -764,18 +777,26 @@ public class CheckoutService {
     }
 
     private void lockBooking(UUID bookingId, UUID branchId) {
+        lockBooking(bookingId, branchId, "tạo yêu cầu thanh toán");
+    }
+
+    private void lockBooking(UUID bookingId, UUID branchId, String action) {
         bookingRepository.requireActiveBranch(branchId); // BR-177
         if (!checkoutRepository.lockBookingInBranch(bookingId, branchId)) {
-            if (bookingRepository.bookingExists(bookingId)) throw fail(403, "Bạn không có quyền tạo yêu cầu thanh toán đối với booking.");
+            if (bookingRepository.bookingExists(bookingId)) throw fail(403, "Bạn không có quyền " + action + " đối với booking.");
             throw fail(404, "Không tìm thấy booking.");
         }
     }
 
     private UUID branch(Identity actor) {
+        return branch(actor, "checkout");
+    }
+
+    private UUID branch(Identity actor, String action) {
         if (actor == null || !"RECEPTIONIST".equals(actor.role()))
-            throw fail(403, "Bạn không có quyền checkout đối với booking.");
+            throw fail(403, "Bạn không có quyền " + action + " đối với booking.");
         var scope = bookingRepository.branchScope(actor.id());
-        if (scope == null) throw fail(403, "Bạn không có quyền checkout đối với booking.");
+        if (scope == null) throw fail(403, "Bạn không có quyền " + action + " đối với booking.");
         return scope.id();
     }
 

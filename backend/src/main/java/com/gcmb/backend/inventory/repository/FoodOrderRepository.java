@@ -331,13 +331,23 @@ public class FoodOrderRepository {
         return ids.isEmpty()?null:ids.get(0);
     }
 
-    public List<UUID> comboGiftOrderIds(UUID branchId, UUID bookingId) {
+    public List<UUID> lockComboGiftOrderIds(UUID branchId, UUID bookingId) {
         return jdbcTemplate.query("""
             SELECT id FROM gcmb.fb_order
             WHERE branch_id=? AND booking_id=? AND idempotency_key LIKE 'COMBO-GIFT-'||?::text||'%'
               AND status IN ('ACCEPTED','SERVED')
-            ORDER BY created_at,id
+            ORDER BY created_at,id FOR UPDATE
             """,(resultSet, rowNumber) ->resultSet.getObject("id",UUID.class),branchId,bookingId,bookingId);
+    }
+
+    public boolean hasStockSale(UUID orderId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+            SELECT EXISTS (
+              SELECT 1 FROM gcmb.order_line l
+              JOIN gcmb.stock_movement m ON m.order_line_id=l.id AND m.kind='SALE'
+              WHERE l.order_id=?
+            )
+            """, Boolean.class, orderId));
     }
 
     public void insertReturn(UUID inventoryItemId, UUID saleMovementId, BigDecimal quantity, BigDecimal before,

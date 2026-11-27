@@ -94,14 +94,15 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
 
   return <form className="accounting-refund-action" onSubmit={(event) => {
     event.preventDefault();
-    onSubmit(externalReference.trim(), image);
+    onSubmit(externalReference.trim(), image, item.checkoutBillNumber ? new FormData(event.currentTarget) : null);
   }}>
+    <small>Nhập mã giao dịch hoặc tải lên tệp minh chứng chuyển khoản.</small>
     <label className="deposit-form-field">
-      <span>Mã giao dịch chuyển khoản <small>(không bắt buộc)</small></span>
+      <span>Mã giao dịch chuyển khoản</span>
       <input maxLength={200} value={externalReference} onChange={(event) => setExternalReference(event.target.value)} autoComplete="off" />
     </label>
     <div className="deposit-form-field accounting-refund-evidence-field">
-      <span>Tệp minh chứng chuyển khoản <small>(không bắt buộc)</small></span>
+      <span>Tệp minh chứng chuyển khoản</span>
       <label className="accounting-refund-upload">
         <input ref={imageInput} type="file" accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,.heic,image/heif,.heif,application/pdf,.pdf"
           onChange={(event) => selectImage(event.target.files?.[0] || null)}
@@ -123,9 +124,25 @@ function RefundCompletionForm({ item, busy, error, onSubmit }) {
     </div>
     <section className="accounting-refund-final-check" aria-label="Đối chiếu lần cuối trước khi ghi nhận">
       <p><span>Số tiền hoàn</span><strong>{formatVnd(item.amount)}</strong></p>
-      <p><span>Chủ tài khoản</span><strong>{item.beneficiaryName || '—'}</strong></p>
-      <p><span>Ngân hàng · số tài khoản</span><strong>{item.bankName || '—'} · {item.bankAccount || '—'}</strong></p>
+      {!item.checkoutBillNumber && <>
+        <p><span>Chủ tài khoản</span><strong>{item.beneficiaryName || '—'}</strong></p>
+        <p><span>Ngân hàng · số tài khoản</span><strong>{item.bankName || '—'} · {item.bankAccount || '—'}</strong></p>
+      </>}
     </section>
+    {item.checkoutBillNumber && <>
+      <label className="deposit-form-field">
+        <span>Tên chủ tài khoản nhận hoàn</span>
+        <input name="beneficiaryName" defaultValue={item.beneficiaryName || ''} maxLength={200} required />
+      </label>
+      <label className="deposit-form-field">
+        <span>Ngân hàng nhận hoàn</span>
+        <input name="bankName" defaultValue={item.bankName || ''} maxLength={200} required />
+      </label>
+      <label className="deposit-form-field">
+        <span>Số tài khoản nhận hoàn</span>
+        <input name="bankAccount" defaultValue={item.bankAccount || ''} maxLength={60} required />
+      </label>
+    </>}
     <label className="accounting-refund-confirm">
       <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} required
         aria-describedby="accounting-refund-confirm-copy" />
@@ -197,13 +214,15 @@ function RefundDetails({ item, busy, error, onComplete, onBackToQueue }) {
       <section className="deposit-details-amount">
         <span>Số tiền yêu cầu hoàn</span>
         <strong>{formatVnd(item.amount)}</strong>
-        <small>Đặt phòng đã hủy</small>
+        <small>{item.checkoutBillNumber ? `Cọc dư từ hóa đơn ${item.checkoutBillNumber}` : 'Đặt phòng đã hủy'}</small>
       </section>
       <dl className="deposit-detail-list">
         <div><dt>Số điện thoại</dt><dd>{item.phone || '—'}</dd></div>
-        <div><dt>Chủ tài khoản</dt><dd>{item.beneficiaryName}</dd></div>
-        <div><dt>Ngân hàng</dt><dd>{item.bankName}</dd></div>
-        <div><dt>Số tài khoản</dt><dd>{item.bankAccount}</dd></div>
+        {(!item.checkoutBillNumber || item.bankAccount) && <>
+          <div><dt>Chủ tài khoản</dt><dd>{item.beneficiaryName}</dd></div>
+          <div><dt>Ngân hàng</dt><dd>{item.bankName}</dd></div>
+          <div><dt>Số tài khoản</dt><dd>{item.bankAccount}</dd></div>
+        </>}
         <div><dt>Gửi yêu cầu lúc</dt><dd>{dateTimeText(item.requestedAt)}</dd></div>
         {item.paidAt && <div><dt>Đã hoàn lúc</dt><dd>{dateTimeText(item.paidAt)}</dd></div>}
         {item.externalReference && <div><dt>Mã giao dịch hoàn</dt><dd>{item.externalReference}</dd></div>}
@@ -323,16 +342,19 @@ export default function AccountantRefundPage() {
     navigate('/dang-nhap', { replace: true });
   }
 
-  async function completeRefund(item, externalReference, image) {
-    setBusy(true);
+  async function completeRefund(item, externalReference, image, recipient) {
     setMutationError(null);
     setNotice('');
+    if (!externalReference && !image) {
+      setMutationError({ id: item.id, message: 'Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.' });
+      return;
+    }
+    setBusy(true);
     try {
-      const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
+      const result = await depositApi.completeRefundRequest(item.id, externalReference, image, recipient);
       setFilter('all');
       setSelectedId(item.id);
-      const proofNotice = image ? ' và lưu tệp minh chứng.'
-        : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
+      const proofNotice = image ? ' và lưu tệp minh chứng.' : ' theo mã giao dịch.';
       setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} tiền cọc${proofNotice}`);
       setReload((value) => value + 1);
     } catch (error) {
@@ -437,7 +459,7 @@ export default function AccountantRefundPage() {
             label="Phân trang hoàn tiền cọc" />
         </section>
         <RefundDetails item={selected} busy={busy} error={mutationError?.id === selected?.id ? mutationError?.message : null}
-          onComplete={(reference, image) => completeRefund(selected, reference, image)}
+          onComplete={(reference, image, recipient) => completeRefund(selected, reference, image, recipient)}
           onBackToQueue={() => setMobileView('queue')} />
       </div>
     </div>

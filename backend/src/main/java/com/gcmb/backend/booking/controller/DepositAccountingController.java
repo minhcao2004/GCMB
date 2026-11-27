@@ -36,8 +36,12 @@ public class DepositAccountingController {
     @PostMapping(value = "/refund-requests/{requestId}/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public DepositDtos.RefundCompletionResult completeRefund(@AuthenticationPrincipal Identity identity,
             @PathVariable UUID requestId, @RequestParam(value = "externalReference", required = false) String externalReference,
+            @RequestParam(value = "beneficiaryName", required = false) String beneficiaryName,
+            @RequestParam(value = "bankName", required = false) String bankName,
+            @RequestParam(value = "bankAccount", required = false) String bankAccount,
             @RequestPart(value = "image", required = false) MultipartFile image) {
-        return depositManagementService.completeRefund(identity, requestId, externalReference, image);
+        return depositManagementService.completeRefund(identity, requestId, externalReference, image,
+            new DepositDtos.RefundRecipient(beneficiaryName, bankName, bankAccount));
     }
 
     @GetMapping("/refund-requests/{requestId}/evidence")

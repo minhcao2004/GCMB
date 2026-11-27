@@ -16,7 +16,7 @@ import org.springframework.stereotype.Repository;
 // Đọc tiền cọc theo chi nhánh và hàng đợi hoàn cọc kế toán toàn hệ thống.
 public class DepositRepository {
     public record RefundRequestRow(UUID id, UUID branchId, UUID bookingId, UUID depositId, BigDecimal amount,
-                                   String reason, String status) {}
+                                   String reason, String status, UUID checkoutBillId) {}
     public record RefundEvidenceRow(String objectKey, String originalName, String mimeType) {}
 
     private static final String DEPOSIT_VIEW = """
@@ -184,10 +184,11 @@ public class DepositRepository {
         return jdbcTemplate.query("""
             SELECT r.id,r.booking_id,b.code,r.branch_id,br.name AS branch_name,b.contact_name,b.contact_phone,r.amount,r.reason,
                    r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference,
-                   r.evidence_id IS NOT NULL AS has_evidence
+                   r.evidence_id IS NOT NULL AS has_evidence,cb.number AS checkout_bill_number
             FROM gcmb.refund_request r
             JOIN gcmb.booking b ON b.id=r.booking_id
             JOIN gcmb.branch br ON br.id=r.branch_id
+            LEFT JOIN gcmb.bill cb ON cb.id=r.checkout_bill_id
             WHERE r.kind='DEPOSIT'
             ORDER BY CASE WHEN r.status IN ('REQUESTED','APPROVED','PROCESSING') THEN 0 ELSE 1 END,
                      r.created_at DESC,r.id DESC
@@ -197,7 +198,8 @@ public class DepositRepository {
                 resultSet.getString("contact_phone"), resultSet.getBigDecimal("amount"),
                 resultSet.getString("reason"), resultSet.getString("beneficiary_name"), resultSet.getString("bank_name"),
                 resultSet.getString("bank_account"), resultSet.getString("status"), instant(resultSet, "created_at"),
-                instant(resultSet, "paid_at"), resultSet.getString("external_reference"), resultSet.getBoolean("has_evidence")));
+                 instant(resultSet, "paid_at"), resultSet.getString("external_reference"), resultSet.getBoolean("has_evidence"),
+                 resultSet.getString("checkout_bill_number")));
     }
 
     public RefundEvidenceRow refundEvidenceForAccounting(UUID requestId) {
@@ -249,38 +251,49 @@ public class DepositRepository {
     public RefundRequestRow refundRequest(UUID branchId, UUID requestId, boolean lock) {
         String lockClause = lock ? " FOR UPDATE" : "";
         List<RefundRequestRow> rows = jdbcTemplate.query("""
-            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status,checkout_bill_id
             FROM gcmb.refund_request
             WHERE branch_id=? AND id=? AND kind='DEPOSIT'
             """ + lockClause, (resultSet, rowNumber) -> new RefundRequestRow(
                 resultSet.getObject("id", UUID.class), resultSet.getObject("branch_id", UUID.class),
                 resultSet.getObject("booking_id", UUID.class),
                 resultSet.getObject("deposit_id", UUID.class), resultSet.getBigDecimal("amount"),
-                resultSet.getString("reason"), resultSet.getString("status")), branchId, requestId);
+                resultSet.getString("reason"), resultSet.getString("status"),
+                resultSet.getObject("checkout_bill_id", UUID.class)), branchId, requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public RefundRequestRow refundRequestForAccounting(UUID requestId, boolean lock) {
         String lockClause = lock ? " FOR UPDATE" : "";
         List<RefundRequestRow> rows = jdbcTemplate.query("""
-            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status
+            SELECT id,branch_id,booking_id,deposit_id,amount,reason,status,checkout_bill_id
             FROM gcmb.refund_request
             WHERE id=? AND kind='DEPOSIT'
             """ + lockClause, (resultSet, rowNumber) -> new RefundRequestRow(
                 resultSet.getObject("id", UUID.class), resultSet.getObject("branch_id", UUID.class),
                 resultSet.getObject("booking_id", UUID.class), resultSet.getObject("deposit_id", UUID.class),
-                resultSet.getBigDecimal("amount"), resultSet.getString("reason"), resultSet.getString("status")), requestId);
+                resultSet.getBigDecimal("amount"), resultSet.getString("reason"), resultSet.getString("status"),
+                resultSet.getObject("checkout_bill_id", UUID.class)), requestId);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    public boolean checkoutBillIsSettled(UUID billId, UUID bookingId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM gcmb.bill WHERE id=? AND booking_id=? AND status='SETTLED')
+            """, Boolean.class, billId, bookingId));
+    }
+
     public boolean completeRefundRequest(UUID branchId, RefundRequestRow request, UUID actorId,
-                                         String externalReference, UUID evidenceId) {
+                                         String externalReference, UUID evidenceId, DepositDtos.RefundRecipient recipient) {
         int updated = jdbcTemplate.update("""
             UPDATE gcmb.refund_request
-            SET status='PAID',processed_by=?,paid_at=CURRENT_TIMESTAMP,external_reference=?,evidence_id=?
+            SET status='PAID',processed_by=?,paid_at=CURRENT_TIMESTAMP,external_reference=?,evidence_id=?,
+                beneficiary_name=COALESCE(?,beneficiary_name),bank_name=COALESCE(?,bank_name),bank_account=COALESCE(?,bank_account)
             WHERE id=? AND branch_id=? AND kind='DEPOSIT'
               AND status IN ('REQUESTED','APPROVED','PROCESSING')
-            """, actorId, externalReference, evidenceId, request.id(), branchId);
+            """, actorId, externalReference, evidenceId, recipient == null ? null : recipient.beneficiaryName(),
+            recipient == null ? null : recipient.bankName(), recipient == null ? null : recipient.bankAccount(),
+            request.id(), branchId);
         if (updated != 1) return false;
 
         int inserted = jdbcTemplate.update("""

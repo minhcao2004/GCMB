@@ -725,7 +725,7 @@ export default function RoomOverviewPage() {
       </form>}
       <button type="button" className="room-order-close" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>Đóng</button>
     </dialog>
-    {stayMode && currentBooking && <BookingStayDialog key={`${currentBooking.id}-${stayMode}`} booking={currentBooking} detail={detail} bookingOptions={options} initialMode={stayMode} onClose={() => setStayMode(null)} onSave={saveStay} busy={busy} timezone={timezone} />}
+    {stayMode && currentBooking && <BookingStayDialog key={`${currentBooking.id}-${stayMode}`} booking={currentBooking} detail={detail} initialMode={stayMode} onClose={() => setStayMode(null)} onSave={saveStay} busy={busy} timezone={timezone} />}
     {!orderDialogOpen && !scheduleOpen && <IncomingRoomOrderDialog orders={incomingOrders} employees={orderEmployees} busy={busy} error={incomingOrderError} notice={incomingOrderNotice}
       onConfirm={confirmIncomingOrder} onReject={rejectIncomingOrder} onDefer={deferIncomingOrder} />}
   </AppShell>;

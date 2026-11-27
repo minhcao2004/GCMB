@@ -518,10 +518,9 @@ public class PayrollService {
     if (payrollRepository.advanceRequestExists(input.requestId())) throw conflict(
       "Yêu cầu ứng lương này đã được ghi nhận. Vui lòng tải lại lịch sử."
     );
-    if (payrollRepository.payrollAlreadySubmitted(payrollPeriod.get("id"), input.employeeId())) {
-      throw conflict("QLCS đã chốt lương, không thể ứng thêm cho kỳ này.");
-    }
-    if (payrollRepository.finalSalaryPaid(payrollPeriod.get("id"), input.employeeId())) throw conflict("Nhân viên đã nhận lương cuối kỳ, không thể ứng thêm."); // BR-74.
+    // BR-74: bảng lương đã gửi vẫn được ứng cho đến khi lương cuối kỳ được trả.
+    if (payrollRepository.finalSalaryPaid(payrollPeriod.get("id"), input.employeeId()))
+      throw conflict("Nhân viên đã nhận lương cuối kỳ, không thể ứng thêm.");
     BigDecimal amount = money(input.amount(), "Số tiền ứng", true);
     BigDecimal available = (BigDecimal) available(actor, value, input.employeeId()).get(
       "available"
@@ -537,17 +536,17 @@ public class PayrollService {
     );
     var assignments = payrollRepository.findCurrentBranch(input.employeeId());
     if (assignments.isEmpty()) throw bad("Nhân viên chưa có cơ sở phân công.");
+    var entries = payrollRepository.findEntryNetAmount(payrollPeriod.get("id"), input.employeeId());
+    var entry = entries.isEmpty() ? null : entries.get(0);
+    if (entry != null && ((BigDecimal) entry.get("net_amount")).compareTo(amount) < 0)
+      throw conflict("Khoản ứng vượt số tiền còn phải trả của bảng lương.");
+
     UUID id = UUID.randomUUID();
     payrollRepository.insertPaidAdvance(id, input.employeeId(), payrollPeriod.get("id"), assignments.get(0), amount, actor.id(),
         input.reference(), input.requestId());
     post(actor, input.accountId(), id, true, amount, assignments.get(0));
-    // BR-74/75/76: an advance after approval changes settlement only, not earned salary.
-    var entries = payrollRepository.findEntryNetAmount(payrollPeriod.get("id"), input.employeeId());
-    if (!entries.isEmpty()) {
-      var entry = entries.get(0);
-      if (((BigDecimal) entry.get("net_amount")).compareTo(amount) < 0) throw conflict(
-        "Khoản ứng vượt số tiền còn phải trả của bảng lương."
-      );
+    // BR-75/76: chỉ khấu trừ khoản ứng đã chi vào số còn phải trả.
+    if (entry != null) {
       payrollRepository.deductAdvanceFromEntry(entry.get("id"), id, amount);
     }
     increment(payrollPeriod);

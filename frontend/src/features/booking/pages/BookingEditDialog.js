@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 import { bookingApi } from '../services/bookingApi';
 import TimeInput from '../components/TimeInput';
-import { formatVnd, isValidTimeInput } from '../data/bookingData';
+import { formatVnd, hourlyRentalMinutes, isValidTimeInput } from '../data/bookingData';
 
 // Tách thời điểm ISO thành ngày/giờ nhập theo múi giờ chi nhánh.
 function partsInZone(value, timezone) {
@@ -80,15 +81,15 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
   const plannedStart = useMemo(() => form ? instantInZone(form.startDate, form.startTime, timezone) : null, [form, timezone]);
   const plannedEnd = useMemo(() => form ? instantInZone(form.endDate, form.endTime, timezone) : null, [form, timezone]);
   const durationMinutes = plannedStart && plannedEnd ? (new Date(plannedEnd) - new Date(plannedStart)) / 60000 : 0;
-  const hourlyDurationValid = /^(?:[1-9]|1\d|2[0-4])$/.test(String(form?.durationHours || ''));
+  const hourlyMinutes = hourlyRentalMinutes(form?.durationHours);
+  const hourlyDurationValid = hourlyMinutes !== null;
   const periodValid = Boolean(plannedStart && plannedEnd && new Date(plannedStart) > new Date()
     && Number.isInteger(durationMinutes) && durationMinutes >= 1 && durationMinutes <= 1440
-    && (form?.pricingMode !== 'HOURLY' || (hourlyDurationValid && durationMinutes === Number(form.durationHours) * 60)));
+    && (form?.pricingMode !== 'HOURLY' || durationMinutes === hourlyMinutes));
   const formReady = Boolean(form?.startDate && form?.startTime && form?.endDate && form?.endTime);
   const booking = detail?.booking;
   const contactPhoneError = !form?.contactPhone.trim() ? 'Nhập số điện thoại.'
-    : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
-      ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
+    : phoneFormatError(form.contactPhone);
   const currentCombo = detail?.charges?.find((charge) => charge.status === 'ACTIVE' && charge.comboId);
 
   useEffect(() => {
@@ -130,11 +131,12 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     const { name, value } = event.target;
     setForm((current) => {
       const next = { ...current, [name]: value };
-      if (next.pricingMode === 'HOURLY' && (name === 'durationHours' || name === 'startDate' || name === 'startTime')
-          && /^(?:[1-9]|1\d|2[0-4])$/.test(String(next.durationHours))) {
+      const minutes = hourlyRentalMinutes(next.durationHours);
+      if (next.pricingMode === 'HOURLY' && minutes !== null
+          && (name === 'durationHours' || name === 'startDate' || name === 'startTime')) {
         const start = instantInZone(next.startDate, next.startTime, timezone);
         if (start) {
-          const end = partsInZone(new Date(new Date(start).getTime() + Number(next.durationHours) * 3600000), timezone);
+          const end = partsInZone(new Date(new Date(start).getTime() + minutes * 60000), timezone);
           next.endDate = end.date;
           next.endTime = end.time;
         }
@@ -190,11 +192,11 @@ if (!periodValid) return setFormError(
       const next = { ...current, pricingMode };
       const start = instantInZone(current.startDate, current.startTime, timezone);
       if (pricingMode === 'HOURLY') {
-        const hours = /^(?:[1-9]|1\d|2[0-4])$/.test(String(current.durationHours)) ? current.durationHours : '2';
-        next.durationHours = hours;
+        const minutes = hourlyRentalMinutes(current.durationHours) ?? 120;
+        next.durationHours = String(minutes / 60);
         next.comboId = '';
         if (start) {
-          const end = partsInZone(new Date(new Date(start).getTime() + Number(hours) * 3600000), timezone);
+          const end = partsInZone(new Date(new Date(start).getTime() + minutes * 60000), timezone);
           next.endDate = end.date;
           next.endTime = end.time;
         }
@@ -231,7 +233,7 @@ if (!periodValid) return setFormError(
         <h3 className="booking-cancel-section-title">Thông tin booking</h3>
         <div className="booking-form-grid booking-customer-grid">
           <label className="booking-form-field"><span>Tên khách *</span><input name="contactName" maxLength="200" value={form.contactName} onChange={change} /></label>
-          <label className={`booking-form-field ${contactPhoneError ? 'is-invalid' : ''}`}><span>Số điện thoại *</span><input type="tel" inputMode="numeric" autoComplete="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} aria-invalid={!!contactPhoneError} aria-describedby={contactPhoneError ? 'booking-edit-phone-error' : undefined} />{contactPhoneError && <small id="booking-edit-phone-error" className="booking-field-error" aria-live="polite">{contactPhoneError}</small>}</label>
+          <label className={`booking-form-field ${contactPhoneError ? 'is-invalid' : ''}`}><span>Số điện thoại *</span><input type="tel" inputMode="tel" autoComplete="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} aria-invalid={!!contactPhoneError} aria-describedby={contactPhoneError ? 'booking-edit-phone-error' : undefined} />{contactPhoneError && <small id="booking-edit-phone-error" className="booking-field-error" aria-live="polite">{contactPhoneError}</small>}</label>
         </div>
         <h3 className="booking-cancel-section-title booking-edit-section-title">Thời gian sử dụng</h3>
         <div className="booking-form-grid booking-schedule-grid">
@@ -245,8 +247,8 @@ if (!periodValid) return setFormError(
           <button type="button" className={form.pricingMode === 'COMBO' ? 'is-selected' : ''} onClick={() => changeMode('COMBO')}>Combo</button>
         </div>
         {form.pricingMode === 'HOURLY' ? <label className="booking-form-field booking-edit-combo"><span>Thời lượng thuê (giờ)</span>
-          <input type="number" name="durationHours" min="1" max="24" step="1" inputMode="numeric" value={form.durationHours} onChange={change} aria-invalid={!hourlyDurationValid} />
-          <small className={!hourlyDurationValid ? 'booking-inline-error' : ''}>Nhập số giờ nguyên từ 1 đến 24. Giờ trả được tính tự động.</small>
+          <input type="number" name="durationHours" min="0" max="24" step="any" inputMode="decimal" value={form.durationHours} onChange={change} aria-invalid={!hourlyDurationValid} />
+          <small className={!hourlyDurationValid ? 'booking-inline-error' : ''}>Nhập thời lượng từ 1 phút đến 24 giờ. Ví dụ 0,5 giờ là 30 phút.</small>
         </label> : <label className="booking-form-field booking-edit-combo"><span>Combo sử dụng</span>
           <select name="comboId" value={form.comboId} onChange={changeCombo}>
             {!form.comboId && <option value="">Chọn combo</option>}

@@ -203,8 +203,8 @@ public class FinanceRepository {
                                     String description, String beneficiaryName, UUID requestedBy, String status) {
         jdbcTemplate.update("""
             INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
-              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,payment_method,requested_by,status)
-            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?,?)
+              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status)
+            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
             """, requestId, code, kind, branchId, categoryId, categoryType, recognitionMode, allocationMonths, amount, expenseOn,
             description, beneficiaryName, "", "", requestedBy, status);
     }
