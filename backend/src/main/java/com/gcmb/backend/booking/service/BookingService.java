@@ -521,33 +521,20 @@ public class BookingService {
             throw new BookingFailure(400, "plannedStart", "Thời gian bắt đầu của booking đặt trước không được ở quá khứ. Vui lòng chọn lại thời gian.");
         }
 
-        RoomRow room = request.roomId() == null ? null : lockUsableRoom(request.roomId(), branch);
-        if (request.roomId() != null && room == null)
-            throw new BookingFailure(409, "roomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
-        RoomTypeRow roomType = room == null ? bookingRepository.lockRoomType(request.roomTypeId()) : bookingRepository.lockRoomType(room.roomTypeId());
+        if (request.roomId() != null)
+            throw new BookingFailure(400, "roomId", "Phòng cụ thể chỉ được chọn khi check-in.");
+        RoomTypeRow roomType = bookingRepository.lockRoomType(request.roomTypeId());
         if (roomType == null) throw new BookingFailure(409, "roomTypeId", "Hạng phòng không còn hoạt động. Vui lòng chọn lại hạng phòng.");
-        if (room != null && request.roomTypeId() != null && !request.roomTypeId().equals(roomType.id()))
-            throw new BookingFailure(400, "roomTypeId", "Hạng phòng không khớp với phòng đã chọn.");
-        if (room != null && bookingRepository.hasRoomOverlap(room.id(), request.plannedStart(), request.plannedEnd(), null))
-            throw roomConflict(room.code());
         int guestCount = request.guestCount() == null ? 1 : request.guestCount();
         if (guestCount < 1)
             throw new BookingFailure(400, "guestCount", "Số lượng khách phải là số nguyên lớn hơn 0.");
-        if (room != null && guestCount > room.capacity())
-            throw new BookingFailure(400, "guestCount", "Phòng " + room.code() + " chỉ phù hợp tối đa " + room.capacity() + " khách. Vui lòng giảm số khách hoặc chọn phòng có sức chứa lớn hơn.");
-        if (room == null && guestCount > roomType.capacity())
+        if (guestCount > roomType.capacity())
             throw new BookingFailure(400, "guestCount", "Hạng phòng " + roomType.name() + " chỉ phù hợp tối đa " + roomType.capacity() + " khách. Vui lòng giảm số khách hoặc chọn hạng phòng khác.");
-        if (room == null) {
-            // shortcut: sức chứa khác nhau trong cùng hạng có thể làm kiểm tra tồn phòng thận trọng; dùng ghép phòng theo sức chứa khi cần tối ưu nhận booking.
-            long suitableRooms = bookingRepository.availableRooms(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd()).stream()
-                .filter(candidate -> candidate.capacity() >= guestCount).count();
-            int held = bookingRepository.unassignedBookings(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd(), null);
-            if (suitableRooms <= held) throw new BookingFailure(409, "roomTypeId", "Không còn phòng phù hợp thuộc hạng đã chọn trong khung giờ này. Vui lòng đổi thời gian hoặc hạng phòng.");
-        } else {
-            int available = bookingRepository.availableRooms(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd()).size();
-            int held = bookingRepository.unassignedBookings(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd(), null);
-            if (available <= held) throw new BookingFailure(409, "roomId", "Không còn phòng trống sau khi giữ chỗ theo hạng phòng. Vui lòng chọn thời gian khác.");
-        }
+        // shortcut: sức chứa khác nhau trong cùng hạng có thể làm kiểm tra tồn phòng thận trọng; dùng ghép phòng theo sức chứa khi cần tối ưu nhận booking.
+        long suitableRooms = bookingRepository.availableRooms(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd()).stream()
+            .filter(candidate -> candidate.capacity() >= guestCount).count();
+        int held = bookingRepository.unassignedBookings(branch.id(), roomType.id(), request.plannedStart(), request.plannedEnd(), null);
+        if (suitableRooms <= held) throw new BookingFailure(409, "roomTypeId", "Không còn phòng phù hợp thuộc hạng đã chọn trong khung giờ này. Vui lòng đổi thời gian hoặc hạng phòng.");
         if (request.pricingMode() == null || "HOURLY".equalsIgnoreCase(request.pricingMode().trim()))
             validateHourlyRental(request.plannedStart(), request.plannedEnd());
         BookingDtos.PriceQuote quote = bookingPricingService.quote(roomType.id(), branch.id(), branch.timezone(),
@@ -581,7 +568,6 @@ public class BookingService {
             request.plannedStart(), request.plannedEnd(), REFUND_CUTOFF_MINUTES, actorId, note);
         bookingRepository.setComboGiftQuantities(bookingId, selectedCombo == null ? 0 : selectedCombo.includedFnbQuantity(),
             selectedCombo == null ? 0 : selectedCombo.includedFoodQuantity());
-        UUID allocationId = room == null ? null : insertAllocation(branch, bookingId, room.id(), room.code(), request.plannedStart(), request.plannedEnd(), actorId);
         bookingRepository.createDepositAccount(bookingId);
         // Chỉ ghi sổ khi thực sự có tiền đã thu; yêu cầu cọc của combo không tự tạo khoản thu.
         if (depositAmount.signum() > 0 && !"BANK_TRANSFER".equals(paymentMethod)) {
@@ -590,9 +576,9 @@ public class BookingService {
             if (bookingRepository.depositBalance(bookingId).compareTo(depositAmount) != 0)
                 throw new IllegalStateException("Received booking deposit does not match its ledger balance");
         }
-        for (BookingDtos.ChargeLine charge : quote.charges()) bookingRepository.insertCharge(bookingId, allocationId, charge);
+        for (BookingDtos.ChargeLine charge : quote.charges()) bookingRepository.insertCharge(bookingId, null, charge);
         bookingRepository.event(bookingId, actorId, "BOOKING_CREATED", null, detailsMap(
-            "branchId", branch.id(), "roomTypeId", roomType.id(), "roomId", room == null ? null : room.id(), "startsAt", request.plannedStart(),
+            "branchId", branch.id(), "roomTypeId", roomType.id(), "roomId", null, "startsAt", request.plannedStart(),
             "endsAt", request.plannedEnd(), "pricingMode", quote.pricingMode(),
             "expectedAmount", quote.expectedAmount(), "depositRequired", quote.depositRequired(), "guestCount", guestCount,
             "depositReceived", "BANK_TRANSFER".equals(paymentMethod) ? BigDecimal.ZERO : depositAmount,
@@ -614,15 +600,17 @@ public class BookingService {
     public BookingDtos.BookingDetail openWalkIn(Identity identity, BookingDtos.WalkInRequest request) {
         if (request == null || request.durationMinutes() == null || request.durationMinutes() <= 0)
             throw new BookingFailure(400, "form", "Vui lòng chọn thời lượng sử dụng hợp lệ.");
+        RoomRow room = request.roomId() == null ? null : lockUsableRoom(request.roomId(), branch(identity));
+        if (room == null) throw new BookingFailure(409, "roomId", "Phòng không tồn tại tại chi nhánh hoặc hiện không hoạt động");
         Instant start = Instant.now();
-        var createRequest = new BookingDtos.CreateBookingRequest(request.roomId(), start,
+        var createRequest = new BookingDtos.CreateBookingRequest(null, room.roomTypeId(), start,
             start.plus(Duration.ofMinutes(request.durationMinutes())), request.pricingMode(), request.comboId(),
             request.contactName(), request.contactPhone(), "WALK_IN", request.note(), request.guestCount(),
             BigDecimal.ZERO, null, null);
         var created = create(identity, createRequest);
         // Quà combo được chọn và ghi nhận trong cùng giao dịch nhận khách tại quầy.
         return checkIn(identity, created.booking().id(),
-            new BookingDtos.CheckInRequest(request.drinkItems(), request.foodItems()));
+            new BookingDtos.CheckInRequest(room.id(), request.drinkItems(), request.foodItems()));
     }
 
     @Transactional

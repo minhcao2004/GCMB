@@ -473,7 +473,8 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
     setSelectedRoomId('');
     setAvailableRooms([]);
     setRoomError('');
-    if (!booking?.id || booking.status !== 'CONFIRMED' || booking.roomId) return () => { active = false; };
+    if (!booking?.id || booking.status !== 'CONFIRMED' || booking.roomId
+      || new Date(booking.plannedEnd).getTime() <= Date.now()) return () => { active = false; };
     setRoomLoading(true);
     bookingApi.checkInRooms(booking.id).then((rooms) => {
       if (active) setAvailableRooms(rooms || []);
@@ -481,7 +482,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
       if (active) { const errors = apiErrors(requestError); setRoomError(errors.form || Object.values(errors)[0] || 'Không tải được phòng trống.'); }
     }).finally(() => { if (active) setRoomLoading(false); });
     return () => { active = false; };
-  }, [booking?.id, booking?.status, booking?.roomId]);
+  }, [booking?.id, booking?.status, booking?.roomId, booking?.plannedEnd]);
   useEffect(() => {
     let active = true;
     setGiftRequirements(null);
@@ -546,7 +547,8 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           <div><span>Ngày nhận</span><strong>{dateText(booking.plannedStart, timezone)}</strong></div><div><span>Giờ hẹn lúc đặt</span><strong>{timeText(booking.plannedStart, timezone)}</strong></div>
           <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{checkInRoom.roomCode ? `${checkInRoom.roomCode} · ${checkInRoom.roomName || ''}` : 'Chọn bên dưới'}</strong></div>
         </div></section>
-        {booking.status === 'CONFIRMED' && !booking.roomId && <section className="booking-checkin-section">
+        {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note" role="alert">Booking đã kết thúc lúc {timeText(booking.plannedEnd, timezone)} ngày {dateText(booking.plannedEnd, timezone)}, không thể check-in.</p>}
+        {booking.status === 'CONFIRMED' && !booking.roomId && checkInTimeValid && <section className="booking-checkin-section">
           <h3>Chọn phòng cụ thể *</h3>
           <label className="booking-form-field"><span>Phòng hạng {booking.roomTypeName || 'đã đặt'}</span>
             <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} disabled={roomLoading || busy} required>
@@ -573,7 +575,6 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
         {booking.status === 'CONFIRMED' && <p className="booking-checkin-time-note">Giờ trả dự kiến sẽ dời theo giờ check-in thực tế để giữ nguyên thời lượng đã đặt. Hệ thống sẽ kiểm tra lại lịch phòng trước khi xác nhận.</p>}
         {booking.status === 'CANCELLED' && <p className="booking-checkin-time-note">Booking đã bị hủy nên không thể nhận phòng. Vui lòng kiểm tra lại booking của khách.</p>}
         {booking.status !== 'CONFIRMED' && booking.status !== 'IN_HOUSE' && booking.status !== 'CANCELLED' && <p className="booking-checkin-time-note">Booking này không còn ở trạng thái chờ check-in.</p>}
-        {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note">Đã quá giờ kết thúc booking, không thể check-in.</p>}
       </div>
       <div className="booking-checkin-footer">
         {error && <p className="booking-inline-error" role="alert">{error}</p>}

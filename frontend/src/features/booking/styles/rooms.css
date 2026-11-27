@@ -157,8 +157,8 @@
 @media (max-width: 520px) { .walk-in-dialog { padding: 18px; } .walk-in-fields { grid-template-columns: 1fr; } .walk-in-note { grid-column: auto; } .walk-in-actions button { flex: 1; } }
 .room-checkout:disabled { opacity: .55; cursor: not-allowed; }
 .room-checkout-note { display: block; margin-top: 8px; color: var(--room-muted); font-size: var(--gcmb-font-size-xs); line-height: var(--gcmb-line-height); }
-.room-order-dialog { box-sizing: border-box; width: min(600px, calc(100vw - 28px)); max-width: none; max-height: min(92dvh, 820px); overflow: auto; border: 0; border-radius: 16px; padding: 22px; color: #202638; background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
-.room-order-dialog::backdrop { background: rgb(26 38 56 / 42%); }
+.room-order-dialog { box-sizing: border-box; width: min(600px, calc(100vw - 28px)); max-width: none; max-height: min(92dvh, 820px); overflow: auto; overscroll-behavior: contain; border: 0; border-radius: 16px; padding: 22px; color: #202638; background: #fff; box-shadow: 0 20px 60px rgb(26 38 56 / 24%); }
+.room-order-dialog::backdrop { overflow: hidden; overscroll-behavior: contain; background: rgb(26 38 56 / 42%); }
 .room-order-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .room-order-dialog h2 { margin: 0; font-size: 19px; }
 .room-order-dialog header p { margin: 5px 0 0; color: #697687; font-size: 11px; }

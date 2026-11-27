@@ -126,6 +126,9 @@
 .food-order-dialog .food-dialog-close { flex: 0 0 auto; min-width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
 .food-order-dialog-error { margin-bottom: 14px; border-radius: 8px; padding: 11px 13px; color: #8e2e44; background: #fff1f3; font-size: 12px; }
 .food-order-dialog .food-add-footer { position: sticky; bottom: -24px; z-index: 1; padding: 15px 0 24px; background: #fff; }
+.food-staff-order-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.food-staff-order-item .food-staff-order-price { display: grid; gap: 4px; margin-top: 5px; color: #566275; font-size: 11px; font-weight: 700; }
+.food-staff-order-price input { box-sizing: border-box; width: 140px; min-height: 36px; border: 1px solid #d5dde3; border-radius: 8px; padding: 0 9px; color: #202638; background: #fff; font: inherit; }
 .food-staff-add .food-section-title > div > h2,.food-staff-queue .food-section-title > div > h2 { margin: 0; font-size: 20px; }
 .food-staff-add .food-section-title > div > p,.food-staff-queue .food-section-title > div > p { margin: 5px 0 0; color: var(--food-muted); font-size: 12px; }
 .food-form-row { display: grid; grid-template-columns: minmax(180px,1.2fr) minmax(180px,1fr) minmax(180px,1fr) auto; align-items: end; gap: 11px; }
@@ -177,6 +180,7 @@
   .food-section-title { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 680px) {
+  .food-staff-order-context { grid-template-columns: 1fr; gap: 0; }
   .mr-order-header { min-height: 62px; padding: 0 17px; }
   .mr-order-header p { max-width: 55%; text-align: right; }
   .mr-order-content { width: calc(100% - 32px); padding-top: 25px; }

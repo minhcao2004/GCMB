@@ -58,7 +58,6 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   const [itemDraft, setItemDraft] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [receiptDraft, setReceiptDraft] = useState(null);
-  const [receiptCreateLineId, setReceiptCreateLineId] = useState(null);
   const [receiptItemDraft, setReceiptItemDraft] = useState(null);
   const [adjustDraft, setAdjustDraft] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
@@ -191,7 +190,6 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
 
   const openReceipt = () => {
     setReceiptDraft({ receivedAt: makeLocalDateTime(), supplierName: '', supplierInvoice: '', items: [newReceiptLine(newId())] });
-    setReceiptCreateLineId(null);
     setReceiptItemDraft(null);
     setEvidence(null);
     setError('');
@@ -235,6 +233,7 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
 
   const saveReceiptItem = async () => {
     if (!receiptItemDraft || busy) return;
+    // BR-111, MSG02: các trường bắt buộc không được để trống hoặc chỉ có khoảng trắng.
     if (!receiptItemDraft.name.trim()) { setError('Vui lòng bổ sung tên mặt hàng.'); return; }
     if (!receiptItemDraft.category.trim()) { setError('Vui lòng bổ sung nhóm hàng.'); return; }
     if (!receiptItemDraft.unitId) { setError('Vui lòng bổ sung đơn vị tồn kho.'); return; }
@@ -252,10 +251,21 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
         categories: current.categories.includes(item.category)
           ? current.categories : [...current.categories, item.category].sort((left, right) => left.localeCompare(right, 'vi')),
       }));
-      updateReceiptLine(receiptCreateLineId, 'inventoryItemId', item.id);
-      setReceiptCreateLineId(null);
+      setReceiptDraft((draft) => {
+        const emptyIndex = draft.items.findIndex((line) => !line.inventoryItemId);
+        if (emptyIndex !== -1) return {
+          ...draft,
+          items: draft.items.map((line, index) => index === emptyIndex
+            ? { ...newReceiptLine(line.id), inventoryItemId: item.id } : line),
+        };
+        return { ...draft, items: [...draft.items, { ...newReceiptLine(newId()), inventoryItemId: item.id }] };
+      });
       setReceiptItemDraft(null);
-      setToastMessage(`Đã tạo mặt hàng ${item.name}. Chọn đơn vị nhận để tiếp tục.`);
+      // MSG10: thông báo tạo mặt hàng thành công.
+      setToastMessage(`Đã tạo mặt hàng ${item.name}.`);
+      window.requestAnimationFrame(() => {
+        pageRef.current?.querySelector(`[data-receipt-unit-for="${item.id}"]`)?.focus({ preventScroll: true });
+      });
     } catch (saveError) {
       setError(displayError(saveError));
     } finally {
@@ -517,7 +527,35 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
           {attachmentField}
         </div>
         <div className="inv-line-items">
-          <div className="inv-line-heading"><h3>Mặt hàng nhận</h3><span>{receiptLines.length} dòng</span></div>
+          <div className="inv-line-heading"><h3>Mặt hàng nhận</h3><div className="inv-line-heading-actions">
+            <span>{receiptLines.length} dòng</span>
+            <button type="button" className="inv-button inv-button-quiet inv-receipt-create-toggle" disabled={busy}
+              aria-expanded={Boolean(receiptItemDraft)} aria-controls={receiptItemDraft ? 'inv-receipt-inline-create' : undefined}
+              onClick={() => {
+                if (receiptItemDraft) { setReceiptItemDraft(null); return; }
+                setReceiptItemDraft({ name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '', trackingMode: 'AUTO_ON_SALE', minimumQuantity: '5' });
+                setError('');
+              }}>{receiptItemDraft ? 'Hủy tạo mặt hàng' : '+ Tạo mặt hàng mới'}</button>
+          </div></div>
+          {receiptItemDraft && <div id="inv-receipt-inline-create" className="inv-receipt-inline-create" role="group" aria-label="Tạo mặt hàng mới"
+            onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}>
+            <strong>Tạo mặt hàng và tiếp tục nhập</strong>
+            <div className="inv-receipt-create-grid">
+              <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft.name} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
+              <label className="inv-field"><span>Nhóm hàng *</span><select value={receiptItemDraft.category} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })}>
+                <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+              <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft.unitId} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
+                <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select></label>
+              <label className="inv-field"><span>Cách theo dõi tồn *</span><select value={receiptItemDraft.trackingMode} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, trackingMode: event.target.value })}>
+                <option value="AUTO_ON_SALE">Tự trừ khi bán</option><option value="MANUAL">Theo dõi thủ công</option>
+              </select></label>
+              <label className="inv-field"><span>Ngưỡng sắp hết</span><input type="number" min="0" step="0.001" value={receiptItemDraft.minimumQuantity} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, minimumQuantity: event.target.value })} /></label>
+            </div>
+            <div className="inv-receipt-create-actions"><small>Mã mặt hàng sẽ được hệ thống cấp tự động. Tồn ban đầu bằng 0; tồn chỉ tăng khi xác nhận phiếu nhập.</small>
+              <button type="button" className="inv-button inv-button-primary" disabled={busy || !metadata.units.length} onClick={saveReceiptItem}>{busy ? 'Đang tạo…' : 'Tạo và chọn mặt hàng'}</button>
+            </div>
+          </div>}
           <div className="inv-receipt-lines">
             {receiptLines.map((line) => {
               const item = items.find((row) => row.id === line.inventoryItemId);
@@ -530,35 +568,9 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
                   <label className="inv-field"><span>Mặt hàng *</span><select required value={line.inventoryItemId} onChange={(event) => updateReceiptLine(line.id, 'inventoryItemId', event.target.value)}>
                     <option value="">Chọn mặt hàng</option>{activeItems.filter((option) => !receiptLines.some((other) => other.id !== line.id && other.inventoryItemId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.sku} · {option.name}</option>)}
                   </select></label>
-                  <button type="button" className="inv-text-button inv-receipt-create-toggle" disabled={busy}
-                    onClick={() => {
-                      if (receiptCreateLineId === line.id) { setReceiptCreateLineId(null); setReceiptItemDraft(null); return; }
-                      setReceiptCreateLineId(line.id);
-                      setReceiptItemDraft({ name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '', trackingMode: 'AUTO_ON_SALE', minimumQuantity: '5' });
-                      setError('');
-                    }}>+ Tạo mặt hàng mới</button>
-                  {receiptCreateLineId === line.id && <div className="inv-receipt-inline-create" role="group" aria-label="Tạo mặt hàng mới"
-                    onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}>
-                    <strong>Tạo mặt hàng và tiếp tục nhập</strong>
-                    <div className="inv-receipt-create-grid">
-                      <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft?.name || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
-                      <label className="inv-field"><span>Nhóm hàng *</span><select value={receiptItemDraft?.category || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })}>
-                        <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
-                      <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft?.unitId || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
-                        <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-                      </select></label>
-                      <label className="inv-field"><span>Cách theo dõi tồn *</span><select value={receiptItemDraft?.trackingMode || 'AUTO_ON_SALE'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, trackingMode: event.target.value })}>
-                        <option value="AUTO_ON_SALE">Tự trừ khi bán</option><option value="MANUAL">Theo dõi thủ công</option>
-                      </select></label>
-                      <label className="inv-field"><span>Ngưỡng sắp hết</span><input type="number" min="0" step="0.001" value={receiptItemDraft?.minimumQuantity ?? '5'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, minimumQuantity: event.target.value })} /></label>
-                    </div>
-                    <div className="inv-receipt-create-actions"><small>Mã mặt hàng sẽ được hệ thống cấp tự động. Tồn ban đầu bằng 0; tồn chỉ tăng khi xác nhận phiếu nhập.</small>
-                      <button type="button" className="inv-button inv-button-primary" disabled={busy || !metadata.units.length} onClick={saveReceiptItem}>{busy ? 'Đang tạo…' : 'Tạo và chọn mặt hàng'}</button>
-                    </div>
-                  </div>}
                 </div>
                 <button type="button" className="inv-remove-line" aria-label={`Bỏ dòng ${item?.name || 'mặt hàng'}`} disabled={receiptLines.length === 1} onClick={() => removeReceiptLine(line.id)}>Bỏ</button>
-                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select required disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
+                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select required data-receipt-unit-for={line.inventoryItemId} disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
                   <option value="">Chọn đơn vị nhận</option>
                   <option value="BASE">{item?.unitName || 'Đơn vị tồn kho'} (đơn vị tồn kho)</option>
                   {RECEIVING_UNITS.filter((unit) => unit.toLocaleLowerCase('vi-VN') !== item?.unitName.toLocaleLowerCase('vi-VN')).map((unit) => <option key={unit} value={unit}>{unit}</option>)}

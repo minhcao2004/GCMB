@@ -7,6 +7,7 @@ import { apiErrors, authApi } from '../../auth/services/authApi';
 import { AppShell } from '../../booking/pages/BookingManagementPage';
 import { formatVnd } from '../../booking/data/bookingData';
 import { foodOrderApi } from '../services/foodOrderApi';
+import '../../booking/styles/rooms.css';
 import './food-orders.css';
 
 const filters = [['ALL', 'Tất cả trạng thái'], ['PENDING', 'Chờ xác nhận'], ['ACCEPTED', 'Đang chuẩn bị'], ['SERVED', 'Đã phục vụ'], ['REJECTED', 'Đã từ chối'], ['CANCELLED', 'Đã hủy']];
@@ -14,6 +15,8 @@ const statusLabel = { PENDING: 'Chờ xác nhận', ACCEPTED: 'Đang chuẩn b�
 const errorText = (error) => Object.values(apiErrors(error))[0];
 const newKey = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const orderPollInterval = 5000;
+const normalizeOrderSearch = (value) => String(value || '').trim().toLocaleLowerCase('vi-VN')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 
 export default function ReceptionOrdersPage() {
   const navigate = useNavigate();
@@ -33,7 +36,8 @@ export default function ReceptionOrdersPage() {
   const [menu, setMenu] = useState([]);
   const [bookingId, setBookingId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
-  const [menuItemId, setMenuItemId] = useState('');
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategory, setMenuCategory] = useState('all');
   const [draft, setDraft] = useState({});
   const [draftPrices, setDraftPrices] = useState({});
   const [quantities, setQuantities] = useState({});
@@ -100,7 +104,6 @@ export default function ReceptionOrdersPage() {
       setMenu(menuItems);
       setBookingId((current) => current || checkoutBookingId || activeBookings[0]?.id || '');
       setEmployeeId((current) => current || servingEmployees[0]?.id || '');
-      setMenuItemId((current) => current || menuItems.find((item) => item.available)?.id || '');
     } catch (loadError) {
       if (loadError.response?.status === 401) navigate('/dang-nhap', { replace: true });
       else setError(errorText(loadError));
@@ -201,19 +204,25 @@ export default function ReceptionOrdersPage() {
     }
   };
 
-  const draftLines = useMemo(() => menu.filter((item) => draft[item.id] > 0), [menu, draft]);
+  const availableMenu = useMemo(() => menu.filter((item) => item.available), [menu]);
+  const visibleMenu = useMemo(() => {
+    const keyword = normalizeOrderSearch(menuSearch);
+    return availableMenu.filter((item) =>
+      (menuCategory === 'all' || normalizeOrderSearch(item.category) === normalizeOrderSearch(menuCategory))
+      && (!keyword || normalizeOrderSearch(item.name).includes(keyword)));
+  }, [availableMenu, menuSearch, menuCategory]);
+  // BR-117: chỉ gửi món có số lượng nguyên dương, kể cả khi đang bị bộ lọc ẩn.
+  const draftLines = useMemo(() => availableMenu.filter((item) => draft[item.id] > 0), [availableMenu, draft]);
   const draftTotal = draftLines.reduce((sum, item) => sum + Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id], 0);
-  const draftAddItem = () => {
-    if (!menuItemId) return;
-    setDraft((current) => ({ ...current, [menuItemId]: (current[menuItemId] || 0) + 1 }));
-    const item = menu.find((candidate) => candidate.id === menuItemId);
-    setDraftPrices((current) => ({ ...current, [menuItemId]: current[menuItemId] ?? Number(item?.salePrice || 0) }));
-  };
-  const changeDraft = (itemId, amount) => setDraft((current) => {
+  const selectedOrderBooking = bookings.find((booking) => booking.id === bookingId);
+  const changeDraft = (item, amount) => {
+    if (amount > 0) setDraftPrices((current) => ({ ...current, [item.id]: current[item.id] ?? Number(item.salePrice || 0) }));
+    setDraft((current) => {
     const next = { ...current };
-    if (amount <= 0) delete next[itemId]; else next[itemId] = amount;
+    if (amount <= 0) delete next[item.id]; else next[item.id] = amount;
     return next;
-  });
+    });
+  };
   const changeOrderQty = (orderId, itemId, amount) => setQuantities((current) => ({
     ...current,
     [orderId]: { ...(current[orderId] || {}), [itemId]: amount },
@@ -274,21 +283,33 @@ export default function ReceptionOrdersPage() {
     <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
       {incomingOrderAlert && <div className="food-alert food-alert--incoming" role="alert" aria-live="assertive"><div><strong>Khách vừa gửi {incomingOrderAlert.count} yêu cầu món mới.</strong><span>{incomingOrderAlert.roomNames.length > 0 ? `Phòng ${incomingOrderAlert.roomNames.slice(0, 3).join(', ')}${incomingOrderAlert.roomNames.length > 3 ? ` và ${incomingOrderAlert.roomNames.length - 3} phòng khác` : ''}.` : 'Vui lòng kiểm tra danh sách chờ xác nhận.'}</span></div><button type="button" onClick={() => { setIncomingOrderAlert(null); setStatus('PENDING'); setDate(''); setRoomId(''); document.getElementById('food-staff-order-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem yêu cầu</button></div>}
 
-      <dialog ref={orderDialogRef} className="food-order-dialog" aria-labelledby="food-order-dialog-title" onClose={() => setOrderDialogOpen(false)} onCancel={(event) => { if (busy) event.preventDefault(); }}>
-      <section className="food-staff-add">
-        <div className="food-section-title"><div><h2 id="food-order-dialog-title">Thêm món vào booking</h2><p>Đơn do lễ tân tạo được ghi nhận ngay và trừ kho theo thiết lập món. Với món tặng kèm combo, đặt giá áp dụng là 0 đ.</p></div><button type="button" className="food-dialog-close" aria-label="Đóng cửa sổ order" disabled={busy} onClick={() => setOrderDialogOpen(false)}>×</button></div>
-        {error && <div className="food-order-dialog-error" role="alert">{error}</div>}
-        {bookings.length === 0 ? <div className="food-empty-inline">Hiện không có booking đang ở phòng tại cơ sở này.</div> : employees.length === 0 ? <div className="food-empty-inline">Chưa có lễ tân được xác nhận trong ca hiện tại. Chọn ca đang mở trong lịch phân ca rồi tải lại.</div> : <form onSubmit={addOrder}>
-          <div className="food-form-row">
-            <label>Booking đang sử dụng<select autoFocus value={bookingId} onChange={(event) => setBookingId(event.target.value)} required>{bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.roomName} · {booking.customerName}</option>)}</select></label>
-            <label>Nhân viên phụ trách<select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} required>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
-            <label>Chọn món<select value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)}>{menu.filter((item) => item.available).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatVnd(item.salePrice)}</option>)}</select></label>
-            <button type="button" className="food-secondary" disabled={!menuItemId} onClick={draftAddItem}>Thêm món</button>
+      <dialog ref={orderDialogRef} className="room-order-dialog food-staff-order-dialog" aria-labelledby="food-order-dialog-title" onClose={() => setOrderDialogOpen(false)} onCancel={(event) => { if (busy) event.preventDefault(); }}>
+        <header><div><h2 id="food-order-dialog-title">Ghi nhận order{selectedOrderBooking?.roomName ? ` · ${selectedOrderBooking.roomName}` : ''}</h2><p>{selectedOrderBooking?.customerName || 'Chọn booking đang sử dụng'}</p></div><button type="button" aria-label="Đóng cửa sổ order" disabled={busy} onClick={() => setOrderDialogOpen(false)}>×</button></header>
+        <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay. Với món tặng kèm combo, đặt giá áp dụng là 0 đ.</p>
+        {error && <div className="room-order-error" role="alert">{error}</div>}
+        {bookings.length === 0 ? <p className="room-order-empty">Hiện không có booking đang ở phòng tại cơ sở này.</p> : employees.length === 0 ? <p className="room-order-empty">Chưa có lễ tân được xác nhận trong ca hiện tại. Chọn ca đang mở trong lịch phân ca rồi tải lại.</p> : availableMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form aria-labelledby="food-order-dialog-title" onSubmit={addOrder}>
+          <div className="food-staff-order-context">
+            <label className="room-order-employee">Booking đang sử dụng<select autoFocus value={bookingId} onChange={(event) => setBookingId(event.target.value)} required>{bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.roomName} · {booking.customerName}</option>)}</select></label>
+            {/* BR-123: chỉ phân công cho lễ tân đang làm ca tại cơ sở của booking. */}
+            <label className="room-order-employee">Nhân viên phụ trách<select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} required>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></label>
           </div>
-          {draftLines.length > 0 && <div className="food-draft-lines">{draftLines.map((item) => <div key={item.id}><span>{item.name}</span><div className="food-quantity"><button type="button" aria-label={`Giảm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] - 1)}>−</button><span>{draft[item.id]}</span><button type="button" aria-label={`Thêm ${item.name}`} onClick={() => changeDraft(item.id, draft[item.id] + 1)}>+</button></div><label className="food-draft-price">Giá áp dụng<MoneyInput aria-label={`Giá ${item.name}`}  min="0"  value={draftPrices[item.id] ?? item.salePrice ?? 0} onValueChange={value => setDraftPrices((current) => ({ ...current, [item.id]: value }))} /></label><strong>{formatVnd(Number(draftPrices[item.id] ?? item.salePrice ?? 0) * draft[item.id])}</strong></div>)}</div>}
-          <footer className="food-add-footer"><span>Tạm tính <strong>{formatVnd(draftTotal)}</strong></span><button className="food-primary" disabled={busy || draftLines.length === 0}>{busy ? 'Đang lưu…' : 'Ghi nhận order'}</button></footer>
+          <search className="room-order-filters" aria-label="Lọc món">
+            <label className="room-order-search">Tìm món<span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" name="menuSearch" placeholder="Nhập tên món…" value={menuSearch} disabled={busy} aria-controls="food-staff-order-items" onChange={(event) => setMenuSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></span></label>
+            <label className="room-order-category">Danh mục<select name="menuCategory" value={menuCategory} disabled={busy} aria-controls="food-staff-order-items" onChange={(event) => setMenuCategory(event.target.value)}><option value="all">Tất cả</option><option value="Đồ ăn">Đồ ăn</option><option value="Đồ uống">Đồ uống</option></select></label>
+          </search>
+          <p className="room-order-result-count" role="status">Hiển thị {visibleMenu.length}/{availableMenu.length} món · Đã chọn {draftLines.length} món</p>
+          <PaginatedList as="div" pageSize={4} className="room-order-items" id="food-staff-order-items">{visibleMenu.length === 0 ? <div className="room-order-no-results">
+            {/* MSG01: không có món khớp từ khóa và bộ lọc. */}
+            <p>Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p><button type="button" disabled={busy} onClick={() => { setMenuSearch(''); setMenuCategory('all'); }}>Đặt lại bộ lọc</button>
+          </div> : visibleMenu.map((item) => {
+            const quantity = draft[item.id] || 0;
+            return <article className="room-order-item food-staff-order-item" key={item.id}>
+              <div><strong>{item.name}</strong><span>{formatVnd(item.salePrice)}</span>{quantity > 0 && <label className="food-staff-order-price">Giá áp dụng<MoneyInput aria-label={`Giá ${item.name}`} min="0" value={draftPrices[item.id] ?? item.salePrice ?? 0} onValueChange={(value) => setDraftPrices((current) => ({ ...current, [item.id]: value }))} /></label>}</div>
+              <div className="room-order-quantity"><button type="button" aria-label={`Giảm ${item.name}`} disabled={quantity === 0 || busy} onClick={() => changeDraft(item, quantity - 1)}>−</button><span>{quantity}</span><button type="button" aria-label={`Tăng ${item.name}`} disabled={busy} onClick={() => changeDraft(item, quantity + 1)}>+</button></div>
+            </article>;
+          })}</PaginatedList>
+          <footer className="room-order-footer"><span>Tạm tính <strong>{formatVnd(draftTotal)}</strong></span><button type="submit" disabled={busy || !bookingId || !employeeId || draftLines.length === 0}>{busy ? 'Đang lưu…' : 'Ghi nhận order'}</button></footer>
         </form>}
-      </section>
       </dialog>
 
       <section className="food-staff-queue" id="food-staff-order-queue">

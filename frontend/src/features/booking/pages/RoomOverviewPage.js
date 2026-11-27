@@ -695,7 +695,7 @@ export default function RoomOverviewPage() {
       <button type="button" className="room-schedule-close" onClick={() => setScheduleOpen(false)}>Đóng</button>
     </dialog>
     <dialog ref={orderDialogRef} className="room-order-dialog" aria-labelledby="room-order-title" onClose={() => setOrderDialogOpen(false)}>
-      <header><div><h2 id="room-order-title">Order dịch vụ · {selected?.code}</h2><p>{currentBooking?.code} · {currentBooking?.contactName}</p></div><button type="button" aria-label="Đóng order dịch vụ" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>×</button></header>
+      <header><div><h2 id="room-order-title">Order dịch vụ · {selected?.code}</h2><p>{currentBooking?.contactName}</p></div><button type="button" aria-label="Đóng order dịch vụ" disabled={orderSubmitting} onClick={() => setOrderDialogOpen(false)}>×</button></header>
       <p className="room-order-guidance">Chọn món và số lượng. Order sẽ được ghi nhận vào booking, cập nhật phí và tồn kho ngay.</p>
       {orderError && <div className="room-order-error" role="alert">{orderError}</div>}
       {orderLoading ? <p className="room-order-empty" role="status">Đang tải thực đơn…</p> : orderMenu.length === 0 ? <p className="room-order-empty">Chưa có món khả dụng để order.</p> : <form onSubmit={submitServiceOrder}>

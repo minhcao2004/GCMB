@@ -382,8 +382,8 @@ function ReportSummary({ source }) {
   </>;
 }
 function MovementTable({ rows }) {
-  return <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
+  return <div className="finance-table-wrap cash-closing-movements"><PaginatedTable pageSize={5}>
     <thead><tr><th>Giao dịch</th><th>Số tiền</th></tr></thead>
-    <tbody>{rows.map((r) => <tr key={r.id}><td>{r.description}<small>{new Date(r.time).toLocaleString('vi-VN')}</small></td><td>{vnd(r.amount)}</td></tr>)}</tbody>
+    <tbody>{rows.map((r) => <tr key={r.id}><td>{r.description?.replace(/\s+BK-[A-Z0-9-]+$/i, '')}<small>{new Date(r.time).toLocaleString('vi-VN')}</small></td><td>{vnd(r.amount)}</td></tr>)}</tbody>
   </PaginatedTable>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
 }
