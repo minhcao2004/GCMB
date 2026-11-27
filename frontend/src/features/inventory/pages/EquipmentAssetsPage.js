@@ -109,7 +109,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   const save = async (event) => {
     event.preventDefault(); setError('');
     if (!editing && !options.codePrefix) return;
-    if (requiresFirstCode && !form.code.trim()) { setError('Vui lòng nhập mã thiết bị đầu tiên của cơ sở.'); return; }
+    if (requiresFirstCode && !form.code.trim()) { setError('Vui lòng bổ sung mã thiết bị.'); return; }
     if (!form.name.trim()) { setError('Vui lòng bổ sung tên thiết bị.'); return; }
     if (!form.categoryId) { setError('Vui lòng bổ sung nhóm thiết bị.'); return; }
     if (!form.roomId && !form.locationNote.trim()) { setError('Vui lòng bổ sung vị trí thiết bị.'); return; }

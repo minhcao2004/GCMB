@@ -5,6 +5,7 @@ import com.gcmb.backend.booking.dto.CheckoutDtos.Issue;
 import com.gcmb.backend.booking.dto.CheckoutDtos.Surcharge;
 import com.gcmb.backend.booking.exception.BookingFailure;
 import com.gcmb.backend.booking.repository.BookingRepository;
+import com.gcmb.backend.booking.repository.BookingRepository.AllocationRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BookingRow;
 import com.gcmb.backend.booking.repository.BookingRepository.BranchScope;
 import com.gcmb.backend.booking.repository.CheckoutRepository;
@@ -137,9 +138,52 @@ class CheckoutServiceDiscountTest {
     }
 
     @Test
-    void rejectsDiscountThatMakesTheHeldDepositExceedTheBill() {
-        var failure = assertIssueRejected(issue(previewWithDeposit(130000), "20", 0, List.of()), 409);
+    void rejectsNegativeDepositBalance() {
+        var failure = assertIssueRejected(issue(previewWithDeposit(-1000), "0", 152000, List.of()), 409);
         assertTrue(failure.getMessage().contains("Số dư cọc"));
+    }
+
+    @Test
+    void appliesOnlyTheBillAmountAndCreatesOneRefundWhenCheckoutCompletes() {
+        stubBillPersistence();
+        stubCheckoutCompletion();
+        var issued = service.issue(actor, bookingId, issue(previewWithDeposit(130000), "20", 0, List.of()));
+        UUID billId = (UUID) issued.get("id");
+        var refundable = BigDecimal.valueOf(9600);
+
+        assertEquals(BigDecimal.valueOf(120400), issued.get("amount"));
+        assertEquals(BigDecimal.valueOf(120400), issued.get("depositApplied"));
+        assertEquals(ZERO, issued.get("remaining"));
+        assertEquals(refundable, issued.get("depositRefundAmount"));
+        verify(bookingRepository, never()).createDepositRefundRequest(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+        doAnswer(call -> {
+            savedBill.put("depositRefundAmount", refundable);
+            savedBill.put("depositRefundStatus", "REQUESTED");
+            return UUID.randomUUID();
+        }).when(bookingRepository).createDepositRefundRequest(eq(branchId), eq(bookingId), eq(depositId), eq(refundable),
+            eq("Hoàn cọc dư khi checkout"), eq("Khách"), eq(""), eq(""), eq(actor.id()), eq(billId));
+
+        var settled = service.complete(actor, billId);
+        assertEquals("SETTLED", settled.get("status"));
+        assertEquals("REQUESTED", settled.get("depositRefundStatus"));
+        assertEquals(refundable, settled.get("depositRefundAmount"));
+        assertEquals(settled, service.complete(actor, billId));
+        verify(bookingRepository).createDepositRefundRequest(branchId, bookingId, depositId, refundable,
+            "Hoàn cọc dư khi checkout", "Khách", "", "", actor.id(), billId);
+        verify(checkoutRepository).settleBill(billId);
+    }
+
+    @Test
+    void doesNotCreateARefundWhenTheDepositEqualsTheBill() {
+        stubBillPersistence();
+        stubCheckoutCompletion();
+        var issued = service.issue(actor, bookingId, issue(previewWithDeposit(150500), "0", 0, List.of()));
+
+        assertEquals(ZERO, issued.get("remaining"));
+        assertEquals(ZERO, issued.get("depositRefundAmount"));
+        assertEquals("SETTLED", service.complete(actor, (UUID) issued.get("id")).get("status"));
+        verify(bookingRepository, never()).createDepositRefundRequest(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -149,7 +193,7 @@ class CheckoutServiceDiscountTest {
     }
 
     private Map<String, Object> previewWithDeposit(long amount) {
-        when(bookingRepository.depositBalance(bookingId)).thenReturn(BigDecimal.valueOf(amount));
+        when(bookingRepository.depositBalance(bookingId)).thenAnswer(call -> BigDecimal.valueOf(amount).subtract(appliedDeposit));
         return service.preview(actor, bookingId);
     }
 
@@ -168,10 +212,11 @@ class CheckoutServiceDiscountTest {
 
     private void stubBillPersistence() {
         doAnswer(call -> {
-            savedBill = Map.of("id", call.getArgument(0, UUID.class), "grossAmount", call.getArgument(4, BigDecimal.class),
+            savedBill = new LinkedHashMap<>(Map.of("id", call.getArgument(0, UUID.class), "grossAmount", call.getArgument(4, BigDecimal.class),
                 "discountAmount", call.getArgument(5, BigDecimal.class), "amount", call.getArgument(6, BigDecimal.class),
                 "roundingAdjustment", call.getArgument(7, BigDecimal.class), "checkoutAt", call.getArgument(8, Timestamp.class),
-                "paid", ZERO, "plannedCash", ZERO);
+                "paid", ZERO, "plannedCash", ZERO, "bookingId", bookingId, "customer", "Khách"));
+            savedBill.put("status", "ISSUED");
             return null;
         }).when(checkoutRepository).insertBill(any(), eq(bookingId), eq(branchId), any(), any(), any(), any(), any(), any(), any(), eq(actor.id()));
         doAnswer(call -> {
@@ -185,6 +230,17 @@ class CheckoutServiceDiscountTest {
             bill.put("depositApplied", appliedDeposit);
             return List.of(bill);
         });
+    }
+
+    private void stubCheckoutCompletion() {
+        Instant checkin = Instant.now().minusSeconds(3600);
+        when(bookingRepository.currentAllocationForUpdate(bookingId)).thenReturn(new AllocationRow(UUID.randomUUID(),
+            bookingId, UUID.randomUUID(), UUID.randomUUID(), "P1", "Phòng 1", "Hạng 1", "AVAILABLE",
+            checkin, checkin.plusSeconds(7200), "OCCUPIED", null, checkin));
+        doAnswer(call -> {
+            savedBill.put("status", "SETTLED");
+            return null;
+        }).when(checkoutRepository).settleBill(any());
     }
 
     private static Map<String, Object> line(String description, long amount, String category) {

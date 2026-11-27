@@ -104,15 +104,18 @@ public class DepositManagementService {
         BigDecimal balance = bookingRepository.depositBalance(request.bookingId());
         if (depositId == null || balance.signum() <= 0)
             throw new BookingFailure(409, "bookingId", "Booking không còn số dư cọc đủ điều kiện hoàn");
-        if (!depositRepository.canRequestRefund(branch.id(), request.bookingId()))
-            throw new BookingFailure(409, "bookingId", "Booking chưa đủ điều kiện hoặc đã có yêu cầu hoàn cọc đang xử lý");
+        var deposit = depositRepository.item(branch.id(), request.bookingId());
+        if (deposit != null && deposit.pendingRefundAmount().signum() > 0)
+            throw new BookingFailure(409, "bookingId", "Thao tác này đã được ghi nhận. Không tạo thêm bản ghi; vui lòng kiểm tra kết quả hiện có.");
+        if (deposit == null || !deposit.canRequestRefund())
+            throw new BookingFailure(409, "bookingId", "Booking chưa đủ điều kiện hoàn cọc.");
 
         String beneficiary = required(request.beneficiaryName(), "beneficiaryName", "Tên chủ tài khoản", 200);
         String bank = required(request.bankName(), "bankName", "Ngân hàng", 200);
         String account = required(request.bankAccount(), "bankAccount", "Số tài khoản", 60);
         String reason = required(request.reason(), "reason", "Lý do hoàn cọc", 1000);
         UUID refundRequestId = bookingRepository.createDepositRefundRequest(branch.id(), request.bookingId(), depositId, balance,
-            reason, beneficiary, bank, account, identity.id());
+            reason, beneficiary, bank, account, identity.id(), null);
         // Sự kiện cùng giao dịch giúp audit và lịch sử booking theo dõi yêu cầu hoàn.
         bookingRepository.event(request.bookingId(), identity.id(), "BOOKING_DEPOSIT_REFUND_REQUESTED", reason,
             java.util.Map.of("refundRequestId", refundRequestId.toString(), "depositAmount", balance));
@@ -127,16 +130,20 @@ public class DepositManagementService {
 
     @Transactional
     public DepositDtos.RefundCompletionResult completeRefund(Identity identity, UUID requestId,
-                                                               String externalReference, MultipartFile image) {
+                                                               String externalReference, MultipartFile image,
+                                                               DepositDtos.RefundRecipient recipient) {
         // BR-17: Chỉ kế toán được ghi nhận hoàn cọc đã hoàn tất.
         requireAccountant(identity);
         financialPeriodService.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận hoàn cọc");
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
-        // Tạm thời cho phép kế toán ghi nhận hoàn cọc khi chưa đính kèm tệp minh chứng.
-        String normalizedReference = externalReference == null ? "" : externalReference.trim();
+        String normalizedReference = externalReference == null ? "" : externalReference.strip();
         String reference = normalizedReference.isEmpty() ? null
             : required(normalizedReference, "externalReference", "Mã giao dịch hoàn", 200);
         boolean hasImage = image != null && !image.isEmpty();
+        // BR-157 / MSG67: cần ít nhất một minh chứng trước khi ghi nhận khoản hoàn.
+        if (reference == null && !hasImage)
+            throw new BookingFailure(400, "externalReference",
+                "Vui lòng tải lên minh chứng chuyển tiền hoặc nhập mã giao dịch trước khi xác nhận đã hoàn cọc.");
         RefundRequestRow initial = depositRepository.refundRequestForAccounting(requestId, false);
         if (initial == null) throw refundRequestNotFound();
         if (!OPEN_REFUND_STATUSES.contains(initial.status())) throw refundAlreadyProcessed();
@@ -145,7 +152,11 @@ public class DepositManagementService {
         if (bookingRepository.lockBookingIdForRefund(initial.bookingId(), initial.branchId()) == null) throw notFound();
         BookingRow booking = bookingRepository.booking(initial.bookingId(), initial.branchId());
         if (booking == null) throw notFound();
-        if (!"CANCELLED".equals(booking.status()))
+        boolean checkoutRefund = initial.checkoutBillId() != null;
+        if (checkoutRefund && (!"COMPLETED".equals(booking.status())
+                || !depositRepository.checkoutBillIsSettled(initial.checkoutBillId(), initial.bookingId())))
+            throw new BookingFailure(409, "requestId", "Chỉ hoàn cọc dư khi booking và hóa đơn đã hoàn tất.");
+        if (!checkoutRefund && !"CANCELLED".equals(booking.status()))
             throw new BookingFailure(409, "requestId", "Chỉ booking đã hủy mới được hoàn tiền cọc");
         UUID depositId = bookingRepository.lockDeposit(initial.bookingId());
         if (depositId == null || !depositId.equals(initial.depositId()))
@@ -157,6 +168,15 @@ public class DepositManagementService {
         BigDecimal balance = bookingRepository.depositBalance(locked.bookingId());
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
+
+        DepositDtos.RefundRecipient verifiedRecipient = null;
+        if (checkoutRefund) {
+            if (recipient == null) throw new BookingFailure(400, "beneficiaryName", "Vui lòng bổ sung thông tin nhận hoàn cọc.");
+            verifiedRecipient = new DepositDtos.RefundRecipient(
+                required(recipient.beneficiaryName(), "beneficiaryName", "Tên chủ tài khoản", 200),
+                required(recipient.bankName(), "bankName", "Ngân hàng", 200),
+                required(recipient.bankAccount(), "bankAccount", "Số tài khoản", 60));
+        }
 
         RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? refundEvidenceStorageService.store(image, "tien-coc") : null;
         if (evidence != null && TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -172,7 +192,7 @@ public class DepositManagementService {
                     evidence.mimeType(), evidence.byteSize(), evidence.sha256(), identity.id());
             }
             if (!depositRepository.completeRefundRequest(locked.branchId(), locked, identity.id(), reference,
-                    evidence == null ? null : evidence.id()))
+                    evidence == null ? null : evidence.id(), verifiedRecipient))
                 throw refundAlreadyProcessed();
         } catch (RuntimeException exception) {
             if (evidence != null && !TransactionSynchronizationManager.isSynchronizationActive()) {

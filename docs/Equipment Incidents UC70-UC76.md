@@ -36,6 +36,8 @@
 
 - Danh sách thiết bị, sự cố và điều chuyển hiển thị tối đa 10 bản ghi mỗi trang với khoảng cách dòng gọn. Các bộ lọc co theo chiều rộng màn hình. Bảng có vùng cuộn ngang riêng khi chiều rộng hẹp.
 - Danh sách sự cố trình bày mã sự cố và tên thiết bị. Mở **Chi tiết sự cố** để đọc mô tả. Số bản ghi trong bộ lọc phản ánh cả ngày báo cáo đang chọn.
+- Mục **Người báo** trong chi tiết hiển thị họ tên từ hồ sơ nhân viên hoặc tên đăng nhập nếu tài khoản chưa có họ tên. API danh sách bổ sung `reporterName` bên cạnh mã tài khoản `reportedBy`.
+- Khi sự cố đủ điều kiện đóng, Quản lý cơ sở bấm **Đóng sự cố** để gửi yêu cầu ngay. Lịch sử ghi người đóng, thời điểm và ghi chú mặc định **Đã đóng sự cố.**
 
 ## Ghi chú
 

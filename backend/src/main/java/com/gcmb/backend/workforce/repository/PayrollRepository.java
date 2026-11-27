@@ -339,14 +339,6 @@ public class PayrollRepository {
     return !jdbcTemplate.queryForList("SELECT id FROM gcmb.salary_advance WHERE idempotency_key=?", idempotencyKey).isEmpty();
   }
 
-  public boolean payrollAlreadySubmitted(Object periodId, UUID employeeId) {
-    return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-      SELECT EXISTS(SELECT 1 FROM gcmb.payroll_entry
-      WHERE period_id=? AND employee_id=? AND submitted_branch_id IS NOT NULL)
-      OR EXISTS(SELECT 1 FROM gcmb.branch_payroll_submission WHERE period_id=? AND employee_id=?)
-      """, Boolean.class, periodId, employeeId, periodId, employeeId));
-  }
-
   public boolean finalSalaryPaid(Object periodId, UUID employeeId) {
     return !jdbcTemplate.queryForList(
       "SELECT s.id FROM gcmb.salary_payment s JOIN gcmb.payroll_entry e ON e.id=s.payroll_entry_id WHERE e.period_id=? AND e.employee_id=? AND s.status='PAID'",

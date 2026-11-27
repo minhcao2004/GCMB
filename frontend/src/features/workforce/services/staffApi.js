@@ -1,4 +1,5 @@
 import { formatDateLabel } from '../../../shared/utils/dateLabel';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -61,7 +62,6 @@ export function staffErrors(form) {
       errors[key] = `${label} chỉ được chứa tối đa ${max} ký tự.`;
   }
   for (const [key, label, max] of [
-    ['phone', 'Số điện thoại', 15],
     ['contactEmail', 'Email liên hệ', 254],
     ['address', 'Địa chỉ', 2000],
     ['notes', 'Ghi chú', 4000],
@@ -69,8 +69,8 @@ export function staffErrors(form) {
     if ((form[key] || '').trim().length > max)
       errors[key] = `${label} chỉ được chứa tối đa ${max} ký tự.`;
   }
-  if (form.phone?.trim() && !/^0[0-9]{6,14}$/.test(form.phone.trim()))
-    errors.phone = 'Số điện thoại phải có từ 7 đến 15 chữ số, bắt đầu bằng 0; không được chứa dấu + hoặc ký tự định dạng.';
+  const phoneError = phoneFormatError(form.phone);
+  if (phoneError) errors.phone = phoneError;
   if (form.identityNumber?.trim() && !/^[0-9]{12}$/.test(form.identityNumber.trim()))
     errors.identityNumber = 'Số định danh phải gồm đúng 12 chữ số.';
   if (form.contactEmail?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim()))

@@ -25,7 +25,7 @@ public final class EquipmentIncidentDtos {
         boolean roomUnusable, String status, String handlingPlan, String assessmentNote,
         String vendorName, BigDecimal actualCost, LocalDate completedOn, String outcome,
         OffsetDateTime createdAt, String severity, String priority, LocalDate expectedCompletionOn,
-        String proposedSolution, UUID reportedBy, UUID closedBy, OffsetDateTime closedAt,
+        String proposedSolution, UUID reportedBy, String reporterName, UUID closedBy, OffsetDateTime closedAt,
         String serviceProvider, String replacementDetails, BigDecimal estimatedCost) {}
     public record TransferCommand(UUID assetId, UUID toBranchId, String reason) {}
     public record TransferReceiptCommand(UUID toRoomId, String note) {}

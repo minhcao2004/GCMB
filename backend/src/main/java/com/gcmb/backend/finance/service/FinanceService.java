@@ -281,26 +281,25 @@ public class FinanceService {
         financialPeriodService.requireOpen(toLocalDate(expenseRequest.get("expense_on")), "xét duyệt và thanh toán đề nghị chi hoặc hoàn ứng");
         // BR-90, BR-91: only a request in the accountant queue may be approved and paid with its evidence in one transaction.
         if(!"WAITING_ACCOUNTANT".equals(expenseRequest.get("status"))) conflict("Đề nghị này không chờ kế toán xét duyệt.");
+        requirePaymentProof(proof);
         int approvedCount=financeRepository.approveWaitingAccountantRequest(requestId,actor.id());
         if(approvedCount==0) conflict("Đề nghị vừa được xử lý ở phiên khác. Vui lòng tải lại.");
         financeRepository.insertHistory(requestId,actor.id(),"APPROVED",clean(note,1000));
-        // BR-90: evidence remains available, but is optional in the combined accountant approval-and-payment flow.
-        return recordApprovedPayment(actor,requestId,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart,true,false);
+        return recordApprovedPayment(actor,requestId,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart,true);
+    }
+
+    private static void requirePaymentProof(MultipartFile proof) {
+        if (proof == null || proof.isEmpty())
+            bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90.
     }
 
     private Map<String,Object> recordApprovedPayment(Identity actor, UUID requestId, String reference, MultipartFile proof,
             String paidPaymentMethod, String bankAccount, String bankName,
             Integer requestedMonths, LocalDate requestedStart, boolean requireCategoryInvoice) {
-        return recordApprovedPayment(actor,requestId,reference,proof,paidPaymentMethod,bankAccount,bankName,requestedMonths,requestedStart,requireCategoryInvoice,true);
-    }
-
-    private Map<String,Object> recordApprovedPayment(Identity actor, UUID requestId, String reference, MultipartFile proof,
-            String paidPaymentMethod, String bankAccount, String bankName,
-            Integer requestedMonths, LocalDate requestedStart, boolean requireCategoryInvoice, boolean requirePaymentProof) {
         Map<String,Object> expenseRequest=request(requestId);
         financialPeriodService.requireOpen(toLocalDate(expenseRequest.get("expense_on")), "ghi nhận thanh toán đề nghị chi hoặc hoàn ứng");
         if(!"APPROVED_TO_PAY".equals(expenseRequest.get("status"))) conflict("Chỉ có thể ghi nhận đã thanh toán khi đề nghị đã được phê duyệt và việc thanh toán đã được xác nhận."); // MSG97 / BR-207.
-        if(requirePaymentProof&&(proof==null||proof.isEmpty())) bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90.
+        requirePaymentProof(proof);
         if(requireCategoryInvoice&&Boolean.TRUE.equals(expenseRequest.get("invoice_required"))&&attachments(requestId).stream().noneMatch(attachment->"INVOICE".equals(attachment.get("kind"))))
             bad("Hạng mục này bắt buộc có hóa đơn. Vui lòng tải hóa đơn trước khi thanh toán.");
         // BR-90, BR-207: chỉ ghi cách chi thực tế sau khi kế toán xác nhận thanh toán.

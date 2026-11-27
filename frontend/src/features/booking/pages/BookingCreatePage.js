@@ -1,10 +1,11 @@
 import { PaginatedList } from '../../../shared/components/Pagination';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
 import TimeInput from '../components/TimeInput';
-import { formatDate, formatMoneyInput, formatVnd, isValidTimeInput } from '../data/bookingData';
+import { formatDate, formatMoneyInput, formatVnd, hourlyRentalMinutes, isValidTimeInput } from '../data/bookingData';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
 function localDate(value = new Date()) {
@@ -55,12 +56,9 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
   const combos = selectedType?.combos || [];
   const selectedCombo = combos.find((item) => item.id === form.comboId) || combos[0] || null;
-  // BR-150: giờ thuê hỗ trợ bước 30 phút để chấp nhận booking 90 phút.
-  const parsedHourlyDuration = Number(form.durationHours);
-  const hourlyDurationValid = Number.isFinite(parsedHourlyDuration)
-    && parsedHourlyDuration >= 1 && parsedHourlyDuration <= 24
-    && Number.isInteger(parsedHourlyDuration * 2);
-  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyDurationValid ? Number(form.durationHours) * 60 : null;
+  const hourlyMinutes = hourlyRentalMinutes(form.durationHours);
+  const hourlyDurationValid = hourlyMinutes !== null;
+  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyMinutes;
   const plannedStart = useMemo(() => {
     if (!form.date || !isValidTimeInput(form.time)) return null;
     const date = new Date(`${form.date}T${form.time}:00`);
@@ -87,9 +85,7 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const validSchedule = Boolean(plannedStart && plannedEnd && plannedStart > new Date() && plannedEnd > plannedStart);
   const pricingSelectionValid = form.pricingMode === 'COMBO' ? Boolean(selectedCombo) : hourlyDurationValid;
   const depositAmountValid = Number.isFinite(depositAmount) && depositAmount > 0;
- const contactPhoneError = !form.contactPhone.trim() ? 'Nhập số điện thoại.'
-  : !/^0[0-9]{6,14}$/.test(form.contactPhone.trim())
-    ? 'Số điện thoại phải bắt đầu bằng 0 và gồm 7–15 chữ số, không chứa dấu hoặc khoảng trắng.' : '';
+  const contactPhoneError = !form.contactPhone.trim() ? 'Nhập số điện thoại.' : phoneFormatError(form.contactPhone);
 
 const paymentReferenceRequired = form.depositEnabled && depositAmountValid && !cashPayment;
 const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transaction.trim());
@@ -248,7 +244,7 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             {showContactNameError && <small id="booking-contact-name-error" className="booking-field-error" aria-live="polite">Nhập họ tên khách.</small>}
           </Field>
           <Field label="Số điện thoại *" className={showContactPhoneError ? 'is-invalid' : ''}>
-            <input type="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} onBlur={() => markTouched('contactPhone')} inputMode="numeric" autoComplete="tel" placeholder="Nhập số điện thoại" required aria-invalid={showContactPhoneError} aria-describedby={showContactPhoneError ? 'booking-contact-phone-error' : undefined} />
+            <input type="tel" name="contactPhone" maxLength="30" value={form.contactPhone} onChange={change} onBlur={() => markTouched('contactPhone')} inputMode="tel" autoComplete="tel" placeholder="Nhập số điện thoại" required aria-invalid={showContactPhoneError} aria-describedby={showContactPhoneError ? 'booking-contact-phone-error' : undefined} />
             {showContactPhoneError && <small id="booking-contact-phone-error" className="booking-field-error" aria-live="polite">{contactPhoneError}</small>}
           </Field>
         </div>
@@ -290,9 +286,9 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             </button>)}
             {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
           </PaginatedList> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
-            <input type="number" name="durationHours" min="1" max="24" step="0.5" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
+            <input type="number" name="durationHours" min="0" max="24" step="any" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
             <small id="booking-duration-help" className={showDurationError ? 'booking-field-error' : 'booking-field-hint'} aria-live={showDurationError ? 'polite' : undefined}>
-              {showDurationError ? 'Thời lượng thuê phải từ 1 đến 24 giờ, theo bước 0,5 giờ.' : 'Nhập thời lượng từ 1 đến 24 giờ; chấp nhận bước 0,5 giờ.'}
+              {showDurationError ? 'Thời lượng phải tương ứng số phút nguyên từ 1 phút đến 24 giờ.' : 'Ví dụ: nhập 0,5 giờ để đặt 30 phút.'}
             </small>
           </Field>}
           {showComboError && <small className="booking-field-error booking-combo-error" role="status">Hãy chọn một combo đang áp dụng cho hạng phòng này.</small>}

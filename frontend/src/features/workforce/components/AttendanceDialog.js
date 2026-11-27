@@ -53,7 +53,7 @@ export default function AttendanceDialog({
   const [errors, setErrors] = useState({});
   const [stale, setStale] = useState(false);
   const locked = readOnly || (recording && entries.every(({ row }) => row.periodStatus === 'CLOSED'));
-  const closingEmployees = (data.employees || []).filter((e) => !dialog.employeeIds || dialog.employeeIds.includes(e.employeeId));
+  const closingEmployees = (data.employees || []).filter((e) => dialog.periodOnly || !dialog.employeeIds || dialog.employeeIds.includes(e.employeeId));
   const editableEntries = entries.filter(({ row }) => !readOnly && row.periodStatus !== 'CLOSED' && !isFuture(row));
   const pendingEntries = editableEntries
     .filter(({ row, status, note, resolved }) =>
@@ -73,7 +73,7 @@ export default function AttendanceDialog({
     setErrors({});
   };
   const title = closing
-    ? 'Xác nhận chốt bảng công'
+    ? dialog.periodOnly ? 'Xác nhận chốt công tháng' : 'Xác nhận chốt bảng công'
     : employee
       ? `Công tháng · ${dialog.employee.fullName}`
       : locked
@@ -102,7 +102,7 @@ export default function AttendanceDialog({
     }
     const found = {};
     if (closing) {
-      if (!closingEmployees.length) found.employeeIds = 'Vui lòng chọn nhân viên cần chốt.';
+      if (!dialog.periodOnly && !closingEmployees.length) found.employeeIds = 'Vui lòng chọn nhân viên cần chốt.';
       if (!confirmed)
         found.confirmedCorrect = 'Vui lòng xác nhận không còn bản ghi chấm công chưa đúng.';
     } else {
@@ -130,7 +130,8 @@ export default function AttendanceDialog({
       if (closing) {
         result = await attendanceApi.close(
           data.month,
-          { revision: data.revision, confirmedCorrect: confirmed, employeeIds: closingEmployees.map((e) => e.employeeId) },
+          { revision: data.revision, confirmedCorrect: confirmed,
+            employeeIds: dialog.periodOnly ? [] : closingEmployees.map((e) => e.employeeId) },
           scope
         );
       } else {
@@ -279,9 +280,11 @@ export default function AttendanceDialog({
                 </div>
               </dl>
               <p className="attendance-alert">
-                Sau xác nhận, công cả tháng của các nhân viên được chọn bị khóa để tính lương.
-                Các ca đăng ký từ ngày mai trong tháng này sẽ bị hủy.
-                Những nhân viên khác vẫn được chấm công bình thường. Không có thao tác mở khóa.
+                {dialog.periodOnly
+                  ? 'Công của mọi nhân viên trong tháng đã được chốt. Xác nhận để khóa kỳ công chung của cơ sở.'
+                  : <>Sau xác nhận, công cả tháng của các nhân viên được chọn bị khóa để tính lương.
+                    Các ca đăng ký từ ngày mai trong tháng này sẽ bị hủy.
+                    Những nhân viên khác vẫn được chấm công bình thường. Không có thao tác mở khóa.</>}
               </p>
               <label className="attendance-check">
                 <input

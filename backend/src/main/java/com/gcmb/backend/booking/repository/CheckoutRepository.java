@@ -95,12 +95,14 @@ public class CheckoutRepository {
                 b.checkout_at AS "checkoutAt",b.inspection_note AS "inspectionNote",
                 b.planned_cash AS "plannedCash",b.planned_cash_tendered AS "plannedCashTendered",
                 COALESCE((SELECT sum(e.amount) FROM gcmb.deposit_entry e WHERE e.bill_id=b.id AND e.kind='APPLY'),0) AS "depositApplied",
+                COALESCE(rr.amount,0) AS "depositRefundAmount",rr.status AS "depositRefundStatus",
                 k.code AS "bookingCode",k.contact_name AS customer,k.actual_checkin AS checkin,
                 COALESCE((SELECT r.code||' · '||r.name FROM gcmb.room_allocation a JOIN gcmb.room r ON r.id=a.room_id
                     WHERE a.booking_id=k.id ORDER BY a.created_at DESC LIMIT 1),'—') AS room,
                 COALESCE((SELECT sum(p.amount) FROM gcmb.payment p WHERE p.bill_id=b.id AND NOT EXISTS (SELECT 1 FROM gcmb.checkout_cash_reclassification c WHERE c.payment_id=p.id)),0) AS paid
             FROM gcmb.bill b JOIN gcmb.booking k ON k.id=b.booking_id
             JOIN gcmb.branch br ON br.id=b.branch_id
+            LEFT JOIN gcmb.refund_request rr ON rr.checkout_bill_id=b.id
             WHERE b.id=? AND b.branch_id=?
             """, billId, branchId);
     }

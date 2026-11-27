@@ -203,7 +203,7 @@ export default function ShiftSchedulePage({ user, branchScope, readOnly = false 
               disabled={readonly || loading || preparing || !data?.editableSlots?.length}
               onClick={() => publish(week)}
             >
-              Chỉnh tuần hiện tại
+              {week === data?.nextWeek ? 'Chỉnh tuần tới' : 'Chỉnh tuần hiện tại'}
             </button>
           )}
           <button onClick={() => setWeek(data?.nextWeek || addDays(monday(today()), 7))}>

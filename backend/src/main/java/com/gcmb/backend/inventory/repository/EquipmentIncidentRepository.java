@@ -51,11 +51,14 @@ public class EquipmentIncidentRepository {
             SELECT i.id,i.asset_id,a.code asset_code,a.name asset_name,i.branch_id,b.name branch_name,
               a.room_id,r.code room_code,COALESCE(r.name,a.location_note,'—') location,
               i.description,i.room_unusable,i.status,i.handling_plan,COALESCE(l.note,i.assessment_note) assessment_note,
-              i.severity,i.priority,i.expected_completion_on,i.proposed_solution,i.reported_by,i.closed_by,i.closed_at,
+              i.severity,i.priority,i.expected_completion_on,i.proposed_solution,i.reported_by,
+              COALESCE(NULLIF(btrim(e.full_name),''),u.username) reporter_name,i.closed_by,i.closed_at,
               COALESCE(p.vendor_name,i.service_provider) vendor_name,p.actual_cost,p.finished_at::date completed_on,p.outcome,i.created_at,
               i.service_provider,i.replacement_details,i.estimated_cost
             FROM gcmb.asset_incident i JOIN gcmb.asset a ON a.id=i.asset_id
             JOIN gcmb.branch b ON b.id=i.branch_id LEFT JOIN gcmb.room r ON r.id=a.room_id
+            LEFT JOIN gcmb.user_account u ON u.id=i.reported_by
+            LEFT JOIN gcmb.employee e ON e.user_id=u.id
             LEFT JOIN LATERAL (SELECT vendor_name,actual_cost,finished_at,outcome FROM gcmb.asset_repair x
               WHERE x.incident_id=i.id ORDER BY x.created_at DESC LIMIT 1) p ON true
             LEFT JOIN LATERAL (SELECT note FROM gcmb.asset_incident_progress x
@@ -63,7 +66,20 @@ public class EquipmentIncidentRepository {
             WHERE (?::uuid IS NULL OR i.branch_id=?) AND (?='' OR i.status=?) AND
               (?='' OR lower(concat_ws(' ',a.code,a.name,i.description,i.assessment_note)) LIKE lower('%'||?||'%'))
             ORDER BY i.created_at DESC,i.id DESC
-            """, (resultSet, rowNumber) -> new IncidentView(resultSet.getObject("id",UUID.class),resultSet.getObject("asset_id",UUID.class),resultSet.getString("asset_code"),resultSet.getString("asset_name"),resultSet.getObject("branch_id",UUID.class),resultSet.getString("branch_name"),resultSet.getObject("room_id",UUID.class),resultSet.getString("room_code"),resultSet.getString("location"),resultSet.getString("description"),resultSet.getBoolean("room_unusable"),resultSet.getString("status"),resultSet.getString("handling_plan"),resultSet.getString("assessment_note"),resultSet.getString("vendor_name"),resultSet.getBigDecimal("actual_cost"),resultSet.getObject("completed_on",java.time.LocalDate.class),resultSet.getString("outcome"),resultSet.getObject("created_at",java.time.OffsetDateTime.class),resultSet.getString("severity"),resultSet.getString("priority"),resultSet.getObject("expected_completion_on",java.time.LocalDate.class),resultSet.getString("proposed_solution"),resultSet.getObject("reported_by",UUID.class),resultSet.getObject("closed_by",UUID.class),resultSet.getObject("closed_at",java.time.OffsetDateTime.class),resultSet.getString("service_provider"),resultSet.getString("replacement_details"),resultSet.getBigDecimal("estimated_cost")), branch,branch,status,status,search,search);
+            """, (rs, rowNumber) -> new IncidentView(
+                rs.getObject("id", UUID.class), rs.getObject("asset_id", UUID.class),
+                rs.getString("asset_code"), rs.getString("asset_name"), rs.getObject("branch_id", UUID.class),
+                rs.getString("branch_name"), rs.getObject("room_id", UUID.class), rs.getString("room_code"),
+                rs.getString("location"), rs.getString("description"), rs.getBoolean("room_unusable"),
+                rs.getString("status"), rs.getString("handling_plan"), rs.getString("assessment_note"),
+                rs.getString("vendor_name"), rs.getBigDecimal("actual_cost"),
+                rs.getObject("completed_on", java.time.LocalDate.class), rs.getString("outcome"),
+                rs.getObject("created_at", java.time.OffsetDateTime.class), rs.getString("severity"),
+                rs.getString("priority"), rs.getObject("expected_completion_on", java.time.LocalDate.class),
+                rs.getString("proposed_solution"), rs.getObject("reported_by", UUID.class), rs.getString("reporter_name"),
+                rs.getObject("closed_by", UUID.class), rs.getObject("closed_at", java.time.OffsetDateTime.class),
+                rs.getString("service_provider"), rs.getString("replacement_details"), rs.getBigDecimal("estimated_cost")),
+            branch, branch, status, status, search, search);
     }
 
     // UC-70: Tạo sự cố ban đầu ở trạng thái REPORTED và lưu người báo.

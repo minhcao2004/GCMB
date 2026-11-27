@@ -21,7 +21,7 @@ public class RoomCatalogRepository {
 
     private static final String PRICE_RULE_COLUMNS = """
         SELECT p.id,p.code,p.version,rt.id AS room_type_id,rt.name AS room_type_name,p.name,p.weekdays,
-               p.valid_from,p.valid_to,p.minute_from,p.minute_to,p.hourly_price,p.active
+               p.valid_from,(p.valid_to - 1) AS valid_to,p.minute_from,p.minute_to,p.hourly_price,p.active
         FROM gcmb.price_rule p JOIN gcmb.room_type rt ON rt.id=p.room_type_id
         """;
 
@@ -119,7 +119,58 @@ public class RoomCatalogRepository {
     }
 
     public List<PriceRuleView> findPriceRule(UUID id) {
-        return jdbcTemplate.query(PRICE_RULE_COLUMNS + " WHERE p.id=?", PRICE_RULE_MAPPER, id);
+        return jdbcTemplate.query(PRICE_RULE_COLUMNS + " WHERE p.id=? AND p.branch_id IS NULL", PRICE_RULE_MAPPER, id);
+    }
+
+    public void lockPriceRuleChanges() {
+        jdbcTemplate.execute("LOCK TABLE gcmb.price_rule IN SHARE ROW EXCLUSIVE MODE");
+    }
+
+    public String overlappingPriceRuleName(UUID roomTypeId, UUID replacedId, LocalDate validFrom,
+            LocalDate validTo, int minuteFrom, int minuteTo, List<Integer> weekdays) {
+        String days = weekdays.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+        List<String> names = jdbcTemplate.queryForList("""
+            WITH requested AS (
+              SELECT ?::uuid AS room_type_id, ?::uuid AS replaced_id,
+                     COALESCE(?::date, CURRENT_DATE) AS valid_from, ?::date AS valid_until,
+                     ?::integer AS minute_from, ?::integer AS minute_to,
+                     string_to_array(?, ',')::smallint[] AS weekdays
+            )
+            SELECT p.name
+            FROM gcmb.price_rule p CROSS JOIN requested r
+            WHERE p.active AND p.branch_id IS NULL AND p.room_type_id = r.room_type_id
+              AND p.id IS DISTINCT FROM r.replaced_id
+              AND p.minute_from < r.minute_to AND r.minute_from < p.minute_to
+              AND p.weekdays && r.weekdays
+              AND EXISTS (
+                SELECT 1
+                FROM generate_series(0, 6) AS offsets(days)
+                CROSS JOIN LATERAL (
+                  SELECT CASE WHEN p.day_kind = 'SPECIFIC' THEN p.specific_date
+                              ELSE GREATEST(p.valid_from, r.valid_from) + offsets.days END AS active_on
+                ) d
+                WHERE d.active_on >= GREATEST(p.valid_from, r.valid_from)
+                  AND (p.valid_to IS NULL OR d.active_on < p.valid_to)
+                  AND (r.valid_until IS NULL OR d.active_on < r.valid_until)
+                  AND EXTRACT(ISODOW FROM d.active_on)::smallint = ANY(p.weekdays)
+                  AND EXTRACT(ISODOW FROM d.active_on)::smallint = ANY(r.weekdays)
+                  AND CASE p.day_kind
+                        WHEN 'ALL' THEN true
+                        WHEN 'WEEKDAY' THEN EXTRACT(ISODOW FROM d.active_on) <= 5
+                        WHEN 'WEEKEND' THEN EXTRACT(ISODOW FROM d.active_on) >= 6
+                        WHEN 'SPECIFIC' THEN true
+                        ELSE false
+                      END
+              )
+            ORDER BY p.code, p.version DESC
+            LIMIT 1
+            """, String.class, roomTypeId, replacedId, validFrom, exclusiveEnd(validTo), minuteFrom, minuteTo, days);
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    // Ngày kết thúc trên form có hiệu lực trọn ngày. Database dùng biên phải loại trừ.
+    private static LocalDate exclusiveEnd(LocalDate validTo) {
+        return validTo == null ? null : validTo.plusDays(1);
     }
 
     public boolean activePriceRuleCodeExists(String code) {
@@ -159,7 +210,7 @@ public class RoomCatalogRepository {
                 statement.setObject(4, roomTypeId);
                 statement.setString(5, name);
                 statement.setObject(6, validFrom);
-                statement.setObject(7, validTo);
+                statement.setObject(7, exclusiveEnd(validTo));
                 statement.setInt(8, minuteFrom);
                 statement.setInt(9, minuteTo);
                 statement.setArray(10, weekdayArray);
@@ -218,10 +269,10 @@ public class RoomCatalogRepository {
 
     public void insertHourlyPrice(UUID id, UUID roomTypeId, String name, BigDecimal price) {
         jdbcTemplate.update("""
-            INSERT INTO gcmb.price_rule(id,room_type_id,branch_id,name,valid_from,day_kind,minute_from,minute_to,
+            INSERT INTO gcmb.price_rule(id,room_type_id,branch_id,name,code,valid_from,day_kind,minute_from,minute_to,
               hourly_price,overtime_hourly_price,billing_step_minutes,priority,active)
-            VALUES(?,?,NULL,?,CURRENT_DATE,'ALL',0,1440,?,?,60,100,true)
-            """, id, roomTypeId, name, price, price);
+            VALUES(?,?,NULL,?,?,CURRENT_DATE,'ALL',0,1440,?,?,60,100,true)
+            """, id, roomTypeId, name, "HOURLY-" + id.toString().toUpperCase(java.util.Locale.ROOT), price, price);
     }
 
     public int countActiveCombos(String code) {

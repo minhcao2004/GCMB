@@ -118,7 +118,7 @@ public class EquipmentAssetService {
 
     private BigInteger firstCodeNumber(String input, String prefix) {
         if (input == null || input.isBlank())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập mã thiết bị đầu tiên của cơ sở.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung mã thiết bị.");
         String value = input.strip().toUpperCase(Locale.ROOT);
         String digits = value.startsWith(prefix) ? value.substring(prefix.length()) : value;
         if (!digits.matches("[0-9]{1,52}") || digits.chars().allMatch(digit -> digit == '0'))

@@ -17,6 +17,7 @@ import com.gcmb.backend.pricing.dto.RoomTypeCommand;
 import com.gcmb.backend.pricing.dto.RoomTypeView;
 import com.gcmb.backend.pricing.repository.RoomCatalogRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -113,25 +114,23 @@ public class RoomCatalogService {
     @Transactional
     public PriceRuleView createPriceRule(PriceRuleCommand command) {
         validatePriceRule(command);
+        roomCatalogRepository.lockPriceRuleChanges();
         roomType(command.roomTypeId());
         String code = command.code().trim().toUpperCase();
         if (roomCatalogRepository.activePriceRuleCodeExists(code)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã quy tắc giá đang được sử dụng.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã quy tắc giá “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
-        UUID id = UUID.randomUUID();
-        insertPriceRule(id, code, roomCatalogRepository.nextPriceRuleVersion(code), command);
-        return priceRule(id);
+        return savePriceRule(code, null, command);
     }
 
     @Transactional
     public PriceRuleView updatePriceRule(UUID id, PriceRuleCommand command) {
         validatePriceRule(command);
+        roomCatalogRepository.lockPriceRuleChanges();
         PriceRuleView previous = priceRule(id);
         if (!previous.code().equalsIgnoreCase(command.code().trim())) throw bad("Không thể đổi mã quy tắc khi đang sửa.");
-        roomCatalogRepository.deactivatePriceRule(id);
-        UUID nextId = UUID.randomUUID();
-        insertPriceRule(nextId, previous.code(), roomCatalogRepository.nextPriceRuleVersion(previous.code()), command);
-        return priceRule(nextId);
+        roomType(command.roomTypeId());
+        return savePriceRule(previous.code(), id, command);
     }
 
     @Transactional
@@ -143,12 +142,29 @@ public class RoomCatalogService {
         }
     }
 
-    private void insertPriceRule(UUID id, String code, int version, PriceRuleCommand command) {
+    private PriceRuleView savePriceRule(String code, UUID replacedId, PriceRuleCommand command) {
         boolean wholeDay = command.minuteFrom().equals(command.minuteTo());
         int minuteFrom = wholeDay ? 0 : command.minuteFrom();
         int minuteTo = wholeDay ? 1440 : (command.minuteTo() == 0 ? 1440 : command.minuteTo());
-        roomCatalogRepository.insertPriceRule(id, code, version, command.roomTypeId(), command.name().trim(),
+        if (minuteTo <= minuteFrom) throw bad("Khung giờ áp dụng không hợp lệ.");
+        requireNoPriceOverlap(command.roomTypeId(), replacedId, command.validFrom(), command.validTo(),
+            minuteFrom, minuteTo, command.weekdays());
+        if (replacedId != null) roomCatalogRepository.deactivatePriceRule(replacedId);
+        UUID id = UUID.randomUUID();
+        roomCatalogRepository.insertPriceRule(id, code, roomCatalogRepository.nextPriceRuleVersion(code),
+            command.roomTypeId(), command.name().trim(),
             command.validFrom(), command.validTo(), minuteFrom, minuteTo, command.weekdays(), command.hourlyPrice());
+        return priceRule(id);
+    }
+
+    private void requireNoPriceOverlap(UUID roomTypeId, UUID replacedId, LocalDate validFrom, LocalDate validTo,
+            int minuteFrom, int minuteTo, List<Integer> weekdays) {
+        String conflict = roomCatalogRepository.overlappingPriceRuleName(
+            roomTypeId, replacedId, validFrom, validTo, minuteFrom, minuteTo, weekdays);
+        if (conflict != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cấu hình giá bị trùng với " + conflict
+                + " về hạng phòng, ngày áp dụng và khung giờ. Vui lòng điều chỉnh thời gian áp dụng.");
+        }
     }
 
     private PriceRuleView priceRule(UUID id) {
@@ -164,10 +180,10 @@ public class RoomCatalogService {
         if (command.name() == null || command.name().isBlank()) throw bad("Vui lòng bổ sung Tên quy tắc giá.");
         if (command.name().trim().length() > 200) throw bad("Tên quy tắc giá chỉ được chứa tối đa 200 ký tự.");
         if (command.roomTypeId() == null) throw bad("Vui lòng bổ sung Hạng áp dụng.");
-        if (command.weekdays() == null || command.weekdays().isEmpty()) throw bad("Vui lòng chọn ít nhất một ngày áp dụng.");
+        if (command.weekdays() == null || command.weekdays().isEmpty()) throw bad("Vui lòng chọn ít nhất một ngày trong tuần áp dụng mức giá này.");
         if (command.weekdays().stream().anyMatch(day -> day == null || day < 1 || day > 7)) throw bad("Ngày áp dụng không hợp lệ.");
         if (command.validFrom() == null) throw bad("Vui lòng bổ sung Ngày bắt đầu.");
-        if (command.validTo() != null && command.validTo().isBefore(command.validFrom())) throw bad("Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.");
+        if (command.validTo() != null && command.validTo().isBefore(command.validFrom())) throw bad("Ngày kết thúc hiệu lực phải bằng hoặc sau ngày bắt đầu hiệu lực.");
         if (command.minuteFrom() == null) throw bad("Vui lòng bổ sung Bắt đầu.");
         if (command.minuteTo() == null) throw bad("Vui lòng bổ sung Kết thúc.");
         if (command.minuteFrom() < 0 || command.minuteFrom() > 1439 || command.minuteTo() < 0 || command.minuteTo() > 1440) throw bad("Khung giờ áp dụng không hợp lệ.");
@@ -187,10 +203,12 @@ public class RoomCatalogService {
         if ("COMBO".equals(kind) && !roomTypeId.equals(command.roomTypeId())) throw bad("Hạng phòng và combo không khớp.");
         RoomTypeView room = roomType(roomTypeId);
         if ("HOURLY".equals(kind)) {
+            roomCatalogRepository.lockPriceRuleChanges();
             String name = room.name() + " · Giờ lẻ";
             if (roomCatalogRepository.countActiveHourlyPrices(roomTypeId, name) > 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Hạng phòng đã có giá giờ lẻ đang áp dụng.");
             }
+            requireNoPriceOverlap(roomTypeId, null, null, null, 0, 1440, List.of(1, 2, 3, 4, 5, 6, 7));
             UUID id = UUID.randomUUID();
             roomCatalogRepository.insertHourlyPrice(id, roomTypeId, name, command.price());
             return price(id, "HOURLY");
@@ -217,6 +235,7 @@ public class RoomCatalogService {
     public PriceCatalogItem updatePrice(String kind, UUID id, PriceCommand command) {
         validatePrice(kind, command);
         if ("HOURLY".equals(kind)) {
+            roomCatalogRepository.lockPriceRuleChanges();
             PriceCatalogItem previous = price(id, "HOURLY");
             roomCatalogRepository.deactivatePriceRule(id);
             return createPrice("HOURLY", previous.roomTypeId(), command);
@@ -277,7 +296,8 @@ public class RoomCatalogService {
             if(command.name()==null||command.name().isBlank()) throw bad("Vui lòng bổ sung Tên combo.");
             if(command.name().trim().length()>200) throw bad("Tên combo chỉ được chứa tối đa 200 ký tự.");
             if(command.roomTypeId()==null) throw bad("Vui lòng bổ sung Hạng áp dụng.");
-            if(command.durationMinutes()==null||command.durationMinutes()<1) throw bad("Thời lượng phải lớn hơn 0.");
+            if (command.durationMinutes() == null) throw bad("Vui lòng bổ sung Thời lượng (phút).");
+            if (command.durationMinutes() < 1) throw bad("Thời lượng phải lớn hơn 0.");
             if(command.minuteFrom()==null) throw bad("Vui lòng bổ sung Bắt đầu.");
             if(command.minuteTo()==null) throw bad("Vui lòng bổ sung Kết thúc.");
             if(command.minuteFrom()<0||command.minuteFrom()>1439||command.minuteTo()<0||command.minuteTo()>1440)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
-import { formatVnd } from '../data/bookingData';
+import { formatVnd, hourlyRentalMinutes } from '../data/bookingData';
 
 export default function WalkInDialog({ room, options, onClose, onOpened }) {
   const dialog = useRef(null);
@@ -26,9 +26,7 @@ export default function WalkInDialog({ room, options, onClose, onOpened }) {
   const giftsReady = !giftRequired || (!giftLoading && !giftError && giftMenu.length > 0
     && drinkSelections.length === drinkCount && foodSelections.length === foodCount
     && drinkSelections.every(Boolean) && foodSelections.every(Boolean));
-  const hours = Number(form.durationHours);
-  // BR-150: thời lượng tính giờ từ 1 đến 24 giờ; giao diện chọn theo bước 30 phút.
-  const duration = form.pricingMode === 'COMBO' ? combo?.durationMinutes : (hours >= 1 && hours <= 24 && Number.isInteger(hours * 2) ? hours * 60 : null);
+  const duration = form.pricingMode === 'COMBO' ? combo?.durationMinutes : hourlyRentalMinutes(form.durationHours);
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
@@ -90,7 +88,9 @@ export default function WalkInDialog({ room, options, onClose, onOpened }) {
         <label>Số điện thoại <span>*</span><input name="contactPhone" type="tel" value={form.contactPhone} onChange={change} pattern="\+?[0-9]+" maxLength="30" title="Chỉ gồm chữ số và có thể có dấu + ở đầu" autoComplete="tel" required /></label>
         <label>Số khách <span>*</span><input name="guestCount" type="number" min="1" max={room.capacity} step="1" value={form.guestCount} onChange={change} required /></label>
         <label>Hình thức sử dụng<select name="pricingMode" value={form.pricingMode} onChange={change}><option value="HOURLY">Tính giờ</option>{combos.length > 0 && <option value="COMBO">Combo</option>}</select></label>
-        {form.pricingMode === 'HOURLY' ? <label>Thời lượng (giờ)<input name="durationHours" type="number" min="1" max="24" step="0.5" value={form.durationHours} onChange={change} required /></label> : <label>Gói dịch vụ<select name="comboId" value={form.comboId} onChange={change}>{combos.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.durationMinutes} phút · {formatVnd(item.price)}</option>)}</select></label>}
+        {form.pricingMode === 'HOURLY' ? <label>Thời lượng (giờ)<input name="durationHours" type="number" min="0" max="24" step="any" inputMode="decimal" value={form.durationHours} onChange={change} required />
+          {!duration && <small>Thời lượng phải tương ứng số phút nguyên từ 1 phút đến 24 giờ.</small>}
+        </label> : <label>Gói dịch vụ<select name="comboId" value={form.comboId} onChange={change}>{combos.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.durationMinutes} phút · {formatVnd(item.price)}</option>)}</select></label>}
         {giftRequired && <div className="walk-in-gifts"><strong>Quà tặng theo combo</strong>{giftLoading && <small>Đang tải món F&amp;B…</small>}{giftError && <small role="alert">{giftError}</small>}{!giftLoading && !giftError && !giftMenu.length && <small role="alert">Cơ sở chưa có món quà combo khả dụng.</small>}{[['Đồ uống', drinkSelections, setDrinkSelections], ['Đồ ăn', foodSelections, setFoodSelections]].map(([label, selections, setSelections]) => selections.map((selectedId, index) => <label key={`${label}-${index}`}>{label} {index + 1}<select required value={selectedId} onChange={(event) => setSelections((current) => current.map((id, i) => i === index ? event.target.value : id))}><option value="">Chọn {label.toLowerCase()}</option>{giftMenu.map((item) => <option key={item.id} value={item.id} disabled={Number(item.stockQuantity || 0) <= [...drinkSelections, ...foodSelections].filter((id) => id === item.id).length - (selectedId === item.id ? 1 : 0)}>{item.name} · tồn {item.stockQuantity} {item.unitName}</option>)}</select></label>))}</div>}
         <label className="walk-in-note">Ghi chú <textarea name="note" value={form.note} onChange={change} maxLength="2000" rows="2" placeholder="Nhập ghi chú (nếu có)" /></label>
       </div>

@@ -1,5 +1,6 @@
 import { PaginatedList } from '../../../shared/components/Pagination';
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 import { useEffect, useMemo, useState } from 'react';
 import {
   bookingRooms,
@@ -122,13 +123,13 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
   const save = (event) => {
     event.preventDefault();
     const nextErrors = {};
-    const digits = form.phone.replace(/\D/g, '');
+    const phoneError = phoneFormatError(form.phone);
     const start = fromDateAndTime(form.startDate, form.startTime);
     const end = fromDateAndTime(form.endDate, form.endTime);
     const now = new Date();
     if (!form.customerName.trim()) nextErrors.customerName = 'Nhập tên khách hàng.';
-    if (!digits) nextErrors.phone = 'Nhập số điện thoại.';
-    else if (digits.length < 9 || digits.length > 11) nextErrors.phone = 'Số điện thoại cần có từ 9 đến 11 chữ số.';
+    if (!form.phone.trim()) nextErrors.phone = 'Nhập số điện thoại.';
+    else if (phoneError) nextErrors.phone = phoneError;
     if (!form.startDate) nextErrors.startDate = 'Chọn ngày bắt đầu.';
     if (!isValidTimeInput(form.startTime)) nextErrors.startTime = form.startTime ? 'Nhập giờ theo định dạng 24 giờ, ví dụ 14:30.' : 'Chọn giờ bắt đầu.';
     if (!form.endDate) nextErrors.endDate = 'Chọn ngày kết thúc.';
@@ -197,7 +198,7 @@ export function BookingFormDialog({ open, mode, booking, bookings, selectedDate,
               <legend>Thông tin khách hàng</legend>
               <div className="booking-two-columns">
                 <TextField label="Tên khách hàng *" name="customerName" value={form.customerName} onChange={updateField} error={errors.customerName} placeholder="Nguyễn Minh Anh" autoComplete="name" />
-                <TextField label="Số điện thoại *" name="phone" value={form.phone} onChange={updateField} error={errors.phone} placeholder="0912 345 678" inputMode="tel" autoComplete="tel" />
+                <TextField label="Số điện thoại *" name="phone" value={form.phone} onChange={updateField} error={errors.phone} placeholder="0912345678" inputMode="tel" autoComplete="tel" />
               </div>
             </fieldset>
 

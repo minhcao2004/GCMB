@@ -38,9 +38,15 @@ Trong **Chi phí & đề nghị** của Quản lý cơ sở, cả **Đề nghị
 
 - At **3,000,000 VND or less**, the request enters the Accountant queue.
 - Above **3,000,000 VND**, it enters the Head Office Manager approval queue first; after approval, the Accountant pays it.
-- Rejection records the actor, time, and reason. The review screen asks the Accountant to confirm or cancel before approval/rejection is submitted. Missing evidence does not block the review; approval does not reduce the fund.
-- Accountant records the actual payment date, optional bank reference, and transfer proof. The system checks the shared balance under a transaction lock, rejects insufficient funds, records the payment in the branch/category history, and deducts the amount once.
+- Rejection records the actor, time, and reason. Review and approval can occur before payment. The Accountant's combined approval and payment action requires a payment proof file before either step is recorded.
+- The Accountant provides payment proof and may enter a bank reference. The system checks the shared balance under a transaction lock, rejects insufficient funds, records the payment in the branch/category history, and deducts the amount once. Missing payment proof returns MSG95.
 - UC120 history is read-only. Head Office Manager and Accountant can see all branches; a Branch Manager sees their assigned branch only.
+
+## Ứng lương và thanh toán cuối kỳ
+
+- Sau khi Quản lý cơ sở gửi bảng lương, kế toán vẫn có thể ghi nhận ứng lương nếu nhân viên chưa nhận lương cuối kỳ của tháng đó. Khoản ứng phải nằm trong số lương còn có thể ứng và số còn phải trả.
+- Khoản ứng đã chi được ghi riêng, trừ quỹ một lần và khấu trừ vào số lương còn phải trả. Lương gốc giữ nguyên. Ví dụ lương 440.000đ đã ứng 100.000đ thì còn phải trả 340.000đ.
+- Khi lương cuối kỳ đã được ghi nhận thanh toán thành công, hệ thống chặn ứng thêm cho nhân viên đó trong cùng kỳ.
 
 ## Evidence storage and access
 

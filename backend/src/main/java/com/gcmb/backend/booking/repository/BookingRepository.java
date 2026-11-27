@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,14 +58,14 @@ public class BookingRepository {
     public record ComboRow(UUID id, String code, int version, UUID roomTypeId, String name,
                            int durationMinutes, BigDecimal price, BigDecimal depositRequired,
                            BigDecimal overtimeHourlyPrice, Instant validFrom, Instant validTo,
-                           int includedFnbQuantity, int includedFoodQuantity) {}
+                           int includedFnbQuantity, int includedFoodQuantity, int minuteFrom, int minuteTo) {}
     public record ComboGiftRequirements(int drinkQuantity, int foodQuantity) {}
     public record RoomRow(UUID id, String code, String name, int capacity, String operatingStatus,
                           UUID roomTypeId, String roomTypeName) {}
     public record PricingRule(UUID id, String name, UUID branchId, LocalDate validFrom, LocalDate validTo,
                               String dayKind, LocalDate specificDate, int minuteFrom, int minuteTo,
                               BigDecimal hourlyPrice, BigDecimal overtimeHourlyPrice,
-                              int billingStepMinutes, int priority) {}
+                              int billingStepMinutes, int priority, List<Integer> weekdays) {}
     // Ảnh chụp booking phục vụ các thao tác trong một giao dịch.
     public record BookingRow(UUID id, UUID branchId, UUID roomTypeId, String code, String contactName, String contactPhone, int guestCount,
                              String channel, Instant plannedStart, Instant plannedEnd, Instant actualCheckin,
@@ -158,7 +159,7 @@ public class BookingRepository {
     public List<ComboRow> combos(UUID roomTypeId, UUID branchId) {
         return jdbcTemplate.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity,minute_from,minute_to
             FROM gcmb.combo c
             WHERE active=true AND room_type_id=? AND (branch_id IS NULL OR branch_id=?) AND (valid_to IS NULL OR valid_to>CURRENT_TIMESTAMP)
             ORDER BY name,version DESC
@@ -173,7 +174,7 @@ public class BookingRepository {
     public ComboRow combo(UUID id, UUID branchId) {
         List<ComboRow> rows = jdbcTemplate.query("""
             SELECT id,code,version,room_type_id,name,duration_minutes,price,deposit_required,
-                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity
+                   overtime_hourly_price,valid_from,valid_to,included_fnb_quantity,included_food_quantity,minute_from,minute_to
             FROM gcmb.combo c WHERE id=? AND active=true AND (branch_id IS NULL OR branch_id=?)
             """, (resultSet, rowNumber) -> combo(resultSet), id, branchId);
         return rows.isEmpty() ? null : rows.get(0);
@@ -185,14 +186,14 @@ public class BookingRepository {
             resultSet.getObject("room_type_id", UUID.class), resultSet.getString("name"), resultSet.getInt("duration_minutes"),
             resultSet.getBigDecimal("price"), resultSet.getBigDecimal("deposit_required"), resultSet.getBigDecimal("overtime_hourly_price"),
             instant(resultSet, "valid_from"), instant(resultSet, "valid_to"), resultSet.getInt("included_fnb_quantity"),
-            resultSet.getInt("included_food_quantity"));
+            resultSet.getInt("included_food_quantity"), resultSet.getInt("minute_from"), resultSet.getInt("minute_to"));
     }
 
     // Lấy các rule giá có thể bao phủ khoảng ngày cần báo giá.
     public List<PricingRule> pricingRules(UUID roomTypeId, UUID branchId, LocalDate startDate, LocalDate endDate) {
         return jdbcTemplate.query("""
             SELECT id,name,branch_id,valid_from,valid_to,day_kind,specific_date,minute_from,minute_to,
-                   hourly_price,overtime_hourly_price,billing_step_minutes,priority
+                   hourly_price,overtime_hourly_price,billing_step_minutes,priority,weekdays
             FROM gcmb.price_rule
             WHERE room_type_id=? AND active=true AND (branch_id=? OR branch_id IS NULL)
               AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)
@@ -205,7 +206,9 @@ public class BookingRepository {
                 resultSet.getObject("valid_to", LocalDate.class), resultSet.getString("day_kind"),
                 resultSet.getObject("specific_date", LocalDate.class), resultSet.getInt("minute_from"), resultSet.getInt("minute_to"),
                 resultSet.getBigDecimal("hourly_price"), resultSet.getBigDecimal("overtime_hourly_price"),
-                resultSet.getInt("billing_step_minutes"), resultSet.getInt("priority")), roomTypeId, branchId,
+                resultSet.getInt("billing_step_minutes"), resultSet.getInt("priority"),
+                Arrays.stream((Object[]) resultSet.getArray("weekdays").getArray())
+                    .map(day -> ((Number) day).intValue()).toList()), roomTypeId, branchId,
                 endDate, startDate, startDate, endDate);
     }
 
@@ -502,13 +505,14 @@ public class BookingRepository {
 
     // Tạo yêu cầu hoàn cọc chờ xử lý, chưa ghi nhận đã thanh toán.
     public UUID createDepositRefundRequest(UUID branchId, UUID bookingId, UUID depositId, BigDecimal amount,
-            String reason, String beneficiaryName, String bankName, String bankAccount, UUID actorId) {
+            String reason, String beneficiaryName, String bankName, String bankAccount, UUID actorId, UUID checkoutBillId) {
         return jdbcTemplate.queryForObject("""
             INSERT INTO gcmb.refund_request(branch_id,booking_id,deposit_id,kind,amount,reason,
-                                            beneficiary_name,bank_name,bank_account,requested_by,status)
-            VALUES (?,?,?,'DEPOSIT',?,?,?,?,?,?,'REQUESTED')
+                                            beneficiary_name,bank_name,bank_account,requested_by,status,checkout_bill_id)
+            VALUES (?,?,?,'DEPOSIT',?,?,?,?,?,?,'REQUESTED',?)
             RETURNING id
-            """, UUID.class, branchId, bookingId, depositId, amount, reason, beneficiaryName, bankName, bankAccount, actorId);
+            """, UUID.class, branchId, bookingId, depositId, amount, reason, beneficiaryName, bankName, bankAccount, actorId,
+            checkoutBillId);
     }
 
     // Khóa booking thuộc chi nhánh để serialize các cập nhật đồng thời.

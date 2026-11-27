@@ -46,7 +46,9 @@ public final class DepositDtos {
                                     String customerName, String phone,
                                     BigDecimal amount, String reason, String beneficiaryName, String bankName,
                                     String bankAccount, String status, Instant requestedAt, Instant paidAt,
-                                    String externalReference, boolean hasEvidence) {}
+                                    String externalReference, boolean hasEvidence, String checkoutBillNumber) {}
+
+    public record RefundRecipient(String beneficiaryName, String bankName, String bankAccount) {}
 
     public record RefundEvidenceContent(String originalName, String mimeType, byte[] bytes) {}
 

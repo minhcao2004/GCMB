@@ -195,7 +195,11 @@ public class FoodOrderService {
     @Transactional
     public void deductComboGiftStock(Identity actor, UUID bookingId) {
         UUID branchId = branch(actor);
-        for (UUID orderId : foodOrderRepository.comboGiftOrderIds(branchId,bookingId))
+        // Serialize repeated requests before checking the stock ledger.
+        List<UUID> orderIds = foodOrderRepository.lockComboGiftOrderIds(branchId, bookingId);
+        if (orderIds.stream().anyMatch(foodOrderRepository::hasStockSale))
+            throw conflict("Quà combo đã được xuất kho. Vui lòng kiểm tra kết quả hiện có.");
+        for (UUID orderId : orderIds)
             deductAutomaticStock(orderId,branchId,actor.id(),"Xuất kho đồ ăn, đồ uống combo khi thanh toán bill booking");
     }
 

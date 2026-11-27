@@ -413,6 +413,21 @@ export default function AttendancePage({
                     >
                       Chốt công nhân viên đã chọn
                     </button>
+                    <button
+                      type="button"
+                      className="shift-primary"
+                      disabled={readonly || !data.monthEnded}
+                      onClick={() => {
+                        if (!data.canClosePeriod) {
+                          setError(data.periodCloseBlockReason);
+                          return;
+                        }
+                        setError('');
+                        setDialog({ type: 'close', periodOnly: true, employeeIds: [] });
+                      }}
+                    >
+                      Chốt công tháng
+                    </button>
                   </div>
                 )}
               </>
@@ -474,7 +489,9 @@ export default function AttendancePage({
             // MSG11/12: thông báo lưu và đổi trạng thái theo mẫu tài liệu.
             setNotice(
               monthly
-                ? `Đã chốt công cả tháng cho các nhân viên được chọn trong tháng ${result.month.split('-').reverse().join('/')}.`
+                ? result.period.status === 'CLOSED'
+                  ? `Đã chốt kỳ công tháng ${result.month.split('-').reverse().join('/')} của cơ sở.`
+                  : `Đã chốt công cả tháng cho các nhân viên được chọn trong tháng ${result.month.split('-').reverse().join('/')}.`
                 : 'Đã cập nhật bản ghi chấm công.'
             );
           }}
