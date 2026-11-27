@@ -278,6 +278,7 @@ Backend entry point: `com.gcmb.backend.BackendApplication`, tại `backend/src/m
 | Flyway reports duplicate migration versions | Start with `npm.cmd start` from `frontend/` to rebuild only the generated migration resource directory. Load the shared location plus exactly one V66/V67 history. Avoid Maven `clean` when PostgreSQL data lives under `backend/target/`. |
 | Flyway reports a checksum mismatch for V66/V67 | Read `public.flyway_schema_history` and select the matching migration locations using the [V66/V67 compatibility guide](docs/Flyway%20V66-V67%20Compatibility.md). Keep validation enabled and preserve the recorded history. |
 | Frontend cannot call the API | Check the backend is running, the API base path is correct, and backend CORS allows `http://localhost:3000`. |
+| Frontend reports `Unexpected token` at `<<<<<<< HEAD` or a duplicated declaration after a merge | Compare both versions of the reported file and resolve the conflicting code. Check for remaining markers and run `npm.cmd run build` from `frontend/`. |
 | Java version mismatch | Check `java -version`, `JAVA_HOME`, and the IDE project SDK; use JDK 17. |
 | `Unresolved compilation problem` at `BackendApplication.main` while Maven says `Nothing to compile` | Stop the development servers, run `.\mvnw.cmd clean compile` from `backend/`, then run `npm.cmd start` from `frontend/`. This rebuilds generated classes after an IDE compilation or entry-point package change. Ensure the IDE uses `com.gcmb.backend.BackendApplication`. |
 

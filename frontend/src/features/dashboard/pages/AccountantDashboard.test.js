@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import api from '../../../api/client';
+import { clearStale } from '../../../shared/utils/staleCache';
 import { authApi } from '../../auth/services/authApi';
 import AccountantDashboard from './AccountantDashboard';
 
@@ -10,14 +11,24 @@ jest.mock('../../../api/client', () => ({ get: jest.fn() }));
 jest.mock('../../auth/services/authApi', () => ({ authApi: { me: jest.fn() } }));
 jest.mock('../../booking/pages/BookingManagementPage', () => ({ AppShell: ({ children }) => children }));
 
+const cashFlow = {
+  current: { income: 1200, expense: 400, net: 800 }, previous: { income: 1000, expense: 500, net: 500 },
+  comparisonFrom: '2026-10-01', comparisonTo: '2026-10-26',
+  branches: [{ id: 'a', name: 'Cơ sở A' }],
+  rows: [{ id: 'expense-1', cashDate: '2026-11-26', kind: 'SALARY', amount: -400 }],
+};
+
+const reports = (path) => ({ data: path.endsWith('/cash-flow') ? cashFlow
+  : path.endsWith('/unreconciled-count') ? { count: 2 } : { items: [] } });
+
+beforeEach(() => {
+  clearStale();
+  jest.clearAllMocks();
+  authApi.me.mockResolvedValue({ id: 'accountant-a', role: 'ACCOUNTANT' });
+  api.get.mockImplementation(async (path) => reports(path));
+});
+
 test('compares all three cash figures and reloads the selected calendar scope', async () => {
-  authApi.me.mockResolvedValue({ role: 'ACCOUNTANT' });
-  api.get.mockImplementation((path) => Promise.resolve({ data: path.endsWith('/cash-flow') ? {
-    current: { income: 1200, expense: 400, net: 800 }, previous: { income: 1000, expense: 500, net: 500 },
-    comparisonFrom: '2026-10-01', comparisonTo: '2026-10-26',
-    branches: [{ id: 'a', name: 'Cơ sở A' }],
-    rows: [{ id: 'expense-1', cashDate: '2026-11-26', kind: 'SALARY', amount: -400 }],
-  } : path.endsWith('/unreconciled-count') ? { count: 2 } : { items: [] } }));
   render(<AccountantDashboard/>);
   const metrics = within(screen.getByRole('region', { name: 'Chỉ số tài chính' }));
   await metrics.findByText('+20%');
@@ -32,4 +43,22 @@ test('compares all three cash figures and reloads the selected calendar scope', 
   await waitFor(() => expect(api.get).toHaveBeenCalledWith('/accounting/reports/cash-flow', {
     params: { from: '2026-11-26', to: '2026-11-26', branchId: 'a', compare: 'previous-day' },
   }));
+});
+
+test('keeps the previous cash figures visible when a background refresh fails', async () => {
+  const firstVisit = render(<AccountantDashboard/>);
+  await screen.findByText('+20%');
+  firstVisit.unmount();
+
+  let failRefresh;
+  api.get.mockImplementation((path) => path.endsWith('/cash-flow')
+    ? new Promise((_resolve, reject) => { failRefresh = reject; }) : Promise.resolve(reports(path)));
+
+  render(<AccountantDashboard/>);
+  await screen.findByText('+20%');
+  expect(failRefresh).toBeDefined();
+  failRefresh(new Error('Network error'));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Một số số liệu đang hiển thị từ lần tải trước');
+  expect(screen.getByText('+20%')).toBeInTheDocument();
 });

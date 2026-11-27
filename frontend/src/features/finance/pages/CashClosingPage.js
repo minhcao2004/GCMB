@@ -1,4 +1,3 @@
-import { formatDateLabel } from '../../../shared/utils/dateLabel';
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
@@ -16,8 +15,6 @@ import '../styles/finance.css';
 
 const labels = { SUBMITTED: 'Chờ kế toán đối soát', NEEDS_EXPLANATION: 'Cần bổ sung', RECONCILED: 'Đã đối soát' };
 const message = (e) => Object.values(apiErrors(e)).join(' ');
-const displayDate = (value) => formatDateLabel(value, '');
-
 
 export default function CashClosingPage({ user, accounting = false, readOnly = false }) {
   const location = useLocation();

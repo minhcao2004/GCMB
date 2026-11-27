@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../../api/client';
 import { authApi } from '../../auth/services/authApi';
-import { AppShell } from '../../booking/pages/BookingManagementPage';<<<<<<< HEAD
+import { AppShell } from '../../booking/pages/BookingManagementPage';
 import { readStale, staleKey, writeStale } from '../../../shared/utils/staleCache';
 
 import { dateKey, dateLabel } from '../../finance/utils/financeDates';
@@ -130,50 +130,6 @@ export default function AccountantDashboard() {
   useEffect(() => {
     if (!user) return undefined;
     let active = true;
-
-    setError('');
-    const cacheKey = staleKey('accountant', month, branchId, dateFrom, dateTo);
-    const cached = readStale(cacheKey);
-    const params = { month, ...(branchId ? { branchId } : {}) };
-    const apply = (results) => {
-      const [summary, refund, periodResult, details, transactions, imported] = results;
-      if (summary.status === 'fulfilled') {
-        const list = summary.value.data.results || [];
-        setBranches((current) => {
-          const combined = [...current, ...list.map((row) => ({ id: row.id, name: row.name }))];
-          if (imported.status === 'fulfilled') combined.push(...(imported.value.data.branchOptions || []).map((row) => ({ id: row.id, name: row.name })));
-          return [...new Map(combined.map((row) => [row.id, row])).values()];
-        });
-      } else { setError(errorText(summary.reason)); }
-      setRefunds(refund.status === 'fulfilled' ? refund.value.data.items || [] : []);
-      setPeriods(periodResult.status === 'fulfilled' ? periodResult.value.data || [] : []);
-      setPaymentMethods(details.status === 'fulfilled' ? details.value.data.paymentMethods || [] : []);
-      setRecentTransactions(transactions.status === 'fulfilled' ? transactions.value.data || [] : []);
-      const sourceRows = imported.status === 'fulfilled' ? imported.value.data.rows || [] : [];
-      const sourceBranchesWithInvoices = new Set(sourceRows.filter((row) => row.recordType === 'KIOT_INVOICE').map((row) => row.branchId));
-      setSourceTransactions(sourceRows.filter((row) => row.recordType === 'KIOT_INVOICE' || !sourceBranchesWithInvoices.has(row.branchId))
-        .map((row) => ({ id: `source-${row.id}`, bookingDate: row.businessDate, occurredAt: `${row.businessDate}T12:00:00`, branchId: row.branchId, branchName: row.branchName,
-          kind: 'PAYMENT', amount: Number(row.paidAmount || 0), method: row.paymentMethod || 'Theo dữ liệu nguồn',
-          reason: row.invoiceNumber || row.sourceKey || 'Booking nhập nguồn', status: row.sourceSystem === 'SYNTHETIC_DEMO' ? 'Dữ liệu mô phỏng' : 'Dữ liệu nguồn', sourceSystem: row.sourceSystem })));
-      const sections = ['Báo cáo tháng', 'Hoàn tiền cọc', 'Kỳ tài chính', 'Phương thức thanh toán', 'Giao dịch', 'Dữ liệu nguồn'];
-      const failedSections = results.flatMap((item, index) => item.status === 'rejected' ? [sections[index]] : []);
-      if (failedSections.length) setError(`Không tải được: ${failedSections.join(', ')}. Số liệu có thể chưa đầy đủ. Vui lòng thử lại.`);
-    };
-    // Hiện ngay số liệu lần trước (nếu có) trong lúc tải bản mới ở nền.
-    if (cached) { apply(cached); setLoading(false); } else setLoading(true);
-    Promise.allSettled([
-      api.get('/accounting/reports/monthly', { params }),
-      api.get('/accounting/deposits/refund-requests'),
-      api.get('/accounting/financial-periods'),
-      api.get('/accounting/dashboard-details', { params: { month, from: dateFrom, to: dateTo, ...(branchId ? { branchId } : {}) } }),
-      api.get('/accounting/transactions', { params }),
-      api.get('/accounting/reports/source-imports', { params: { from: monthBounds(month).start, to: monthBounds(month).end, ...(branchId ? { branchId } : {}) } }),
-    ]).then((results) => {
-      if (!active) return;
-      if (results.every((item) => item.status === 'fulfilled')) writeStale(cacheKey, results);
-      apply(results);
-    }).finally(() => { if (active) setLoading(false); });
-
     setRefundsFailed(false);
     setRefunds(null);
     api.get('/accounting/deposits/refund-requests').then(({ data }) => { if (active) setRefunds(data.items || []); })
@@ -186,16 +142,30 @@ export default function AccountantDashboard() {
     if (!user) return undefined;
     let active = true;
     setError('');
+    const cacheKey = staleKey('accountant-cash-flow', user.id, from, to, branchId, compare);
+    const cached = readStale(cacheKey);
+    if (cached) {
+      setBranches(cached.flow.branches || []);
+      setOverview({ key: scopeKey, data: cached });
+    }
     const params = { from, to, ...(branchId && { branchId }) };
     Promise.allSettled([
       api.get('/accounting/reports/cash-flow', { params: { ...params, compare } }),
       api.get('/accounting/cash-closing/unreconciled-count', { params }),
     ]).then(([flow, closing]) => {
       if (!active) return;
-      if (flow.status === 'fulfilled') setBranches(flow.value.data.branches || []);
-      if (flow.status === 'rejected') setError(errorText(flow.reason));
-      setOverview({ key: scopeKey, data: { flow: flow.status === 'fulfilled' ? flow.value.data : null,
-        closingCount: closing.status === 'fulfilled' ? closing.value.data.count : null } });
+      const data = {
+        flow: flow.status === 'fulfilled' ? flow.value.data : cached?.flow ?? null,
+        closingCount: closing.status === 'fulfilled' ? closing.value.data.count : cached?.closingCount ?? null,
+      };
+      if (data.flow) setBranches(data.flow.branches || []);
+      if (flow.status === 'fulfilled' && closing.status === 'fulfilled') {
+        writeStale(cacheKey, data);
+      } else {
+        const message = flow.status === 'rejected' ? errorText(flow.reason) : 'Không tải được số phiếu chốt quỹ.';
+        setError(cached ? `${message} Một số số liệu đang hiển thị từ lần tải trước.` : message);
+      }
+      setOverview({ key: scopeKey, data });
     });
     return () => { active = false; };
   }, [user, from, to, branchId, compare, scopeKey]);
