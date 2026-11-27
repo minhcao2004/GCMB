@@ -472,12 +472,12 @@ public class BookingRepository {
             """, ts(stoppedAt), billedMinutes, amount, actorId, meterId);
     }
 
-    // Dịch chặng phòng khi khách check-in sớm và kích hoạt phòng.
+    // Dịch chặng phòng khi khách check-in lệch giờ hẹn và kích hoạt phòng.
     public int shiftAndOccupyAllocation(UUID allocationId, Instant now, Instant startsAt, Instant endsAt) {
         return jdbcTemplate.update("""
             UPDATE gcmb.room_allocation
             SET starts_at=?,ends_at=?,state='OCCUPIED',actual_start=?,
-                change_reason='Khách nhận phòng sớm; khung giờ được dời để giữ nguyên thời lượng'
+                change_reason='Khung giờ được dời theo giờ nhận phòng thực tế để giữ nguyên thời lượng'
             WHERE id=? AND state='RESERVED'
             """, ts(startsAt), ts(endsAt), ts(now), allocationId);
     }

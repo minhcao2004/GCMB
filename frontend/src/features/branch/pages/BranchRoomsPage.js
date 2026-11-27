@@ -28,7 +28,8 @@ export default function BranchRoomsPage({user,search:sharedSearch,onSearchChange
  const [drawer,setDrawer]=useState(false),[editing,setEditing]=useState(null),[form,setForm]=useState(blank),[statusOpen,setStatusOpen]=useState(false),[statusForm,setStatusForm]=useState({status:'AVAILABLE',reason:'',expectedReadyAt:''});
  const [busy,setBusy]=useState(false),[toast,setToast]=useState(null),[error,setError]=useState('');
  // Dùng mã MR đã lưu của từng phòng, độc lập với mã phòng hiển thị tại mỗi cơ sở.
- const selectedRoomUrl=selected?.mrCode?`${window.location.origin}/mr/${encodeURIComponent(selected.mrCode)}`:'';
+ const publicSiteOrigin=process.env.REACT_APP_PUBLIC_SITE_ORIGIN||window.location.origin;
+ const selectedRoomUrl=selected?.mrCode?new URL(`/mr/${encodeURIComponent(selected.mrCode)}`,publicSiteOrigin).href:'';
  const reload=useCallback(async()=>{const [r,t]=await Promise.all([roomApi.rooms(),roomApi.types()]);setRooms(r);setTypes(t);setSelected(cur=>cur?r.find(x=>x.id===cur.id)||null:r.find(x=>x.code==='P.402')||r[0]||null)},[roomApi]);
  useEffect(()=>{reload().catch(e=>setError(displayError(e)))},[reload]);
  const floors=useMemo(()=>[...new Set(rooms.map(r=>r.floorNumber))].sort((a,b)=>a-b),[rooms]);

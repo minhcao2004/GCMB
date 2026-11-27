@@ -154,7 +154,7 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    // BR-01, BR-03, BR-05, BR-155: chỉ hiện phòng cùng hạng, đủ sức chứa và thực sự chưa có khách để gán khi check-in.
+    // BR-01, BR-03, BR-04, BR-05, BR-155: chỉ hiện phòng trống cho toàn bộ khung giờ sau khi dời check-in.
     public List<BookingDtos.AvailableRoom> checkInRooms(Identity identity, UUID bookingId) {
         BranchScope branch = branch(identity);
         BookingRow booking = bookingRepository.booking(bookingId, branch.id());
@@ -163,9 +163,8 @@ public class BookingService {
         if (bookingRepository.currentAllocation(bookingId) != null) return List.of();
         Instant now = Instant.now();
         if (!booking.plannedEnd().isAfter(now)) return List.of();
-        Instant start = now.isBefore(booking.plannedStart()) ? now : booking.plannedStart();
-        Instant end = now.isBefore(booking.plannedStart())
-            ? now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd())) : booking.plannedEnd();
+        Instant start = now;
+        Instant end = now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd()));
         return bookingRepository.availableRoomsForEdit(branch.id(), start, end, bookingId, true).stream()
             .filter(room -> room.roomTypeId().equals(booking.roomTypeId()) && room.capacity() >= booking.guestCount())
             .map(room -> new BookingDtos.AvailableRoom(room.id(), room.code(), room.name(), room.capacity(), room.operatingStatus())).toList();
@@ -449,6 +448,8 @@ public class BookingService {
                 from = from.plus(shift); to = to.plus(shift);
             }
             from = later(from, allocation.startsAt());
+            // BR-215: khách đến muộn chỉ trả tiền cho thời gian sau check-in thực tế.
+            if (booking.actualCheckin() != null) from = later(from, booking.actualCheckin());
             to = earlier(earlier(earlier(to, allocation.endsAt()), booking.plannedEnd()), at);
             long seconds = Math.max(0, Duration.between(from,to).getSeconds());
             Map<String,Object> updated = new LinkedHashMap<>(snapshot);
@@ -642,9 +643,9 @@ public class BookingService {
         Instant now = Instant.now();
         if (!booking.plannedEnd().isAfter(now))
             throw new BookingFailure(409, "form", "Đã quá khung giờ booking; không thể check-in");
-        Instant effectiveStart = now.isBefore(booking.plannedStart()) ? now : booking.plannedStart();
-        Instant effectiveEnd = now.isBefore(booking.plannedStart())
-            ? now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd())) : booking.plannedEnd();
+        // BR-03, BR-07: giữ nguyên thời lượng khi check-in lệch giờ hẹn và kiểm tra lại lịch phòng đã dời.
+        Instant effectiveStart = now;
+        Instant effectiveEnd = now.plus(Duration.between(booking.plannedStart(), booking.plannedEnd()));
         AllocationRow allocation = bookingRepository.currentAllocationForUpdate(bookingId);
         if (allocation == null) {
             if (request == null || request.roomId() == null)
@@ -683,13 +684,13 @@ public class BookingService {
         validateGiftChoices(food, giftRequirements.foodQuantity(), "đồ ăn");
         foodOrderService.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
 
-        // Giữ plannedStart làm giờ hẹn gốc; chỉ dời allocation và plannedEnd khi khách đến sớm.
+        // Giữ plannedStart làm giờ hẹn gốc; dời chặng phòng và plannedEnd theo giờ nhận phòng thực tế.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
         if (bookingRepository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
             throw roomConflict(allocation.roomCode());
 
         int bookingUpdated = bookingRepository.checkInBooking(bookingId, now, effectiveEnd);
-        int allocationUpdated = earlyCheckIn
+        int allocationUpdated = !now.equals(booking.plannedStart())
             ? shiftAndOccupyAllocation(allocation.id(), now, effectiveStart, effectiveEnd, allocation.roomCode())
             : bookingRepository.occupyAllocation(allocation.id(), now);
         if (bookingUpdated != 1 || allocationUpdated != 1)
