@@ -179,7 +179,7 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
       <div><h1 id="expense-report-title">Báo cáo chi phí</h1></div>
       <div className="expense-report-summary">
         <dl className="expense-report-total">
-          <dt>Tổng chi phí</dt>
+          <dt>{isHeadOfficeManager ? 'Tổng chi phí' : 'Tổng chi'}</dt>
           <dd>{currentData ? money(totals.amount) : '—'}
             {currentData && <small>{totals.paymentCount.toLocaleString('vi-VN')} khoản chi</small>}
           </dd>

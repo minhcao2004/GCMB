@@ -1,3 +1,4 @@
+import { Drawer } from '../../../shared/components/Overlays';
 import { PaginatedTable } from '../../../shared/components/Pagination';
 /** Author: HuyDV. QLCS requests 500k..1m cash; accountant records the actual payment. */
 import { useEffect, useState } from 'react';
@@ -5,8 +6,11 @@ import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd } from '../services/financeApi';
 import MoneyInput from '../../../shared/components/MoneyInput';
+import { dateTimeLabel } from '../utils/financeDates';
+import '../styles/accountant-finance-workspace.css';
 
 const statusLabel = { REQUESTED: 'Chờ kế toán thanh toán', PAID: 'Đã thanh toán', REJECTED: 'Đã từ chối' };
+const statusTone = { REQUESTED: 'pending', PAID: 'received', REJECTED: 'neutral' };
 const message = (error) => Object.values(apiErrors(error)).join(' ');
 const hasRecipient = (row) => ['recipient_name', 'recipient_bank_name', 'recipient_bank_account', 'recipient_bank_holder']
   .every((key) => row?.[key]);
@@ -40,6 +44,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [paymentError, setPaymentError] = useState('');
   const [notice, setNotice] = useState('');
   const [version, setVersion] = useState(0);
 
@@ -47,6 +52,7 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
     let active = true;
     setLoading(true);
     setError('');
+    setData(null);
     api.get(base, { branchId: filter || undefined }, branch)
       .then((result) => { if (active) setData(result); })
       .catch((e) => { if (active) setError(message(e)); })
@@ -69,25 +75,27 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
     finally { setBusy(false); }
   };
 
-  const settle = async (reject) => {
+  const settle = async (event) => {
+    event.preventDefault();
+    if (busy || !confirmed || !hasRecipient(selected) || (!reference.trim() && !proof)) return;
     setBusy(true);
-    setError('');
+    setPaymentError('');
     setNotice('');
     try {
-      let body = { confirmed, reference, note };
-      if (!reject && proof) {
+      let body = { confirmed, reference: reference.trim(), note: note.trim() };
+      if (proof) {
         const form = new FormData();
         form.append('command', new Blob([JSON.stringify(body)], { type: 'application/json' }));
         form.append('proof', proof);
         body = form;
       }
-      await api.post(base + '/' + selected.id + (reject ? '/reject' : '/pay'), body);
+      await api.post(base + '/' + selected.id + '/pay', body);
       setSelected(null);
-      setNotice(reject ? 'Đã từ chối yêu cầu cấp két.' : 'Đã ghi nhận thanh toán cho quản lý cơ sở, trừ quỹ kế toán và cộng tiền vào két cơ sở.');
+      setNotice('Đã ghi nhận thanh toán cấp két cho quản lý cơ sở.');
       setProof(null);
       setVersion((previousVersion) => previousVersion + 1);
       onChange?.();
-    } catch (e) { setError(message(e)); }
+    } catch (e) { setPaymentError(message(e)); }
     finally { setBusy(false); }
   };
 
@@ -114,14 +122,14 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
     setReference('');
     setNote('');
     setProof(null);
-    setError('');
+    setPaymentError('');
     if (hasRecipient(row)) return;
     setBusy(true);
     try {
       const completed = await api.post(base + '/' + row.id + '/recipient', {});
       setSelected({ ...row, ...completed });
       setVersion((value) => value + 1);
-    } catch (failure) { setError(message(failure)); }
+    } catch (failure) { setPaymentError(message(failure)); }
     finally { setBusy(false); }
   };
 
@@ -129,22 +137,30 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
   const visibleRows = rows.filter((row) => !statusFilter || row.status === statusFilter);
   const pending = rows.some((row) => row.status === 'REQUESTED' && row.account_id === data?.accountId);
   const validAmount = /^\d+$/.test(amount) && Number(amount) >= 500000 && Number(amount) <= 1000000;
-  return <section className="finance-card">
-    <h2>{accounting ? 'Cấp tiền két cơ sở' : 'Yêu cầu cấp tiền két'}</h2>
+  return <section className={accounting ? 'finance-panel finance-workspace-view drawer-funding-workspace' : 'finance-card'} aria-busy={loading}>
+    <header className={accounting ? 'finance-workspace-header' : undefined}>
+      <h2>{accounting ? 'Cấp tiền két cơ sở' : 'Yêu cầu cấp tiền két'}</h2>
+      {accounting && <button type="button" disabled={busy || loading} onClick={() => setVersion((value) => value + 1)}>Tải lại yêu cầu</button>}
+    </header>
     <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
-    {loading ? <p role="status">Đang tải yêu cầu cấp két…</p> : data && <>
-      {accounting ? <div className="finance-toolbar">
-        <p>Quỹ kế toán còn: <strong>{vnd(data.fundBalance)}</strong></p>
-        <label>Cơ sở<select value={filter} onChange={(e) => { setFilter(e.target.value); setSelected(null); }}>
-          <option value="">Tất cả cơ sở</option>
-          {data.branches.map((branchItem) => <option key={branchItem.id} value={branchItem.id}>{branchItem.name}</option>)}
-        </select></label>
-        <label>Trạng thái<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
-          {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
-        <button disabled={busy} onClick={() => { setSelected(null); setProof(null); setVersion((previousVersion) => previousVersion + 1); }}>Tải lại yêu cầu</button>
-      </div> : <>
+    {loading ? <p className="finance-empty" role="status">Đang tải yêu cầu cấp két…</p> : data && <>
+      {accounting ? <>
+        <dl className="finance-workspace-metrics" aria-label="Tổng hợp cấp tiền két">
+          <div><dt>Quỹ kế toán còn</dt><dd>{vnd(data.fundBalance)}</dd></div>
+          <div><dt>Yêu cầu chờ thanh toán</dt><dd className="is-pending">{rows.filter((row) => row.status === 'REQUESTED').length}</dd></div>
+          <div><dt>Yêu cầu đã thanh toán</dt><dd className="is-received">{rows.filter((row) => row.status === 'PAID').length}</dd></div>
+        </dl>
+        <div className="finance-workspace-filters" role="group" aria-label="Lọc yêu cầu cấp tiền két">
+          <label>Cơ sở<select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="">Tất cả cơ sở</option>
+            {data.branches.map((branchItem) => <option key={branchItem.id} value={branchItem.id}>{branchItem.name}</option>)}
+          </select></label>
+          <label>Trạng thái<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">Tất cả trạng thái</option>
+            {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+        </div>
+      </> : <>
         <p>Két hiện tại: <strong>{vnd(data.drawerBalance)}</strong></p>
         <RecipientDetails recipient={data.recipient} />
         {!hasRecipient(data.recipient) && <p className="finance-warning">
@@ -160,54 +176,65 @@ export default function DrawerFundingPanel({ user, refreshKey = 0, onChange }) {
               </fieldset>
             </form>}
       </>}
-      {selected && <form className="finance-info" onSubmit={(e) => { e.preventDefault(); settle(false); }}>
-        <h3>{selected.branchName}</h3>
-        <p>Thanh toán cấp két: <strong>{vnd(selected.amount)}</strong></p>
-        <RecipientDetails recipient={selected} />
-        {!hasRecipient(selected) && <p className="finance-warning">Yêu cầu cũ chưa lưu thông tin nhận tiền. Quản lý cơ sở gửi yêu cầu cần bổ sung thông tin tại phần lịch sử yêu cầu cấp két trước khi thanh toán.</p>}
-        <label>Mã giao dịch / chứng từ<input required={!proof} maxLength={200} value={reference} onChange={(e) => setReference(e.target.value)} /></label>
-        <label>Minh chứng thanh toán (ảnh/PDF)
-          <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif"
-            disabled={busy} onChange={(event) => {
-              const file = event.target.files?.[0] || null;
-              if (file?.size > 20_000_000) {
-                setError('Minh chứng không được vượt quá 20 MB.');
-                event.target.value = '';
-                setProof(null);
-              } else {
-                setProof(file);
-                setError('');
-              }
-            }} />
-          <small>Nhập mã giao dịch hoặc tải minh chứng để tham chiếu khoản đã chuyển cho quản lý cơ sở.</small>
-        </label>
-        <label>Ghi chú / lý do từ chối<textarea maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        <label className="finance-check"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi xác nhận đã thanh toán đủ tiền cấp két cho quản lý cơ sở nhận tiền ở trên.</label>
-        <div className="finance-actions">
+      {selected && <Drawer open title="Ghi nhận thanh toán cấp két" className="finance-workspace-drawer"
+        onClose={() => { if (!busy) setSelected(null); }}
+        footer={<>
           <button type="button" disabled={busy} onClick={() => setSelected(null)}>Đóng</button>
-          <button type="button" disabled={busy || !note.trim()} onClick={() => settle(true)}>Từ chối yêu cầu</button>
-          <button className="finance-primary" disabled={busy || !confirmed || !hasRecipient(selected) || (!reference.trim() && !proof)}>Xác nhận đã thanh toán</button>
-        </div>
-      </form>}
-      <h3>Lịch sử yêu cầu cấp két</h3>
-      <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
+          <button type="submit" form="drawer-payment-form" className="finance-primary"
+            disabled={busy || !confirmed || !hasRecipient(selected) || (!reference.trim() && !proof)}>
+            {busy ? 'Đang xử lý…' : 'Xác nhận đã thanh toán'}
+          </button>
+        </>}>
+        <div className="finance-workspace-payment-summary"><strong>{selected.branchName}</strong><b>{vnd(selected.amount)}</b></div>
+        <RecipientDetails recipient={selected}/>
+        {!hasRecipient(selected) && <p className="finance-warning">Cần bổ sung tài khoản nhận cho yêu cầu cũ trước khi thanh toán.</p>}
+        <form id="drawer-payment-form" className="finance-workspace-form" onSubmit={settle}>
+          <fieldset className="finance-workspace-form-single" disabled={busy}>
+            <legend>Chứng từ chuyển khoản</legend>
+            <label>Mã giao dịch<input required={!proof} maxLength={200} value={reference} onChange={(event) => {
+              setReference(event.target.value); setConfirmed(false);
+            }}/></label>
+            <label>Minh chứng (ảnh hoặc PDF)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif"
+              onChange={(event) => {
+                const file = event.target.files?.[0] || null;
+                setConfirmed(false);
+                if (file && (file.size === 0 || file.size > 20_000_000)) {
+                  setPaymentError('Minh chứng phải lớn hơn 0 byte và tối đa 20 MB.');
+                  event.target.value = '';
+                  setProof(null);
+                } else {
+                  setProof(file);
+                  setPaymentError('');
+                }
+              }}/></label>
+            <p className="finance-workspace-note">Nhập mã giao dịch hoặc đính kèm minh chứng tối đa 20 MB.</p>
+            <label>Ghi chú (tùy chọn)<textarea rows={2} maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)}/></label>
+          </fieldset>
+          <label className="finance-workspace-check"><input type="checkbox" checked={confirmed} disabled={busy}
+            onChange={(event) => setConfirmed(event.target.checked)}/>Tôi xác nhận đã chuyển đủ tiền cấp két cho người nhận trên.</label>
+          {paymentError && <p className="finance-error" role="alert">{paymentError}</p>}
+        </form>
+      </Drawer>}
+      <h3 className={accounting ? "finance-workspace-subtitle" : undefined}>Lịch sử yêu cầu cấp két</h3>
+      <div className={accounting ? 'finance-table-wrap finance-workspace-table' : 'finance-table-wrap'}>
+        <PaginatedTable pageSize={5} resetKey={JSON.stringify([filter, statusFilter])} paginationLabel="Phân trang cấp tiền két">
         <thead><tr><th>Cơ sở / thời điểm</th><th>Số tiền</th><th>Người nhận / ngân hàng</th><th>Nội dung</th><th>Trạng thái</th><th>Chứng từ / thao tác</th></tr></thead>
         <tbody>{visibleRows.map((row) => <tr key={row.id}>
-          <td>{row.branchName}<small>{new Date(row.requested_at).toLocaleString('vi-VN')}</small></td>
+          <td>{row.branchName}<small>{dateTimeLabel(row.requested_at)}</small></td>
           <td>{vnd(row.amount)}</td>
           <td>{row.recipient_name || 'Chưa lưu thông tin nhận tiền'}
             {row.recipient_bank_name && <small>{row.recipient_bank_name} · {row.recipient_bank_account}</small>}
             {row.recipient_bank_holder && <small>Chủ tài khoản: {row.recipient_bank_holder}</small>}
           </td>
           <td>{row.reason}{row.resolution_note && <small>{row.resolution_note}</small>}</td>
-          <td>{statusLabel[row.status]}{row.processed_at && <small>{new Date(row.processed_at).toLocaleString('vi-VN')} · {row.processedBy}</small>}</td>
+          <td>{accounting ? <span className={'finance-status ' + statusTone[row.status]}>{statusLabel[row.status]}</span> : statusLabel[row.status]}{row.processed_at && <small>{dateTimeLabel(row.processed_at)} · {row.processedBy}</small>}</td>
           <td>
             {row.payment_reference && <p>Mã giao dịch: {row.payment_reference}</p>}
             {row.hasEvidence && <button type="button" disabled={busy} onClick={() => downloadEvidence(row)}>Tải minh chứng · {row.evidence_original_name}</button>}
             {!accounting && row.status === 'REQUESTED' && !hasRecipient(row) && row.requested_by === data.requesterId && (
               <button type="button" disabled={busy || user.readOnly} onClick={() => completeRecipient(row)}>Bổ sung thông tin nhận tiền</button>
             )}
-            {accounting && row.status === 'REQUESTED' && <button disabled={busy} onClick={() => openPayment(row)}>Thanh toán cấp két</button>}
+            {accounting && row.status === 'REQUESTED' && <button type="button" aria-haspopup="dialog" disabled={busy} onClick={() => openPayment(row)}>Thanh toán cấp két</button>}
           </td>
         </tr>)}</tbody>
       </PaginatedTable>{!visibleRows.length && <p>Không có yêu cầu cấp tiền két phù hợp với bộ lọc.</p>}</div>

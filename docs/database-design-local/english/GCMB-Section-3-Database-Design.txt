@@ -1,0 +1,2459 @@
+3. Database Design
+
+3.1 Introduction and Rationale for Choosing PostgreSQL
+
+PostgreSQL is an open-source relational database management system. GCMB chose it because foreign keys keep bookings, bills and payments linked, and transactions let related updates succeed or roll back together.
+
+3.2 pgAdmin 4
+
+pgAdmin 4 provides a graphical interface for connecting to PostgreSQL and inspecting schemas, columns, constraints and views. Query Tool allows the team to run SQL and inspect its results. ERD Tool can visualize table relationships. The database records shown in pgAdmin are stored on the PostgreSQL server.
+
+3.3 What PostgreSQL Stores
+
+| Feature | Data stored in PostgreSQL |
+| --- | --- |
+| FE-01 | Branch and room configuration, pricing, combos, accounts, role and permission mappings, password and token hashes, audit events, and attachment metadata. |
+| FE-02 | Booking identifiers, guest contact details, reservations, room assignments, usage and charges, bills, deposits, payment and refund records, and tax invoice requests. |
+| FE-03 | Menu items, room-linked F&B orders, inventory quantities and movements, equipment details, incident and repair history, and references to supporting files. |
+| FE-04 | Employee profiles and payout account details, shift schedules, attendance, pay rates, payroll results, salary advances, payment records, and proof metadata. |
+| FE-05 | Financial accounts, bank transactions, cash closings, fund transfers, expense requests, approvals, allocations, ledger entries, and reporting source records. |
+
+3.4 File Metadata and Object Storage
+
+The PostgreSQL attachment table stores an internal UUID in attachment.id and the file’s storage key in attachment.object_key. It also stores original_name, mime_type, byte_size, sha256, uploaded_by and created_at. A business record can reference attachment.id, for example through refund_request.evidence_id or asset.image_attachment_id. Some workflows store file references directly in their own tables. Examples include menu_item.image_object_key, finance_attachment.object_key and salary_payment_evidence.object_key.
+
+The storage provider holds the actual image or document bytes. GCMB uses Cloudinary when enabled, and the production configuration enables it by default. The project’s deployment notes record a successful private PNG upload and retrieval test. Supported examples include menu and equipment images, stock receipt evidence, refund proof, payroll proof and expense documents. Some workflows can use local disk.
+
+Cloudflare R2 is an optional S3-compatible storage provider for GCMB upload paths that support an S3 bucket. When configured for R2, the application can store the object bytes in the bucket and retain the object key in PostgreSQL. R2 can store video objects as a platform capability. The GCMB evidence and equipment upload validators support JPEG, PNG, WebP, HEIC, HEIF and PDF.
+
+3.5 Table Dictionary by Feature
+
+Each table block lists its purpose and all schema columns. PK means primary key, FK means foreign key, UNIQUE means a uniqueness constraint, CHECK means a validation rule, and EXCLUDE means an exclusion constraint. NOT NULL requires a value. TIMESTAMPTZ means TIMESTAMP WITH TIME ZONE. A composite key applies to the combination of named columns. Referenced tables belong to the feature in which their own table block appears.
+
+3.5.1 FE-01 System Administration and Configuration
+
+Accounts, roles and permissions determine who can access the system and within which scope. Branches, room types, rooms, price rules and combos provide the configuration used in booking and order workflows. Audit events and attachment metadata support traceability across features.
+
+3.5.1.1 branch
+Defines each operating branch and its contact details, timezone and operating status.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| address | TEXT | NOT NULL | Address. |
+| phone | VARCHAR(30) | NULL | Phone number. |
+| timezone | VARCHAR(60) | NOT NULL | Time zone. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| opened_on | DATE | NULL, CHECK | Opening date. |
+| closed_on | DATE | NULL, CHECK | Closing date. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| notes | TEXT | NOT NULL / DEFAULT '' | Notes. |
+| status_reason | TEXT | NOT NULL / DEFAULT '' | Reason for the current status. |
+| updated_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the latest update. |
+
+Key and validation details
+- branch_check: CHECK (closed_on IS NULL OR opened_on IS NULL OR closed_on >= opened_on)
+- branch_status_check: status IN ('ACTIVE', 'SUSPENDED', 'CLOSED')
+
+3.5.1.2 role
+Defines application roles used to classify access.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, CHECK, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- role_code_check: code IN ('HEAD_OFFICE_MANAGER', 'BRANCH_MANAGER', 'RECEPTIONIST', 'ACCOUNTANT')
+
+3.5.1.3 permission
+Defines the actions that may be granted to application roles.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.1.4 role_permission
+Grants a permission to a role within an access scope.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| role_id | UUID | NOT NULL, UNIQUE (composite) / FK → role(id) | Role. |
+| permission_id | UUID | NOT NULL, UNIQUE (composite) / FK → permission(id) | Identifier of the associated permission. |
+| scope | VARCHAR(20) | NOT NULL, CHECK | Organizational scope at which the role grants this permission. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- role_permission_scope_check: scope IN ('CHAIN', 'BRANCH', 'SELF')
+- UNIQUE: role_id, permission_id
+
+3.5.1.5 user_account
+Holds authentication records, role assignments and optional branch scope.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| username | VARCHAR(100) | NOT NULL | Login username. |
+| email | VARCHAR(254) | NOT NULL | Email address. |
+| password_hash | TEXT | NOT NULL | Hash used to verify the account password. |
+| role_id | UUID | NOT NULL / FK → role(id) | Role. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| failed_login_count | INTEGER | NOT NULL, CHECK | Number of failed login attempts. |
+| locked_until | TIMESTAMPTZ | NULL | Account unlock time. |
+| last_login_at | TIMESTAMPTZ | NULL | Most recent login. |
+| password_changed_at | TIMESTAMPTZ | NULL | Most recent password change. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| branch_id | UUID | NULL / FK → branch(id) | Operating branch associated with the record. |
+
+Key and validation details
+- user_account_failed_login_count_check: CHECK (failed_login_count >= 0)
+- user_account_status_check: status IN ('ACTIVE', 'LOCKED', 'REVOKED')
+- uq_user_email_ci: CREATE UNIQUE INDEX uq_user_email_ci ON gcmb.user_account USING btree (lower((email)::text))
+- uq_user_username_ci: CREATE UNIQUE INDEX uq_user_username_ci ON gcmb.user_account USING btree (lower((username)::text))
+
+3.5.1.6 branch_manager_assignment
+Records the user assigned to manage each branch and who assigned them.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| branch_id | UUID | NOT NULL, PK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| user_id | UUID | NOT NULL, PK (composite) / FK → user_account(id) | Branch manager. |
+| assigned_by | UUID | NOT NULL / FK → user_account(id) | User who made the assignment. |
+| assigned_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Assignment timestamp. |
+
+Key and validation details
+- PK: branch_id, user_id
+
+3.5.1.7 auth_token
+Tracks hashed authentication tokens and their expiration, usage and revocation.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| user_id | UUID | NOT NULL / FK → user_account(id) | Account that owns the token. |
+| token_hash | TEXT | NOT NULL, UNIQUE | Hash of the issued token. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| expires_at | TIMESTAMPTZ | NOT NULL, CHECK | Expiration timestamp. |
+| used_at | TIMESTAMPTZ | NULL | Timestamp when used. |
+| revoked_at | TIMESTAMPTZ | NULL | Timestamp when revoked. |
+| created_at | TIMESTAMPTZ | NOT NULL, CHECK / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| code_hash | TEXT | NULL | Hash used to verify the authentication code. |
+| failed_attempts | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Number of failed verification attempts. |
+| selected_branch_id | UUID | NULL / FK → branch(id) | Identifier of the associated selected branch. |
+
+Key and validation details
+- auth_token_check: CHECK (expires_at > created_at)
+- auth_token_failed_attempts_check: CHECK (failed_attempts >= 0)
+- auth_token_kind_check: kind IN ('SESSION', 'PASSWORD_RESET')
+
+3.5.1.8 auth_rate_limit
+Tracks verification attempts within a time window for a rate-limit bucket.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| bucket_key | VARCHAR(100) | PK, NOT NULL | Rate-limit bucket key. |
+| window_start | TIMESTAMPTZ | NOT NULL | Start of the rate-limit window. |
+| attempts | INTEGER | NOT NULL, CHECK | Number of attempts. |
+
+Key and validation details
+- auth_rate_limit_attempts_check: CHECK (attempts > 0)
+
+3.5.1.9 audit_event
+Records business or security actions, the actor, the affected record and change snapshots.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| actor_id | UUID | NULL / FK → user_account(id) | User who performed the action. |
+| branch_id | UUID | NULL / FK → branch(id) | Operating branch associated with the record. |
+| action | VARCHAR(60) | NOT NULL | Action performed. |
+| entity_type | VARCHAR(60) | NOT NULL | Entity type. |
+| entity_id | UUID | NULL | Identifier of the affected record, interpreted using entity_type. |
+| before_data | JSONB | NULL | Data before the change. |
+| after_data | JSONB | NULL | Data after the change. |
+| reason | TEXT | NULL | Business reason recorded for the action. |
+| request_id | VARCHAR(100) | NULL | Request identifier. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.1.10 attachment
+Keeps a storage key and integrity metadata for an uploaded file.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| object_key | TEXT | NOT NULL, UNIQUE | Storage key used by the backend to retrieve the file bytes. |
+| original_name | VARCHAR(200) | NOT NULL | Original uploaded filename. |
+| mime_type | VARCHAR(100) | NOT NULL | Media type of the uploaded file. |
+| byte_size | BIGINT | NOT NULL, CHECK | Size of the file in bytes. |
+| sha256 | VARCHAR(64) | NOT NULL | Hexadecimal SHA-256 checksum of the file contents. |
+| uploaded_by | UUID | NOT NULL / FK → user_account(id) | User who uploaded the file. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- attachment_byte_size_check: CHECK (byte_size >= 0)
+
+3.5.1.11 room_type
+Classifies rooms by service mode and capacity.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| mode | VARCHAR(20) | NOT NULL, CHECK | Mode selected from the supported values. |
+| capacity | INTEGER | NOT NULL, CHECK | Capacity. |
+| description | TEXT | NULL | Descriptive details for the record. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- room_type_capacity_check: CHECK (capacity > 0)
+- room_type_mode_check: mode IN ('CINEMA', 'MUSIC_BOX')
+
+3.5.1.12 room
+Defines a physical room at a branch and records its current operating status.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| room_type_id | UUID | NOT NULL / FK → room_type(id) | Room type. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE (composite) | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| capacity | INTEGER | NOT NULL, CHECK | Capacity. |
+| operating_status | VARCHAR(25) | NOT NULL, CHECK | Operating status selected from the supported values. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| floor_number | INTEGER | NOT NULL, CHECK / DEFAULT 1 | Floor number. |
+| description | TEXT | NOT NULL / DEFAULT '' | Descriptive details for the record. |
+| status_reason | TEXT | NOT NULL / DEFAULT '' | Reason for the current status. |
+| expected_ready_at | TIMESTAMPTZ | NULL | Expected time the room will be ready. |
+| mr_code | VARCHAR(40) | NOT NULL, UNIQUE index / DEFAULT ('MR-'::text \|\| upper(replace((gen_random_uuid())::text, '-'::text, ''::text))) | Stable random room code used in public QR links. |
+
+Key and validation details
+- room_capacity_check: CHECK (capacity > 0)
+- room_floor_number_check: CHECK (floor_number >= '-5'::integer AND floor_number <= 100)
+- room_operating_status_check: operating_status IN ('AVAILABLE', 'CLEANING', 'UNDER_MAINTENANCE', 'INACTIVE')
+- room_operating_status_without_cleaning_check: operating_status IN ('AVAILABLE', 'UNDER_MAINTENANCE', 'INACTIVE')
+- UNIQUE: branch_id, code
+- UNIQUE: id, branch_id
+- uq_room_mr_code: CREATE UNIQUE INDEX uq_room_mr_code ON gcmb.room USING btree (mr_code)
+
+3.5.1.13 price_rule
+Defines versioned room prices and billing increments for specific dates or times.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| room_type_id | UUID | NOT NULL / FK → room_type(id) | Room type. |
+| branch_id | UUID | NULL / FK → branch(id) | Operating branch associated with the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| valid_from | DATE | NOT NULL, CHECK | Start of the period during which this record applies. |
+| valid_to | DATE | NULL, CHECK | End of the period during which this record applies. |
+| day_kind | VARCHAR(20) | NOT NULL, CHECK | Day kind selected from the supported values. |
+| specific_date | DATE | NULL, CHECK | Specific date, when applicable. |
+| minute_from | INTEGER | NOT NULL, CHECK | Start minute. |
+| minute_to | INTEGER | NOT NULL, CHECK | End minute. |
+| hourly_price | NUMERIC(18,0) | NOT NULL, CHECK | Hourly price. |
+| overtime_hourly_price | NUMERIC(18,0) | NOT NULL, CHECK | Overtime hourly price. |
+| billing_step_minutes | INTEGER | NOT NULL, CHECK | Billing interval in minutes. |
+| priority | INTEGER | NOT NULL | Rule priority. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE (composite) | Business code used to identify the record. |
+| version | INTEGER | NOT NULL, CHECK, UNIQUE (composite) / DEFAULT 1 | Revision or version number. |
+| weekdays | SMALLINT[] | NOT NULL, CHECK / DEFAULT ARRAY[(1)::smallint, (2)::smallint, (3)::smallint, (4)::smallint, (5)::smallint, (6)::smallint, (7)::smallint] | Applicable days of the week. |
+
+Key and validation details
+- price_rule_check: CHECK (valid_to IS NULL OR valid_to > valid_from)
+- price_rule_check1: CHECK (minute_from >= 0 AND minute_to <= 1440 AND minute_to > minute_from)
+- price_rule_check2: CHECK (hourly_price >= 0::numeric AND overtime_hourly_price >= 0::numeric AND billing_step_minutes > 0)
+- price_rule_check3: CHECK ((day_kind::text = 'SPECIFIC'::text) = (specific_date IS NOT NULL))
+- price_rule_day_kind_check: day_kind IN ('ALL', 'WEEKDAY', 'WEEKEND', 'HOLIDAY', 'SPECIFIC')
+- price_rule_version_check: CHECK (version > 0)
+- price_rule_weekdays_check: CHECK (cardinality(weekdays) >= 1 AND cardinality(weekdays) <= 7)
+- UNIQUE: code, version
+
+3.5.1.14 combo
+Defines versioned room packages, included items, eligibility and pricing.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE (composite) | Business code used to identify the record. |
+| version | INTEGER | NOT NULL, CHECK, UNIQUE (composite) | Revision or version number. |
+| room_type_id | UUID | NOT NULL / FK → room_type(id) | Room type. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| duration_minutes | INTEGER | NOT NULL, CHECK | Duration. |
+| price | NUMERIC(18,0) | NOT NULL, CHECK | Price. |
+| deposit_required | NUMERIC(18,0) | NOT NULL, CHECK | Required deposit. |
+| overtime_hourly_price | NUMERIC(18,0) | NOT NULL, CHECK | Overtime hourly price. |
+| valid_from | TIMESTAMPTZ | NOT NULL, CHECK | Start of the period during which this record applies. |
+| valid_to | TIMESTAMPTZ | NULL, CHECK | End of the period during which this record applies. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| mode | VARCHAR(20) | NOT NULL, CHECK | Mode selected from the supported values. |
+| branch_id | UUID | NULL / FK → branch(id) | Operating branch associated with the record. |
+| day_group | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'ALL' | Applicable day group. |
+| minute_from | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Start minute. |
+| minute_to | INTEGER | NOT NULL, CHECK / DEFAULT 1440 | End minute. |
+| min_guests | INTEGER | NOT NULL, CHECK / DEFAULT 1 | Minimum number of guests. |
+| max_guests | INTEGER | NULL, CHECK | Maximum number of guests. |
+| included_description | TEXT | NOT NULL / DEFAULT '' | Included items or services. |
+| priority | INTEGER | NOT NULL / DEFAULT 100 | Priority. |
+| included_fnb_quantity | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Included fnb quantity recorded for this combo. |
+| included_food_quantity | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Included food quantity recorded for this combo. |
+
+Key and validation details
+- ck_combo_included_fnb_quantity_nonnegative: CHECK (included_fnb_quantity >= 0)
+- ck_combo_included_food_quantity_range: CHECK (included_food_quantity >= 0 AND included_food_quantity <= 20)
+- combo_check: CHECK (version > 0 AND duration_minutes > 0)
+- combo_check1: CHECK (price >= 0::numeric AND deposit_required >= 0::numeric AND overtime_hourly_price >= 0::numeric)
+- combo_check2: CHECK (valid_to IS NULL OR valid_to > valid_from)
+- combo_day_group_check: day_group IN ('ALL', 'MON_THU', 'FRI_SUN', 'WEEKDAY', 'WEEKEND')
+- combo_guest_range_check: CHECK (min_guests > 0 AND (max_guests IS NULL OR max_guests >= min_guests))
+- combo_mode_check: mode IN ('CINEMA', 'MUSIC_BOX')
+- combo_schedule_check: CHECK (minute_from >= 0 AND minute_from <= 1439 AND minute_to >= 1 AND minute_to <= 1440 AND minute_from <> minute_to)
+- UNIQUE: code, version
+
+3.5.1.15 combo_item
+Defines each menu item and quantity included in a combo package.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| combo_id | UUID | NOT NULL, UNIQUE (composite) / FK → combo(id) | Combo. |
+| menu_item_id | UUID | NOT NULL, UNIQUE (composite) / FK → menu_item(id) | Menu item included in the combo. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| menu_item_code | VARCHAR(60) | NOT NULL | Menu item code recorded for this combo item. |
+| menu_item_name | VARCHAR(200) | NOT NULL | Menu item name recorded for this combo item. |
+| menu_item_category | VARCHAR(200) | NOT NULL | Menu item category recorded for this combo item. |
+
+Key and validation details
+- combo_item_quantity_check: CHECK (quantity > 0::numeric)
+- UNIQUE: combo_id, menu_item_id
+
+3.5.1.16 room_operating_status_history
+Records changes in a room's operating status and expected readiness.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| room_id | UUID | NOT NULL / FK (composite) | Identifier of the associated room. |
+| branch_id | UUID | NOT NULL / FK (composite) | Operating branch associated with the record. |
+| previous_status | VARCHAR(25) | NOT NULL, CHECK | Previous status selected from the supported values. |
+| new_status | VARCHAR(25) | NOT NULL, CHECK | New status selected from the supported values. |
+| reason | TEXT | NOT NULL / DEFAULT '' | Business reason recorded for the action. |
+| expected_ready_at | TIMESTAMPTZ | NULL | Timestamp of the expected ready event. |
+| changed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the changed action. |
+| changed_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the changed event. |
+
+Key and validation details
+- room_operating_status_history_new_status_check: new_status IN ('AVAILABLE', 'CLEANING', 'UNDER_MAINTENANCE', 'INACTIVE')
+- room_operating_status_history_previous_status_check: previous_status IN ('AVAILABLE', 'CLEANING', 'UNDER_MAINTENANCE', 'INACTIVE')
+- Composite FK: FOREIGN KEY (room_id, branch_id) REFERENCES gcmb.room(id, branch_id) ON DELETE RESTRICT
+
+
+3.5.2 FE-02 Booking and Room Operations
+
+Bookings link to room allocations, time meters, charges and included combo items. Checkout produces bill lines and payment records. Deposits and refunds have their own history, and tax invoice requests are tracked against the booking. The tables reference FE-01 configuration, FE-03 order lines and FE-05 financial accounts and bank transactions.
+
+3.5.2.1 booking
+Holds the reservation, guest details, planned and actual times and service status.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| contact_name | VARCHAR(200) | NOT NULL | Customer contact name. |
+| contact_phone | VARCHAR(30) | NULL | Contact phone number. |
+| channel | VARCHAR(20) | NOT NULL | Booking channel. |
+| planned_start | TIMESTAMPTZ | NOT NULL, CHECK | Planned start time. |
+| planned_end | TIMESTAMPTZ | NOT NULL, CHECK | Planned end time. |
+| actual_checkin | TIMESTAMPTZ | NULL, CHECK | Actual check-in time. |
+| actual_checkout | TIMESTAMPTZ | NULL, CHECK | Actual check-out time. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| cancelled_at | TIMESTAMPTZ | NULL | Cancellation timestamp. |
+| cancellation_reason | TEXT | NULL | Cancellation reason. |
+| refund_cutoff_minutes | INTEGER | NOT NULL, CHECK | Refund cutoff in minutes. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who created the booking. |
+| note | TEXT | NULL | Additional information recorded by the operator. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| guest_count | INTEGER | NOT NULL, CHECK / DEFAULT 1 | Number of guests. |
+| combo_included_drink_quantity | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Drink quantity covered by the booking’s combo. |
+| combo_included_food_quantity | INTEGER | NOT NULL, CHECK / DEFAULT 0 | Food quantity covered by the booking’s combo. |
+| room_type_id | UUID | NULL / FK → room_type(id) | Identifier of the associated room type. |
+
+Key and validation details
+- booking_check: CHECK (planned_end > planned_start)
+- booking_check1: CHECK (actual_checkout IS NULL OR actual_checkin IS NOT NULL AND actual_checkout >= actual_checkin)
+- booking_guest_count_check: CHECK (guest_count > 0)
+- booking_refund_cutoff_minutes_check: CHECK (refund_cutoff_minutes >= 0)
+- booking_status_check: status IN ('DRAFT', 'CONFIRMED', 'IN_HOUSE', 'COMPLETED', 'CANCELLED')
+- ck_booking_combo_drink_quantity_range: CHECK (combo_included_drink_quantity >= 0 AND combo_included_drink_quantity <= 20)
+- ck_booking_combo_food_quantity_range: CHECK (combo_included_food_quantity >= 0 AND combo_included_food_quantity <= 20)
+- UNIQUE: id, branch_id
+
+3.5.2.2 booking_event
+Records changes and operational actions during the booking lifecycle.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL / FK → booking(id) | Booking. |
+| actor_id | UUID | NOT NULL / FK → user_account(id) | User who performed the event. |
+| event_type | VARCHAR(60) | NOT NULL | Event type. |
+| reason | TEXT | NULL | Business reason recorded for the action. |
+| details | JSONB | NOT NULL | Event details. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.2.3 room_allocation
+Reserves a room for a booking within a recorded time interval.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL, UNIQUE (composite), EXCLUDE, Partial UNIQUE index / FK (composite) / FK → booking(id) | Booking. |
+| room_id | UUID | NOT NULL, EXCLUDE / FK (composite) / FK → room(id) | Room. |
+| starts_at | TIMESTAMPTZ | NOT NULL, CHECK | Planned start time. |
+| ends_at | TIMESTAMPTZ | NOT NULL, CHECK | Planned end time. |
+| actual_start | TIMESTAMPTZ | NULL, CHECK | Actual start time. |
+| actual_end | TIMESTAMPTZ | NULL, CHECK | Actual end time. |
+| state | VARCHAR(20) | NOT NULL, CHECK | Current workflow state. |
+| change_reason | TEXT | NULL | Reason for changing the allocation. |
+| change_cause | VARCHAR(20) | NULL, CHECK | Change cause selected from the supported values. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who created the allocation. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- room_allocation_change_cause_check: CHECK (change_cause IS NULL OR (change_cause::text = ANY (ARRAY['CUSTOMER'::character varying, 'BRANCH_FAULT'::character varying]::text[])))
+- room_allocation_check: CHECK (ends_at > starts_at)
+- room_allocation_check1: CHECK (actual_end IS NULL OR actual_start IS NOT NULL AND actual_end >= actual_start)
+- room_allocation_state_check: state IN ('RESERVED', 'OCCUPIED', 'FINISHED', 'RELEASED')
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+- Composite FK: FOREIGN KEY (room_id, branch_id) REFERENCES gcmb.room(id, branch_id)
+- UNIQUE: id, booking_id
+- no_booking_parallel_rooms: EXCLUDE USING gist (booking_id WITH =, tstzrange(starts_at, ends_at, '[)'::text) WITH &&) WHERE (state::text = ANY (ARRAY['RESERVED'::character varying, 'OCCUPIED'::character varying, 'FINISHED'::character varying]::text[])) DEFERRABLE
+- no_room_overlap: EXCLUDE USING gist (room_id WITH =, tstzrange(starts_at, ends_at, '[)'::text) WITH &&) WHERE (state::text = ANY (ARRAY['RESERVED'::character varying, 'OCCUPIED'::character varying]::text[])) DEFERRABLE
+- uq_active_stay: CREATE UNIQUE INDEX uq_active_stay ON gcmb.room_allocation USING btree (booking_id) WHERE ((state)::text = 'OCCUPIED'::text)
+
+3.5.2.4 booking_hourly_meter
+Tracks a room stay billed by elapsed time and the resulting charge.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL, UNIQUE / FK → booking(id) | At most one meter per booking. |
+| allocation_id | UUID | NOT NULL / FK → room_allocation(id) | Room allocation. |
+| price_rule_id | UUID | NOT NULL / FK → price_rule(id) | Price rule. |
+| started_at | TIMESTAMPTZ | NOT NULL | Meter start time. |
+| billed_from | TIMESTAMPTZ | NOT NULL, CHECK | Start of billable time. |
+| original_allocation_end | TIMESTAMPTZ | NOT NULL | Original allocation end time. |
+| reserved_until | TIMESTAMPTZ | NOT NULL, CHECK | Time reserved until. |
+| hourly_price | NUMERIC(18,0) | NOT NULL, CHECK | Hourly price. |
+| status | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'RUNNING' | Current lifecycle status. |
+| stopped_at | TIMESTAMPTZ | NULL, CHECK | Meter stop time. |
+| billed_minutes | INTEGER | NULL, CHECK | Billable minutes. |
+| amount | NUMERIC(18,0) | NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| started_by | UUID | NOT NULL / FK → user_account(id) | User who started the meter. |
+| stopped_by | UUID | NULL, CHECK / FK → user_account(id) | User who stopped the meter. |
+
+Key and validation details
+- booking_hourly_meter_check: CHECK (reserved_until > billed_from AND hourly_price >= 0::numeric)
+- booking_hourly_meter_check1: CHECK (status::text = 'RUNNING'::text AND stopped_at IS NULL AND billed_minutes IS NULL AND amount IS NULL AND stopped_by IS NULL OR status::text = 'STOPPED'::text AND stopped_at IS NOT NULL AND billed_minutes IS NOT NULL AND billed_minutes >= 0 AND amount IS NOT NULL AND amount >= 0::numeric AND stopped_by IS NOT NULL)
+- booking_hourly_meter_status_check: status IN ('RUNNING', 'STOPPED')
+
+3.5.2.5 booking_charge
+Records a priced room or package charge with its pricing snapshot.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL / FK (composite) / FK → booking(id) | Booking. |
+| allocation_id | UUID | NULL / FK (composite) / FK → room_allocation(id) | Related room allocation. |
+| price_rule_id | UUID | NULL / FK → price_rule(id) | Applied price rule. |
+| combo_id | UUID | NULL / FK → combo(id) | Applied combo. |
+| kind | VARCHAR(20) | NOT NULL | Business classification used by the workflow. |
+| description | VARCHAR(200) | NOT NULL | Descriptive details for the record. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| unit_price | NUMERIC(18,0) | NOT NULL, CHECK | Selling price per unit on the line. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| pricing_snapshot | JSONB | NOT NULL | Snapshot of pricing details. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- booking_charge_check: CHECK (quantity > 0::numeric AND unit_price >= 0::numeric AND amount >= 0::numeric)
+- booking_charge_status_check: status IN ('ACTIVE', 'SUPERSEDED')
+- Composite FK: FOREIGN KEY (allocation_id, booking_id) REFERENCES gcmb.room_allocation(id, booking_id)
+
+3.5.2.6 booking_combo_item
+Records what a booking received under its selected combo.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL, UNIQUE (composite) / FK → booking(id) | Identifier of the associated booking. |
+| combo_item_id | UUID | NULL / FK → combo_item(id) | Identifier of the associated combo item. |
+| menu_item_id | UUID | NOT NULL, UNIQUE (composite) / FK → menu_item(id) | Identifier of the associated menu item. |
+| item_name_snapshot | VARCHAR(200) | NOT NULL | Item name captured when the record was produced. |
+| included_quantity | NUMERIC(18,3) | NOT NULL, CHECK | Included quantity recorded for this booking combo item. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- booking_combo_item_included_quantity_check: CHECK (included_quantity > 0::numeric)
+- UNIQUE: booking_id, menu_item_id
+- UNIQUE: id, booking_id
+
+3.5.2.7 bill
+Records a booking's checkout totals, discounts, inspection and payment planning.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL, UNIQUE, UNIQUE (composite) / FK (composite) / FK → booking(id) | At most one bill per booking. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| number | VARCHAR(60) | NOT NULL, UNIQUE | Bill number. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| gross_amount | NUMERIC(18,0) | NOT NULL, CHECK | Amount before discount. |
+| discount_amount | NUMERIC(18,0) | NOT NULL, CHECK | Discount amount. |
+| discount_reference | VARCHAR(200) | NULL | Discount reference. |
+| discount_reason | TEXT | NULL | Reason for discount. |
+| discount_by | UUID | NULL / FK → user_account(id) | User who applied the discount. |
+| net_amount | NUMERIC(18,0) | NOT NULL, CHECK | Amount after discount. |
+| issued_at | TIMESTAMPTZ | NULL | Issue timestamp. |
+| completed_at | TIMESTAMPTZ | NULL | Completion timestamp. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| checkout_at | TIMESTAMPTZ | NULL | Checkout timestamp. |
+| inspection_note | TEXT | NOT NULL / DEFAULT '' | Room inspection notes. |
+| issued_by | UUID | NULL / FK → user_account(id) | User who issued the bill. |
+| planned_cash | NUMERIC(18,0) | NOT NULL, CHECK / DEFAULT 0 | Planned cash recorded for this bill. |
+| planned_cash_tendered | NUMERIC(18,0) | NOT NULL, CHECK / DEFAULT 0 | Planned cash tendered recorded for this bill. |
+| checkout_rounding_adjustment | NUMERIC(18,0) | NOT NULL / DEFAULT 0 | Rounding adjustment recorded at checkout. |
+
+Key and validation details
+- bill_check: CHECK (gross_amount >= 0::numeric AND discount_amount >= 0::numeric AND discount_amount <= gross_amount)
+- bill_check1: CHECK (net_amount = (gross_amount - discount_amount))
+- bill_planned_cash_valid: CHECK (planned_cash >= 0::numeric AND planned_cash_tendered >= planned_cash AND (planned_cash > 0::numeric OR planned_cash_tendered = 0::numeric))
+- bill_status_check: status IN ('DRAFT', 'ISSUED', 'SETTLED', 'VOID')
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+- UNIQUE: id, booking_id
+- UNIQUE: id, branch_id
+
+3.5.2.8 bill_line
+Itemizes the charges and order lines included in a bill.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| bill_id | UUID | NOT NULL / FK → bill(id) | Bill. |
+| booking_charge_id | UUID | NULL, CHECK, UNIQUE / FK → booking_charge(id) | Booking charge. |
+| order_line_id | UUID | NULL, CHECK, UNIQUE / FK → order_line(id) | Order line. |
+| description | VARCHAR(200) | NOT NULL | Descriptive details for the record. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| unit_price | NUMERIC(18,0) | NOT NULL, CHECK | Selling price per unit on the line. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- bill_line_check: CHECK (quantity > 0::numeric AND unit_price >= 0::numeric AND amount >= 0::numeric)
+- bill_line_check1: CHECK (num_nonnulls(booking_charge_id, order_line_id) = 1)
+
+3.5.2.9 deposit
+Identifies the deposit balance associated with a booking.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL, UNIQUE / FK → booking(id) | At most one deposit ledger per booking. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.2.10 deposit_entry
+Records an addition, application or refund in a booking's deposit history.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| deposit_id | UUID | NOT NULL / FK → deposit(id) | Deposit ledger. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| payment_id | UUID | NULL, CHECK, UNIQUE / FK → payment(id) | Payment that received the deposit. |
+| bill_id | UUID | NULL, CHECK / FK → bill(id) | Bill where the deposit is applied. |
+| refund_id | UUID | NULL, CHECK, UNIQUE / FK → refund_request(id) | Deposit refund request. |
+| actor_id | UUID | NULL / FK → user_account(id) | User who performed the action. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- deposit_entry_amount_check: CHECK (amount > 0::numeric)
+- deposit_entry_check: CHECK (kind::text = 'RECEIVE'::text AND payment_id IS NOT NULL AND bill_id IS NULL AND refund_id IS NULL OR kind::text = 'APPLY'::text AND payment_id IS NULL AND bill_id IS NOT NULL AND refund_id IS NULL OR kind::text = 'REFUND'::text AND payment_id IS NULL AND bill_id IS NULL AND refund_id IS NOT NULL OR kind::text = 'FORFEIT'::text AND payment_id IS NULL AND bill_id IS NULL AND refund_id IS NULL)
+
+3.5.2.11 payment_request
+Defines an expected collection amount and reference code for matching a payment.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL, UNIQUE (composite) / FK (composite) / FK → booking(id) | Booking. |
+| bill_id | UUID | NULL, CHECK / FK (composite) / FK → bill(id) | Bill; NULL when purpose is DEPOSIT. |
+| account_id | UUID | NOT NULL / FK → financial_account(id) | Receiving account. |
+| purpose | VARCHAR(20) | NOT NULL, CHECK | Purpose recorded for this payment request. |
+| reference_code | VARCHAR(80) | NOT NULL, UNIQUE | Reconciliation reference. |
+| expected_amount | NUMERIC(18,0) | NOT NULL, CHECK | Expected amount. |
+| expires_at | TIMESTAMPTZ | NOT NULL, CHECK | Expiration timestamp. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL, CHECK / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- payment_request_check: CHECK (expected_amount > 0::numeric AND expires_at > created_at)
+- payment_request_check1: CHECK (purpose::text = 'DEPOSIT'::text AND bill_id IS NULL OR purpose::text = 'BILL'::text AND bill_id IS NOT NULL)
+- payment_request_status_check: status IN ('PENDING', 'SETTLED', 'EXPIRED', 'CANCELLED')
+- Composite FK: FOREIGN KEY (bill_id, booking_id) REFERENCES gcmb.bill(id, booking_id)
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+- UNIQUE: id, booking_id
+
+3.5.2.12 payment
+Records a collected amount, payment method and links to the booking or bill.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL, UNIQUE (composite) / FK (composite) / FK → booking(id) | Booking. |
+| bill_id | UUID | NULL, CHECK / FK (composite) / FK → bill(id) | Bill. |
+| purpose | VARCHAR(20) | NOT NULL, CHECK | Purpose selected from the supported values. |
+| method | VARCHAR(20) | NOT NULL, CHECK | Method selected from the supported values. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| cash_tendered | NUMERIC(18,0) | NULL, CHECK | Cash received from customer. |
+| cash_change | NUMERIC(18,0) | NULL, CHECK | Change returned. |
+| request_id | UUID | NULL, CHECK, UNIQUE / FK (composite) / FK → payment_request(id) | Payment request. |
+| bank_transaction_id | UUID | NULL, CHECK, UNIQUE / FK → bank_transaction(id) | Bank transaction. |
+| received_at | TIMESTAMPTZ | NOT NULL | Payment receipt timestamp. |
+| received_by | UUID | NULL, CHECK / FK → user_account(id) | User who received the payment. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| receipt_reference | VARCHAR(120) | NULL, CHECK | Receipt reference selected from the supported values. |
+
+Key and validation details
+- payment_amount_check: CHECK (amount > 0::numeric)
+- payment_check: CHECK (purpose::text = 'DEPOSIT'::text AND bill_id IS NULL OR purpose::text = 'BILL'::text AND bill_id IS NOT NULL)
+- payment_method_fields_check: CHECK (method::text = 'BANK_TRANSFER'::text AND request_id IS NOT NULL AND bank_transaction_id IS NOT NULL AND cash_tendered IS NULL AND cash_change IS NULL AND receipt_reference IS NULL OR method::text = 'CASH'::text AND request_id IS NULL AND bank_transaction_id IS NULL AND cash_tendered IS NOT NULL AND cash_change IS NOT NULL AND cash_tendered >= amount AND cash_change = (cash_tendered - amount) OR (method::text = ANY (ARRAY['MANUAL_TRANSFER'::character varying, 'CARD'::character varying, 'QR'::character varying]::text[])) AND request_id IS NULL AND bank_transaction_id IS NULL AND cash_tendered IS NULL AND cash_change IS NULL AND received_by IS NOT NULL AND (receipt_reference IS NULL OR NULLIF(btrim(receipt_reference::text), ''::text) IS NOT NULL))
+- payment_purpose_method_check: CHECK (purpose::text = 'DEPOSIT'::text AND (method::text = ANY (ARRAY['BANK_TRANSFER'::character varying, 'MANUAL_TRANSFER'::character varying, 'CASH'::character varying, 'CARD'::character varying, 'QR'::character varying]::text[])) OR purpose::text = 'BILL'::text AND (method::text = ANY (ARRAY['BANK_TRANSFER'::character varying, 'CASH'::character varying]::text[])))
+- Composite FK: FOREIGN KEY (bill_id, booking_id) REFERENCES gcmb.bill(id, booking_id)
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+- Composite FK: FOREIGN KEY (request_id, booking_id) REFERENCES gcmb.payment_request(id, booking_id)
+- UNIQUE: id, booking_id
+
+3.5.2.13 refund_request
+Tracks a requested deposit or overpayment refund, its approval outcome and evidence reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL / FK (composite) / FK → booking(id) | Booking. |
+| deposit_id | UUID | NULL, CHECK / FK → deposit(id) | Deposit, when refunding a deposit. |
+| overpayment_transaction_id | UUID | NULL, CHECK / FK → bank_transaction(id) | Transaction, when refunding an overpayment. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| beneficiary_name | VARCHAR(200) | NOT NULL | Recipient name. |
+| bank_name | VARCHAR(200) | NOT NULL | Name of the bank for the associated account. |
+| bank_account | VARCHAR(60) | NOT NULL | Bank account number used for the transfer or payout. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| processed_by | UUID | NULL, CHECK / FK → user_account(id) | User who processed the transaction or request. |
+| paid_at | TIMESTAMPTZ | NULL, CHECK | Refund payment timestamp. |
+| external_reference | VARCHAR(200) | NULL | Reference supplied by an external system or transaction. |
+| evidence_id | UUID | NULL / FK → attachment(id) | Supporting attachment. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- refund_request_amount_check: CHECK (amount > 0::numeric)
+- refund_request_check: CHECK (kind::text = 'DEPOSIT'::text AND deposit_id IS NOT NULL AND overpayment_transaction_id IS NULL OR kind::text = 'OVERPAYMENT'::text AND deposit_id IS NULL AND overpayment_transaction_id IS NOT NULL)
+- refund_request_check1: CHECK (status::text <> 'PAID'::text OR paid_at IS NOT NULL AND processed_by IS NOT NULL)
+- refund_request_status_check: status IN ('REQUESTED', 'APPROVED', 'PROCESSING', 'PAID', 'REJECTED', 'FAILED')
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+
+3.5.2.14 checkout_cash_reclassification
+Records a checkout payment reclassified as cash and the reason.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| payment_id | UUID | PK, NOT NULL / FK → payment(id) | Identifier of the associated payment. |
+| reason | TEXT | NOT NULL / DEFAULT 'Tiền mặt checkout cũ được chuyển về phân bổ tạm bởi V13' | Business reason recorded for the action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.2.15 tax_invoice_request
+Records requested tax invoice details and the processing status for a booking.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| booking_id | UUID | PK, NOT NULL / FK → booking(id) | Identifier of the associated booking. |
+| buyer_name | VARCHAR(200) | NOT NULL | Buyer name recorded for this tax invoice request. |
+| tax_code | VARCHAR(30) | NULL | Buyer tax identifier supplied for the invoice. |
+| buyer_address | VARCHAR(2000) | NULL | Buyer address recorded for this tax invoice request. |
+| contact_email | VARCHAR(254) | NULL | Contact email recorded for this tax invoice request. |
+| status | VARCHAR(30) | NOT NULL, CHECK / DEFAULT 'REQUESTED' | Current lifecycle status. |
+| note | VARCHAR(2000) | NOT NULL / DEFAULT '' | Additional information recorded by the operator. |
+| delivery_result | VARCHAR(2000) | NOT NULL / DEFAULT '' | Result recorded after sending or delivering the tax invoice. |
+| version | BIGINT | NOT NULL / DEFAULT 0 | Revision or version number. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| updated_by | UUID | NOT NULL / FK → user_account(id) | User who performed the updated action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| updated_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the latest update. |
+
+Key and validation details
+- tax_invoice_request_status_check: status IN ('REQUESTED', 'PREPARING', 'ISSUED', 'DELIVERED', 'DELIVERY_FAILED')
+
+3.5.2.16 tax_invoice_read
+Records which user has read a tax invoice request and when.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| booking_id | UUID | NOT NULL, PK (composite) / FK → tax_invoice_request(booking_id) | Booking whose tax invoice request the user marked as read. |
+| user_id | UUID | NOT NULL, PK (composite) / FK → user_account(id) | Identifier of the associated user. |
+| read_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the user marked the tax invoice request as read. |
+
+Key and validation details
+- PK: booking_id, user_id
+
+
+3.5.3 FE-03 F&B, Inventory and Equipment Management
+
+Menu items and QR sessions support room-linked orders. Stock receipts and movements track inventory quantities. Equipment records connect assets to their locations, incidents, repairs, supporting files and transfers between branches.
+
+3.5.3.1 unit
+Defines units used for inventory quantities.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.3.2 inventory_item
+Defines a stock item at a branch, its unit and tracking mode.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| sku | VARCHAR(60) | NOT NULL, UNIQUE (composite) | Stock keeping unit. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| unit_id | UUID | NOT NULL / FK → unit(id) | Unit of measure. |
+| tracking_mode | VARCHAR(20) | NOT NULL, CHECK | Tracking mode selected from the supported values. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| category | VARCHAR(100) | NOT NULL / DEFAULT 'Chưa phân nhóm' | Category recorded for this inventory item. |
+
+Key and validation details
+- inventory_item_tracking_mode_check: tracking_mode IN ('AUTO_ON_SALE', 'MANUAL')
+- UNIQUE: branch_id, sku
+- UNIQUE: id, branch_id
+
+3.5.3.3 menu_item
+Defines an F&B item, its selling price, optional stock link and image reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) / FK (composite) | Operating branch associated with the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE (composite) | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| category | VARCHAR(200) | NOT NULL | Category. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| inventory_item_id | UUID | NULL, CHECK / FK (composite) / FK → inventory_item(id) | Related inventory item, if applicable. |
+| sale_price | NUMERIC(18,0) | NOT NULL, CHECK | Sale price. |
+| active | BOOLEAN | NOT NULL, CHECK | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| deleted_at | TIMESTAMPTZ | NULL, CHECK | Timestamp when the record was soft-deleted. |
+| deleted_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the deleted action. |
+| description | VARCHAR(1000) | NULL | Descriptive details for the record. |
+| image_object_key | VARCHAR(100) | NULL, CHECK | Storage key for the image file. |
+| image_original_name | VARCHAR(200) | NULL, CHECK | Original filename of the image file. |
+| image_mime_type | VARCHAR(120) | NULL, CHECK | Media type of the image file. |
+
+Key and validation details
+- ck_menu_item_deleted_actor: CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+- ck_menu_item_deleted_inactive: CHECK (deleted_at IS NULL OR active = false)
+- ck_menu_item_image_metadata: CHECK (image_object_key IS NULL AND image_original_name IS NULL AND image_mime_type IS NULL OR image_object_key IS NOT NULL AND image_original_name IS NOT NULL AND image_mime_type IS NOT NULL)
+- menu_item_check: CHECK ((kind::text = 'PACKAGED'::text) = (inventory_item_id IS NOT NULL))
+- menu_item_kind_check: kind IN ('PACKAGED', 'PREPARED', 'SERVICE')
+- menu_item_sale_price_check: CHECK (sale_price >= 0::numeric)
+- Composite FK: FOREIGN KEY (inventory_item_id, branch_id) REFERENCES gcmb.inventory_item(id, branch_id)
+- UNIQUE: branch_id, code
+- UNIQUE: id, branch_id
+
+3.5.3.4 room_qr_session
+Tracks a room ordering session and the lifecycle of its hashed QR token.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| booking_id | UUID | NOT NULL / FK (composite) / FK → booking(id) | Identifier of the associated booking. |
+| allocation_id | UUID | NOT NULL / FK (composite) / FK → room_allocation(id) | Identifier of the associated allocation. |
+| token_hash | TEXT | NOT NULL, UNIQUE | Hash of the issued token. |
+| expires_at | TIMESTAMPTZ | NOT NULL, CHECK | Timestamp of the expires event. |
+| revoked_at | TIMESTAMPTZ | NULL | Timestamp of the revoked event. |
+| created_at | TIMESTAMPTZ | NOT NULL, CHECK / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- room_qr_session_check: CHECK (expires_at > created_at)
+- Composite FK: FOREIGN KEY (allocation_id, booking_id) REFERENCES gcmb.room_allocation(id, booking_id)
+
+3.5.3.5 fb_order
+Tracks a room-linked F&B order from submission through service.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL, UNIQUE (composite) / FK (composite) / FK → booking(id) | Identifier of the associated booking. |
+| allocation_id | UUID | NOT NULL / FK (composite) / FK → room_allocation(id) | Identifier of the associated allocation. |
+| channel | VARCHAR(20) | NOT NULL, CHECK | Channel recorded for this fb order. |
+| created_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the created action. |
+| qr_session_id | UUID | NULL, CHECK / FK → room_qr_session(id) | Room QR session that originated the order. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| accepted_by | UUID | NULL / FK → user_account(id) | User who accepted the submitted order. |
+| accepted_at | TIMESTAMPTZ | NULL | Timestamp of the accepted event. |
+| served_at | TIMESTAMPTZ | NULL | Timestamp of the served event. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| assigned_employee_id | UUID | NULL / FK → employee(id) | On-duty employee assigned to serve the order. |
+
+Key and validation details
+- fb_order_check: CHECK (channel::text = 'STAFF'::text AND created_by IS NOT NULL AND qr_session_id IS NULL OR channel::text = 'ROOM_QR'::text AND qr_session_id IS NOT NULL AND created_by IS NULL)
+- fb_order_status_check: status IN ('PENDING', 'ACCEPTED', 'SERVED', 'REJECTED', 'CANCELLED')
+- Composite FK: FOREIGN KEY (allocation_id, booking_id) REFERENCES gcmb.room_allocation(id, booking_id)
+- Composite FK: FOREIGN KEY (booking_id, branch_id) REFERENCES gcmb.booking(id, branch_id)
+- UNIQUE: id, booking_id
+- UNIQUE: id, branch_id
+
+3.5.3.6 order_line
+Itemizes a menu product, quantity and selling price for an F&B order.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| order_id | UUID | NOT NULL / FK (composite) / FK → fb_order(id) | Order; fb_order is outside this list of 33 tables. |
+| branch_id | UUID | NOT NULL / FK → branch(id) / FK (composite) | Operating branch associated with the record. |
+| booking_id | UUID | NOT NULL / FK (composite) / FK → booking(id) | Booking. |
+| menu_item_id | UUID | NOT NULL / FK (composite) / FK → menu_item(id) | Menu item. |
+| booking_combo_item_id | UUID | NULL, CHECK / FK (composite) / FK → booking_combo_item(id) | Combo item; booking_combo_item is outside this list. |
+| name_snapshot | VARCHAR(200) | NOT NULL | Item name at the time of ordering. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| unit_price | NUMERIC(18,0) | NOT NULL, CHECK | Selling price per unit on the line. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- order_line_check: CHECK (quantity > 0::numeric AND unit_price >= 0::numeric)
+- order_line_check1: CHECK (booking_combo_item_id IS NULL OR unit_price = 0::numeric)
+- Composite FK: FOREIGN KEY (booking_combo_item_id, booking_id) REFERENCES gcmb.booking_combo_item(id, booking_id)
+- Composite FK: FOREIGN KEY (menu_item_id, branch_id) REFERENCES gcmb.menu_item(id, branch_id)
+- Composite FK: FOREIGN KEY (order_id, booking_id) REFERENCES gcmb.fb_order(id, booking_id)
+- Composite FK: FOREIGN KEY (order_id, branch_id) REFERENCES gcmb.fb_order(id, branch_id)
+
+3.5.3.7 stock_balance
+Keeps current and minimum quantities for an inventory item.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| inventory_item_id | UUID | NOT NULL, UNIQUE / FK → inventory_item(id) | Identifier of the associated inventory item. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| minimum_quantity | NUMERIC(18,3) | NOT NULL, CHECK | Minimum stock level used for inventory monitoring. |
+| version | BIGINT | NOT NULL, CHECK | Revision or version number. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- stock_balance_check: CHECK (quantity >= 0::numeric AND minimum_quantity >= 0::numeric AND version >= 0)
+
+3.5.3.8 stock_receipt
+Records a receipt of goods, its posting status and supporting evidence reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL, UNIQUE (composite) / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| supplier_name | VARCHAR(200) | NOT NULL | Supplier name recorded for this stock receipt. |
+| supplier_invoice | VARCHAR(200) | NULL | Supplier’s invoice number for the received stock. |
+| expense_id | UUID | NULL / FK → expense(id) | Identifier of the associated expense. |
+| received_at | TIMESTAMPTZ | NOT NULL | Timestamp of the received event. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| posted_by | UUID | NULL / FK → user_account(id) | User who performed the posted action. |
+| posted_at | TIMESTAMPTZ | NULL | Timestamp of the posted event. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| evidence_object_key | VARCHAR(255) | NULL | Storage key for the evidence file. |
+| evidence_original_name | VARCHAR(200) | NULL | Original filename of the evidence file. |
+| evidence_mime_type | VARCHAR(100) | NULL | Media type of the evidence file. |
+
+Key and validation details
+- stock_receipt_status_check: status IN ('DRAFT', 'POSTED', 'CANCELLED')
+- UNIQUE: id, branch_id
+
+3.5.3.9 stock_receipt_line
+Itemizes received stock, cost and expiry date for a receipt.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| receipt_id | UUID | NOT NULL / FK (composite) / FK → stock_receipt(id) | Identifier of the associated receipt. |
+| branch_id | UUID | NOT NULL / FK → branch(id) / FK (composite) | Operating branch associated with the record. |
+| inventory_item_id | UUID | NOT NULL / FK (composite) / FK → inventory_item(id) | Identifier of the associated inventory item. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| unit_cost | NUMERIC(18,0) | NOT NULL, CHECK | Acquisition cost per unit. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| expiry_date | DATE | NULL | Stock expiration date recorded when receiving the item. |
+
+Key and validation details
+- stock_receipt_line_check: CHECK (quantity > 0::numeric AND unit_cost >= 0::numeric)
+- Composite FK: FOREIGN KEY (inventory_item_id, branch_id) REFERENCES gcmb.inventory_item(id, branch_id)
+- Composite FK: FOREIGN KEY (receipt_id, branch_id) REFERENCES gcmb.stock_receipt(id, branch_id)
+
+3.5.3.10 stock_movement
+Records a quantity change, its source and optional reversal or evidence.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| inventory_item_id | UUID | NOT NULL / FK → inventory_item(id) | Identifier of the associated inventory item. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Movement category such as receipt, issue or adjustment. |
+| quantity_delta | NUMERIC(18,3) | NOT NULL, CHECK | Signed quantity change made by this inventory movement. |
+| quantity_before | NUMERIC(18,3) | NOT NULL, CHECK | Inventory quantity immediately before the movement. |
+| quantity_after | NUMERIC(18,3) | NOT NULL, CHECK | Inventory quantity immediately after the movement. |
+| unit_cost | NUMERIC(18,0) | NULL | Acquisition cost per unit. |
+| receipt_line_id | UUID | NULL, CHECK, Partial UNIQUE index / FK → stock_receipt_line(id) | Identifier of the associated receipt line. |
+| order_line_id | UUID | NULL, CHECK, Partial UNIQUE index / FK → order_line(id) | Identifier of the associated order line. |
+| reverses_id | UUID | NULL / FK → stock_movement(id) | Previous inventory movement reversed by this record. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| actor_id | UUID | NOT NULL / FK → user_account(id) | Identifier of the associated actor. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| evidence_object_key | VARCHAR(255) | NULL | Storage key for the evidence file. |
+| evidence_original_name | VARCHAR(200) | NULL | Original filename of the evidence file. |
+| evidence_mime_type | VARCHAR(100) | NULL | Media type of the evidence file. |
+| occurred_at | TIMESTAMPTZ | NULL | Timestamp when the source event occurred. |
+
+Key and validation details
+- stock_movement_check: CHECK (quantity_after = (quantity_before + quantity_delta) AND quantity_after >= 0::numeric AND quantity_before >= 0::numeric)
+- stock_movement_check1: CHECK (kind::text <> 'RECEIPT'::text OR receipt_line_id IS NOT NULL AND quantity_delta > 0::numeric)
+- stock_movement_check2: CHECK (kind::text <> 'SALE'::text OR order_line_id IS NOT NULL AND quantity_delta < 0::numeric)
+- stock_movement_kind_check: kind IN ('OPENING', 'RECEIPT', 'SALE', 'ADJUSTMENT', 'RETURN')
+- stock_movement_quantity_delta_check: CHECK (quantity_delta <> 0::numeric)
+- uq_stock_receipt_post: CREATE UNIQUE INDEX uq_stock_receipt_post ON gcmb.stock_movement USING btree (receipt_line_id) WHERE ((kind)::text = 'RECEIPT'::text)
+- uq_stock_sale_post: CREATE UNIQUE INDEX uq_stock_sale_post ON gcmb.stock_movement USING btree (order_line_id) WHERE ((kind)::text = 'SALE'::text)
+
+3.5.3.11 asset_category
+Classifies equipment assets within a branch.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE (composite), Partial UNIQUE index | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| description | VARCHAR(500) | NOT NULL / DEFAULT '' | Descriptive details for the record. |
+
+Key and validation details
+- UNIQUE: branch_id, code
+- ux_asset_category_global_code: CREATE UNIQUE INDEX ux_asset_category_global_code ON gcmb.asset_category USING btree (code) WHERE (branch_id IS NULL)
+
+3.5.3.12 equipment_asset_code_counter
+Keeps the latest sequence used to allocate an equipment code per branch code.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| branch_code | VARCHAR(60) | PK, NOT NULL | Branch business code used to scope the equipment sequence. |
+| last_number | NUMERIC(53,0) | NOT NULL, CHECK | Most recent sequence value allocated for equipment codes in the branch. |
+
+Key and validation details
+- equipment_asset_code_counter_last_number_check: CHECK (last_number >= 0::numeric)
+
+3.5.3.13 asset
+Registers an equipment asset, its location, condition, acquisition and image reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(120) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| category_id | UUID | NOT NULL / FK → asset_category(id) | Identifier of the associated category. |
+| branch_id | UUID | NOT NULL / FK → branch(id) / FK (composite) | Operating branch associated with the record. |
+| room_id | UUID | NULL / FK (composite) / FK → room(id) | Identifier of the associated room. |
+| location_note | VARCHAR(200) | NULL | Location note recorded for this asset. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| serial_number | VARCHAR(200) | NULL | Serial number recorded for this asset. |
+| purchase_date | DATE | NULL, CHECK | Calendar date recorded for purchase. |
+| purchase_value | NUMERIC(18,0) | NULL, CHECK | Purchase value recorded for this asset. |
+| expense_id | UUID | NULL / FK → expense(id) | Identifier of the associated expense. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| active | BOOLEAN | NOT NULL / DEFAULT true | Whether the record is active. |
+| warranty_expiry | DATE | NULL, CHECK | Warranty expiry recorded for this asset. |
+| image_attachment_id | UUID | NULL / FK → attachment(id) | Identifier of the associated image attachment. |
+
+Key and validation details
+- asset_purchase_value_check: CHECK (purchase_value IS NULL OR purchase_value >= 0::numeric)
+- asset_status_check: status IN ('IN_USE', 'BROKEN', 'REPAIRING', 'IN_TRANSIT', 'RETIRED')
+- ck_asset_warranty_expiry: CHECK (warranty_expiry IS NULL OR purchase_date IS NULL OR warranty_expiry >= purchase_date)
+- Composite FK: FOREIGN KEY (room_id, branch_id) REFERENCES gcmb.room(id, branch_id)
+
+3.5.3.14 asset_incident
+Tracks a reported equipment problem, assessment, handling plan and outcome.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| asset_id | UUID | NOT NULL / FK → asset(id) | Identifier of the associated asset. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| reported_by | UUID | NOT NULL / FK → user_account(id) | User who performed the reported action. |
+| description | TEXT | NOT NULL | Descriptive details for the record. |
+| evidence_id | UUID | NULL / FK → attachment(id) | Identifier of the associated evidence. |
+| room_unusable | BOOLEAN | NOT NULL | Whether the incident makes the room unavailable for use. |
+| handling_plan | VARCHAR(20) | NULL, CHECK | Handling plan selected from the supported values. |
+| assessed_by | UUID | NULL / FK → user_account(id) | User who performed the assessed action. |
+| assessed_at | TIMESTAMPTZ | NULL | Timestamp of the assessed event. |
+| assessment_note | TEXT | NULL | Assessment note recorded for this asset incident. |
+| replacement_asset_id | UUID | NULL / FK → asset(id) | Equipment asset selected as a substitute for the incident. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| severity | VARCHAR(16) | NOT NULL, CHECK / DEFAULT 'MEDIUM' | Severity selected from the supported values. |
+| priority | VARCHAR(16) | NOT NULL, CHECK / DEFAULT 'NORMAL' | Priority selected from the supported values. |
+| expected_completion_on | DATE | NULL | Calendar date recorded for expected completion. |
+| proposed_solution | TEXT | NULL | Proposed solution recorded for this asset incident. |
+| closed_by | UUID | NULL | User who performed the closed action. |
+| closed_at | TIMESTAMPTZ | NULL | Timestamp of the closed event. |
+| service_provider | VARCHAR(200) | NULL | Service provider recorded for this asset incident. |
+| replacement_details | TEXT | NULL | Replacement details recorded for this asset incident. |
+| estimated_cost | NUMERIC(18,0) | NULL | Estimated cost recorded for this asset incident. |
+
+Key and validation details
+- asset_incident_handling_plan_check: CHECK (handling_plan IS NULL OR (handling_plan::text = ANY (ARRAY['REPAIR'::character varying, 'REPLACE'::character varying, 'NO_ACTION'::character varying]::text[])))
+- ck_asset_incident_priority: priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')
+- ck_asset_incident_severity: severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')
+- ck_asset_incident_status_v37: status IN ('REPORTED', 'WAITING_APPROVAL', 'REJECTED', 'ASSESSED', 'IN_PROGRESS', 'VERIFIED', 'CLOSED')
+
+3.5.3.15 asset_incident_progress
+Records a status or progress update for an equipment incident.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| incident_id | UUID | NOT NULL / FK → asset_incident(id) | Identifier of the associated incident. |
+| logged_by | UUID | NOT NULL | User who performed the logged action. |
+| status | VARCHAR(20) | NOT NULL | Current lifecycle status. |
+| note | TEXT | NOT NULL | Additional information recorded by the operator. |
+| expected_completion_on | DATE | NULL | Calendar date recorded for expected completion. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.3.16 asset_repair
+Tracks a repair, costs, verification and supporting invoice or transfer references.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| incident_id | UUID | NOT NULL / FK → asset_incident(id) | Identifier of the associated incident. |
+| vendor_name | VARCHAR(200) | NOT NULL | Vendor name recorded for this asset repair. |
+| planned_cost | NUMERIC(18,0) | NULL, CHECK | Planned cost recorded for this asset repair. |
+| actual_cost | NUMERIC(18,0) | NULL, CHECK | Actual cost recorded for this asset repair. |
+| started_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the started event. |
+| finished_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the finished event. |
+| outcome | TEXT | NULL | Outcome recorded for this asset repair. |
+| verified_by | UUID | NULL / FK → user_account(id) | User who performed the verified action. |
+| verified_at | TIMESTAMPTZ | NULL | Timestamp of the verified event. |
+| expense_id | UUID | NULL / FK → expense(id) | Identifier of the associated expense. |
+| evidence_id | UUID | NULL / FK → attachment(id) | Identifier of the associated evidence. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| invoice_attachment_id | UUID | NULL / FK → attachment(id) | Identifier of the associated invoice attachment. |
+| transfer_attachment_id | UUID | NULL / FK → attachment(id) | Identifier of the associated transfer attachment. |
+
+Key and validation details
+- asset_repair_actual_cost_check: CHECK (actual_cost IS NULL OR actual_cost >= 0::numeric)
+- asset_repair_check: CHECK (finished_at IS NULL OR started_at IS NOT NULL AND finished_at >= started_at)
+- asset_repair_planned_cost_check: CHECK (planned_cost IS NULL OR planned_cost >= 0::numeric)
+
+3.5.3.17 asset_transfer
+Tracks the movement, handover and receipt of an equipment asset between branches.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| asset_id | UUID | NOT NULL, Partial UNIQUE index / FK → asset(id) | Identifier of the associated asset. |
+| from_branch_id | UUID | NOT NULL, CHECK / FK → branch(id) | Branch the asset is transferred from. |
+| to_branch_id | UUID | NOT NULL, CHECK / FK → branch(id) / FK (composite) | Branch the asset is transferred to. |
+| to_room_id | UUID | NULL / FK → room(id) / FK (composite) | Identifier of the associated to room. |
+| initiated_by | UUID | NOT NULL / FK → user_account(id) | User who performed the initiated action. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| handed_over_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the handed over action. |
+| handed_over_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the handed over event. |
+| received_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the received action. |
+| received_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the received event. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- asset_transfer_check: CHECK (from_branch_id <> to_branch_id)
+- asset_transfer_check1: CHECK (received_at IS NULL OR handed_over_at IS NOT NULL AND received_at >= handed_over_at)
+- asset_transfer_check2: CHECK (status::text <> 'COMPLETED'::text OR received_at IS NOT NULL AND received_by IS NOT NULL AND handed_over_by IS NOT NULL)
+- asset_transfer_status_check: status IN ('REQUESTED', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED')
+- Composite FK: FOREIGN KEY (to_room_id, to_branch_id) REFERENCES gcmb.room(id, branch_id)
+- uq_active_asset_transfer: CREATE UNIQUE INDEX uq_active_asset_transfer ON gcmb.asset_transfer USING btree (asset_id) WHERE ((status)::text = ANY ((ARRAY['REQUESTED'::character varying, 'IN_TRANSIT'::character varying])::text[]))
+
+
+3.5.4 FE-04 Workforce and Payroll Management
+
+Employee and shift records support attendance and monthly closing. Pay rates, calendars and attendance totals feed payroll entries and components. Salary advances, payout status and proof references support payment reconciliation.
+
+3.5.4.1 employee
+Keeps the staff profile, contact details, employment status and payout account.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| user_id | UUID | NULL, UNIQUE / FK → user_account(id) | Identifier of the associated user. |
+| full_name | VARCHAR(200) | NOT NULL | Full name recorded for this employee. |
+| identity_number | VARCHAR(30) | NULL, UNIQUE | Identity document number recorded for the employee. |
+| phone | VARCHAR(30) | NULL | Phone recorded for this employee. |
+| address | TEXT | NULL | Address recorded for this employee. |
+| bank_name | VARCHAR(200) | NULL | Name of the bank for the associated account. |
+| bank_account | VARCHAR(60) | NULL | Bank account number used for the transfer or payout. |
+| bank_holder | VARCHAR(200) | NULL | Name of the bank account holder. |
+| hired_on | DATE | NOT NULL, CHECK | Calendar date recorded for hired. |
+| resigned_on | DATE | NULL, CHECK | Calendar date recorded for resigned. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| position | VARCHAR(60) | NOT NULL / DEFAULT 'OTHER' | Position recorded for this employee. |
+| contact_email | VARCHAR(254) | NULL | Contact email recorded for this employee. |
+| notes | TEXT | NOT NULL / DEFAULT '' | Notes recorded for this employee. |
+| version | BIGINT | NOT NULL / DEFAULT 0 | Revision or version number. |
+
+Key and validation details
+- employee_check: CHECK (resigned_on IS NULL OR resigned_on >= hired_on)
+- employee_status_check: status IN ('ACTIVE', 'INACTIVE', 'RESIGNED')
+
+3.5.4.2 employee_assignment
+Records where an employee works, when the assignment applies and who assigned it.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| employee_id | UUID | NOT NULL, EXCLUDE / FK → employee(id) | Identifier of the associated employee. |
+| branch_id | UUID | NOT NULL, EXCLUDE / FK → branch(id) | Operating branch associated with the record. |
+| valid_from | TIMESTAMPTZ | NOT NULL, CHECK | Start of the period during which this record applies. |
+| valid_to | TIMESTAMPTZ | NULL, CHECK | End of the period during which this record applies. |
+| is_branch_manager | BOOLEAN | NOT NULL | Whether this record is marked as branch manager. |
+| assigned_by | UUID | NOT NULL / FK → user_account(id) | User who performed the assigned action. |
+| reason | TEXT | NULL | Business reason recorded for the action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- employee_assignment_check: CHECK (valid_to IS NULL OR valid_to > valid_from)
+- no_branch_manager_overlap: EXCLUDE USING gist (branch_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&) WHERE (is_branch_manager)
+- no_home_branch_overlap: EXCLUDE USING gist (employee_id WITH =, tstzrange(valid_from, valid_to, '[)'::text) WITH &&)
+
+3.5.4.3 shift_template
+Defines reusable start and end times for shifts.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| start_minute | INTEGER | NOT NULL, CHECK, UNIQUE (composite) | Start minute used by the workflow. |
+| end_minute | INTEGER | NOT NULL, CHECK, UNIQUE (composite) | End minute used by the workflow. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- shift_template_check: CHECK (start_minute = 0 AND end_minute = 420 OR start_minute = 420 AND end_minute = 720 OR start_minute = 720 AND end_minute = 1080 OR start_minute = 1080 AND end_minute = 1440)
+- UNIQUE: start_minute, end_minute
+
+3.5.4.4 scheduled_shift
+Defines a dated branch work shift, its staffing capacity and status.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| template_id | UUID | NOT NULL, UNIQUE (composite) / FK → shift_template(id) | Identifier of the associated template. |
+| work_date | DATE | NOT NULL, UNIQUE (composite) | Calendar date of the work shift. |
+| starts_at | TIMESTAMPTZ | NOT NULL, CHECK | Timestamp of the starts event. |
+| ends_at | TIMESTAMPTZ | NOT NULL, CHECK | Timestamp of the ends event. |
+| capacity | INTEGER | NOT NULL, CHECK | Capacity recorded for this scheduled shift. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| version | BIGINT | NOT NULL / DEFAULT 0 | Revision or version number. |
+
+Key and validation details
+- scheduled_shift_check: CHECK (ends_at > starts_at AND capacity > 0)
+- scheduled_shift_status_check: status IN ('OPEN', 'CLOSED', 'CANCELLED')
+- UNIQUE: branch_id, template_id, work_date
+
+3.5.4.5 shift_assignment
+Records an employee's assignment to a scheduled shift.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| shift_id | UUID | NOT NULL, Partial UNIQUE index / FK → scheduled_shift(id) | Identifier of the associated shift. |
+| employee_id | UUID | NOT NULL, Partial UNIQUE index / FK → employee(id) | Identifier of the associated employee. |
+| source | VARCHAR(20) | NOT NULL, CHECK | Source selected from the supported values. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| assigned_by | UUID | NOT NULL / FK → user_account(id) | User who performed the assigned action. |
+| cancelled_at | TIMESTAMPTZ | NULL | Timestamp of the cancelled event. |
+| reason | TEXT | NULL | Business reason recorded for the action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- shift_assignment_source_check: source IN ('SELF', 'MANAGER')
+- shift_assignment_status_check: status IN ('CONFIRMED', 'CANCELLED')
+- uq_active_assignment: CREATE UNIQUE INDEX uq_active_assignment ON gcmb.shift_assignment USING btree (shift_id, employee_id) WHERE ((status)::text = 'CONFIRMED'::text)
+
+3.5.4.6 attendance_period
+Tracks the branch attendance cycle and its monthly closing status.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| month | DATE | NOT NULL, CHECK, UNIQUE (composite) | Month covered by the branch attendance period. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| closed_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the closed action. |
+| closed_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the closed event. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| version | BIGINT | NOT NULL / DEFAULT 0 | Revision or version number. |
+
+Key and validation details
+- attendance_period_check: CHECK (status::text <> 'CLOSED'::text OR closed_by IS NOT NULL AND closed_at IS NOT NULL)
+- attendance_period_month_check: CHECK (month = date_trunc('month'::text, month::timestamp with time zone)::date)
+- attendance_period_status_check: status IN ('OPEN', 'CLOSED')
+- UNIQUE: branch_id, month
+
+3.5.4.7 attendance
+Records actual worked time, breaks and exceptions for a shift assignment.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| assignment_id | UUID | NOT NULL, UNIQUE / FK → shift_assignment(id) | Identifier of the associated assignment. |
+| period_id | UUID | NOT NULL / FK → attendance_period(id) | Identifier of the associated period. |
+| actual_in | TIMESTAMPTZ | NULL, CHECK | Timestamp when the employee actually started work. |
+| actual_out | TIMESTAMPTZ | NULL, CHECK | Timestamp when the employee actually finished work. |
+| break_minutes | INTEGER | NOT NULL, CHECK | Minutes deducted for breaks. |
+| worked_minutes | INTEGER | NOT NULL, CHECK | Number of minutes of work recorded. |
+| exception_note | TEXT | NULL | Exception note recorded for this attendance. |
+| recorded_by | UUID | NOT NULL / FK → user_account(id) | User who entered or recorded this information. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| status | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'WORKED' | Current lifecycle status. |
+| version | BIGINT | NOT NULL / DEFAULT 1 | Revision or version number. |
+
+Key and validation details
+- attendance_check: CHECK (break_minutes >= 0 AND worked_minutes >= 0)
+- attendance_check1: CHECK (actual_out IS NULL OR actual_in IS NOT NULL AND actual_out >= actual_in)
+- attendance_status_valid: status IN ('WORKED', 'ABSENT')
+
+3.5.4.8 attendance_issue
+Tracks a reported attendance discrepancy and its resolution.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| attendance_id | UUID | NOT NULL / FK → attendance(id) | Identifier of the associated attendance. |
+| reported_by | UUID | NOT NULL / FK → user_account(id) | User who performed the reported action. |
+| description | TEXT | NOT NULL | Descriptive details for the record. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| resolved_by | UUID | NULL / FK → user_account(id) | User who performed the resolved action. |
+| resolved_at | TIMESTAMPTZ | NULL | Timestamp of the resolved event. |
+| resolution | TEXT | NULL | Resolution recorded for the issue or variance. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- attendance_issue_status_check: status IN ('OPEN', 'RESOLVED', 'REJECTED')
+
+3.5.4.9 employee_attendance_closing
+Stores a monthly attendance snapshot when an employee's attendance is closed.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| period_id | UUID | NOT NULL, PK (composite) / FK → attendance_period(id) | Identifier of the associated period. |
+| employee_id | UUID | NOT NULL, PK (composite) / FK → employee(id) | Identifier of the associated employee. |
+| closed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the closed action. |
+| closed_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the closed event. |
+| source_snapshot | JSONB | NOT NULL | Point-in-time source values retained for traceability. |
+
+Key and validation details
+- PK: period_id, employee_id
+
+3.5.4.10 employee_pay_rate
+Tracks an employee's hourly rate over effective dates.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| employee_id | UUID | NOT NULL, EXCLUDE / FK → employee(id) | Identifier of the associated employee. |
+| valid_from | DATE | NOT NULL, CHECK | Start of the period during which this record applies. |
+| valid_to | DATE | NULL, CHECK | End of the period during which this record applies. |
+| hourly_rate | NUMERIC(18,0) | NOT NULL, CHECK | Base pay per hour at the applicable rate. |
+| changed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the changed action. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- employee_pay_rate_check: CHECK (valid_to IS NULL OR valid_to > valid_from)
+- employee_pay_rate_hourly_rate_check: CHECK (hourly_rate >= 0::numeric)
+- no_pay_rate_overlap: EXCLUDE USING gist (employee_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+
+3.5.4.11 branch_employee_pay_rate
+Sets an employee's hourly rate for a given branch and effective date.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| branch_id | UUID | NOT NULL, PK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| employee_id | UUID | NOT NULL, PK (composite) / FK → employee(id) | Identifier of the associated employee. |
+| effective_from | DATE | NOT NULL, PK (composite) | Date from which the rate or setting applies. |
+| hourly_rate | NUMERIC(15,0) | NOT NULL, CHECK | Base pay per hour at the applicable rate. |
+
+Key and validation details
+- branch_employee_pay_rate_hourly_rate_check: CHECK (hourly_rate > 0::numeric)
+- PK: branch_id, employee_id, effective_from
+
+3.5.4.12 payroll_setting
+Stores effective-dated wage multipliers and the night rate.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| effective_from | DATE | PK, NOT NULL | Date from which the rate or setting applies. |
+| normal_multiplier | NUMERIC(10,4) | NOT NULL, CHECK | Normal multiplier recorded for this payroll setting. |
+| rest_multiplier | NUMERIC(10,4) | NOT NULL, CHECK | Rest multiplier recorded for this payroll setting. |
+| holiday_multiplier | NUMERIC(10,4) | NOT NULL, CHECK | Holiday multiplier recorded for this payroll setting. |
+| night_rate | NUMERIC(10,4) | NOT NULL, CHECK | Night rate recorded for this payroll setting. |
+| changed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the changed action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- payroll_setting_holiday_multiplier_check: CHECK (holiday_multiplier >= 0::numeric)
+- payroll_setting_night_rate_check: CHECK (night_rate >= 0::numeric)
+- payroll_setting_normal_multiplier_check: CHECK (normal_multiplier >= 0::numeric)
+- payroll_setting_rest_multiplier_check: CHECK (rest_multiplier >= 0::numeric)
+
+3.5.4.13 payroll_calendar_year
+Records approval of a calendar year used for wage calculations.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| year | INTEGER | PK, NOT NULL, CHECK | Year recorded for this payroll calendar year. |
+| confirmed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the confirmed action. |
+| confirmed_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the confirmed event. |
+
+Key and validation details
+- payroll_calendar_year_year_check: CHECK (year >= 2000 AND year <= 9998)
+
+3.5.4.14 payroll_calendar
+Classifies each work date for wage calculations.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| work_date | DATE | PK, NOT NULL | Calendar date of the work shift. |
+| day_kind | VARCHAR(10) | NOT NULL, CHECK | Calendar class used to determine the applicable payroll rate. |
+| description | VARCHAR(500) | NOT NULL | Descriptive details for the record. |
+| changed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the changed action. |
+
+Key and validation details
+- payroll_calendar_day_kind_check: day_kind IN ('HOLIDAY', 'REST', 'NORMAL')
+
+3.5.4.15 payroll_period
+Tracks the status and confirmation of a monthly payroll cycle.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| month | DATE | NOT NULL, CHECK, UNIQUE | Month covered by the payroll cycle. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| confirmed_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the confirmed action. |
+| confirmed_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the confirmed event. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| version | BIGINT | NOT NULL / DEFAULT 0 | Revision or version number. |
+
+Key and validation details
+- payroll_period_check: CHECK (status::text <> 'CONFIRMED'::text OR confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)
+- payroll_period_month_check: CHECK (month = date_trunc('month'::text, month::timestamp with time zone)::date)
+- payroll_period_status_check: status IN ('DRAFT', 'CONFIRMED')
+
+3.5.4.16 branch_payroll_submission
+Records branch-submitted work totals, wages, adjustments and source data per employee.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| period_id | UUID | NOT NULL, PK (composite) / FK → payroll_period(id) | Identifier of the associated period. |
+| employee_id | UUID | NOT NULL, PK (composite) / FK → employee(id) | Identifier of the associated employee. |
+| branch_id | UUID | NOT NULL, PK (composite) / FK → branch(id) | Operating branch associated with the record. |
+| minutes | BIGINT | NOT NULL, CHECK | Number of minutes included in the payroll component or submission. |
+| wage | NUMERIC(18,0) | NOT NULL, CHECK | Wage recorded for this branch payroll submission. |
+| bonus | NUMERIC(18,0) | NOT NULL, CHECK | Bonus recorded for this branch payroll submission. |
+| penalty | NUMERIC(18,0) | NOT NULL, CHECK | Penalty recorded for this branch payroll submission. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| source_snapshot | JSONB | NOT NULL | Point-in-time source values retained for traceability. |
+| submitted_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the record. |
+| submitted_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was submitted. |
+
+Key and validation details
+- branch_payroll_submission_bonus_check: CHECK (bonus >= 0::numeric)
+- branch_payroll_submission_minutes_check: CHECK (minutes >= 0)
+- branch_payroll_submission_penalty_check: CHECK (penalty >= 0::numeric)
+- branch_payroll_submission_wage_check: CHECK (wage >= 0::numeric)
+- PK: period_id, employee_id, branch_id
+
+3.5.4.17 payroll_entry
+Stores the employee-level payroll result and payout account snapshot.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| period_id | UUID | NOT NULL, UNIQUE (composite) / FK → payroll_period(id) | Identifier of the associated period. |
+| employee_id | UUID | NOT NULL, UNIQUE (composite) / FK → employee(id) | Identifier of the associated employee. |
+| gross_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for gross. |
+| deduction_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for deduction. |
+| net_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for net. |
+| bank_name_snapshot | VARCHAR(200) | NULL | Bank name recorded when the payroll entry was calculated. |
+| bank_account_snapshot | VARCHAR(60) | NULL | Bank account number recorded when the payroll entry was calculated. |
+| bank_holder_snapshot | VARCHAR(200) | NULL | Payee name recorded when the payroll entry was calculated. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| submitted_branch_id | UUID | NULL / FK → branch(id) | Identifier of the associated submitted branch. |
+
+Key and validation details
+- payroll_entry_check: CHECK (gross_amount >= 0::numeric AND deduction_amount >= 0::numeric)
+- payroll_entry_check1: CHECK (net_amount = (gross_amount - deduction_amount) AND net_amount >= 0::numeric)
+- UNIQUE: period_id, employee_id
+
+3.5.4.18 payroll_component
+Explains which attendance, rates or other adjustments contribute to a payroll result.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| payroll_entry_id | UUID | NOT NULL / FK → payroll_entry(id) | Identifier of the associated payroll entry. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| attendance_id | UUID | NULL / FK → attendance(id) | Identifier of the associated attendance. |
+| pay_rate_id | UUID | NULL / FK → employee_pay_rate(id) | Identifier of the associated pay rate. |
+| kind | VARCHAR(25) | NOT NULL, CHECK | Business classification used by the workflow. |
+| minutes | INTEGER | NOT NULL, CHECK | Number of minutes included in the payroll component or submission. |
+| hourly_rate_snapshot | NUMERIC(18,0) | NOT NULL, CHECK | Hourly pay rate applied to this calculation. |
+| multiplier | NUMERIC(18,4) | NOT NULL, CHECK | Wage multiplier applied to the hourly rate. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| calculation_snapshot | JSONB | NOT NULL | Inputs and results retained for tracing the calculation. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- payroll_component_check: CHECK (minutes >= 0 AND hourly_rate_snapshot >= 0::numeric AND multiplier >= 0::numeric AND amount >= 0::numeric)
+- payroll_component_kind_check: kind IN ('BASE', 'OVERTIME', 'NIGHT', 'ADDITION', 'DEDUCTION')
+
+3.5.4.19 salary_advance
+Tracks the amount and payment status of a salary advance.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| employee_id | UUID | NOT NULL / FK → employee(id) | Identifier of the associated employee. |
+| period_id | UUID | NOT NULL / FK → payroll_period(id) | Identifier of the associated period. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| paid_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the paid event. |
+| processed_by | UUID | NOT NULL / FK → user_account(id) | User who processed the transaction or request. |
+| external_reference | VARCHAR(200) | NULL | Reference supplied by an external system or transaction. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- salary_advance_amount_check: CHECK (amount > 0::numeric)
+- salary_advance_check: CHECK (status::text <> 'PAID'::text OR paid_at IS NOT NULL)
+- salary_advance_status_check: status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED')
+
+3.5.4.20 advance_application
+Links a salary advance to the payroll entry that applies it.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| advance_id | UUID | NOT NULL, UNIQUE / FK → salary_advance(id) | Identifier of the associated advance. |
+| payroll_entry_id | UUID | NOT NULL / FK → payroll_entry(id) | Identifier of the associated payroll entry. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- advance_application_amount_check: CHECK (amount > 0::numeric)
+
+3.5.4.21 salary_payment
+Tracks a salary payout attempt, reference and outcome for a payroll entry.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| payroll_entry_id | UUID | NOT NULL, Partial UNIQUE index / FK → payroll_entry(id) | Identifier of the associated payroll entry. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| paid_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the paid event. |
+| external_reference | VARCHAR(200) | NULL | Reference supplied by an external system or transaction. |
+| failure_reason | TEXT | NULL | Failure reason recorded for this salary payment. |
+| processed_by | UUID | NOT NULL / FK → user_account(id) | User who processed the transaction or request. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- salary_payment_amount_check: CHECK (amount > 0::numeric)
+- salary_payment_check: CHECK (status::text <> 'PAID'::text OR paid_at IS NOT NULL)
+- salary_payment_status_check: status IN ('PENDING', 'PAID', 'FAILED')
+- uq_salary_paid: CREATE UNIQUE INDEX uq_salary_paid ON gcmb.salary_payment USING btree (payroll_entry_id) WHERE ((status)::text = 'PAID'::text)
+- uq_salary_pending: CREATE UNIQUE INDEX uq_salary_pending ON gcmb.salary_payment USING btree (payroll_entry_id) WHERE ((status)::text = 'PENDING'::text)
+
+3.5.4.22 salary_payment_evidence
+Keeps the object key and file metadata for a salary payout receipt.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| payment_id | UUID | PK, NOT NULL / FK → salary_payment(id) | Identifier of the associated payment. |
+| object_key | TEXT | NOT NULL | Storage key used by the backend to retrieve the file bytes. |
+| original_name | VARCHAR(200) | NOT NULL | Original uploaded filename. |
+| mime_type | VARCHAR(100) | NOT NULL | Media type of the uploaded file. |
+| byte_size | BIGINT | NOT NULL, CHECK | Size of the file in bytes. |
+| sha256 | VARCHAR(64) | NOT NULL | Hexadecimal SHA-256 checksum of the file contents. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- salary_payment_evidence_byte_size_check: CHECK (byte_size > 0 AND byte_size <= 20000000)
+
+
+3.5.5 FE-05 Financial Management and Reporting
+
+Financial accounts, bank transactions, cash closing and handovers support daily reconciliation. Fund transfers, expense requests and allocations track spending across periods. Ledger entries, imports, views and export jobs supply reporting data.
+
+3.5.5.1 financial_account
+Defines a financial account, its purpose, branch scope and optional bank details.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| kind | VARCHAR(25) | NOT NULL, CHECK | Business classification used by the workflow. |
+| branch_id | UUID | NULL, CHECK / FK → branch(id) | Operating branch associated with the record. |
+| bank_name | VARCHAR(200) | NULL | Name of the bank for the associated account. |
+| bank_account_number | VARCHAR(60) | NULL | Bank account number. |
+| account_holder | VARCHAR(200) | NULL | Account holder. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- financial_account_check: CHECK ((kind::text <> ALL (ARRAY['BRANCH_FUND'::character varying, 'CASH_DRAWER'::character varying]::text[])) OR branch_id IS NOT NULL)
+- financial_account_kind_check: kind IN ('CENTRAL_FUND', 'BRANCH_FUND', 'CASH_DRAWER', 'BANK')
+
+3.5.5.2 bank_transaction
+Records imported bank transactions, matching outcomes and exception resolution.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| account_id | UUID | NOT NULL, UNIQUE (composite) / FK → financial_account(id) | Receiving account. |
+| provider | VARCHAR(30) | NOT NULL, UNIQUE (composite) | Provider. |
+| external_id | VARCHAR(120) | NOT NULL, UNIQUE (composite) | External transaction identifier. |
+| direction | VARCHAR(10) | NOT NULL, CHECK | Direction selected from the supported values. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| transfer_content | TEXT | NOT NULL | Transfer description. |
+| occurred_at | TIMESTAMPTZ | NOT NULL | Timestamp when the source event occurred. |
+| match_status | VARCHAR(20) | NOT NULL, CHECK | Match status selected from the supported values. |
+| raw_payload | JSONB | NOT NULL | Original payload retained from the bank transaction provider. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| exception_reason | VARCHAR(40) | NULL | Exception reason recorded for this bank transaction. |
+| resolution_status | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'UNRESOLVED' | Resolution status selected from the supported values. |
+| resolved_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the resolved event. |
+| resolved_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the resolved action. |
+| resolution_note | VARCHAR(1000) | NULL, CHECK | Explanation recorded when resolving or rejecting the request. |
+
+Key and validation details
+- bank_transaction_amount_check: CHECK (amount > 0::numeric)
+- bank_transaction_direction_check: direction IN ('IN', 'OUT')
+- bank_transaction_match_status_check: match_status IN ('UNMATCHED', 'MATCHED', 'EXCEPTION')
+- bank_transaction_resolution_status_check: resolution_status IN ('UNRESOLVED', 'RESOLVED')
+- sepay_exception_resolution_complete: CHECK (resolution_status::text = 'UNRESOLVED'::text AND resolved_at IS NULL AND resolved_by IS NULL AND resolution_note IS NULL OR resolution_status::text = 'RESOLVED'::text AND resolved_at IS NOT NULL AND resolved_by IS NOT NULL AND resolution_note IS NOT NULL AND length(TRIM(BOTH FROM resolution_note)) > 0)
+- UNIQUE: provider, account_id, external_id
+
+3.5.5.3 daily_cash_closing
+Records the expected and counted cash balances and the closing outcome for a business day.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| account_id | UUID | NOT NULL, UNIQUE (composite) / FK → financial_account(id) | Identifier of the associated account. |
+| business_date | DATE | NOT NULL, UNIQUE (composite) | Operating date used for reconciliation and reporting. |
+| opening_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for opening. |
+| cash_in | NUMERIC(18,0) | NOT NULL, CHECK | Cash in recorded for this daily cash closing. |
+| cash_out | NUMERIC(18,0) | NOT NULL, CHECK | Cash out recorded for this daily cash closing. |
+| expected_closing | NUMERIC(18,0) | NOT NULL, CHECK | Cash balance expected at the end of the business day. |
+| actual_closing | NUMERIC(18,0) | NOT NULL, CHECK | Cash physically counted at the end of the business day. |
+| variance | NUMERIC(18,0) | NOT NULL, CHECK | Difference between actual and expected cash. |
+| explanation | TEXT | NULL, CHECK | Explanation recorded for this daily cash closing. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| submitted_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the record. |
+| submitted_at | TIMESTAMPTZ | NULL | Timestamp when the record was submitted. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| source_snapshot | JSONB | NOT NULL / DEFAULT '[]'::jsonb | Point-in-time source values retained for traceability. |
+
+Key and validation details
+- daily_cash_closing_check: CHECK (opening_amount >= 0::numeric AND cash_in >= 0::numeric AND cash_out >= 0::numeric AND actual_closing >= 0::numeric)
+- daily_cash_closing_check1: CHECK (expected_closing = (opening_amount + cash_in - cash_out))
+- daily_cash_closing_check2: CHECK (variance = (actual_closing - expected_closing))
+- daily_cash_closing_check3: CHECK (status::text <> 'RECONCILED'::text OR variance = 0::numeric OR length(TRIM(BOTH FROM explanation)) > 0)
+- daily_cash_closing_status_check: status IN ('DRAFT', 'SUBMITTED', 'RECONCILED')
+- explained_reconciled_variance: CHECK (status::text <> 'RECONCILED'::text OR variance = 0::numeric OR COALESCE(length(TRIM(BOTH FROM explanation)), 0) > 0)
+- UNIQUE: account_id, business_date
+
+3.5.5.4 cash_closing_handover
+Records who requested and confirmed handover of a daily cash closing.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| closing_id | UUID | PK, NOT NULL / FK → daily_cash_closing(id) | Identifier of the associated closing. |
+| account_id | UUID | NOT NULL, Partial UNIQUE index / FK → financial_account(id) | Identifier of the associated account. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| requested_at | TIMESTAMPTZ | NOT NULL, CHECK / DEFAULT CURRENT_TIMESTAMP | Timestamp when the request was submitted. |
+| received_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the received action. |
+| received_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the received event. |
+
+Key and validation details
+- cash_closing_handover_check: CHECK ((received_by IS NULL) = (received_at IS NULL))
+- cash_closing_handover_check1: CHECK (received_at IS NULL OR received_at >= requested_at)
+- one_pending_cash_handover: CREATE UNIQUE INDEX one_pending_cash_handover ON gcmb.cash_closing_handover USING btree (account_id) WHERE (received_at IS NULL)
+
+3.5.5.5 cash_reconciliation
+Records the review decision and note on a daily cash closing.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| closing_id | UUID | NOT NULL / FK → daily_cash_closing(id) | Identifier of the associated closing. |
+| reviewed_by | UUID | NOT NULL / FK → user_account(id) | User who reviewed the record. |
+| decision | VARCHAR(25) | NOT NULL, CHECK | Decision selected from the supported values. |
+| note | TEXT | NOT NULL | Additional information recorded by the operator. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- cash_reconciliation_decision_check: decision IN ('NEEDS_EXPLANATION', 'RECONCILED')
+
+3.5.5.6 cash_closing_evidence
+Stores file metadata associated with a daily cash closing.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| closing_id | UUID | PK, NOT NULL / FK → daily_cash_closing(id) | Identifier of the associated closing. |
+| original_name | VARCHAR(200) | NOT NULL | Original uploaded filename. |
+| mime_type | VARCHAR(100) | NOT NULL | Media type of the uploaded file. |
+| object_key | VARCHAR(200) | NOT NULL | Storage key used by the backend to retrieve the file bytes. |
+
+3.5.5.7 cash_closing_report
+Tracks the revision and state of the current closing report.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| closing_id | UUID | PK, NOT NULL / FK → daily_cash_closing(id) / FK (composite) | Identifier of the associated closing. |
+| revision | INTEGER | NOT NULL / FK (composite) | Revision number of the closing report. |
+| state | VARCHAR(25) | NOT NULL, CHECK | Current workflow state. |
+
+Key and validation details
+- cash_closing_report_state_check: state IN ('SUBMITTED', 'NEEDS_EXPLANATION', 'RECONCILED')
+- Composite FK: FOREIGN KEY (closing_id, revision) REFERENCES gcmb.cash_closing_report_revision(closing_id, revision)
+
+3.5.5.8 cash_closing_report_revision
+Keeps a submitted closing report snapshot and its revision number.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| closing_id | UUID | NOT NULL, PK (composite) / FK → daily_cash_closing(id) | Identifier of the associated closing. |
+| revision | INTEGER | NOT NULL, CHECK, PK (composite) | Revision number of the closing report. |
+| payload | JSONB | NOT NULL | Submitted closing report snapshot for this revision. |
+| submitted_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the record. |
+| submitted_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was submitted. |
+
+Key and validation details
+- cash_closing_report_revision_revision_check: CHECK (revision > 0)
+- PK: closing_id, revision
+
+3.5.5.9 cash_closing_revision_evidence
+Stores the evidence reference associated with a specific closing report revision.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| closing_id | UUID | NOT NULL, PK (composite) / FK (composite) | Identifier of the associated closing. |
+| revision | INTEGER | NOT NULL, PK (composite) / FK (composite) | Revision number of the closing report. |
+| original_name | VARCHAR(200) | NOT NULL | Original uploaded filename. |
+| mime_type | VARCHAR(100) | NOT NULL | Media type of the uploaded file. |
+| object_key | VARCHAR(200) | NOT NULL | Storage key used by the backend to retrieve the file bytes. |
+
+Key and validation details
+- Composite FK: FOREIGN KEY (closing_id, revision) REFERENCES gcmb.cash_closing_report_revision(closing_id, revision)
+- PK: closing_id, revision
+
+3.5.5.10 cash_closing_notification
+Records a recipient of a notification for a closing report version.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL | Unique identifier for the record. |
+| closing_id | UUID | NOT NULL, UNIQUE (composite) / FK → daily_cash_closing(id) | Identifier of the associated closing. |
+| report_version | INTEGER | NOT NULL, UNIQUE (composite) | Report version recorded for this cash closing notification. |
+| recipient_id | UUID | NOT NULL, UNIQUE (composite) / FK → user_account(id) | Identifier of the associated recipient. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- UNIQUE: closing_id, report_version, recipient_id
+
+3.5.5.11 cash_drawer_funding
+Tracks a request to fund a branch cash drawer, processing details and proof reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| account_id | UUID | NOT NULL, Partial UNIQUE index / FK → financial_account(id) | Identifier of the associated account. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| reason | TEXT | NOT NULL, CHECK | Business reason recorded for the action. |
+| status | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'REQUESTED' | Current lifecycle status. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| requested_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the request was submitted. |
+| idempotency_key | UUID | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| processed_by | UUID | NULL, CHECK / FK → user_account(id) | User who processed the transaction or request. |
+| processed_at | TIMESTAMPTZ | NULL, CHECK | Timestamp when the transaction or request was processed. |
+| payment_reference | VARCHAR(200) | NOT NULL / DEFAULT '' | Bank reference or proof reference for the payment. |
+| resolution_note | TEXT | NOT NULL, CHECK / DEFAULT '' | Explanation recorded when resolving or rejecting the request. |
+| recipient_name | VARCHAR(200) | NULL, CHECK | Name of the person receiving the payment. |
+| recipient_bank_name | VARCHAR(200) | NULL, CHECK | Name of the recipient’s bank. |
+| recipient_bank_account | VARCHAR(60) | NULL, CHECK | Bank account number used for the recipient’s transfer. |
+| recipient_bank_holder | VARCHAR(200) | NULL, CHECK | Registered holder of the recipient’s bank account. |
+| evidence_original_name | VARCHAR(255) | NULL, CHECK | Original filename of the evidence file. |
+| evidence_mime_type | VARCHAR(100) | NULL, CHECK | Media type of the evidence file. |
+| evidence_object_key | TEXT | NULL, CHECK | Storage key for the evidence file. |
+
+Key and validation details
+- cash_drawer_funding_amount_check: CHECK (amount >= 500000::numeric AND amount <= 1000000::numeric)
+- cash_drawer_funding_check: CHECK (status::text = 'REQUESTED'::text AND processed_by IS NULL AND processed_at IS NULL OR status::text <> 'REQUESTED'::text AND processed_by IS NOT NULL AND processed_at IS NOT NULL)
+- cash_drawer_funding_check1: CHECK (status::text <> 'REJECTED'::text OR length(TRIM(BOTH FROM resolution_note)) > 0)
+- cash_drawer_funding_reason_check: CHECK (length(TRIM(BOTH FROM reason)) > 0)
+- cash_drawer_funding_status_check: status IN ('REQUESTED', 'PAID', 'REJECTED')
+- complete_drawer_payment_evidence: CHECK (evidence_object_key IS NULL AND evidence_original_name IS NULL AND evidence_mime_type IS NULL OR evidence_object_key IS NOT NULL AND evidence_original_name IS NOT NULL AND evidence_mime_type IS NOT NULL)
+- complete_drawer_recipient: CHECK (recipient_name IS NULL AND recipient_bank_name IS NULL AND recipient_bank_account IS NULL AND recipient_bank_holder IS NULL OR recipient_name IS NOT NULL AND recipient_bank_name IS NOT NULL AND recipient_bank_account IS NOT NULL AND recipient_bank_holder IS NOT NULL AND length(TRIM(BOTH FROM recipient_name)) > 0 AND length(TRIM(BOTH FROM recipient_bank_name)) > 0 AND recipient_bank_account::text ~ '^[A-Za-z0-9]{3,60}$'::text AND length(TRIM(BOTH FROM recipient_bank_holder)) > 0)
+- one_pending_drawer_funding: CREATE UNIQUE INDEX one_pending_drawer_funding ON gcmb.cash_drawer_funding USING btree (account_id) WHERE ((status)::text = 'REQUESTED'::text)
+
+3.5.5.12 cash_drawer_remittance
+Records a transfer out of a cash drawer and the balance before the transfer.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| account_id | UUID | NOT NULL / FK → financial_account(id) | Identifier of the associated account. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| occurred_at | TIMESTAMPTZ | NOT NULL | Timestamp when the source event occurred. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| reason | TEXT | NOT NULL, CHECK | Business reason recorded for the action. |
+| reference | VARCHAR(200) | NOT NULL | Reference recorded for this cash drawer remittance. |
+| recorded_by | UUID | NOT NULL / FK → user_account(id) | User who entered or recorded this information. |
+| idempotency_key | UUID | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| balance_before | NUMERIC(18,0) | NULL, CHECK | Cash drawer balance immediately before the remittance. |
+| full_sweep | BOOLEAN | NOT NULL, CHECK / DEFAULT false | Whether the remittance empties the cash drawer balance. |
+
+Key and validation details
+- cash_drawer_remittance_amount_check: CHECK (amount > 0::numeric)
+- cash_drawer_remittance_check: CHECK (balance_before >= amount)
+- cash_drawer_remittance_reason_check: CHECK (length(TRIM(BOTH FROM reason)) > 0)
+- full_drawer_sweep_balance: CHECK (NOT full_sweep OR balance_before IS NOT NULL AND balance_before = amount)
+
+3.5.5.13 shift_cash_dispatch
+Records shift cash sent, expected amounts and reconciliation details.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| business_date | DATE | NOT NULL, UNIQUE (composite) | Operating date used for reconciliation and reporting. |
+| shift_number | SMALLINT | NOT NULL, CHECK, UNIQUE (composite) | Shift number recorded for this shift cash dispatch. |
+| expected_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for expected. |
+| actual_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for actual. |
+| variance | NUMERIC(18,0) | NULL / GENERATED (actual_amount - expected_amount) | Difference between actual and expected cash. |
+| source_revision | UUID | NOT NULL | Source revision recorded for this shift cash dispatch. |
+| source_snapshot | JSONB | NOT NULL | Point-in-time source values retained for traceability. |
+| note | TEXT | NOT NULL, CHECK / DEFAULT '' | Additional information recorded by the operator. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| handed_by | UUID | NOT NULL / FK → user_account(id) | User who performed the handed action. |
+| handed_at | TIMESTAMPTZ | NOT NULL / DEFAULT clock_timestamp() | Timestamp of the handed event. |
+| resolved_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the resolved action. |
+| resolved_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the resolved event. |
+| resolution | TEXT | NOT NULL, CHECK / DEFAULT '' | Resolution recorded for the issue or variance. |
+
+Key and validation details
+- shift_cash_dispatch_actual_amount_check: CHECK (actual_amount >= 0::numeric)
+- shift_cash_dispatch_check: CHECK (actual_amount = expected_amount AND status::text = 'MATCHED'::text OR actual_amount <> expected_amount AND (status::text = ANY (ARRAY['DISCREPANCY'::character varying, 'RESOLVED'::character varying]::text[])) AND length(TRIM(BOTH FROM note)) > 0)
+- shift_cash_dispatch_check1: CHECK (status::text = 'RESOLVED'::text AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL AND length(TRIM(BOTH FROM resolution)) > 0 OR status::text <> 'RESOLVED'::text AND resolved_by IS NULL AND resolved_at IS NULL AND resolution = ''::text)
+- shift_cash_dispatch_note_check: CHECK (length(note) <= 2000)
+- shift_cash_dispatch_resolution_check: CHECK (length(resolution) <= 2000)
+- shift_cash_dispatch_shift_number_check: CHECK (shift_number >= 1 AND shift_number <= 4)
+- shift_cash_dispatch_status_check: status IN ('MATCHED', 'DISCREPANCY', 'RESOLVED')
+- UNIQUE: branch_id, business_date, shift_number
+
+3.5.5.14 shift_cash_handover
+Records shift cash received, variances and how they were resolved.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| business_date | DATE | NOT NULL, UNIQUE (composite) | Operating date used for reconciliation and reporting. |
+| shift_number | SMALLINT | NOT NULL, CHECK, UNIQUE (composite) | Shift number recorded for this shift cash handover. |
+| expected_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for expected. |
+| actual_amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount for actual. |
+| variance | NUMERIC(18,0) | NULL / GENERATED (actual_amount - expected_amount) | Difference between actual and expected cash. |
+| source_revision | UUID | NOT NULL | Source revision recorded for this shift cash handover. |
+| source_snapshot | JSONB | NOT NULL | Point-in-time source values retained for traceability. |
+| note | TEXT | NOT NULL, CHECK / DEFAULT '' | Additional information recorded by the operator. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| received_by | UUID | NOT NULL / FK → user_account(id) | User who performed the received action. |
+| received_at | TIMESTAMPTZ | NOT NULL / DEFAULT clock_timestamp() | Timestamp of the received event. |
+| resolved_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the resolved action. |
+| resolved_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the resolved event. |
+| resolution | TEXT | NOT NULL, CHECK / DEFAULT '' | Resolution recorded for the issue or variance. |
+
+Key and validation details
+- shift_cash_handover_actual_amount_check: CHECK (actual_amount >= 0::numeric)
+- shift_cash_handover_check: CHECK (actual_amount = expected_amount AND status::text = 'MATCHED'::text OR actual_amount <> expected_amount AND (status::text = ANY (ARRAY['DISCREPANCY'::character varying, 'RESOLVED'::character varying]::text[])) AND length(TRIM(BOTH FROM note)) > 0)
+- shift_cash_handover_check1: CHECK (status::text = 'RESOLVED'::text AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL AND length(TRIM(BOTH FROM resolution)) > 0 OR status::text <> 'RESOLVED'::text AND resolved_by IS NULL AND resolved_at IS NULL AND resolution = ''::text)
+- shift_cash_handover_note_check: CHECK (length(note) <= 2000)
+- shift_cash_handover_resolution_check: CHECK (length(resolution) <= 2000)
+- shift_cash_handover_shift_number_check: CHECK (shift_number >= 1 AND shift_number <= 4)
+- shift_cash_handover_status_check: status IN ('MATCHED', 'DISCREPANCY', 'RESOLVED')
+- UNIQUE: branch_id, business_date, shift_number
+
+3.5.5.15 finance_fund_transfer
+Tracks a finance fund transfer, its sender and receipt confirmation.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(40) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| amount | NUMERIC(14,2) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| sent_on | DATE | NOT NULL | Calendar date recorded for sent. |
+| transfer_reference | VARCHAR(200) | NULL | Transfer reference recorded for this finance fund transfer. |
+| sent_by | UUID | NOT NULL / FK → user_account(id) | User who performed the sent action. |
+| sent_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the sent event. |
+| received_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the received action. |
+| received_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the received event. |
+| status | VARCHAR(24) | NOT NULL, CHECK | Current lifecycle status. |
+
+Key and validation details
+- finance_fund_transfer_amount_check: CHECK (amount > 0::numeric)
+- finance_fund_transfer_check: CHECK (status::text = 'WAITING_CONFIRMATION'::text AND received_by IS NULL AND received_at IS NULL OR status::text = 'RECEIVED'::text AND received_by IS NOT NULL AND received_at IS NOT NULL)
+- finance_fund_transfer_status_check: status IN ('WAITING_CONFIRMATION', 'RECEIVED')
+
+3.5.5.16 finance_expense_category
+Defines categories and rules used to classify and recognize expense requests.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(40) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(120) | NOT NULL, UNIQUE | Display name. |
+| description | VARCHAR(500) | NOT NULL / DEFAULT '' | Descriptive details for the record. |
+| active | BOOLEAN | NOT NULL / DEFAULT true | Whether the record is active. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| updated_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the latest update. |
+| cost_type | VARCHAR(5) | NOT NULL, CHECK / DEFAULT 'OPEX' | Cost type selected from the supported values. |
+| category_group | VARCHAR(20) | NOT NULL, CHECK / DEFAULT 'OTHER' | Category group selected from the supported values. |
+| cost_nature | VARCHAR(10) | NOT NULL, CHECK / DEFAULT 'VARIABLE' | Nature of the cost for expense classification. |
+| recognition_mode | VARCHAR(12) | NOT NULL, CHECK / DEFAULT 'IMMEDIATE' | Rule used to recognize the expense amount over time. |
+| default_allocation_months | INTEGER | NULL, CHECK | Default number of allocation months for the category. |
+| invoice_required | BOOLEAN | NOT NULL / DEFAULT false | Whether the category requires invoice evidence. |
+| reimbursement_allowed | BOOLEAN | NOT NULL / DEFAULT true | Whether this expense category permits reimbursement. |
+
+Key and validation details
+- finance_expense_category_allocation_months_check: CHECK (recognition_mode::text = 'IMMEDIATE'::text AND default_allocation_months IS NULL OR recognition_mode::text = 'ALLOCATED'::text AND default_allocation_months >= 2 AND default_allocation_months <= 60)
+- finance_expense_category_category_group_check: category_group IN ('RENT', 'UTILITIES', 'INGREDIENTS', 'MAINTENANCE', 'MARKETING', 'EQUIPMENT', 'OTHER')
+- finance_expense_category_cost_nature_check: cost_nature IN ('FIXED', 'VARIABLE')
+- finance_expense_category_cost_type_check: cost_type IN ('OPEX', 'CAPEX')
+- finance_expense_category_recognition_mode_check: recognition_mode IN ('IMMEDIATE', 'ALLOCATED')
+
+3.5.5.17 finance_expense_request
+Tracks a request for an expense or reimbursement through review and payment.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(40) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| category_id | UUID | NOT NULL / FK → finance_expense_category(id) | Identifier of the associated category. |
+| amount | NUMERIC(14,2) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| expense_on | DATE | NOT NULL | Calendar date recorded for expense. |
+| description | VARCHAR(1000) | NOT NULL | Descriptive details for the record. |
+| beneficiary_name | VARCHAR(160) | NOT NULL | Beneficiary name recorded for this finance expense request. |
+| bank_account | VARCHAR(80) | NOT NULL | Bank account number used for the transfer or payout. |
+| bank_name | VARCHAR(120) | NOT NULL | Name of the bank for the associated account. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| requested_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the request was submitted. |
+| status | VARCHAR(32) | NOT NULL, CHECK | Current lifecycle status. |
+| accountant_reviewed_by | UUID | NULL / FK → user_account(id) | User who performed the accountant reviewed action. |
+| accountant_reviewed_at | TIMESTAMPTZ | NULL | Timestamp of the accountant reviewed event. |
+| head_office_reviewed_by | UUID | NULL / FK → user_account(id) | User who performed the head office reviewed action. |
+| head_office_reviewed_at | TIMESTAMPTZ | NULL | Timestamp of the head office reviewed event. |
+| paid_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the paid action. |
+| paid_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the paid event. |
+| paid_reference | VARCHAR(200) | NULL | Paid reference recorded for this finance expense request. |
+| category_type | VARCHAR(5) | NOT NULL, CHECK / DEFAULT 'OPEX' | Category type selected from the supported values. |
+| recognition_mode | VARCHAR(12) | NOT NULL, CHECK / DEFAULT 'IMMEDIATE' | Rule used to recognize the expense amount over time. |
+| allocation_months | INTEGER | NULL, CHECK | Number of months across which this expense is allocated. |
+| allocation_start | DATE | NULL, CHECK | First month used when allocating the expense. |
+| origin | VARCHAR(24) | NOT NULL, CHECK / DEFAULT 'BRANCH_MANAGER' | Origin selected from the supported values. |
+| idempotency_key | UUID | NULL, Partial UNIQUE index | Request key used to identify repeated submissions. |
+| payment_method | VARCHAR(8) | NULL, CHECK | Payment method selected from the supported values. |
+| paid_payment_method | VARCHAR(8) | NULL, CHECK | Paid payment method selected from the supported values. |
+
+Key and validation details
+- finance_expense_request_allocation_check: CHECK (recognition_mode::text = 'IMMEDIATE'::text AND allocation_months IS NULL AND allocation_start IS NULL OR recognition_mode::text = 'ALLOCATED'::text AND allocation_months >= 2 AND allocation_months <= 60 AND (allocation_start IS NULL OR EXTRACT(day FROM allocation_start) = 1::numeric))
+- finance_expense_request_allocation_integer_check: CHECK (recognition_mode::text <> 'ALLOCATED'::text OR amount = trunc(amount))
+- finance_expense_request_allocation_paid_check: CHECK (status::text <> 'PAID'::text OR recognition_mode::text <> 'ALLOCATED'::text OR allocation_start IS NOT NULL)
+- finance_expense_request_amount_check: CHECK (amount > 0::numeric)
+- finance_expense_request_category_type_check: category_type IN ('OPEX', 'CAPEX')
+- finance_expense_request_check: CHECK (status::text = 'PAID'::text AND paid_by IS NOT NULL AND paid_at IS NOT NULL OR status::text <> 'PAID'::text AND paid_by IS NULL AND paid_at IS NULL)
+- finance_expense_request_kind_check: kind IN ('PAYMENT', 'REIMBURSEMENT')
+- finance_expense_request_origin_check: origin IN ('BRANCH_MANAGER', 'ACCOUNTANT_DIRECT')
+- finance_expense_request_recognition_mode_check: recognition_mode IN ('IMMEDIATE', 'ALLOCATED')
+- finance_expense_request_status_check: status IN ('WAITING_ACCOUNTANT', 'WAITING_HEAD_OFFICE', 'APPROVED_TO_PAY', 'REJECTED', 'PAID')
+- finance_request_method_on_payment_check: CHECK (paid_payment_method IS NULL OR status::text = 'PAID'::text)
+- finance_request_new_payment_method_check: CHECK (status::text <> 'PAID'::text OR payment_method IS NULL OR paid_payment_method IS NOT NULL)
+- finance_request_paid_payment_method_check: paid_payment_method IN ('CASH', 'BANK')
+- finance_request_payment_method_check: payment_method IN ('CASH', 'BANK')
+- finance_expense_request_direct_idempotency: CREATE UNIQUE INDEX finance_expense_request_direct_idempotency ON gcmb.finance_expense_request USING btree (idempotency_key) WHERE (((origin)::text = 'ACCOUNTANT_DIRECT'::text) AND (idempotency_key IS NOT NULL))
+
+3.5.5.18 finance_attachment
+Stores metadata for proof and other files linked to finance records.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| owner_type | VARCHAR(24) | NOT NULL, CHECK | Discriminator identifying the type of linked finance record. |
+| owner_id | UUID | NOT NULL | ID of the finance record selected by owner_type. |
+| kind | VARCHAR(24) | NOT NULL, CHECK | Business classification used by the workflow. |
+| object_key | VARCHAR(260) | NOT NULL, UNIQUE | Storage key used by the backend to retrieve the file bytes. |
+| original_name | VARCHAR(200) | NOT NULL | Original uploaded filename. |
+| mime_type | VARCHAR(100) | NOT NULL | Media type of the uploaded file. |
+| byte_size | BIGINT | NOT NULL, CHECK | Size of the file in bytes. |
+| sha256 | CHAR(64) | NOT NULL | Hexadecimal SHA-256 checksum of the file contents. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- finance_attachment_byte_size_check: CHECK (byte_size > 0)
+- finance_attachment_kind_check: kind IN ('TRANSFER_PROOF', 'INVOICE', 'PAYMENT_PROOF', 'ADJUSTMENT_EVIDENCE')
+- finance_attachment_owner_type_check: owner_type IN ('FUND_TRANSFER', 'EXPENSE_REQUEST', 'FINANCIAL_TRANSACTION')
+
+3.5.5.19 finance_request_history
+Records actor actions taken on an expense request.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| request_id | UUID | NOT NULL / FK → finance_expense_request(id) | Identifier of the associated request. |
+| actor_id | UUID | NOT NULL / FK → user_account(id) | Identifier of the associated actor. |
+| action | VARCHAR(32) | NOT NULL | Action recorded for this finance request history. |
+| note | VARCHAR(1000) | NOT NULL / DEFAULT '' | Additional information recorded by the operator. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+3.5.5.20 finance_expense_allocation
+Records expense recognition amounts allocated to months.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| request_id | UUID | NOT NULL, UNIQUE (composite) / FK → finance_expense_request(id) | Identifier of the associated request. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| category_id | UUID | NOT NULL / FK → finance_expense_category(id) | Identifier of the associated category. |
+| period_month | DATE | NOT NULL, CHECK, UNIQUE (composite) | Calendar month to which the record applies. |
+| seq | INTEGER | NOT NULL, CHECK, UNIQUE (composite) | Sequence of this allocation within its source request. |
+| amount | BIGINT | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| status | VARCHAR(12) | NOT NULL, CHECK / DEFAULT 'SCHEDULED' | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- finance_expense_allocation_amount_check: CHECK (amount > 0)
+- finance_expense_allocation_period_month_check: CHECK (period_month = date_trunc('month'::text, period_month::timestamp with time zone)::date)
+- finance_expense_allocation_seq_check: CHECK (seq >= 1 AND seq <= 60)
+- finance_expense_allocation_status_check: status IN ('SCHEDULED', 'CANCELLED')
+- UNIQUE: request_id, period_month
+- UNIQUE: request_id, seq
+
+3.5.5.21 finance_recurring_expense
+Defines a recurring cost template, due day, beneficiary and reminder settings.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, Partial UNIQUE index / FK → branch(id) | Operating branch associated with the record. |
+| category_id | UUID | NOT NULL, Partial UNIQUE index / FK → finance_expense_category(id) | Identifier of the associated category. |
+| beneficiary_name | VARCHAR(160) | NOT NULL, CHECK | Beneficiary name recorded for this finance recurring expense. |
+| bank_account | VARCHAR(80) | NOT NULL, CHECK | Bank account number used for the transfer or payout. |
+| bank_name | VARCHAR(120) | NOT NULL, CHECK | Name of the bank for the associated account. |
+| due_day | SMALLINT | NOT NULL, CHECK | Due day recorded for this finance recurring expense. |
+| monthly_amount | NUMERIC | NULL, CHECK | Monetary amount for monthly. |
+| expected_amount | NUMERIC | NULL, CHECK | Monetary amount for expected. |
+| expense_belongs_to | VARCHAR(16) | NOT NULL, CHECK | Expense attribution used for this recurring cost. |
+| start_month | DATE | NOT NULL, CHECK | Start month recorded for this finance recurring expense. |
+| end_month | DATE | NULL, CHECK | End month recorded for this finance recurring expense. |
+| reminder_days | SMALLINT | NOT NULL, CHECK / DEFAULT 3 | Reminder days recorded for this finance recurring expense. |
+| status | VARCHAR(12) | NOT NULL, CHECK / DEFAULT 'ACTIVE' | Current lifecycle status. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| updated_by | UUID | NOT NULL / FK → user_account(id) | User who performed the updated action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| updated_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the latest update. |
+| terminated_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the terminated event. |
+
+Key and validation details
+- finance_recurring_expense_bank_account_check: CHECK (length(btrim(bank_account::text)) > 0)
+- finance_recurring_expense_bank_name_check: CHECK (length(btrim(bank_name::text)) > 0)
+- finance_recurring_expense_beneficiary_name_check: CHECK (length(btrim(beneficiary_name::text)) > 0)
+- finance_recurring_expense_due_day_check: CHECK (due_day >= 1 AND due_day <= 31)
+- finance_recurring_expense_end_month_check: CHECK (end_month IS NULL OR end_month = date_trunc('month'::text, end_month::timestamp with time zone)::date)
+- finance_recurring_expense_expected_amount_check: CHECK (expected_amount IS NULL OR expected_amount > 0::numeric AND expected_amount = trunc(expected_amount))
+- finance_recurring_expense_expense_belongs_to_check: expense_belongs_to IN ('SAME_MONTH', 'PREVIOUS_MONTH')
+- finance_recurring_expense_month_range_check: CHECK (end_month IS NULL OR end_month >= start_month)
+- finance_recurring_expense_monthly_amount_check: CHECK (monthly_amount IS NULL OR monthly_amount > 0::numeric AND monthly_amount = trunc(monthly_amount))
+- finance_recurring_expense_reminder_days_check: CHECK (reminder_days >= 0 AND reminder_days <= 31)
+- finance_recurring_expense_start_month_check: CHECK (start_month = date_trunc('month'::text, start_month::timestamp with time zone)::date)
+- finance_recurring_expense_status_check: status IN ('ACTIVE', 'TERMINATED')
+- finance_recurring_expense_termination_check: CHECK (status::text = 'ACTIVE'::text AND terminated_at IS NULL OR status::text = 'TERMINATED'::text AND terminated_at IS NOT NULL)
+- finance_recurring_expense_active_identity: CREATE UNIQUE INDEX finance_recurring_expense_active_identity ON gcmb.finance_recurring_expense USING btree (branch_id, category_id, lower(btrim((beneficiary_name)::text))) WHERE ((status)::text = 'ACTIVE'::text)
+
+3.5.5.22 finance_recurring_expense_period
+Records a scheduled occurrence of a recurring cost and its resulting expense request.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| recurring_id | UUID | NOT NULL, UNIQUE (composite) / FK → finance_recurring_expense(id) | Identifier of the associated recurring. |
+| period_month | DATE | NOT NULL, CHECK, UNIQUE (composite) | Calendar month to which the record applies. |
+| due_date | DATE | NOT NULL | Calendar date recorded for due. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| category_id | UUID | NOT NULL / FK → finance_expense_category(id) | Identifier of the associated category. |
+| beneficiary_name | VARCHAR(160) | NOT NULL | Beneficiary name recorded for this finance recurring expense period. |
+| bank_account | VARCHAR(80) | NOT NULL | Bank account number used for the transfer or payout. |
+| bank_name | VARCHAR(120) | NOT NULL | Name of the bank for the associated account. |
+| amount | NUMERIC | NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| default_amount | NUMERIC | NULL, CHECK | Monetary amount for default. |
+| expected_amount | NUMERIC | NULL, CHECK | Monetary amount for expected. |
+| reminder_days | SMALLINT | NOT NULL, CHECK | Reminder days recorded for this finance recurring expense period. |
+| status | VARCHAR(12) | NOT NULL, CHECK / DEFAULT 'PENDING' | Current lifecycle status. |
+| request_id | UUID | NULL, CHECK, UNIQUE / FK → finance_expense_request(id) | Identifier of the associated request. |
+| skip_reason | VARCHAR(1000) | NULL, CHECK | Skip reason recorded for this finance recurring expense period. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| updated_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the latest update. |
+
+Key and validation details
+- finance_recurring_expense_period_amount_check: CHECK (amount IS NULL OR amount > 0::numeric AND amount = trunc(amount))
+- finance_recurring_expense_period_default_amount_check: CHECK (default_amount IS NULL OR default_amount > 0::numeric AND default_amount = trunc(default_amount))
+- finance_recurring_expense_period_expected_amount_check: CHECK (expected_amount IS NULL OR expected_amount > 0::numeric AND expected_amount = trunc(expected_amount))
+- finance_recurring_expense_period_period_month_check: CHECK (period_month = date_trunc('month'::text, period_month::timestamp with time zone)::date)
+- finance_recurring_expense_period_reminder_days_check: CHECK (reminder_days >= 0 AND reminder_days <= 31)
+- finance_recurring_expense_period_state_check: CHECK (status::text = 'PENDING'::text AND request_id IS NULL AND skip_reason IS NULL OR status::text = 'PAID'::text AND request_id IS NOT NULL AND amount IS NOT NULL AND skip_reason IS NULL OR status::text = 'SKIPPED'::text AND request_id IS NULL AND skip_reason IS NOT NULL AND length(btrim(skip_reason::text)) > 0)
+- finance_recurring_expense_period_status_check: status IN ('PENDING', 'PAID', 'SKIPPED')
+- UNIQUE: recurring_id, period_month
+
+3.5.5.23 finance_recurring_expense_notice
+Records a reminder sent for a recurring expense occurrence.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| period_id | UUID | NOT NULL, UNIQUE (composite) / FK → finance_recurring_expense_period(id) | Identifier of the associated period. |
+| recipient_id | UUID | NOT NULL, UNIQUE (composite) / FK → user_account(id) | Identifier of the associated recipient. |
+| reminder_type | VARCHAR(16) | NOT NULL, CHECK, UNIQUE (composite) | Reminder type selected from the supported values. |
+| reminder_date | DATE | NOT NULL, UNIQUE (composite) | Calendar date recorded for reminder. |
+| message | VARCHAR(500) | NOT NULL | Message recorded for this finance recurring expense notice. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- finance_recurring_expense_notice_reminder_type_check: reminder_type IN ('BEFORE_DUE', 'DUE', 'OVERDUE')
+- UNIQUE: period_id, recipient_id, reminder_type, reminder_date
+
+3.5.5.24 finance_request_stock_receipt
+Links an expense request to a stock receipt and records the linked amount.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| request_id | UUID | NOT NULL, PK (composite) / FK → finance_expense_request(id) | Identifier of the associated request. |
+| receipt_id | UUID | NOT NULL, PK (composite), Partial UNIQUE index / FK → stock_receipt(id) | Identifier of the associated receipt. |
+| amount | NUMERIC(14,2) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| active | BOOLEAN | NOT NULL / DEFAULT true | Whether the record is active. |
+
+Key and validation details
+- finance_request_stock_receipt_amount_check: CHECK (amount > 0::numeric)
+- PK: request_id, receipt_id
+- finance_request_stock_receipt_active: CREATE UNIQUE INDEX finance_request_stock_receipt_active ON gcmb.finance_request_stock_receipt USING btree (receipt_id) WHERE active
+
+3.5.5.25 financial_period
+Tracks the closing state and approval of an accounting month.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| month | DATE | NOT NULL, CHECK, UNIQUE | Month covered by the accounting period. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| closed_by | UUID | NULL, CHECK / FK → user_account(id) | User who performed the closed action. |
+| closed_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the closed event. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+| close_note | VARCHAR(1000) | NOT NULL / DEFAULT '' | Close note recorded for this financial period. |
+
+Key and validation details
+- financial_period_check: CHECK (status::text <> 'CLOSED'::text OR closed_by IS NOT NULL AND closed_at IS NOT NULL)
+- financial_period_month_check: CHECK (month = date_trunc('month'::text, month::timestamp with time zone)::date)
+- financial_period_status_check: status IN ('OPEN', 'CLOSED')
+
+3.5.5.26 financial_transaction
+Identifies a posted financial event and the originating business transaction.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| period_id | UUID | NOT NULL / FK → financial_period(id) | Identifier of the associated period. |
+| booking_date | DATE | NOT NULL | Calendar date recorded for booking. |
+| occurred_at | TIMESTAMPTZ | NOT NULL | Timestamp when the source event occurred. |
+| kind | VARCHAR(25) | NOT NULL, CHECK | Business classification used by the workflow. |
+| payment_id | UUID | NULL, CHECK, UNIQUE / FK → payment(id) | Identifier of the associated payment. |
+| refund_id | UUID | NULL, CHECK, UNIQUE / FK → refund_request(id) | Identifier of the associated refund. |
+| expense_payment_id | UUID | NULL, CHECK, UNIQUE / FK → expense_payment(id) | Identifier of the associated expense payment. |
+| salary_payment_id | UUID | NULL, CHECK, UNIQUE / FK → salary_payment(id) | Identifier of the associated salary payment. |
+| salary_advance_id | UUID | NULL, CHECK, UNIQUE / FK → salary_advance(id) | Identifier of the associated salary advance. |
+| fund_transfer_id | UUID | NULL, CHECK, UNIQUE / FK → fund_transfer(id) | Identifier of the associated fund transfer. |
+| adjusts_transaction_id | UUID | NULL, CHECK / FK → financial_transaction(id) | Previously posted ledger transaction adjusted by this entry. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| created_by | UUID | NULL / FK → user_account(id) | User who performed the created action. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- financial_transaction_check: CHECK (kind::text = 'OPENING'::text AND num_nonnulls(payment_id, refund_id, expense_payment_id, salary_payment_id, salary_advance_id, fund_transfer_id, adjusts_transaction_id) = 0 OR kind::text <> 'OPENING'::text AND num_nonnulls(payment_id, refund_id, expense_payment_id, salary_payment_id, salary_advance_id, fund_transfer_id, adjusts_transaction_id) = 1)
+- financial_transaction_check1: CHECK ((payment_id IS NULL OR kind::text = 'PAYMENT'::text) AND (refund_id IS NULL OR kind::text = 'REFUND'::text) AND (expense_payment_id IS NULL OR kind::text = 'EXPENSE'::text) AND (salary_payment_id IS NULL OR kind::text = 'SALARY'::text) AND (salary_advance_id IS NULL OR kind::text = 'ADVANCE'::text) AND (fund_transfer_id IS NULL OR kind::text = 'TRANSFER'::text) AND (adjusts_transaction_id IS NULL OR kind::text = 'ADJUSTMENT'::text))
+- financial_transaction_kind_check: kind IN ('PAYMENT', 'REFUND', 'EXPENSE', 'SALARY', 'ADVANCE', 'TRANSFER', 'OPENING', 'ADJUSTMENT')
+
+3.5.5.27 financial_entry
+Records a signed financial movement in an account for a ledger transaction.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| transaction_id | UUID | NOT NULL, UNIQUE (composite) / FK → financial_transaction(id) | Identifier of the associated transaction. |
+| account_id | UUID | NOT NULL, UNIQUE (composite) / FK → financial_account(id) | Identifier of the associated account. |
+| branch_id | UUID | NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| amount_signed | NUMERIC(18,0) | NOT NULL, CHECK | Signed amount posted to the account or adjustment. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- financial_entry_amount_signed_check: CHECK (amount_signed <> 0::numeric)
+- UNIQUE: transaction_id, account_id, branch_id
+
+3.5.5.28 business_adjustment
+Records a signed adjustment to a bill or expense in a financial period.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| period_id | UUID | NOT NULL / FK → financial_period(id) | Identifier of the associated period. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| bill_id | UUID | NULL, CHECK / FK → bill(id) | Identifier of the associated bill. |
+| expense_id | UUID | NULL, CHECK / FK → expense(id) | Identifier of the associated expense. |
+| amount_signed | NUMERIC(18,0) | NOT NULL, CHECK | Signed amount posted to the account or adjustment. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| created_by | UUID | NOT NULL / FK → user_account(id) | User who performed the created action. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- business_adjustment_amount_signed_check: CHECK (amount_signed <> 0::numeric)
+- business_adjustment_check: CHECK (num_nonnulls(bill_id, expense_id) = 1)
+
+3.5.5.29 fund_transfer
+Records a movement of funds from one financial account to another.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| from_account_id | UUID | NULL, CHECK / FK → financial_account(id) | Account from which the funds are debited. |
+| to_account_id | UUID | NOT NULL, CHECK / FK → financial_account(id) | Account to which the funds are credited. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| occurred_at | TIMESTAMPTZ | NULL | Timestamp when the source event occurred. |
+| external_reference | VARCHAR(200) | NULL | Reference supplied by an external system or transaction. |
+| processed_by | UUID | NOT NULL / FK → user_account(id) | User who processed the transaction or request. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- fund_transfer_amount_check: CHECK (amount > 0::numeric)
+- fund_transfer_check: CHECK (from_account_id IS NULL OR from_account_id <> to_account_id)
+- fund_transfer_check1: CHECK (kind::text = 'HEAD_OFFICE'::text AND from_account_id IS NULL OR (kind::text = ANY (ARRAY['ALLOCATION'::character varying, 'RETURN'::character varying, 'REMITTANCE'::character varying]::text[])) AND from_account_id IS NOT NULL)
+- fund_transfer_status_check: status IN ('PENDING', 'COMPLETED', 'FAILED')
+
+3.5.5.30 expense
+Holds an expense with its business classification, beneficiary, approval and recognition date.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| category_id | UUID | NOT NULL / FK → expense_category(id) | Identifier of the associated category. |
+| class_snapshot | VARCHAR(10) | NOT NULL, CHECK | Class captured when the record was produced. |
+| kind | VARCHAR(20) | NOT NULL, CHECK | Business classification used by the workflow. |
+| payment_source | VARCHAR(20) | NOT NULL, CHECK | Payment source selected from the supported values. |
+| personal_payer_id | UUID | NULL, CHECK / FK → employee(id) | Identifier of the associated personal payer. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| recipient_name | VARCHAR(200) | NOT NULL | Name of the person receiving the payment. |
+| recipient_bank | VARCHAR(200) | NULL | Recipient bank recorded for this expense. |
+| recipient_account | VARCHAR(60) | NULL | Recipient account recorded for this expense. |
+| reason | TEXT | NOT NULL | Business reason recorded for the action. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| approved_amount | NUMERIC(18,0) | NULL, CHECK | Monetary amount for approved. |
+| recognized_on | DATE | NOT NULL | Calendar date recorded for recognized. |
+| approval_threshold_snapshot | NUMERIC(18,0) | NOT NULL, CHECK | Approval threshold captured when the record was produced. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- expense_check: CHECK (amount > 0::numeric AND approval_threshold_snapshot >= 0::numeric)
+- expense_check1: CHECK (approved_amount IS NULL OR approved_amount > 0::numeric AND approved_amount <= amount)
+- expense_check2: CHECK (kind::text = 'REIMBURSEMENT'::text AND payment_source::text = 'PERSONAL'::text AND personal_payer_id IS NOT NULL OR kind::text = 'PAYMENT'::text AND (payment_source::text = ANY (ARRAY['CENTRAL'::character varying, 'BRANCH_FUND'::character varying]::text[])) AND personal_payer_id IS NULL)
+- expense_class_snapshot_check: class_snapshot IN ('OPEX', 'CAPEX')
+- expense_status_check: status IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'PAID', 'CANCELLED')
+
+3.5.5.31 expense_line
+Itemizes the quantities, prices and amounts included in an expense.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| expense_id | UUID | NOT NULL / FK → expense(id) | Identifier of the associated expense. |
+| description | VARCHAR(200) | NOT NULL | Descriptive details for the record. |
+| quantity | NUMERIC(18,3) | NOT NULL, CHECK | Quantity recorded in the item’s configured unit. |
+| unit_price | NUMERIC(18,0) | NOT NULL, CHECK | Selling price per unit on the line. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- expense_line_check: CHECK (quantity > 0::numeric AND unit_price >= 0::numeric AND amount = round(quantity * unit_price, 0))
+
+3.5.5.32 expense_category
+Classifies expenses in the expense ledger.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| code | VARCHAR(60) | NOT NULL, UNIQUE | Business code used to identify the record. |
+| name | VARCHAR(200) | NOT NULL | Display name. |
+| class | VARCHAR(10) | NOT NULL, CHECK | Class selected from the supported values. |
+| active | BOOLEAN | NOT NULL | Whether the record is active. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- expense_category_class_check: class IN ('OPEX', 'CAPEX')
+
+3.5.5.33 expense_approval
+Records a decision, authorized amount and approver's role at decision time.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| expense_id | UUID | NOT NULL / FK → expense(id) | Identifier of the associated expense. |
+| actor_id | UUID | NOT NULL / FK → user_account(id) | Identifier of the associated actor. |
+| role_snapshot | VARCHAR(60) | NOT NULL | Role captured when the record was produced. |
+| decision | VARCHAR(20) | NOT NULL, CHECK | Decision selected from the supported values. |
+| approved_amount | NUMERIC(18,0) | NULL, CHECK | Monetary amount for approved. |
+| note | TEXT | NULL | Additional information recorded by the operator. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- expense_approval_approved_amount_check: CHECK (approved_amount IS NULL OR approved_amount > 0::numeric)
+- expense_approval_decision_check: decision IN ('APPROVE', 'REJECT', 'RETURN')
+
+3.5.5.34 expense_evidence
+Links a supporting attachment to an expense and classifies it.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| expense_id | UUID | NOT NULL, UNIQUE (composite) / FK → expense(id) | Identifier of the associated expense. |
+| attachment_id | UUID | NOT NULL, UNIQUE (composite) / FK → attachment(id) | Identifier of the corresponding attachment metadata record. |
+| kind | VARCHAR(60) | NOT NULL | Business classification used by the workflow. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- UNIQUE: expense_id, attachment_id
+
+3.5.5.35 expense_payment
+Records payment of an expense from a financial account and its outcome.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| expense_id | UUID | NOT NULL, Partial UNIQUE index / FK → expense(id) | Identifier of the associated expense. |
+| account_id | UUID | NOT NULL / FK → financial_account(id) | Identifier of the associated account. |
+| amount | NUMERIC(18,0) | NOT NULL, CHECK | Monetary amount recorded for the transaction or line. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| external_reference | VARCHAR(200) | NULL | Reference supplied by an external system or transaction. |
+| paid_at | TIMESTAMPTZ | NULL, CHECK | Timestamp of the paid event. |
+| processed_by | UUID | NOT NULL / FK → user_account(id) | User who processed the transaction or request. |
+| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | Request key used to identify repeated submissions. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- expense_payment_amount_check: CHECK (amount > 0::numeric)
+- expense_payment_check: CHECK (status::text <> 'PAID'::text OR paid_at IS NOT NULL)
+- expense_payment_status_check: status IN ('PENDING', 'PAID', 'FAILED')
+- uq_expense_paid: CREATE UNIQUE INDEX uq_expense_paid ON gcmb.expense_payment USING btree (expense_id) WHERE ((status)::text = 'PAID'::text)
+- uq_expense_pending: CREATE UNIQUE INDEX uq_expense_pending ON gcmb.expense_payment USING btree (expense_id) WHERE ((status)::text = 'PENDING'::text)
+
+3.5.5.36 export_job
+Tracks a report export request, selected filters and the generated attachment reference.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| kind | VARCHAR(25) | NOT NULL, CHECK | Report or dataset requested for export. |
+| payroll_period_id | UUID | NULL, CHECK / FK → payroll_period(id) | Identifier of the associated payroll period. |
+| requested_by | UUID | NOT NULL / FK → user_account(id) | User who submitted the request. |
+| filters | JSONB | NOT NULL | Filter parameters submitted for the export. |
+| status | VARCHAR(20) | NOT NULL, CHECK | Current lifecycle status. |
+| attachment_id | UUID | NULL / FK → attachment(id) | Identifier of the corresponding attachment metadata record. |
+| completed_at | TIMESTAMPTZ | NULL | Timestamp of the completed event. |
+| created_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp when the record was created. |
+
+Key and validation details
+- export_job_check: CHECK ((kind::text = 'PAYROLL'::text) = (payroll_period_id IS NOT NULL))
+- export_job_kind_check: kind IN ('PAYROLL', 'TAX_SOURCE', 'EXPENSE_EVIDENCE')
+- export_job_status_check: status IN ('PENDING', 'COMPLETED', 'FAILED')
+
+3.5.5.37 source_import_batch
+Records the source file, file hash, date range and row count for an import.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| branch_id | UUID | NOT NULL, UNIQUE (composite) / FK → branch(id) | Operating branch associated with the record. |
+| source_system | VARCHAR(40) | NOT NULL, UNIQUE (composite) | Source system recorded for this source import batch. |
+| source_file | TEXT | NOT NULL | Filename or source reference recorded for the import batch. |
+| source_sha256 | CHAR(64) | NOT NULL, UNIQUE (composite) | SHA-256 checksum of the imported source file. |
+| period_start | DATE | NOT NULL, CHECK | Earliest date covered by the import batch. |
+| period_end | DATE | NOT NULL, CHECK | Latest date covered by the import batch. |
+| row_count | INTEGER | NOT NULL, CHECK | Number of rows recorded for the import batch. |
+| imported_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the imported event. |
+
+Key and validation details
+- source_import_batch_check: CHECK (period_end >= period_start)
+- source_import_batch_row_count_check: CHECK (row_count >= 0)
+- UNIQUE: branch_id, source_system, source_sha256
+
+3.5.5.38 source_import_record
+Records a source row, sheet and imported business values for reconciliation and reporting.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| id | UUID | PK, NOT NULL / DEFAULT gen_random_uuid() | Unique identifier for the record. |
+| batch_id | UUID | NOT NULL, UNIQUE (composite) / FK → source_import_batch(id) | Identifier of the associated batch. |
+| branch_id | UUID | NOT NULL / FK → branch(id) | Operating branch associated with the record. |
+| record_type | VARCHAR(40) | NOT NULL | Record type recorded for this source import record. |
+| source_sheet | TEXT | NOT NULL, UNIQUE (composite) | Tab name from which the row was imported. |
+| source_row | INTEGER | NOT NULL, CHECK, UNIQUE (composite) | Row number in the source sheet. |
+| business_date | DATE | NOT NULL | Operating date used for reconciliation and reporting. |
+| source_key | TEXT | NULL | Business key retained for identifying the imported row. |
+| payload | JSONB | NOT NULL | Business values imported from the original source row. |
+| imported_at | TIMESTAMPTZ | NOT NULL / DEFAULT CURRENT_TIMESTAMP | Timestamp of the imported event. |
+
+Key and validation details
+- source_import_record_source_row_check: CHECK (source_row > 0)
+- UNIQUE: batch_id, source_sheet, source_row
+
+
+3.6 Reporting and Balance Views
+
+The following views expose derived results from existing relations. Each line lists the view, its purpose, its source relations and the output column types.
+
+cash_handover_movement
+Represents cash movements derived from operating cash handovers.
+Source relations: cash_closing_handover, daily_cash_closing
+Columns: id TEXT, account_id UUID, time TIMESTAMPTZ, amount NUMERIC, kind TEXT, description TEXT
+
+daily_till_movement
+Combines daily till activity represented by cash closings, their reports and cash remittance.
+Source relations: branch, cash_closing_report, cash_closing_report_revision, cash_drawer_remittance, daily_cash_closing
+Columns: id TEXT, account_id UUID, time TIMESTAMPTZ, amount NUMERIC, kind TEXT, description TEXT
+
+drawer_funding_movement
+Projects drawer funding as cash movements.
+Source relations: cash_drawer_funding
+Columns: id TEXT, account_id UUID, time TIMESTAMPTZ, amount NUMERIC(18,0), kind TEXT, description TEXT
+
+v_account_balance
+Calculates balances for financial accounts using payments, ledger entries and cash movements.
+Source relations: cash_handover_movement, daily_till_movement, drawer_funding_movement, financial_account, financial_entry, financial_transaction, payment
+Columns: id UUID, code VARCHAR(60), branch_id UUID, balance NUMERIC
+
+v_bill_balance
+Calculates remaining bill balances after applied deposits, payments and adjustments.
+Source relations: bill, business_adjustment, checkout_cash_reclassification, deposit_entry, payment
+Columns: id UUID, booking_id UUID, net_amount NUMERIC(18,0), deposit_applied NUMERIC, payments NUMERIC, remaining_due NUMERIC
+
+v_cash_variance_alert
+Surfaces daily cash closing variance and its resolution status.
+Source relations: daily_cash_closing
+Columns: id UUID, branch_id UUID, business_date DATE, variance NUMERIC(18,0), explanation TEXT, status VARCHAR(20)
+
+v_deposit_balance
+Calculates the balance associated with each booking deposit.
+Source relations: deposit, deposit_entry
+Columns: id UUID, booking_id UUID, balance NUMERIC
+
+v_expense_recognition
+Projects recognized expense amounts by period for reporting.
+Source relations: finance_expense_allocation, finance_expense_request, finance_recurring_expense_period
+Columns: request_id UUID, branch_id UUID, category_id UUID, category_type VARCHAR(5), recognition_mode VARCHAR(12), period_month DATE, seq INTEGER, amount NUMERIC
+
+3.7 References
+
+Project sources
+README.md
+backend/src/main/resources/db/migration/ (Flyway V1 through V67)
+backend/src/main/resources/application.yaml and application-prod.yml
+RefundEvidenceStorageService.java and EquipmentAssetFileStorageService.java
+docs/VPS Deployment 2026-11-13.md
+
+Product documentation
+PostgreSQL 18 constraints — https://www.postgresql.org/docs/18/ddl-constraints.html
+PostgreSQL 18 transactions — https://www.postgresql.org/docs/18/tutorial-transactions.html
+PostgreSQL 18 JSON types — https://www.postgresql.org/docs/18/datatype-json.html
+pgAdmin 4 Query Tool — https://www.pgadmin.org/docs/pgadmin4/latest/query_tool.html
+pgAdmin 4 ERD Tool — https://www.pgadmin.org/docs/pgadmin4/latest/erd_tool.html
+Cloudflare R2 S3 API — https://developers.cloudflare.com/r2/api/s3/api/
+Cloudinary upload documentation — https://cloudinary.com/documentation/upload_parameters

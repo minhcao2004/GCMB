@@ -56,6 +56,15 @@ const monthLabel = (value) => {
   const month = monthValue(value);
   return month ? `${month.slice(5,7)}/${month.slice(0,4)}` : '—';
 };
+const dateRangeError = (from, to) => from && to && from > to
+  ? 'Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.' : '';
+function matchesExpenseDate(value, from, to) {
+  if (!from && !to) return true;
+  const date = Array.isArray(value) && value.length >= 3
+    ? `${monthValue(value)}-${String(value[2]).padStart(2,'0')}`
+    : String(value ?? '').match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  return Boolean(date && (!from || date >= from) && (!to || date <= to));
+}
 
 function Attachments({ rows=[], compact=false }) {
   const [preview,setPreview]=useState(null);
@@ -86,10 +95,10 @@ const kindLabel=(item)=>item.kind==='INVOICE'?'Hóa đơn':item.kind==='PAYMENT_
   </>;
 }
 
-function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile, historyLabel, compact=false, pageSize=5 }) {
+function RequestTable({ rows, role, busy, onReview, onPay, paymentForms, setPaymentForms, requestFiles, setRequestFiles, onUploadRequestFile, historyLabel, compact=false, pageSize=5, resetKey }) {
   const [expandedAllocation, setExpandedAllocation] = useState(null);
   const tableLabel = historyLabel || (compact ? 'Đề nghị chờ xử lý của kế toán' : 'Đề nghị thanh toán và hoàn ứng');
-  return <div className={`finance-table-wrap${historyLabel || compact ? ' finance-history-table' : ''}${compact ? ' finance-accountant-request-table' : ''}`} role="region" aria-label={tableLabel} tabIndex={0}><PaginatedTable pageSize={pageSize} paginationLabel={`Phân trang ${tableLabel.toLocaleLowerCase('vi')}`}><thead><tr><th scope="col">{compact?'Cơ sở':'Mã · Cơ sở'}</th><th scope="col">Ngày · Hạng mục</th><th scope="col">{compact?'Nội dung':'Nội dung · Lịch sử'}</th><th scope="col">Số tiền</th><th scope="col">Người nhận · Cách chi</th><th scope="col">Trạng thái</th><th scope="col">Chứng từ / thao tác</th></tr></thead><tbody>
+  return <div className={`finance-table-wrap${historyLabel || compact ? ' finance-history-table' : ''}${compact ? ' finance-accountant-request-table' : ''}`} role="region" aria-label={tableLabel} tabIndex={0}><PaginatedTable pageSize={pageSize} resetKey={resetKey} paginationLabel={`Phân trang ${tableLabel.toLocaleLowerCase('vi')}`}><thead><tr><th scope="col">{compact?'Cơ sở':'Mã · Cơ sở'}</th><th scope="col">Ngày · Hạng mục</th><th scope="col">{compact?'Nội dung':'Nội dung · Lịch sử'}</th><th scope="col">Số tiền</th><th scope="col">Người nhận · Cách chi</th><th scope="col">Trạng thái</th><th scope="col">Chứng từ / thao tác</th></tr></thead><tbody>
     {rows.map((row)=>{
       const form = paymentForms[row.id] || {};
       const months = form.allocationMonths ?? row.allocation_months ?? '';
@@ -175,6 +184,8 @@ function FinanceWorkspace({ user }) {
   const fundDialogRef=useRef(null); const fundDialogFirstFieldRef=useRef(null); const fundDialogTriggerRef=useRef(null); const fundReceiptDialogRef=useRef(null);
   const [selectedBranch,setSelectedBranch]=useState('ALL');
   const [selectedRequestStatus,setSelectedRequestStatus]=useState('ALL');
+  const [requestFrom,setRequestFrom]=useState('');
+  const [requestTo,setRequestTo]=useState('');
   const [headOfficeRequestFrom,setHeadOfficeRequestFrom]=useState('');
   const [headOfficeRequestTo,setHeadOfficeRequestTo]=useState('');
   const [historyStatus,setHistoryStatus]=useState('ALL');
@@ -269,8 +280,10 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
   const stockReceipts=data?.stockReceipts||[];
   const selectedReceiptTotal=stockReceipts.filter((receipt)=>selectedReceiptIds.includes(receipt.id)).reduce((sum,receipt)=>sum+Number(receipt.amount),0);
   const branchRequests=selectedBranch==='ALL'?requests:requests.filter((item)=>String(item.branch_id)===String(selectedBranch));
+  const requestDateError=dateRangeError(requestFrom,requestTo);
   const accountantRequests=branchRequests.filter((item)=>!['PAID','REJECTED'].includes(item.status))
     .filter((item)=>selectedRequestStatus==='ALL'||item.status===selectedRequestStatus)
+    .filter((item)=>!requestDateError&&matchesExpenseDate(item.expense_on,requestFrom,requestTo))
     .sort((left,right)=>Number(right.status==='WAITING_ACCOUNTANT')-Number(left.status==='WAITING_ACCOUNTANT'));
   const headOfficeRequests=branchRequests
     .filter((item)=>selectedRequestStatus==='ALL'||item.status===selectedRequestStatus)
@@ -278,10 +291,10 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
     .filter((item)=>!headOfficeRequestTo||String(item.expense_on).slice(0,10)<=headOfficeRequestTo)
     .sort((left,right)=>Number(right.status==='WAITING_HEAD_OFFICE')-Number(left.status==='WAITING_HEAD_OFFICE'));
   // BR-163: Không hiển thị kết quả cho khoảng ngày lọc bị đảo ngược.
-  const historyDateError=historyFrom&&historyTo&&historyFrom>historyTo?'Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.':'';
+  const historyDateError=dateRangeError(historyFrom,historyTo);
   const historyRequests=branchRequests.filter((item)=>['PAID','REJECTED'].includes(item.status))
     .filter((item)=>historyStatus==='ALL'||item.status===historyStatus)
-    .filter((item)=>!historyDateError&&(!historyFrom||String(item.expense_on).slice(0,10)>=historyFrom)&&(!historyTo||String(item.expense_on).slice(0,10)<=historyTo));
+    .filter((item)=>!historyDateError&&matchesExpenseDate(item.expense_on,historyFrom,historyTo));
   // BR-163: Không hiển thị kết quả cho khoảng ngày lọc bị đảo ngược.
   const fundDateError=fundFrom&&fundTo&&fundFrom>fundTo?'Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.':'';
   const visibleFundTransfers=transfers.filter((item)=>fundStatus==='ALL'||item.status===fundStatus)
@@ -307,15 +320,24 @@ async function uploadFundProof(event,id){event.preventDefault();const proof=fund
     </>}
     {role==='ACCOUNTANT'&&accountantSection==='plus'&&<>
       <nav className="finance-tabs" aria-label="Chi và hoàn ứng">{accountantExpenseTabs.map(([key,label])=><button type="button" key={key} className={accountTab===key?'active':''} aria-pressed={accountTab===key} onClick={()=>changeExpenseTab(key)}>{label}</button>)}</nav>
-      {accountTab==='requests'&&<section className="finance-panel finance-workspace-panel finance-accountant-request-panel"><div className="finance-section-heading"><div><h2>Đề nghị chờ xử lý</h2></div><div className="finance-mini-total pending"><span>Đang hiển thị</span><strong>{accountantRequests.length} đề nghị</strong></div></div><search className="finance-request-filters" aria-label="Lọc đề nghị chờ xử lý"><BranchFilter id="finance-request-branch-filter" branches={branches} value={selectedBranch} onChange={setSelectedBranch}/><label className="finance-branch-filter" htmlFor="finance-request-status-filter">Trạng thái<select id="finance-request-status-filter" value={selectedRequestStatus} onChange={(event)=>setSelectedRequestStatus(event.target.value)}><option value="ALL">Tất cả trạng thái</option>{requestStatusOptions.map((status)=><option value={status} key={status}>{statusName[status]}</option>)}</select></label></search>
-        <RequestTable compact rows={accountantRequests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
+      {accountTab==='requests'&&<section className="finance-panel finance-workspace-panel finance-accountant-request-panel"><div className="finance-section-heading"><div><h2>Đề nghị chờ xử lý</h2></div><div className="finance-mini-total pending"><span>Đang hiển thị</span><strong>{accountantRequests.length} đề nghị</strong></div></div>
+        <search className="finance-request-filters finance-expense-request-filters" aria-label="Lọc đề nghị chờ xử lý">
+          <BranchFilter id="finance-request-branch-filter" branches={branches} value={selectedBranch} onChange={setSelectedBranch}/>
+          <label className="finance-branch-filter">Trạng thái<select value={selectedRequestStatus} onChange={(event)=>setSelectedRequestStatus(event.target.value)}><option value="ALL">Tất cả trạng thái</option>{requestStatusOptions.map((status)=><option value={status} key={status}>{statusName[status]}</option>)}</select></label>
+          <label className="finance-branch-filter">Từ ngày<input type="date" value={requestFrom} onChange={(event)=>setRequestFrom(event.target.value)}/></label>
+          <label className="finance-branch-filter">Đến ngày<input type="date" value={requestTo} onChange={(event)=>setRequestTo(event.target.value)}/></label>
+        </search>
+        {requestDateError&&<p className="finance-error" role="alert">{requestDateError}</p>}
+        <RequestTable compact rows={accountantRequests} resetKey={JSON.stringify([selectedBranch,selectedRequestStatus,requestFrom,requestTo])}
+          role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms}
+          requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc}/>
       </section>}
-      {accountTab==='recurring'&&<RecurringExpensesTab branches={branches} categories={categories} busy={busy} revision={recurringRevision} onSave={saveRecurringExpense} onTerminate={terminateRecurringExpense} onSkip={skipRecurringPeriod} onPay={(period)=>{setRecurringPayPeriod(period);setDirectDialogOpen(true);}}/>}
+      {accountTab==='recurring'&&<RecurringExpensesTab branches={branches} categories={categories} busy={busy} revision={recurringRevision} actionError={error} onSave={saveRecurringExpense} onTerminate={terminateRecurringExpense} onSkip={skipRecurringPeriod} onPay={(period)=>{setRecurringPayPeriod(period);setDirectDialogOpen(true);}}/>}
       {accountTab==='drawer'&&<DrawerFundingPanel user={user} onChange={reload}/>}
       {accountTab==='history'&&<section className="finance-panel finance-workspace-panel finance-history-panel"><div className="finance-section-heading"><div><h2>Lịch sử thanh toán và hoàn ứng</h2></div><div className="finance-mini-total"><span>Đang hiển thị</span><strong>{historyRequests.length} đề nghị</strong></div></div><search className="finance-request-filters" aria-label="Lọc lịch sử thanh toán và hoàn ứng"><BranchFilter id="finance-history-branch-filter" branches={branches} value={selectedBranch} onChange={setSelectedBranch}/><label className="finance-branch-filter" htmlFor="finance-history-status-filter">Trạng thái<select id="finance-history-status-filter" value={historyStatus} onChange={(event)=>setHistoryStatus(event.target.value)}><option value="ALL">Tất cả trạng thái</option><option value="PAID">Đã thanh toán</option><option value="REJECTED">Từ chối</option></select></label><label className="finance-branch-filter" htmlFor="finance-history-from-filter">Từ ngày<input id="finance-history-from-filter" type="date" value={historyFrom} onChange={(event)=>setHistoryFrom(event.target.value)}/></label><label className="finance-branch-filter" htmlFor="finance-history-to-filter">Đến ngày<input id="finance-history-to-filter" type="date" value={historyTo} onChange={(event)=>setHistoryTo(event.target.value)}/></label></search>{historyDateError&&<p className="finance-error" role="alert">{historyDateError}</p>}
         <RequestTable rows={historyRequests} role={role} busy={busy} onReview={review} onPay={pay} paymentForms={paymentForms} setPaymentForms={setPaymentForms} requestFiles={requestFiles} setRequestFiles={setRequestFiles} onUploadRequestFile={uploadRequestDoc} historyLabel="Lịch sử thanh toán và hoàn ứng"/>
       </section>}
-      {accountTab==='categories'&&<ExpenseCategoriesTab categories={categories} busy={busy} onSave={saveCategory} onSetActive={setCategoryActive} onDelete={deleteCategory}/>}
+      {accountTab==='categories'&&<ExpenseCategoriesTab categories={categories} busy={busy} error={error} onSave={saveCategory} onSetActive={setCategoryActive} onDelete={deleteCategory}/>}
     </>}
 
     {directDialogOpen&&role==='ACCOUNTANT'&&accountantSection==='plus'&&<DirectExpenseDialog key={recurringPayPeriod?.id||'direct'} branches={branches} categories={categories} busy={busy} recurringPeriod={recurringPayPeriod} onClose={()=>{setDirectDialogOpen(false);setRecurringPayPeriod(null);}} onSubmit={createDirectExpense}/>}

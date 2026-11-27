@@ -335,6 +335,13 @@ public class PayrollService {
 
   public record Payments(long version, List<Pay> payments) {}
 
+  public record BatchSelection(long version, UUID branchId, List<UUID> employeeIds) {}
+
+  public record PaymentBatch(UUID requestId, BatchSelection selection, LocalDate paymentDate,
+                             String bankName, String reference) {}
+
+  private record PayrollOutflow(UUID accountId, Object periodId) {}
+
   private LocalDate month(String value) {
     try {
       var yearMonth = YearMonth.parse(value);
@@ -683,6 +690,114 @@ public class PayrollService {
     return result;
   }
 
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> paymentHistory(Identity actor, String value, UUID branchId) {
+    financeAccess.accountant(actor);
+    LocalDate monthStart = month(value);
+    return payrollRepository.findSalaryPaymentHistory(
+      Timestamp.from(monthStart.atStartOfDay(ZONE).toInstant()),
+      Timestamp.from(monthStart.plusMonths(1).atStartOfDay(ZONE).toInstant()), branchId);
+  }
+
+  public List<Map<String, Object>> exportBatchRecipients(Identity actor, String value, BatchSelection selection) {
+    financeAccess.accountant(actor);
+    financeAccess.lock();
+    return batchEntries(period(month(value), false), selection, batchEmployeeIds(selection));
+  }
+
+  public Map<String, Object> payBatch(Identity actor, String value, PaymentBatch command) {
+    financeAccess.accountant(actor);
+    if (command == null || command.requestId() == null || command.paymentDate() == null
+        || command.paymentDate().isBefore(LocalDate.of(2000, 1, 1))
+        || command.paymentDate().isAfter(LocalDate.now(ZONE))) {
+      throw bad("Vui lòng nhập ngày chuyển khoản hợp lệ, không sau ngày hôm nay.");
+    }
+    String bankName = batchText(command.bankName(), "Ngân hàng chuyển");
+    String reference = batchText(command.reference(), "Mã giao dịch lô");
+    BatchSelection selection = command.selection();
+    Set<UUID> employeeIds = batchEmployeeIds(selection);
+
+    financeAccess.lock();
+    var payrollPeriod = period(month(value), false);
+    if (payrollPeriod == null) throw conflict("Chưa có bảng lương.");
+    Object periodId = payrollPeriod.get("id");
+    UUID batchId = command.requestId();
+    var recorded = payrollRepository.findPaymentBatch(batchId);
+    if (!recorded.isEmpty()) {
+      var existing = recorded.get(0);
+      if (!periodId.equals(existing.get("payroll_period_id")) || !selection.branchId().equals(existing.get("branch_id"))
+          || !command.paymentDate().toString().equals(existing.get("payment_date").toString())
+          || !bankName.equals(existing.get("bank_name")) || !reference.equals(existing.get("external_reference"))
+          || !actor.id().equals(existing.get("created_by"))
+          || !employeeIds.equals(new HashSet<>(payrollRepository.findBatchEmployees(batchId)))) {
+        throw conflict("Mã yêu cầu đã được dùng cho lô khác. Vui lòng kiểm tra lịch sử thanh toán.");
+      }
+      return Map.of("batchId", batchId, "count", employeeIds.size());
+    }
+
+    var entries = batchEntries(payrollPeriod, selection, employeeIds);
+    BigDecimal total = entries.stream().map(entry -> (BigDecimal) entry.get("net_amount"))
+      .reduce(BigDecimal.ZERO, BigDecimal::add);
+    LocalDate paymentDate = command.paymentDate();
+    var outflow = prepareOutflow(null, total, paymentDate);
+    payrollRepository.insertPaymentBatch(batchId, periodId, selection.branchId(), paymentDate, bankName, reference, actor.id());
+    Timestamp paidAt = Timestamp.from(paymentDate.atStartOfDay(ZONE).toInstant());
+    for (var entry : entries) {
+      UUID paymentId = UUID.randomUUID();
+      BigDecimal amount = (BigDecimal) entry.get("net_amount");
+      payrollRepository.insertSalaryPayment(paymentId, entry.get("id"), amount, "PAID", paidAt,
+        reference, null, actor.id(), batchId + "-" + entry.get("employee_id"), batchId);
+      payrollRepository.insertPayrollOutflow(UUID.randomUUID(), outflow.periodId(), paymentDate,
+        false, paymentId, actor.id(), outflow.accountId(), selection.branchId(), amount);
+    }
+    financeAccess.audit(actor, selection.branchId(), batchId, "RECORD_SALARY_PAYMENT_BATCH", null,
+      Map.of("payrollMonth", value, "paymentDate", paymentDate, "bankName", bankName, "reference", reference,
+        "employeeIds", selection.employeeIds(), "total", total));
+    increment(payrollPeriod);
+    return Map.of("batchId", batchId, "count", entries.size());
+  }
+
+  private static String batchText(String value, String label) {
+    String result = text(value, label, true);
+    if (result.length() > 200) throw bad(label + " chỉ được chứa tối đa 200 ký tự.");
+    return result;
+  }
+
+  private static Set<UUID> batchEmployeeIds(BatchSelection selection) {
+    if (selection == null || selection.branchId() == null || selection.employeeIds() == null
+        || selection.employeeIds().isEmpty() || selection.employeeIds().size() > 500) {
+      throw bad("Vui lòng chọn cơ sở và từ 1 đến 500 nhân viên để lập lô.");
+    }
+    var employeeIds = new HashSet<>(selection.employeeIds());
+    if (employeeIds.contains(null) || employeeIds.size() != selection.employeeIds().size()) {
+      throw bad("Danh sách lô có nhân viên không hợp lệ hoặc bị trùng.");
+    }
+    return employeeIds;
+  }
+
+  private List<Map<String, Object>> batchEntries(Map<String, Object> payrollPeriod, BatchSelection selection,
+      Set<UUID> employeeIds) {
+    if (payrollPeriod == null) throw conflict("Chưa có bảng lương.");
+    if (selection.version() != ((Number) payrollPeriod.get("version")).longValue()) {
+      throw conflict("Bảng lương đã thay đổi. Vui lòng tải lại và đối chiếu danh sách.");
+    }
+    var entries = payrollRepository.findBatchEntries(payrollPeriod.get("id"), selection.branchId(), selection.employeeIds());
+    if (entries.size() != employeeIds.size()) throw bad("Có nhân viên không thuộc bảng lương của cơ sở đã chọn.");
+    for (var entry : entries) {
+      if (!"CONFIRMED".equals(payrollPeriod.get("status")) && entry.get("submitted_branch_id") == null) {
+        throw conflict("Bảng lương chưa được chốt cho " + entry.get("name") + ".");
+      }
+      if (Boolean.TRUE.equals(entry.get("paid")) || ((BigDecimal) entry.get("net_amount")).signum() <= 0) {
+        throw conflict("Không còn khoản lương cần trả cho " + entry.get("name") + ". Vui lòng tải lại.");
+      }
+      if (List.of("bank_name_snapshot", "bank_account_snapshot", "bank_holder_snapshot").stream()
+          .anyMatch(key -> !(entry.get(key) instanceof String field) || field.isBlank())) {
+        throw bad("Thiếu thông tin tài khoản nhận lương của " + entry.get("name") + ".");
+      }
+    }
+    return entries;
+  }
+
   private void post(
     Identity actor,
     UUID account,
@@ -691,6 +806,13 @@ public class PayrollService {
     BigDecimal amount,
     UUID branch
   ) {
+    LocalDate today = LocalDate.now(ZONE);
+    var outflow = prepareOutflow(account, amount, today);
+    payrollRepository.insertPayrollOutflow(UUID.randomUUID(), outflow.periodId(), today, advance,
+      id, actor.id(), outflow.accountId(), branch, amount); // BR-83: paid movements only.
+  }
+
+  private PayrollOutflow prepareOutflow(UUID account, BigDecimal amount, LocalDate bookingDate) {
     var accounts = payrollRepository.lockActiveCentralFund(account);
     if (accounts.isEmpty()) throw bad("Chưa có quỹ kế toán đang hoạt động để ghi nhận chi tiền.");
     UUID accountId = (UUID) accounts.get(0).get("id");
@@ -704,12 +826,10 @@ public class PayrollService {
         amount +
         " đ. Vui lòng kiểm tra lại nguồn tiền hoặc số tiền."
     ); // MSG93.
-    LocalDate today = LocalDate.now(ZONE);
-    financialPeriodService.requireOpen(today, "ghi nhận chi trả payroll");
-    var period = payrollRepository.shareFinancialPeriod(today.withDayOfMonth(1));
-    if (!"OPEN".equals(period.get("status"))) throw conflict("Kỳ tài chính hiện tại đã đóng.");
-    UUID transaction = UUID.randomUUID();
-    payrollRepository.insertPayrollOutflow(transaction, period.get("id"), today, advance, id, actor.id(), accountId, branch, amount); // BR-83: paid movements only.
+    financialPeriodService.requireOpen(bookingDate, "ghi nhận chi trả lương");
+    var period = payrollRepository.shareFinancialPeriod(bookingDate.withDayOfMonth(1));
+    if (!"OPEN".equals(period.get("status"))) throw conflict("Kỳ tài chính của ngày thanh toán đã đóng.");
+    return new PayrollOutflow(accountId, period.get("id"));
   }
 
   public List<Map<String, Object>> export(Identity actor, String value) {

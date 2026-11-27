@@ -2,44 +2,33 @@ import { formatDateLabel } from '../../../shared/utils/dateLabel';
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 /** Author: HuyDV. UC-98..101 / BR-95..98/208: chốt tiền mặt trong ngày, kế toán đối soát. */
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { apiErrors } from '../../auth/services/authApi';
 import { financeApi as api, vnd, today, emptyMessage } from '../services/financeApi';
 import ShiftCashHandoverPanel from '../components/ShiftCashHandoverPanel';
 import MoneyInput from '../../../shared/components/MoneyInput';
 import DrawerFundingPanel from '../components/DrawerFundingPanel';
+import CashClosingRegister from '../components/CashClosingRegister';
+import { dateLabel as displayDate, dateKey, dateTimeLabel } from '../utils/financeDates';
+import '../styles/accountant-finance-workspace.css';
 import '../styles/finance.css';
 
 const labels = { SUBMITTED: 'Chờ kế toán đối soát', NEEDS_EXPLANATION: 'Cần bổ sung', RECONCILED: 'Đã đối soát' };
 const message = (e) => Object.values(apiErrors(e)).join(' ');
 const displayDate = (value) => formatDateLabel(value, '');
 
+
 export default function CashClosingPage({ user, accounting = false, readOnly = false }) {
   const location = useLocation();
-  useEffect(() => {
-    if (accounting && location.hash === '#cash-closing-notifications-title')
-      document.getElementById('cash-closing-notifications-title')?.focus();
-  }, [accounting, location.hash]);
   const initialQuery = new URLSearchParams(location.search);
-  const scopeBranchId = initialQuery.get('branchId') || '';
-  const deepLinkedReport = accounting && initialQuery.has('reportId');
   const base = accounting ? '/accounting/cash-closing' : '/branch-management/cash-closing';
   const branch = accounting ? undefined : user.branchId;
   const [tab, setTab] = useState(accounting ? 'history' : 'create');
   const [date, setDate] = useState(today());
   const [from, setFrom] = useState(initialQuery.get('from') || today().slice(0, 7) + '-01');
   const [to, setTo] = useState(initialQuery.get('to') || today());
-  const [status, setStatus] = useState(initialQuery.has('status') ? initialQuery.get('status') : accounting && !initialQuery.has('reportId') ? 'SUBMITTED' : '');
-  const [statusDate, setStatusDate] = useState(initialQuery.get('date') || today());
-  const [branchStatuses, setBranchStatuses] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [statusError, setStatusError] = useState('');
-  const [statusLoading, setStatusLoading] = useState(accounting);
-  const [notificationError, setNotificationError] = useState('');
-  const [notificationLoading, setNotificationLoading] = useState(accounting);
-  const [statusRevision, setStatusRevision] = useState(0);
-  const [notificationRevision, setNotificationRevision] = useState(0);
+  const [status, setStatus] = useState(initialQuery.get('status') || '');
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState(null);
   const [saved, setSaved] = useState(null);
@@ -63,19 +52,11 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => {
-    if (!accounting) return;
-    const query = new URLSearchParams(location.search);
-    if (query.has('from')) setFrom(query.get('from'));
-    if (query.has('to')) setTo(query.get('to'));
-    if (query.has('date')) setStatusDate(query.get('date'));
-    if (query.has('reportId')) setStatus('');
-  }, [accounting, location.search]);
-
-  useEffect(() => {
+    if (accounting) return undefined;
     let active = true;
     setLoading(true);
     setError('');
-    if (!deepLinkedReport) setDetail(null);
+    setDetail(null);
     setSaved(null);
     setPreview(null);
     setConfirm(false);
@@ -107,29 +88,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     };
     load();
     return () => { active = false; };
-  }, [base, branch, deepLinkedReport, tab, date, from, to, status, refresh]);
-
-  useEffect(() => {
-    if (!accounting) return undefined;
-    let active = true;
-    setStatusError(''); setStatusLoading(true); setBranchStatuses([]);
-    api.get(base + '/statuses', { date: statusDate, ...(scopeBranchId ? { branchId: scopeBranchId } : {}) })
-      .then((statuses) => { if (active) { if (Array.isArray(statuses)) setBranchStatuses(statuses); else setStatusError('Không tải được trạng thái báo cáo.'); } })
-      .catch((e) => { if (active) setStatusError(message(e) || 'Không tải được trạng thái báo cáo.'); })
-      .finally(() => { if (active) setStatusLoading(false); });
-    return () => { active = false; };
-  }, [accounting, base, scopeBranchId, statusDate, refresh, statusRevision]);
-
-  useEffect(() => {
-    if (!accounting) return undefined;
-    let active = true;
-    setNotificationError(''); setNotificationLoading(true); setNotifications([]);
-    api.get(base + '/notifications')
-      .then((notices) => { if (active) { if (Array.isArray(notices)) setNotifications(notices); else setNotificationError('Không tải được thông báo.'); } })
-      .catch((e) => { if (active) setNotificationError(message(e) || 'Không tải được thông báo.'); })
-      .finally(() => { if (active) setNotificationLoading(false); });
-    return () => { active = false; };
-  }, [accounting, base, refresh, notificationRevision]);
+  }, [accounting, base, branch, tab, date, from, to, status, refresh]);
 
   // Giữ cửa sổ Chi tiết từ nhánh hiện tại cùng luồng chốt/cấp két mới.
   useEffect(() => {
@@ -154,6 +113,8 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     if (!id) return;
     let active = true;
     setDetail(null);
+    setConclusion('');
+    setResolved(false);
     api.get(base + '/' + id).then((report) => { if (active) setDetail(report); })
       .catch((e) => { if (active) setError(message(e)); });
     return () => { active = false; };
@@ -161,7 +122,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
   const edit = (report) => {
     setEvidence(null);
     setConfirm(false);
-    setDate(String(report.business_date).slice(0, 10));
+    setDate(dateKey(report.business_date));
     setTab('create');
     setRefresh((previousRefresh) => previousRefresh + 1);
   };
@@ -217,6 +178,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
     setNotice('');
     try {
       await api.post(base + '/' + detail.id + (returned ? '/return' : '/reconcile'), { resolved, conclusion });
+      setDetail(null);
       setNotice(returned ? 'Đã yêu cầu quản lý cơ sở bổ sung báo cáo.' : 'Đã hoàn tất đối soát. Không phát sinh thao tác nhận hoặc nộp tiền.');
       setRefresh((previousRefresh) => previousRefresh + 1);
     } catch (e) { setError(message(e)); }
@@ -228,37 +190,22 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
   const canCorrect = saved?.status === 'NEEDS_EXPLANATION';
   const remittanceBlocked = preview?.closingBlocked || (!!saved && date !== today());
 
-  return <section className="finance-page cash-closing-page">
-    <h1>{accounting ? 'Đối soát báo cáo cuối ngày' : 'Chốt quỹ cuối ngày'}</h1>
-    <nav className="finance-tabs" aria-label="Báo cáo thu ngân">
-      {!accounting && <button aria-current={tab === 'create' ? 'page' : undefined} onClick={() => setTab('create')}>Báo cáo cuối ngày</button>}
-      <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => setTab('history')}>Lịch sử báo cáo</button>
-      {!accounting && <button aria-current={tab === 'remit' ? 'page' : undefined} onClick={() => setTab('remit')}>Nộp tiền khỏi két</button>}
-      {!accounting && <button aria-current={tab === 'handover' ? 'page' : undefined} onClick={() => setTab('handover')}>Bàn giao ca</button>}
-    </nav>
-    {accounting && <section className="finance-card cash-closing-statuses" aria-label="Trạng thái báo cáo chốt quỹ ngày theo cơ sở">
-      <div className="finance-section-heading"><div><h2>Trạng thái báo cáo chốt quỹ ngày</h2><p>Trạng thái gửi báo cáo theo cơ sở và ngày; báo cáo hiệu quả tháng được tính riêng từ giao dịch.</p></div><label>Ngày báo cáo<input type="date" value={statusDate} max={today()} onChange={(e) => setStatusDate(e.target.value)} /></label></div>
-      {statusLoading && <p role="status">Đang tải trạng thái báo cáo…</p>}
-      {statusError && <p className="finance-error" role="alert">{statusError} <button type="button" onClick={() => setStatusRevision((previousStatusRevision) => previousStatusRevision + 1)}>Thử lại</button></p>}
-      <div className="finance-table-wrap"><table><thead><tr><th>Cơ sở</th><th>Kỳ</th><th>Trạng thái</th><th>Bản ghi</th></tr></thead><tbody>
-        {branchStatuses.map((item) => <tr key={item.branchId}><td>{item.branchName}</td><td>{displayDate(item.businessDate)}</td><td>{item.status === 'NEEDS_EXPLANATION' ? 'Cần bổ sung' : item.status === 'SUBMITTED' ? 'Đã gửi' : 'Chưa gửi'}</td><td>{item.closingId ? <button type="button" onClick={() => open(item.closingId)}>Mở báo cáo</button> : '—'}</td></tr>)}
-      </tbody></table></div>
-      {!statusLoading && !branchStatuses.length && !statusError && <p role="status">Chưa có cơ sở trong phạm vi báo cáo.</p>}
-    </section>}
-    {accounting && <section className="finance-card cash-closing-notifications" aria-label="Các lần gửi báo cáo chốt quỹ gần đây">
-      <h2 id="cash-closing-notifications-title" tabIndex={-1}>Thông báo báo cáo đã gửi</h2>
-      {notificationLoading ? <p role="status">Đang tải thông báo…</p>
-        : notificationError ? <p className="finance-error" role="alert">{notificationError} <button type="button" onClick={() => setNotificationRevision((previousNotificationRevision) => previousNotificationRevision + 1)}>Thử lại</button></p>
-          : notifications.length ? <ul>{notifications.map((item) => <li key={item.id}><Link to={`/ke-toan/chot-quy?${new URLSearchParams({ reportId: item.closingId, from: item.businessDate, to: item.businessDate, date: item.businessDate })}`}>{item.branchName} · {item.reportType} · Ngày kinh doanh {displayDate(item.businessDate)} · Gửi lúc {new Date(item.sentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · Lần gửi {item.reportVersion} · Xem báo cáo hiện tại và lịch sử phiên bản</Link></li>)}</ul>
-            : <p role="status">Chưa có thông báo gửi báo cáo.</p>}
-    </section>}
+  return <section className={`finance-page cash-closing-page${accounting ? ' cash-closing-accountant' : ''}`}>
+    <h1>{accounting ? 'Đối soát quỹ' : 'Chốt quỹ cuối ngày'}</h1>
+    {accounting ? <CashClosingRegister refresh={refresh} busy={busy} onOpen={open}/> :
+      <nav className="finance-tabs" aria-label="Báo cáo thu ngân">
+        <button aria-current={tab === 'create' ? 'page' : undefined} onClick={() => setTab('create')}>Báo cáo cuối ngày</button>
+        <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => setTab('history')}>Lịch sử báo cáo</button>
+        <button aria-current={tab === 'remit' ? 'page' : undefined} onClick={() => setTab('remit')}>Nộp tiền khỏi két</button>
+        <button aria-current={tab === 'handover' ? 'page' : undefined} onClick={() => setTab('handover')}>Bàn giao ca</button>
+      </nav>}
     {tab === 'handover' ? <ShiftCashHandoverPanel user={user} manager readOnly={readOnly} /> : <>
     {!accounting && preview?.pendingHandovers > 0 && <p className="finance-warning" role="status">
       Có {preview.pendingHandovers} bàn giao ca chênh lệch cần xử lý.{' '}
       <button type="button" onClick={() => setTab('handover')}>Xem bàn giao ca</button>
     </p>}
     <ToastStack error={error} notice={notice} onCloseError={() => setError('')} onCloseNotice={() => setNotice('')} />
-    <div className="finance-toolbar">
+    {!accounting && <div className="finance-toolbar">
       {tab === 'create' || tab === 'remit' ? <label>Ngày
         <input type="date" value={date} max={today()} onChange={(e) => changeDate(e.target.value)} />
       </label> : <>
@@ -271,8 +218,8 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         </select></label>
       </>}
       <button disabled={loading || busy} onClick={() => setRefresh((previousRefresh) => previousRefresh + 1)}>Tải lại</button>
-    </div>
-    {loading ? <p role="status">Đang tải…</p> : preview && (tab === 'create' || tab === 'remit') ? <>
+    </div>}
+    {!accounting && loading ? <p role="status">Đang tải…</p> : preview && (tab === 'create' || tab === 'remit') ? <>
       {tab === 'remit' ? <section className="cash-drawer-workspace" aria-label="Nộp tiền và cấp lại tiền két">
       {preview.cashCycle?.due ? <p className="finance-warning" role="alert">Đã {preview.cashCycle.elapsedDays} ngày từ đầu chu kỳ giữ tiền. Đến hạn 5 ngày: quản lý cơ sở cần nộp hết tiền trong két, rồi yêu cầu cấp lại tiền lẻ.</p>
         : null}
@@ -315,18 +262,19 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         </form>
       </div>}
     </> : <div>
-      <article className="finance-card finance-table-wrap"><PaginatedTable pageSize={5}>
+      {!accounting && <article className="finance-card finance-table-wrap"><PaginatedTable pageSize={5}>
         <thead><tr><th>Ngày / cơ sở</th><th>Thực đếm</th><th>Chênh lệch tiền mặt</th><th>Trạng thái</th><th /></tr></thead>
         <tbody>{shown.map((row) => <tr key={row.id}>
           <td>{displayDate(row.business_date)}<small>{row.branchName}</small></td>
           <td>{vnd(row.actual_closing)}</td><td>{vnd(row.variance)}</td>
           <td>{labels[row.status]}</td><td><button disabled={busy} onClick={() => open(row.id)}>Chi tiết</button></td>
         </tr>)}</tbody>
-      </PaginatedTable>{!shown.length && <p>{emptyMessage}</p>}</article>
+      </PaginatedTable>{!shown.length && <p>{emptyMessage}</p>}</article>}
       {detail && <div className="cash-closing-dialog-backdrop">
         <article className="finance-card cash-closing-dialog" role="dialog"
           aria-modal="true" aria-labelledby="cash-closing-dialog-title">
         <div className="finance-actions"><h2 id="cash-closing-dialog-title">{displayDate(detail.business_date)} · {detail.branchName}</h2><button type="button" autoFocus disabled={busy} onClick={() => setDetail(null)}>Đóng</button></div>
+        {error && <p className="finance-error" role="alert">{error}</p>}
         <p>{labels[detail.status]} · Người gửi: {detail.submittedBy} · Phiên bản {detail.report_version || 'cũ'}</p>
         <ReportSummary source={detail.source} />
         <Line label="Tiền mặt thực đếm" value={detail.actual_closing} />
@@ -338,7 +286,7 @@ export default function CashClosingPage({ user, accounting = false, readOnly = f
         }}>Minh chứng phiên bản {evidenceFile.revision || 'cũ'}: {evidenceFile.name}</button>)}
         <details><summary>Giao dịch nguồn lúc gửi</summary><MovementTable rows={detail.source.movements || []} /></details>
         {detail.versions?.length > 1 && <details><summary>Lịch sử các phiên bản báo cáo</summary>{<PaginatedList pageSize={5}>{detail.versions.map((version) => <div key={version.revision} className="finance-info">
-          <strong>Phiên bản {version.revision} · {version.username} · {new Date(version.submitted_at).toLocaleString('vi-VN')}</strong>
+          <strong>Phiên bản {version.revision} · {version.username} · {dateTimeLabel(version.submitted_at)}</strong>
           <p>Thực đếm {vnd(version.payload.actual_closing)} · Chênh lệch {vnd(version.payload.variance)}</p>
           <p>{version.payload.explanation || 'Không có giải trình.'}</p>
         </div>)}</PaginatedList>}</details>}
@@ -385,6 +333,6 @@ function ReportSummary({ source }) {
 function MovementTable({ rows }) {
   return <div className="finance-table-wrap"><PaginatedTable pageSize={5}>
     <thead><tr><th>Giao dịch</th><th>Số tiền</th></tr></thead>
-    <tbody>{rows.map((row) => <tr key={row.id}><td>{row.description}<small>{new Date(row.time).toLocaleString('vi-VN')}</small></td><td>{vnd(row.amount)}</td></tr>)}</tbody>
+    <tbody>{rows.map((row) => <tr key={row.id}><td>{row.description}<small>{dateTimeLabel(row.time)}</small></td><td>{vnd(row.amount)}</td></tr>)}</tbody>
   </PaginatedTable>{!rows.length && <p>Không có giao dịch tiền mặt trong ngày.</p>}</div>;
 }

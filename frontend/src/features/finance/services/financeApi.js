@@ -2,6 +2,15 @@
 /** Author: HuyDV. UC-91..101: CSRF và phạm vi cơ sở cho API lương/chốt quỹ. */
 import api from '../../../api/client';
 import apiClient from '../../../api/client';
+function saveDownload(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const legacyFinanceApi = {
   async get(path, params, branch) {
     return (await api.get(path, { params, headers: branch ? { 'X-GCMB-Branch-Id': branch } : {} }))
@@ -25,12 +34,15 @@ const legacyFinanceApi = {
       responseType: 'blob',
       headers: branch ? { 'X-GCMB-Branch-Id': branch } : {},
     });
-    const url = URL.createObjectURL(response.data);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveDownload(response.data, name);
+  },
+  async downloadPost(path, body, name) {
+    const { data: csrf } = await api.get('/auth/csrf');
+    const { data } = await api.post(path, body, {
+      headers: { [csrf.headerName]: csrf.token },
+      responseType: 'blob',
+    });
+    saveDownload(data, name);
   },
 };
 export const vnd = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`;

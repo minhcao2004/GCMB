@@ -20,6 +20,11 @@ const statusLabels = {
   FAILED: 'Thất bại',
 };
 const filterLabels = { open: 'Chờ xử lý', paid: 'Đã hoàn', all: 'Tất cả' };
+const REFUND_PAGE_SIZE = 10;
+const refundTimeZone = 'Asia/Ho_Chi_Minh';
+const refundDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: refundTimeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+});
 // BR-115, BR-116: giao diện chỉ lọc định dạng/dung lượng; backend kiểm tra chữ ký nội dung.
 const MAX_EVIDENCE_BYTES = 20_000_000;
 const evidenceMimeTypes = new Set([
@@ -35,8 +40,14 @@ function errorText(error, fallback = 'Không tải được yêu cầu hoàn c�
 function dateTimeText(value) {
   if (!value) return 'Chưa ghi nhận';
   return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: refundTimeZone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(value));
+}
+
+function requestDate(value) {
+  if (!value) return '';
+  const parts = Object.fromEntries(refundDateFormatter.formatToParts(new Date(value)).map(({ type, value }) => [type, value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function statusClass(status) {
@@ -225,10 +236,11 @@ export default function AccountantRefundPage() {
   const [selectedId, setSelectedId] = useState('');
   const [filter, setFilter] = useState('open');
   const [search, setSearch] = useState('');
+  const [{ branchId, from, to }, setScope] = useState({ branchId: '', from: '', to: '' });
   const [mobileView, setMobileView] = useState('queue');
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [mutationError, setMutationError] = useState('');
+  const [mutationError, setMutationError] = useState(null);
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
@@ -254,8 +266,6 @@ export default function AccountantRefundPage() {
       if (!active) return;
       const items = result.items || [];
       setQueue({ branchName: result.branchName, items });
-      setSelectedId((current) => current && items.some((item) => item.id === current)
-        ? current : items.find((item) => openStatuses.has(item.status))?.id || items[0]?.id || '');
     }).catch((error) => {
       if (!active) return;
       setQueue(null);
@@ -265,23 +275,47 @@ export default function AccountantRefundPage() {
   }, [user, reload, retryQueue]);
 
   const items = useMemo(() => queue?.items || [], [queue]);
-  const visibleItems = useMemo(() => items.filter((item) => {
+  const branches = useMemo(() => [...new Map(items.map((item) => [item.branchId, item.branchName])).entries()]
+    .sort((left, right) => left[1].localeCompare(right[1], 'vi')), [items]);
+  const invalidRange = Boolean(from && to && from > to);
+  const scopedItems = useMemo(() => {
+    if (invalidRange) return [];
+    return items.filter((item) => {
+      if (branchId && item.branchId !== branchId) return false;
+      if (!from && !to) return true;
+      const date = requestDate(item.requestedAt);
+      return date && (!from || date >= from) && (!to || date <= to);
+    });
+  }, [items, branchId, from, to, invalidRange]);
+  const visibleItems = useMemo(() => scopedItems.filter((item) => {
     const matchesFilter = filter === 'all' || (filter === 'open' ? openStatuses.has(item.status) : item.status === 'PAID');
     const searchText = `${item.bookingCode} ${item.branchName || ''} ${item.customerName} ${item.phone || ''} ${item.bankName} ${item.bankAccount}`.toLocaleLowerCase('vi');
     return matchesFilter && searchText.includes(search.trim().toLocaleLowerCase('vi'));
-  }), [items, filter, search]);
-  const refundPagination = usePagination(visibleItems, 5, `${filter}:${search}`);
-  const selected = items.find((item) => item.id === selectedId) || null;
+  }), [scopedItems, filter, search]);
+  const refundPagination = usePagination(visibleItems, REFUND_PAGE_SIZE, JSON.stringify([filter, search, branchId, from, to]));
+  const selected = visibleItems.find((item) => item.id === selectedId) || refundPagination.items[0] || null;
   const emptyQueueMessage = items.length === 0 ? 'Chưa có yêu cầu hoàn cọc nào.'
-    : filter === 'open' ? 'Không có yêu cầu đang chờ xử lý.' : 'Không tìm thấy yêu cầu phù hợp.';
-  const pendingItems = items.filter((item) => openStatuses.has(item.status));
+    : filter === 'open' && !search.trim() && !branchId && !from && !to ? 'Không có yêu cầu đang chờ xử lý.'
+      : 'Không tìm thấy yêu cầu phù hợp.';
+  const pendingItems = scopedItems.filter((item) => openStatuses.has(item.status));
   const pendingAmount = pendingItems.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const refundedAmount = items.filter((item) => item.status === 'PAID').reduce((total, item) => total + Number(item.amount || 0), 0);
+  const refundedAmount = scopedItems.filter((item) => item.status === 'PAID').reduce((total, item) => total + Number(item.amount || 0), 0);
 
-  useEffect(() => {
-    if (visibleItems.length && !visibleItems.some((item) => item.id === selectedId)) setSelectedId(visibleItems[0].id);
-    else if (!visibleItems.length && selectedId) setSelectedId('');
-  }, [visibleItems, selectedId]);
+  function resetSelection() {
+    setSelectedId('');
+    setMutationError(null);
+    setMobileView('queue');
+  }
+
+  function changeFilter(setter, value) {
+    setter(value);
+    refundPagination.setPage(0);
+    resetSelection();
+  }
+
+  function updateScope(key, value) {
+    changeFilter(setScope, (current) => ({ ...current, [key]: value }));
+  }
 
   async function logout() {
     setLogoutBusy(true);
@@ -291,22 +325,25 @@ export default function AccountantRefundPage() {
 
   async function completeRefund(item, externalReference, image) {
     setBusy(true);
-    setMutationError('');
+    setMutationError(null);
     setNotice('');
     try {
       const result = await depositApi.completeRefundRequest(item.id, externalReference, image);
       setFilter('all');
+      setSelectedId(item.id);
       const proofNotice = image ? ' và lưu tệp minh chứng.'
         : externalReference?.trim() ? ' theo mã giao dịch.' : ' không kèm mã giao dịch hoặc tệp minh chứng.';
       setNotice(`Đã ghi nhận hoàn ${formatVnd(result.amount)} tiền cọc${proofNotice}`);
       setReload((value) => value + 1);
-    } catch (error) { setMutationError(errorText(error, 'Không thể ghi nhận hoàn cọc. Dữ liệu đã nhập vẫn được giữ để bạn thử lại.')); }
+    } catch (error) {
+      setMutationError({ id: item.id, message: errorText(error, 'Không thể ghi nhận hoàn cọc. Dữ liệu đã nhập vẫn được giữ để bạn thử lại.') });
+    }
     finally { setBusy(false); }
   }
 
   function selectRequest(id) {
     setSelectedId(id);
-    setMutationError('');
+    setMutationError(null);
     setMobileView('detail');
   }
 
@@ -338,17 +375,26 @@ export default function AccountantRefundPage() {
         </div>
       </section>
       <div className="accounting-refund-controls">
-        <div className="accounting-refund-filters" role="group" aria-label="Lọc yêu cầu hoàn cọc">
+        <div className="accounting-refund-filters" role="group" aria-label="Trạng thái hoàn cọc">
           {Object.entries(filterLabels).map(([key, label]) => <button key={key} type="button" className={filter === key ? 'is-active' : ''}
-            aria-pressed={filter === key} onClick={() => setFilter(key)}>
+            aria-pressed={filter === key} onClick={() => changeFilter(setFilter, key)}>
             {label}{key === 'open' && <span>{pendingItems.length}</span>}
           </button>)}
         </div>
         <label className="accounting-refund-search">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.4 4.4"/></svg>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Khách hàng, cơ sở, SĐT, ngân hàng, số tài khoản" aria-label="Tìm theo khách hàng, cơ sở, số điện thoại, ngân hàng hoặc số tài khoản" />
+          <input type="search" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} placeholder="Khách hàng, cơ sở, SĐT, ngân hàng, số tài khoản" aria-label="Tìm theo khách hàng, cơ sở, số điện thoại, ngân hàng hoặc số tài khoản" />
         </label>
+        <div className="accounting-refund-scope-filters" role="group" aria-label="Lọc theo cơ sở và ngày gửi">
+          <label>Cơ sở<select value={branchId} onChange={(event) => updateScope('branchId', event.target.value)}>
+            <option value="">Tất cả cơ sở</option>
+            {branches.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select></label>
+          <label>Ngày gửi từ<input type="date" value={from} onChange={(event) => updateScope('from', event.target.value)} /></label>
+          <label>Ngày gửi đến<input type="date" value={to} onChange={(event) => updateScope('to', event.target.value)} /></label>
+        </div>
       </div>
+      {invalidRange && <p className="booking-inline-error" role="alert">Ngày bắt đầu lọc phải bằng hoặc trước ngày kết thúc lọc.</p>}
       <div className="accounting-refund-content-grid" data-mobile-view={mobileView}>
         <section className="deposit-table-card" aria-label="Danh sách yêu cầu hoàn cọc">
           <div className="deposit-table-scroll accounting-refund-desktop-list">
@@ -360,8 +406,8 @@ export default function AccountantRefundPage() {
                 {!loading && !loadError && visibleItems.length === 0 && <tr className="accounting-refund-table-row--message"><td className="deposit-table-message" colSpan="4">
                   {emptyQueueMessage}
                 </td></tr>}
-                {!loading && refundPagination.items.map((item) => <tr key={item.id} className={item.id === selectedId ? 'is-selected' : ''}
-                  onClick={() => selectRequest(item.id)} tabIndex={0} aria-selected={item.id === selectedId}
+                {!loading && refundPagination.items.map((item) => <tr key={item.id} className={item.id === selected?.id ? 'is-selected' : ''}
+                  onClick={() => selectRequest(item.id)} tabIndex={0} aria-selected={item.id === selected?.id}
                   onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectRequest(item.id); } }}>
                   <td><small><b>Cơ sở</b> · {item.branchName || '—'}</small><small><b>Gửi lúc</b> · {dateTimeText(item.requestedAt)}</small></td>
                   <td><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></td>
@@ -376,8 +422,8 @@ export default function AccountantRefundPage() {
             {!loading && loadError && <p className="accounting-refund-mobile-state accounting-refund-mobile-state--error" role="alert">Danh sách chưa tải được.</p>}
             {!loading && !loadError && visibleItems.length === 0 && <p className="accounting-refund-mobile-state">{emptyQueueMessage}</p>}
             {!loading && refundPagination.items.map((item) => <button key={item.id} type="button"
-              className={`accounting-refund-mobile-card${item.id === selectedId ? ' is-selected' : ''}`}
-              aria-pressed={item.id === selectedId} onClick={() => selectRequest(item.id)}>
+              className={`accounting-refund-mobile-card${item.id === selected?.id ? ' is-selected' : ''}`}
+              aria-pressed={item.id === selected?.id} onClick={() => selectRequest(item.id)}>
               <span className="accounting-refund-mobile-card-heading">
                 <span className={statusClass(item.status)}>{statusLabels[item.status] || 'Chưa xác định'}</span></span>
               <span className="accounting-refund-mobile-customer"><strong>{item.customerName}</strong><small>{item.phone || 'Không có số điện thoại'}</small></span>
@@ -387,10 +433,11 @@ export default function AccountantRefundPage() {
             </button>)}
           </div>
           {(loading || visibleItems.length <= refundPagination.pageSize) && <footer className="deposit-table-footer"><span>{loading ? 'Đang cập nhật danh sách' : `${visibleItems.length} yêu cầu`}</span></footer>}
-          <Pagination {...refundPagination} onPageChange={refundPagination.setPage} disabled={loading}
+          <Pagination {...refundPagination} onPageChange={(page) => { refundPagination.setPage(page); resetSelection(); }} disabled={loading}
             label="Phân trang hoàn tiền cọc" />
         </section>
-        <RefundDetails item={selected} busy={busy} error={mutationError} onComplete={(reference, image) => completeRefund(selected, reference, image)}
+        <RefundDetails item={selected} busy={busy} error={mutationError?.id === selected?.id ? mutationError?.message : null}
+          onComplete={(reference, image) => completeRefund(selected, reference, image)}
           onBackToQueue={() => setMobileView('queue')} />
       </div>
     </div>

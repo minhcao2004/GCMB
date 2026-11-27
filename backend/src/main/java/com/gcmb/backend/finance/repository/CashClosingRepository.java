@@ -187,26 +187,39 @@ public class CashClosingRepository {
 
     public List<Map<String, Object>> findBranchClosingStatuses(LocalDate businessDate, UUID branchId) {
         return jdbcTemplate.queryForList("""
-            SELECT b.id AS "branchId",b.name AS "branchName",?::date AS "businessDate",c.id AS "closingId",
-              CASE WHEN c.state='NEEDS_EXPLANATION' THEN 'NEEDS_EXPLANATION'
-                   WHEN c.state IS NULL THEN 'NOT_SUBMITTED' ELSE 'SUBMITTED' END AS status,
-              c.submitted_at AS "submittedAt"
+            SELECT b.id AS "branchId",b.name AS "branchName",?::date::text AS "businessDate",c.id AS "closingId",
+              coalesce(c.state,'NOT_SUBMITTED') AS status,c.submitted_at AS "submittedAt",
+              c.expected_closing AS "expectedClosing",c.actual_closing AS "actualClosing",c.variance,c.explanation
             FROM gcmb.branch b LEFT JOIN LATERAL (
-              SELECT d.id,coalesce(r.state,d.status) state,coalesce(v.submitted_at,d.submitted_at) submitted_at
+              SELECT d.id,coalesce(r.state,d.status) state,coalesce(v.submitted_at,d.submitted_at) submitted_at,
+                coalesce((v.payload->>'expected_closing')::numeric,d.expected_closing) expected_closing,
+                coalesce((v.payload->>'actual_closing')::numeric,d.actual_closing) actual_closing,
+                coalesce((v.payload->>'variance')::numeric,d.variance) variance,
+                coalesce(v.payload->>'explanation',d.explanation) explanation
               FROM gcmb.daily_cash_closing d
               LEFT JOIN gcmb.cash_closing_report r ON r.closing_id=d.id
               LEFT JOIN gcmb.cash_closing_report_revision v ON v.closing_id=r.closing_id AND v.revision=r.revision
-              WHERE d.branch_id=b.id AND d.business_date=?
+              WHERE d.branch_id=b.id AND d.business_date=? AND coalesce(r.state,d.status)<>'DRAFT'
               ORDER BY d.submitted_at DESC,d.id DESC LIMIT 1
             ) c ON true
             WHERE (CAST(? AS uuid) IS NULL OR b.id=?) ORDER BY b.name,b.id
             """, businessDate, businessDate, branchId, branchId);
     }
 
+    public long countUnreconciled(LocalDate from, LocalDate to, UUID branchId) {
+        return jdbcTemplate.queryForObject("""
+            SELECT count(*) FROM gcmb.daily_cash_closing c
+            LEFT JOIN gcmb.cash_closing_report r ON r.closing_id=c.id
+            WHERE c.business_date BETWEEN ? AND ?
+              AND (CAST(? AS uuid) IS NULL OR c.branch_id=?)
+              AND coalesce(r.state,c.status) IN ('SUBMITTED','NEEDS_EXPLANATION')
+            """, Long.class, from, to, branchId, branchId);
+    }
+
     public List<Map<String, Object>> findNotifications(UUID recipientId) {
         return jdbcTemplate.queryForList("""
             SELECT n.id,n.closing_id AS "closingId",n.report_version AS "reportVersion",
-              n.created_at AS "sentAt",b.name AS "branchName",c.business_date AS "businessDate",
+              n.created_at AS "sentAt",b.name AS "branchName",c.business_date::text AS "businessDate",
               'Báo cáo chốt quỹ ngày' AS "reportType"
             FROM gcmb.cash_closing_notification n
             JOIN gcmb.daily_cash_closing c ON c.id=n.closing_id

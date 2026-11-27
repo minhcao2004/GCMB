@@ -1,0 +1,175 @@
+.finance-page.accountant-payroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 1500px;
+  gap: 18px;
+}
+
+.accountant-payroll-heading,
+.accountant-payroll-section-head,
+.accountant-payroll-selection,
+.accountant-payroll-export-line,
+.accountant-payroll-dialog-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.accountant-payroll :is(h1, h2),
+.accountant-payroll p.accountant-payroll-empty {
+  margin: 0;
+}
+
+.accountant-payroll-heading h1 { font-size: clamp(24px, 2.5vw, 32px); }
+.accountant-payroll-section-head h2 { font-size: 19px; }
+.accountant-payroll-section-head span { display: block; margin-top: 4px; color: var(--finance-copy); font-size: 13px; }
+.accountant-payroll-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.accountant-payroll .accountant-payroll-actions button,
+.accountant-payroll .accountant-payroll-section-head button,
+.accountant-payroll .accountant-payroll-tabs button,
+.accountant-payroll .accountant-payroll-modal button { min-height: 42px; font-size: 13px; }
+
+.accountant-payroll-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.accountant-payroll-metrics > div {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: clamp(14px, 2vw, 22px);
+  min-width: 0;
+  border: 1px solid var(--finance-line);
+  border-radius: var(--gcmb-radius-panel);
+  background: var(--gcmb-color-panel);
+}
+.accountant-payroll-metrics .is-due {
+  color: var(--gcmb-color-primary-contrast, #fff);
+  border-color: #292844;
+  background: #292844;
+}
+.accountant-payroll-metrics dt { font-size: 13px; font-weight: 650; }
+.accountant-payroll-metrics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(19px, 2.4vw, 31px);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.accountant-payroll-metrics .metric-count { color: var(--finance-copy); font-size: 12px; font-weight: 500; }
+.accountant-payroll-metrics .is-due .metric-count { color: #e1ddf2; }
+
+.accountant-payroll .accountant-payroll-panel,
+.accountant-payroll .accountant-payroll-secondary {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: clamp(14px, 2vw, 22px);
+}
+.accountant-payroll-secondary summary { font-weight: 700; cursor: pointer; }
+.accountant-payroll-secondary[open] summary { margin-bottom: 12px; }
+.accountant-payroll-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+}
+.accountant-payroll-filters label,
+.accountant-payroll-dialog-form fieldset > label:not(.accountant-payroll-check) {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--finance-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.accountant-payroll :is(.accountant-payroll-filters, .accountant-payroll-dialog-form) :is(input:not([type=checkbox]), select) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.accountant-payroll-selection,
+.accountant-payroll-dialog-summary {
+  padding: 12px 14px;
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-info-soft, #e8f8fb);
+}
+.accountant-payroll-selection-copy,
+.accountant-payroll-dialog-summary > div,
+.accountant-payroll-bank { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.accountant-payroll-selection-copy { font-size: 13px; }
+.accountant-payroll-warning { color: var(--finance-warning-text, #825700); font-size: 12px; font-weight: 650; }
+.accountant-payroll-bank span { color: var(--finance-copy); font-size: 12px; }
+.accountant-payroll :is(.accountant-payroll-register, .accountant-payroll-panel table) { min-width: 760px; }
+.accountant-payroll .accountant-payroll-scroll th { font-size: 12px; }
+.accountant-payroll .accountant-payroll-scroll td { vertical-align: middle; font-size: 13px; }
+.accountant-payroll .accountant-payroll-scroll td strong { font-size: inherit; }
+.accountant-payroll .accountant-payroll-scroll td small { font-size: 12px; }
+.accountant-payroll .accountant-payroll-scroll td button { min-height: 36px; }
+.accountant-payroll .accountant-payroll-scroll { max-height: none; min-width: 0; }
+.accountant-payroll .accountant-payroll-scroll .is-selected { background: var(--gcmb-color-info-soft, #e8f8fb); }
+.accountant-payroll .accountant-payroll-scroll .accountant-payroll-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.accountant-payroll input[type=checkbox] { width: 18px; height: 18px; margin: 0; accent-color: var(--finance-accent); }
+.accountant-payroll-empty { padding: 24px 12px; color: var(--finance-copy); text-align: center; }
+.accountant-payroll-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--gcmb-radius-control);
+  background: var(--gcmb-color-bg);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.accountant-payroll-status.is-paid { color: var(--finance-success-text); background: var(--gcmb-color-success-soft); }
+.accountant-payroll-status.is-pending { color: var(--finance-warning-text); background: var(--gcmb-color-warning-soft); }
+.accountant-payroll-status.is-failed { color: var(--gcmb-color-danger); background: var(--gcmb-color-danger-soft); }
+
+.accountant-payroll .accountant-payroll-modal { width: min(880px, calc(100% - 24px)); max-height: calc(100dvh - 24px); }
+.accountant-payroll-modal .gcmb-ui-dialog__body { display: grid; gap: 14px; }
+.accountant-payroll-modal .gcmb-ui-dialog__footer { flex-wrap: wrap; }
+.accountant-payroll-modal .accountant-payroll-scroll table { min-width: 410px; }
+.accountant-payroll-modal .accountant-payroll-scroll { max-height: 300px; }
+.accountant-payroll-money { font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.accountant-payroll-export-line p { flex: 1 1 220px; margin: 0; font-size: 13px; color: var(--finance-copy); }
+.accountant-payroll-dialog-form { display: grid; gap: 12px; }
+.accountant-payroll-dialog-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--finance-line);
+  border-radius: var(--gcmb-radius-control);
+}
+.accountant-payroll-dialog-form legend { padding: 0 6px; font-weight: 700; }
+.accountant-payroll .accountant-payroll-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  color: var(--finance-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.accountant-payroll-check input { flex: 0 0 18px; }
+.accountant-payroll-history-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 12px; margin: 0; }
+.accountant-payroll-history-meta dt { color: var(--finance-copy); font-size: 13px; }
+.accountant-payroll-history-meta dd { margin: 4px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+
+@media (max-width: 580px) {
+  .accountant-payroll .accountant-payroll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .accountant-payroll-metrics .is-due { grid-column: 1 / -1; }
+  .accountant-payroll-selection .accountant-payroll-actions { width: 100%; }
+  .accountant-payroll-selection .finance-primary { flex: 1 1 100%; }
+  .accountant-payroll-modal .gcmb-ui-dialog__body,
+  .accountant-payroll-modal .gcmb-ui-dialog__header,
+  .accountant-payroll-modal .gcmb-ui-dialog__footer { padding: 14px; }
+}

@@ -33,6 +33,8 @@ test.each(['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'])('shows the combined total befor
   render(<ExpenseBreakdownReportPage initialUser={{ role }} />);
 
   const total = await screen.findByText('490.000 ₫');
+  const totalLabel = role === 'ACCOUNTANT' ? 'Tổng chi' : 'Tổng chi phí';
+  expect(screen.getByText(totalLabel).nextElementSibling).toBe(total);
   const filters = screen.getByRole('group', { name: 'Bộ lọc báo cáo chi phí' });
   expect(total.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText('3 khoản chi')).toBeInTheDocument();
@@ -45,7 +47,7 @@ test.each(['HEAD_OFFICE_MANAGER', 'ACCOUNTANT'])('shows the combined total befor
   }));
 
   fireEvent.change(within(filters).getByLabelText('Danh mục'), { target: { value: 'investment' } });
-  await waitFor(() => expect(screen.getByText('Tổng chi phí').nextElementSibling).toHaveTextContent('150.000 ₫'));
+  await waitFor(() => expect(screen.getByText(totalLabel).nextElementSibling).toHaveTextContent('150.000 ₫'));
 
   fireEvent.click(screen.getByRole('button', { name: 'Xem khoản chi' }));
   await waitFor(() => expect(api.get).toHaveBeenCalledWith('/accounting/reports/expense-breakdown/details', {
