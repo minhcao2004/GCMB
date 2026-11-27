@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.gcmb.backend.dashboard.ReportCache;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -47,13 +48,19 @@ public class FinancialReportRepository {
     }
 
     private final JdbcTemplate jdbcTemplate;
+    private final ReportCache reportCache;
 
-    public FinancialReportRepository(JdbcTemplate jdbcTemplate) {
+    public FinancialReportRepository(JdbcTemplate jdbcTemplate, ReportCache reportCache) {
         this.jdbcTemplate = jdbcTemplate;
+        this.reportCache = reportCache;
     }
 
     // Dòng nhập từ file nguồn (KiotViet/booking) đã chuẩn hóa số tiền theo từng cột của file gốc.
     public List<Map<String, Object>> sourceImportRows(LocalDate start, LocalDate end, UUID branchId, String syntheticFilter) {
+        return reportCache.get("FinancialReportRepository.sourceImportRows", () -> sourceImportRowsQuery(start, end, branchId, syntheticFilter), start, end, branchId, syntheticFilter);
+    }
+
+    private List<Map<String, Object>> sourceImportRowsQuery(LocalDate start, LocalDate end, UUID branchId, String syntheticFilter) {
         return jdbcTemplate.queryForList("""
         WITH imported AS (
           SELECT r.id,r.record_type "recordType",i.source_system "sourceSystem",r.business_date "businessDate",
@@ -94,6 +101,10 @@ public class FinancialReportRepository {
 
     // Bill vận hành đã tất toán của các cơ sở chưa có dữ liệu KiotViet nhập trong khoảng ngày.
     public List<Map<String, Object>> operationalBillRows(LocalDate start, LocalDate end, UUID branchId) {
+        return reportCache.get("FinancialReportRepository.operationalBillRows", () -> operationalBillRowsQuery(start, end, branchId), start, end, branchId);
+    }
+
+    private List<Map<String, Object>> operationalBillRowsQuery(LocalDate start, LocalDate end, UUID branchId) {
         return jdbcTemplate.queryForList("""
         WITH bill_payments AS (
           SELECT bill_id,SUM(amount) paid_amount,
@@ -136,7 +147,11 @@ public class FinancialReportRepository {
     }
 
     // Tổng chi phí theo loại, hạng mục và cơ sở; basis=CASH theo ngày thanh toán, ALLOCATION theo lịch phân bổ.
-    public List<Map<String, Object>> expenseBreakdownRows(String basis, LocalDate start, LocalDate endExclusive,
+    public List<Map<String, Object>> expenseBreakdownRows(String basis, LocalDate start, LocalDate endExclusive, List<UUID> selectedBranches, UUID branchId, String type, UUID categoryId, String search) {
+        return reportCache.get("FinancialReportRepository.expenseBreakdownRows", () -> expenseBreakdownRowsQuery(basis, start, endExclusive, selectedBranches, branchId, type, categoryId, search), basis, start, endExclusive, selectedBranches, branchId, type, categoryId, search);
+    }
+
+    private List<Map<String, Object>> expenseBreakdownRowsQuery(String basis, LocalDate start, LocalDate endExclusive,
             List<UUID> selectedBranches, UUID branchId, String type, UUID categoryId, String search) {
         String branchFilter;
         List<Object> args = new ArrayList<>();
@@ -175,7 +190,11 @@ public class FinancialReportRepository {
         """);
     }
 
-    public List<Map<String, Object>> expenseDetailRows(String basis, LocalDate start, LocalDate endExclusive,
+    public List<Map<String, Object>> expenseDetailRows(String basis, LocalDate start, LocalDate endExclusive, UUID branchId, UUID categoryId, String type, String search) {
+        return reportCache.get("FinancialReportRepository.expenseDetailRows", () -> expenseDetailRowsQuery(basis, start, endExclusive, branchId, categoryId, type, search), basis, start, endExclusive, branchId, categoryId, type, search);
+    }
+
+    private List<Map<String, Object>> expenseDetailRowsQuery(String basis, LocalDate start, LocalDate endExclusive,
             UUID branchId, UUID categoryId, String type, String search) {
         return jdbcTemplate.queryForList(paidExpensesCte(basis) + """
         SELECT source_type "sourceType",record_id "expenseId",expense_code "expenseCode",expense_kind kind,
@@ -200,6 +219,10 @@ public class FinancialReportRepository {
     }
 
     public List<Map<String, Object>> paymentMethodTotals(LocalDate start, LocalDate endExclusive, UUID branchId) {
+        return reportCache.get("FinancialReportRepository.paymentMethodTotals", () -> paymentMethodTotalsQuery(start, endExclusive, branchId), start, endExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> paymentMethodTotalsQuery(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
         WITH bills AS (
           SELECT b.id,b.net_amount,
@@ -233,6 +256,10 @@ public class FinancialReportRepository {
 
     // Sổ thu chi tháng: giao dịch sổ cái kèm điều chỉnh, cộng các đề nghị chi luồng mới đã thanh toán (UC-120).
     public List<Map<String, Object>> transactionRows(LocalDate monthStart, UUID branchId, String kind, String search) {
+        return reportCache.get("FinancialReportRepository.transactionRows", () -> transactionRowsQuery(monthStart, branchId, kind, search), monthStart, branchId, kind, search);
+    }
+
+    private List<Map<String, Object>> transactionRowsQuery(LocalDate monthStart, UUID branchId, String kind, String search) {
         LocalDate monthEnd = monthStart.plusMonths(1);
         return jdbcTemplate.queryForList("""
         WITH transaction_rows AS (

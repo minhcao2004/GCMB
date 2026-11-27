@@ -7,6 +7,7 @@ import api from '../../../api/client';
 import CustomerSourcesChart from '../../dashboard/components/CustomerSourcesChart';
 import KpiComparison, { percentChange } from '../../dashboard/components/KpiComparison';
 import { vietnamToday } from '../../dashboard/components/DashboardPeriodControls';
+import { readStale, staleKey, writeStale } from '../../../shared/utils/staleCache';
 import './branch-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
@@ -141,7 +142,7 @@ export default function BranchOverviewDashboard({ user }) {
   const revenueDate = chartPeriod === 'MONTH' ? `${chartYear}-${chartMonth}` : chartPeriod === 'YEAR' ? chartYear : undefined;
   useEffect(() => {
     let active = true;
-    setLoading(true); setError('');
+    setError('');
     const month = reportRange.from.slice(0, 7);
     const params = {
       month,
@@ -152,8 +153,12 @@ export default function BranchOverviewDashboard({ user }) {
       revenueDate,
       ...(chartPeriod === 'RANGE' ? { revenueFrom: chartRange.from, revenueTo: chartRange.to } : {}),
     };
+    // Hiện ngay số liệu lần trước (nếu có) trong lúc tải bản mới ở nền.
+    const cacheKey = staleKey('branch', user.branchId, params);
+    const cached = readStale(cacheKey);
+    if (cached) { setData(cached); setLoading(false); } else setLoading(true);
     api.get('/branch-management/dashboard', { params, headers: { 'X-GCMB-Branch-Id': user.branchId } })
-      .then(({ data: result }) => { if (active) setData(result); })
+      .then(({ data: result }) => { writeStale(cacheKey, result); if (active) setData(result); })
       .catch((cause) => { if (active) setError(cause.response?.data?.detail || cause.response?.data?.message || 'Không tải được dữ liệu cơ sở.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };

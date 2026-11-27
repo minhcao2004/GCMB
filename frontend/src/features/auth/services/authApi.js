@@ -7,6 +7,7 @@
  */
 
 import api from '../../../api/client';
+import { clearStale } from '../../../shared/utils/staleCache';
 
 // Không đưa bí mật vào URL, bộ nhớ trình duyệt hoặc log; token phiên ở cookie HttpOnly.
 // Lấy token CSRF trước mỗi thao tác xác thực làm thay đổi dữ liệu.
@@ -22,13 +23,13 @@ export const authApi = {
   // Trả danh tính từ cookie phiên hiện tại.
   me: async () => (await api.get('/auth/me')).data,
   managedBranches: async () => (await api.get('/auth/branches')).data,
-  switchBranch: (branchId) => post('branch', { branchId }),
+  switchBranch: (branchId) => { clearStale(); return post('branch', { branchId }); },
   // Các thao tác ghi đều lấy CSRF mới qua post.
-  login: (body) => post('login', body),
+  login: (body) => { clearStale(); return post('login', body); },
   sendCode: (email) => post('forgot-password', { email }),
   reset: (body) => post('reset-password', body),
   changePassword: (body) => post('change-password', body),
-  logout: () => post('logout', {}),
+  logout: () => { clearStale(); return post('logout', {}); },
 };
 // Đổi lỗi HTTP hoặc lỗi mạng thành thông báo trường biểu mẫu.
 export function apiErrors(error) {

@@ -20,42 +20,7 @@ public class DepositRepository {
     public record RefundEvidenceRow(String objectKey, String originalName, String mimeType) {}
 
     private static final String DEPOSIT_VIEW = """
-        WITH ledger AS (
-            SELECT d.id AS deposit_id, d.booking_id,
-                   COALESCE(SUM(e.amount) FILTER (WHERE e.kind='RECEIVE'),0) AS received_amount,
-                   COALESCE(SUM(e.amount) FILTER (WHERE e.kind='APPLY'),0) AS applied_amount,
-                   COALESCE(SUM(e.amount) FILTER (WHERE e.kind='REFUND'),0) AS refunded_amount,
-                   COALESCE(SUM(e.amount) FILTER (WHERE e.kind='FORFEIT'),0) AS forfeited_amount,
-                   COALESCE(SUM(CASE WHEN e.kind='RECEIVE' THEN e.amount ELSE -e.amount END),0) AS balance,
-                   COALESCE(COUNT(DISTINCT e.refund_id) FILTER (WHERE e.kind='REFUND'),0) AS refund_transactions,
-                   MIN(e.created_at) FILTER (WHERE e.kind='RECEIVE') AS received_at,
-                   MAX(e.created_at) AS latest_entry_at,
-                   STRING_AGG(DISTINCT p.method, ',' ORDER BY p.method) AS payment_methods
-            FROM gcmb.deposit d
-            LEFT JOIN gcmb.deposit_entry e ON e.deposit_id=d.id
-            LEFT JOIN gcmb.payment p ON p.id=e.payment_id
-            GROUP BY d.id,d.booking_id
-        ), refund_requests AS (
-            SELECT r.deposit_id,
-                   COALESCE(SUM(r.amount) FILTER (WHERE r.status IN ('REQUESTED','APPROVED','PROCESSING')),0) AS pending_amount,
-                   COUNT(*) FILTER (WHERE r.status IN ('REQUESTED','APPROVED','PROCESSING')) AS pending_count,
-                   MAX(r.created_at) AS latest_request_at,
-                   (ARRAY_AGG(r.status ORDER BY r.created_at DESC,r.id DESC))[1] AS latest_request_status
-            FROM gcmb.refund_request r
-            WHERE r.kind='DEPOSIT'
-            GROUP BY r.deposit_id
-        ), latest_room AS (
-            SELECT DISTINCT ON (a.booking_id) a.booking_id,r.code AS room_code,r.name AS room_name
-            FROM gcmb.room_allocation a
-            JOIN gcmb.room r ON r.id=a.room_id
-            ORDER BY a.booking_id,a.created_at DESC,a.id DESC
-        ), eligible_cancel AS (
-            SELECT e.booking_id,MAX(e.created_at) AS cancelled_at
-            FROM gcmb.booking_event e
-            WHERE e.event_type='BOOKING_CANCELLED'
-              AND e.details ->> 'depositOutcome'='REFUND_ELIGIBLE'
-            GROUP BY e.booking_id
-        ), deposit_view AS (
+        WITH deposit_view AS (
             SELECT b.branch_id,b.id AS booking_id,b.code AS booking_code,b.contact_name AS customer_name,
                    b.contact_phone AS phone,lr.room_code,lr.room_name,
                    COALESCE(b.actual_checkin,b.planned_start) AS check_in_at,
@@ -86,11 +51,48 @@ public class DepositRepository {
                           AND open_request.status IN ('REQUESTED','APPROVED','PROCESSING','PAID')
                     )) AS can_request_refund,
                    ec.cancelled_at
+            -- Tổng hợp bằng LATERAL theo từng booking để bộ lọc cơ sở (v.branch_id) được áp dụng trước, không gom toàn chuỗi.
             FROM gcmb.booking b
-            JOIN ledger l ON l.booking_id=b.id
-            LEFT JOIN refund_requests rr ON rr.deposit_id=l.deposit_id
-            LEFT JOIN latest_room lr ON lr.booking_id=b.id
-            LEFT JOIN eligible_cancel ec ON ec.booking_id=b.id
+            JOIN gcmb.deposit d ON d.booking_id=b.id
+            CROSS JOIN LATERAL (
+                SELECT d.id AS deposit_id,
+                       COALESCE(SUM(e.amount) FILTER (WHERE e.kind='RECEIVE'),0) AS received_amount,
+                       COALESCE(SUM(e.amount) FILTER (WHERE e.kind='APPLY'),0) AS applied_amount,
+                       COALESCE(SUM(e.amount) FILTER (WHERE e.kind='REFUND'),0) AS refunded_amount,
+                       COALESCE(SUM(e.amount) FILTER (WHERE e.kind='FORFEIT'),0) AS forfeited_amount,
+                       COALESCE(SUM(CASE WHEN e.kind='RECEIVE' THEN e.amount ELSE -e.amount END),0) AS balance,
+                       COALESCE(COUNT(DISTINCT e.refund_id) FILTER (WHERE e.kind='REFUND'),0) AS refund_transactions,
+                       MIN(e.created_at) FILTER (WHERE e.kind='RECEIVE') AS received_at,
+                       MAX(e.created_at) AS latest_entry_at,
+                       STRING_AGG(DISTINCT p.method, ',' ORDER BY p.method) AS payment_methods
+                FROM gcmb.deposit_entry e
+                LEFT JOIN gcmb.payment p ON p.id=e.payment_id
+                WHERE e.deposit_id=d.id
+            ) l
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(SUM(r.amount) FILTER (WHERE r.status IN ('REQUESTED','APPROVED','PROCESSING')),0) AS pending_amount,
+                       COUNT(*) FILTER (WHERE r.status IN ('REQUESTED','APPROVED','PROCESSING')) AS pending_count,
+                       MAX(r.created_at) AS latest_request_at,
+                       (ARRAY_AGG(r.status ORDER BY r.created_at DESC,r.id DESC))[1] AS latest_request_status
+                FROM gcmb.refund_request r
+                WHERE r.kind='DEPOSIT' AND r.deposit_id=d.id
+                GROUP BY r.deposit_id
+            ) rr ON true
+            LEFT JOIN LATERAL (
+                SELECT r.code AS room_code,r.name AS room_name
+                FROM gcmb.room_allocation a
+                JOIN gcmb.room r ON r.id=a.room_id
+                WHERE a.booking_id=b.id
+                ORDER BY a.created_at DESC,a.id DESC
+                LIMIT 1
+            ) lr ON true
+            LEFT JOIN LATERAL (
+                SELECT e.booking_id,MAX(e.created_at) AS cancelled_at
+                FROM gcmb.booking_event e
+                WHERE e.booking_id=b.id AND e.event_type='BOOKING_CANCELLED'
+                  AND e.details ->> 'depositOutcome'='REFUND_ELIGIBLE'
+                GROUP BY e.booking_id
+            ) ec ON true
             WHERE l.received_amount>0
         )
         """;

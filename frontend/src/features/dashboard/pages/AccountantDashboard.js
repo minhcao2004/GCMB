@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../../../api/client';
 import { authApi } from '../../auth/services/authApi';
 import { AppShell } from '../../booking/pages/BookingManagementPage';
+import { readStale, staleKey, writeStale } from '../../../shared/utils/staleCache';
 import '../styles/accountant-dashboard.css';
 
 const monthNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date());
@@ -103,17 +104,11 @@ export default function AccountantDashboard() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true); setError('');
+    setError('');
+    const cacheKey = staleKey('accountant', month, branchId, dateFrom, dateTo);
+    const cached = readStale(cacheKey);
     const params = { month, ...(branchId ? { branchId } : {}) };
-    Promise.allSettled([
-      api.get('/accounting/reports/monthly', { params }),
-      api.get('/accounting/deposits/refund-requests'),
-      api.get('/accounting/financial-periods'),
-      api.get('/accounting/dashboard-details', { params: { month, from: dateFrom, to: dateTo, ...(branchId ? { branchId } : {}) } }),
-      api.get('/accounting/transactions', { params }),
-      api.get('/accounting/reports/source-imports', { params: { from: monthBounds(month).start, to: monthBounds(month).end, ...(branchId ? { branchId } : {}) } }),
-    ]).then((results) => {
-      if (!active) return;
+    const apply = (results) => {
       const [summary, refund, periodResult, details, transactions, imported] = results;
       if (summary.status === 'fulfilled') {
         const list = summary.value.data.results || [];
@@ -136,6 +131,20 @@ export default function AccountantDashboard() {
       const sections = ['Báo cáo tháng', 'Hoàn tiền cọc', 'Kỳ tài chính', 'Phương thức thanh toán', 'Giao dịch', 'Dữ liệu nguồn'];
       const failedSections = results.flatMap((item, index) => item.status === 'rejected' ? [sections[index]] : []);
       if (failedSections.length) setError(`Không tải được: ${failedSections.join(', ')}. Số liệu có thể chưa đầy đủ. Vui lòng thử lại.`);
+    };
+    // Hiện ngay số liệu lần trước (nếu có) trong lúc tải bản mới ở nền.
+    if (cached) { apply(cached); setLoading(false); } else setLoading(true);
+    Promise.allSettled([
+      api.get('/accounting/reports/monthly', { params }),
+      api.get('/accounting/deposits/refund-requests'),
+      api.get('/accounting/financial-periods'),
+      api.get('/accounting/dashboard-details', { params: { month, from: dateFrom, to: dateTo, ...(branchId ? { branchId } : {}) } }),
+      api.get('/accounting/transactions', { params }),
+      api.get('/accounting/reports/source-imports', { params: { from: monthBounds(month).start, to: monthBounds(month).end, ...(branchId ? { branchId } : {}) } }),
+    ]).then((results) => {
+      if (!active) return;
+      if (results.every((item) => item.status === 'fulfilled')) writeStale(cacheKey, results);
+      apply(results);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [month, branchId, dateFrom, dateTo]);

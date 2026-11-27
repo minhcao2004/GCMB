@@ -13,6 +13,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -473,9 +474,32 @@ public class FinanceService {
         return expenseRequest;
     }
 
+    // Dashboard QLCC chỉ cần đề nghị đang chờ duyệt, không tải toàn bộ lịch sử thu chi.
+    public List<Map<String,Object>> headOfficePendingRequests(Identity actor) {
+        requireRole(actor, "HEAD_OFFICE_MANAGER");
+        Set<String> pending=Set.of("WAITING_HEAD_OFFICE","WAITING_APPROVAL","WAITING_MANAGER");
+        return withDetails(financeRepository.findRequests(null).stream()
+            .filter(expenseRequest->pending.contains(expenseRequest.get("status"))).toList());
+    }
+
     private List<Map<String,Object>> requests(UUID branchId) {
-        List<Map<String,Object>> expenseRequests=financeRepository.findRequests(branchId);
-        expenseRequests.forEach(expenseRequest->appendDetails(expenseRequest,(UUID)expenseRequest.get("id")));
+        return withDetails(financeRepository.findRequests(branchId));
+    }
+
+    private List<Map<String,Object>> withDetails(List<Map<String,Object>> expenseRequests) {
+        // Nạp chi tiết theo lô (4 câu cho cả danh sách) thay vì 4 câu cho mỗi đề nghị.
+        List<UUID> ids=expenseRequests.stream().map(expenseRequest->(UUID)expenseRequest.get("id")).toList();
+        var attachments=financeRepository.findRequestAttachmentsByRequests(ids);
+        var history=financeRepository.findHistoryByRequests(ids);
+        var allocations=financeRepository.findAllocationsByRequests(ids);
+        var stockReceipts=financeRepository.findLinkedStockReceiptsByRequests(ids);
+        for(Map<String,Object> expenseRequest:expenseRequests) {
+            UUID id=(UUID)expenseRequest.get("id");
+            expenseRequest.put("attachments",attachments.getOrDefault(id,List.of()));
+            expenseRequest.put("history",history.getOrDefault(id,List.of()));
+            expenseRequest.put("allocations",allocations.getOrDefault(id,List.of()));
+            expenseRequest.put("stockReceipts",stockReceipts.getOrDefault(id,List.of()));
+        }
         return expenseRequests;
     }
 

@@ -27,6 +27,8 @@ public class FinanceController {
 
     @GetMapping("/head-office/finance")
     public Map<String,Object> headOffice(@AuthenticationPrincipal Identity who) { return financeService.headOfficeSummary(who); }
+    @GetMapping("/head-office/finance/requests/pending")
+    public List<Map<String,Object>> headOfficePending(@AuthenticationPrincipal Identity who) { return financeService.headOfficePendingRequests(who); }
     @PostMapping("/head-office/finance/fund-transfers")
     public Map<String,Object> sendFund(@AuthenticationPrincipal Identity who,@RequestBody FundTransfer body) {
         return financeService.createFundTransfer(who,body.amount(),body.sentOn(),body.reference());

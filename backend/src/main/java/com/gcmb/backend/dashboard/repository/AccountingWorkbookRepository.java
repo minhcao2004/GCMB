@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.gcmb.backend.dashboard.ReportCache;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -16,12 +17,18 @@ import org.springframework.stereotype.Repository;
 public class AccountingWorkbookRepository {
 
   private final JdbcTemplate jdbcTemplate;
+  private final ReportCache reportCache;
 
-  public AccountingWorkbookRepository(JdbcTemplate jdbcTemplate) {
+  public AccountingWorkbookRepository(JdbcTemplate jdbcTemplate, ReportCache reportCache) {
     this.jdbcTemplate = jdbcTemplate;
+    this.reportCache = reportCache;
   }
 
   public List<Map<String, Object>> billDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.billDaily", () -> billDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> billDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS day,sum(b.net_amount) amount
       FROM gcmb.bill b JOIN gcmb.branch br ON br.id=b.branch_id
@@ -30,6 +37,10 @@ public class AccountingWorkbookRepository {
   }
 
   public List<Map<String, Object>> depositDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.depositDaily", () -> depositDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> depositDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT d.booking_branch_id branch_id,d.day,
         sum(d.amount) FILTER (WHERE d.kind='APPLY') apply_amount,
@@ -44,6 +55,10 @@ public class AccountingWorkbookRepository {
   }
 
   public List<Map<String, Object>> billPaymentDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.billPaymentDaily", () -> billPaymentDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> billPaymentDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT p.branch_id,(p.received_at AT TIME ZONE br.timezone)::date AS day,
         sum(p.amount) FILTER (WHERE p.method='BANK_TRANSFER') bank_amount,
@@ -55,6 +70,10 @@ public class AccountingWorkbookRepository {
 
   // Luồng chi cũ: payment_source=BRANCH_FUND là chi két, còn lại là chi chuyển khoản.
   public List<Map<String, Object>> legacyExpenseDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.legacyExpenseDaily", () -> legacyExpenseDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> legacyExpenseDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT e.branch_id,(p.paid_at AT TIME ZONE br.timezone)::date AS day,
         sum(p.amount) FILTER (WHERE e.payment_source='BRANCH_FUND') cash_amount,
@@ -68,6 +87,10 @@ public class AccountingWorkbookRepository {
 
   // Luồng chi mới không có trường phương thức chi nên được tính toàn bộ là chi chuyển khoản.
   public List<Map<String, Object>> financeExpenseDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.financeExpenseDaily", () -> financeExpenseDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> financeExpenseDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT r.branch_id,(r.paid_at AT TIME ZONE br.timezone)::date AS day,sum(r.amount) bank_amount,
         sum(r.amount) FILTER (WHERE r.category_type='OPEX') opex_bank
@@ -77,6 +100,10 @@ public class AccountingWorkbookRepository {
   }
 
   public List<Map<String, Object>> salaryDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.salaryDaily", () -> salaryDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> salaryDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT e.branch_id,(t.occurred_at AT TIME ZONE br.timezone)::date AS day,sum(-e.amount_signed) amount
       FROM gcmb.financial_entry e JOIN gcmb.financial_transaction t ON t.id=e.transaction_id JOIN gcmb.branch br ON br.id=e.branch_id
@@ -85,6 +112,10 @@ public class AccountingWorkbookRepository {
   }
 
   public List<Map<String, Object>> depositRefundDaily(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.depositRefundDaily", () -> depositRefundDailyQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> depositRefundDailyQuery(YearMonth month, List<UUID> branchIds) {
     return dailyRows("""
       SELECT bk.branch_id,(e.created_at AT TIME ZONE br.timezone)::date AS day,sum(e.amount) amount
       FROM gcmb.deposit_entry e JOIN gcmb.deposit dep ON dep.id=e.deposit_id JOIN gcmb.booking bk ON bk.id=dep.booking_id JOIN gcmb.branch br ON br.id=bk.branch_id
@@ -93,6 +124,10 @@ public class AccountingWorkbookRepository {
   }
 
   public List<Map<String, Object>> expenseLines(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("AccountingWorkbookRepository.expenseLines", () -> expenseLinesQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> expenseLinesQuery(YearMonth month, List<UUID> branchIds) {
     List<Object> args = rangeArgs(month);
     args.addAll(rangeArgs(month));
     args.addAll(branchIds);

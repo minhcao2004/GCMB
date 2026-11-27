@@ -65,6 +65,7 @@ The overview has day, month, and year selectors for its totals, branch revenue c
 ## API overview
 
 - `/api/v1/head-office/finance`: chain view, create incoming fund transfer, upload its receipt to local storage separately, approve/reject high-value request.
+- `GET /api/v1/head-office/finance/requests/pending`: Head Office Manager only. Returns the requests in `WAITING_HEAD_OFFICE`, `WAITING_APPROVAL` or `WAITING_MANAGER`, with the same row shape as `requests` in `/head-office/finance` (attachments, history, allocations, stock receipts). The chain dashboard uses it instead of downloading every request.
 - `/api/v1/head-office/dashboard/revenue-mix`: Head Office Manager payment-method totals for an inclusive date range, optionally scoped to a branch.
 - `/api/v1/accounting/dashboard-details`: accountant payment-method totals over an inclusive `from`/`to` date range, optionally scoped to a branch; omitting dates returns the selected month.
 - `/api/v1/accounting/finance`: accountant balance, fund confirmation, category maintenance, request review and payment.

@@ -313,6 +313,12 @@ Set the active profile through `SPRING_PROFILES_ACTIVE`. The `npm start` launche
 
 Keep database passwords and SePay, email, and cloud-storage credentials outside source control. Frontend `REACT_APP_*` variables are exposed in the browser bundle and must contain only public configuration.
 
+### Report cache
+
+Dashboard and report aggregates (repositories in `backend/.../dashboard/repository/`) are cached in backend memory for `gcmb.report-cache.ttl-seconds` (environment `GCMB_REPORT_CACHE_TTL_SECONDS`, default `300`; `0` disables the cache). Every authenticated `POST`/`PUT`/`PATCH`/`DELETE` under `/api/` (whether it succeeds or fails) clears the whole cache before and after the request, except `/api/v1/auth/**` and business-assistant chat, so in-app changes appear on the next dashboard load. Changes made directly in the database, or by the nightly recurring-expense job, appear after the TTL. The cache is per backend process; running several backend instances would need a shared cache.
+
+The dashboard pages (head office, accountant, branch manager) and the business assistant also keep the last response in browser-tab memory only (not `localStorage`/`sessionStorage`). Reopening a page shows those figures immediately and replaces them when the new response arrives. Login, logout and branch switching clear this memory. Reception room and booking screens are not cached because they show live status.
+
 ### Database migrations
 
 Store shared schema changes under `backend/src/main/resources/db/migration/`. For Flyway, use names such as `V1__create_initial_schema.sql` and `V2__add_booking_indexes.sql`. V66/V67 are preserved separately for two published histories; all new shared versions start at V68. See the [compatibility guide](docs/Flyway%20V66-V67%20Compatibility.md).

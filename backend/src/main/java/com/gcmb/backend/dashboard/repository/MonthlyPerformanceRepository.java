@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.gcmb.backend.dashboard.ReportCache;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -15,9 +16,11 @@ import org.springframework.stereotype.Repository;
 public class MonthlyPerformanceRepository {
 
   private final JdbcTemplate jdbcTemplate;
+  private final ReportCache reportCache;
 
-  public MonthlyPerformanceRepository(JdbcTemplate jdbcTemplate) {
+  public MonthlyPerformanceRepository(JdbcTemplate jdbcTemplate, ReportCache reportCache) {
     this.jdbcTemplate = jdbcTemplate;
+    this.reportCache = reportCache;
   }
 
   public boolean branchExists(UUID branchId) {
@@ -47,6 +50,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> overviewBranchRows(LocalDate from, LocalDate to, List<UUID> branchIds) {
+    return reportCache.get("MonthlyPerformanceRepository.overviewBranchRows", () -> overviewBranchRowsQuery(from, to, branchIds), from, to, branchIds);
+  }
+
+  private List<Map<String, Object>> overviewBranchRowsQuery(LocalDate from, LocalDate to, List<UUID> branchIds) {
     List<Object> args = new ArrayList<>();
     String ctes = overviewCtes(from, to, branchIds, args);
     return jdbcTemplate.queryForList(ctes + """
@@ -68,6 +75,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> overviewCategories(LocalDate from, LocalDate to, List<UUID> branchIds) {
+    return reportCache.get("MonthlyPerformanceRepository.overviewCategories", () -> overviewCategoriesQuery(from, to, branchIds), from, to, branchIds);
+  }
+
+  private List<Map<String, Object>> overviewCategoriesQuery(LocalDate from, LocalDate to, List<UUID> branchIds) {
     List<Object> args = new ArrayList<>();
     String ctes = overviewCtes(from, to, branchIds, args);
     return jdbcTemplate.queryForList(ctes + """
@@ -82,6 +93,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> overviewSeries(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity) {
+    return reportCache.get("MonthlyPerformanceRepository.overviewSeries", () -> overviewSeriesQuery(from, to, branchIds, granularity), from, to, branchIds, granularity);
+  }
+
+  private List<Map<String, Object>> overviewSeriesQuery(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity) {
     List<Object> args = new ArrayList<>();
     String ctes = overviewCtes(from, to, branchIds, args);
     args.add(from); args.add(to); args.add(granularity);
@@ -111,6 +126,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> overviewCategorySeries(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity) {
+    return reportCache.get("MonthlyPerformanceRepository.overviewCategorySeries", () -> overviewCategorySeriesQuery(from, to, branchIds, granularity), from, to, branchIds, granularity);
+  }
+
+  private List<Map<String, Object>> overviewCategorySeriesQuery(LocalDate from, LocalDate to, List<UUID> branchIds, String granularity) {
     List<Object> args = new ArrayList<>();
     String ctes = overviewCtes(from, to, branchIds, args);
     args.add(granularity); args.add(granularity);
@@ -126,6 +145,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> accountingEntries(YearMonth month, List<UUID> branchIds) {
+    return reportCache.get("MonthlyPerformanceRepository.accountingEntries", () -> accountingEntriesQuery(month, branchIds), month, branchIds);
+  }
+
+  private List<Map<String, Object>> accountingEntriesQuery(YearMonth month, List<UUID> branchIds) {
     String branchFilter = branchIds == null || branchIds.isEmpty() ? "" : " AND e.branch_id IN (" + String.join(",", Collections.nCopies(branchIds.size(), "?")) + ")";
     var args = new ArrayList<Object>(List.of(month.atDay(1), month.plusMonths(1).atDay(1)));
     if (branchIds != null) args.addAll(branchIds);
@@ -171,6 +194,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String,Object>> dailyRevenue(LocalDate start, LocalDate end, UUID branchId) {
+    return reportCache.get("MonthlyPerformanceRepository.dailyRevenue", () -> dailyRevenueQuery(start, end, branchId), start, end, branchId);
+  }
+
+  private List<Map<String,Object>> dailyRevenueQuery(LocalDate start, LocalDate end, UUID branchId) {
     return jdbcTemplate.queryForList("""
       WITH bills AS (SELECT b.id,b.branch_id,(b.completed_at AT TIME ZONE br.timezone)::date AS report_date,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
@@ -200,16 +227,21 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String, Object>> monthlyRows(LocalDate start, UUID selected) {
+    return reportCache.get("MonthlyPerformanceRepository.monthlyRows", () -> monthlyRowsQuery(start, selected), start, selected);
+  }
+
+  private List<Map<String, Object>> monthlyRowsQuery(LocalDate start, UUID selected) {
     return jdbcTemplate.queryForList("""
       WITH bill_lines AS (
         SELECT b.id,b.branch_id,b.net_amount,
           COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room_revenue,
           COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NOT NULL),0) fnb_revenue,
           COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='OVERTIME'),0) overtime_revenue
-        FROM gcmb.bill b LEFT JOIN gcmb.bill_line l ON l.bill_id=b.id
+        FROM gcmb.bill b JOIN gcmb.branch bt ON bt.id=b.branch_id LEFT JOIN gcmb.bill_line l ON l.bill_id=b.id
         LEFT JOIN gcmb.booking_charge c ON c.id=l.booking_charge_id
-        WHERE b.status='SETTLED' AND (b.completed_at AT TIME ZONE (SELECT timezone FROM gcmb.branch WHERE id=b.branch_id))::date>=?
-          AND (b.completed_at AT TIME ZONE (SELECT timezone FROM gcmb.branch WHERE id=b.branch_id))::date<?
+        -- So sánh thời điểm với nửa đêm theo múi giờ cơ sở, tương đương so ngày địa phương nhưng không tính lại cho từng hóa đơn.
+        WHERE b.status='SETTLED' AND b.completed_at>=(?::date::timestamp AT TIME ZONE bt.timezone)
+          AND b.completed_at<(?::date::timestamp AT TIME ZONE bt.timezone)
         GROUP BY b.id,b.branch_id,b.net_amount
       ), revenue AS (
         SELECT branch_id,sum(net_amount) bill_revenue,count(*) bill_count,sum(room_revenue) room_revenue,
@@ -240,7 +272,11 @@ public class MonthlyPerformanceRepository {
           (least(COALESCE(a.actual_end,a.ends_at),((d.day::date+time '20:00') AT TIME ZONE br.timezone))-
            greatest(a.starts_at,((d.day::date+time '08:00') AT TIME ZONE br.timezone))))/3600)),0) occupied_hours
         FROM gcmb.branch br CROSS JOIN generate_series(?::date,(?::date-1),interval '1 day') d(day)
-        LEFT JOIN gcmb.room_allocation a ON a.branch_id=br.id AND a.state IN ('OCCUPIED','FINISHED')
+        -- Lọc trước theo cả tháng để không ghép mọi lượt phân phòng với từng ngày; điều kiện theo ngày bên dưới vẫn quyết định kết quả.
+        LEFT JOIN (SELECT a.* FROM gcmb.room_allocation a JOIN gcmb.branch ab ON ab.id=a.branch_id
+          WHERE a.state IN ('OCCUPIED','FINISHED')
+            AND a.starts_at<(((?::date-1)+time '20:00') AT TIME ZONE ab.timezone)
+            AND COALESCE(a.actual_end,a.ends_at)>((?::date+time '08:00') AT TIME ZONE ab.timezone)) a ON a.branch_id=br.id
           AND a.starts_at<((d.day::date+time '20:00') AT TIME ZONE br.timezone)
           AND COALESCE(a.actual_end,a.ends_at)>((d.day::date+time '08:00') AT TIME ZONE br.timezone)
           AND EXISTS (SELECT 1 FROM gcmb.room r WHERE r.id=a.room_id AND r.operating_status NOT IN ('INACTIVE','UNDER_MAINTENANCE'))
@@ -307,6 +343,7 @@ public class MonthlyPerformanceRepository {
       start,start.plusMonths(1), // finance requests
       start,start.plusMonths(1), // bookings
       start,start.plusMonths(1), // occupancy days
+      start.plusMonths(1),start, // occupancy allocation window
       start,start.plusMonths(1), // payroll movements
       start,start.plusMonths(1), // posted cash ledger
       start,start.plusMonths(1), // received payments not posted to the ledger
@@ -319,6 +356,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String,Object>> revenueGroups(LocalDate start, UUID branchId) {
+    return reportCache.get("MonthlyPerformanceRepository.revenueGroups", () -> revenueGroupsQuery(start, branchId), start, branchId);
+  }
+
+  private List<Map<String,Object>> revenueGroupsQuery(LocalDate start, UUID branchId) {
     return jdbcTemplate.queryForList("""
       WITH lines AS (SELECT b.id,b.branch_id,b.net_amount,
         COALESCE(sum(l.amount) FILTER (WHERE l.order_line_id IS NULL AND c.kind='ROOM'),0) room,
@@ -344,6 +385,10 @@ public class MonthlyPerformanceRepository {
   }
 
   public List<Map<String,Object>> expenseGroups(LocalDate start, UUID branchId) {
+    return reportCache.get("MonthlyPerformanceRepository.expenseGroups", () -> expenseGroupsQuery(start, branchId), start, branchId);
+  }
+
+  private List<Map<String,Object>> expenseGroupsQuery(LocalDate start, UUID branchId) {
     return jdbcTemplate.queryForList("""
       SELECT category,sum(amount) amount,count(*) count FROM (
         SELECT e.branch_id,c.name category,p.amount FROM gcmb.expense_payment p JOIN gcmb.expense e ON e.id=p.expense_id

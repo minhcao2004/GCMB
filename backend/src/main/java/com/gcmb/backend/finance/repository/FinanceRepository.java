@@ -1,9 +1,12 @@
 package com.gcmb.backend.finance.repository;
 
 import java.math.BigDecimal;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -312,6 +315,43 @@ public class FinanceRepository {
     public List<Map<String, Object>> findAllocations(UUID requestId) {
         return jdbcTemplate.query("SELECT id,period_month,seq,amount,status FROM gcmb.finance_expense_allocation WHERE request_id=? ORDER BY seq",
             (resultSet, rowNumber) -> toMap(resultSet), requestId);
+    }
+
+    // Nạp chi tiết của nhiều đề nghị bằng một câu mỗi loại, tránh N+1 khi liệt kê danh sách.
+    public Map<UUID, List<Map<String, Object>>> findHistoryByRequests(List<UUID> requestIds) {
+        return queryGrouped("SELECT h.request_id AS group_id,h.id,h.action,h.note,h.created_at,a.username AS actor_name FROM gcmb.finance_request_history h JOIN gcmb.user_account a ON a.id=h.actor_id WHERE h.request_id=ANY(?) ORDER BY h.request_id,h.created_at", requestIds);
+    }
+
+    public Map<UUID, List<Map<String, Object>>> findRequestAttachmentsByRequests(List<UUID> requestIds) {
+        return queryGrouped("SELECT owner_id AS group_id,id,kind,original_name,mime_type,byte_size FROM gcmb.finance_attachment WHERE owner_type='EXPENSE_REQUEST' AND owner_id=ANY(?) ORDER BY owner_id,created_at", requestIds);
+    }
+
+    public Map<UUID, List<Map<String, Object>>> findAllocationsByRequests(List<UUID> requestIds) {
+        return queryGrouped("SELECT request_id AS group_id,id,period_month,seq,amount,status FROM gcmb.finance_expense_allocation WHERE request_id=ANY(?) ORDER BY request_id,seq", requestIds);
+    }
+
+    public Map<UUID, List<Map<String, Object>>> findLinkedStockReceiptsByRequests(List<UUID> requestIds) {
+        return queryGrouped("""
+            SELECT linked.request_id AS group_id,sr.code,sr.supplier_name,linked.amount
+            FROM gcmb.finance_request_stock_receipt linked
+            JOIN gcmb.stock_receipt sr ON sr.id=linked.receipt_id
+            WHERE linked.request_id=ANY(?) ORDER BY linked.request_id,sr.received_at,sr.code
+            """, requestIds);
+    }
+
+    private Map<UUID, List<Map<String, Object>>> queryGrouped(String sql, List<UUID> ids) {
+        Map<UUID, List<Map<String, Object>>> grouped = new HashMap<>();
+        if (ids.isEmpty()) return grouped;
+        jdbcTemplate.query(connection -> {
+            PreparedStatement statement = connection.prepareStatement(sql);
+            statement.setArray(1, connection.createArrayOf("uuid", ids.toArray()));
+            return statement;
+        }, (ResultSet resultSet) -> {
+            Map<String, Object> row = toMap(resultSet);
+            UUID groupId = (UUID) row.remove("group_id");
+            grouped.computeIfAbsent(groupId, key -> new ArrayList<>()).add(row);
+        });
+        return grouped;
     }
 
     // ---- Chứng từ ----

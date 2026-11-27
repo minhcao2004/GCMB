@@ -10,6 +10,7 @@ import CustomerSourcesChart from '../components/CustomerSourcesChart';
 import PeriodControls, { initialPeriodValue, periodRange, vietnamToday } from '../components/DashboardPeriodControls';
 import KpiComparison from '../components/KpiComparison';
 import OperationalAlerts from '../components/OperationalAlerts';
+import { readStale, staleKey, writeStale } from '../../../shared/utils/staleCache';
 import '../styles/executive-dashboard.css';
 
 const money = (value) => value == null ? '—' : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₫`;
@@ -103,18 +104,15 @@ export default function ExecutiveDashboard({ user, onNavigate, onAlertNavigate }
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    setLoading(true); setError(''); setData(null);
+    const cacheKey = staleKey('executive', periodType, periodValue, reportBranchId);
+    const cached = readStale(cacheKey);
+    setError('');
     const selectedRange = periodRange(periodType, periodValue);
     const today = vietnamToday();
     const operationsMonth = periodType === 'YEAR'
       ? `${periodValue}-${periodValue === today.slice(0, 4) ? today.slice(5, 7) : '12'}`
       : selectedRange.from.slice(0, 7);
-    Promise.allSettled([
-      api.get('/head-office/dashboard', { params: { month: operationsMonth, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
-      api.get('/head-office/finance'),
-      financeApi.financialOverview(overviewParams(periodType, periodValue, reportBranchId)),
-    ]).then(([reportResult, financeResult, overviewResult]) => {
-      if (!active) return;
+    const apply = ([reportResult, financeResult, overviewResult]) => {
       if (reportResult.status === 'rejected' || overviewResult.status === 'rejected') {
         setData(null);
         const cause = overviewResult.status === 'rejected' ? overviewResult.reason : reportResult.reason;
@@ -127,7 +125,7 @@ export default function ExecutiveDashboard({ user, onNavigate, onAlertNavigate }
       const branches = overview.branches || [];
       const monthlyById = new Map(monthlyBranches.map((row) => [String(row.id), row]));
       if (!reportBranchId) setBranchOptions(report.branches?.length ? report.branches : monthlyBranches.filter((row) => row.status === 'ACTIVE'));
-      const requests = financeResult.status === 'fulfilled' ? financeResult.value.data.requests || [] : [];
+      const requests = financeResult.status === 'fulfilled' ? financeResult.value.data || [] : [];
       const totals = overview.totals || {};
       const monthlyTotals = report.totals || {};
       const selectedBranchName = reportBranchId ? (report.branches || []).find((branch) => String(branch.id) === String(reportBranchId))?.name : null;
@@ -155,22 +153,41 @@ export default function ExecutiveDashboard({ user, onNavigate, onAlertNavigate }
         approvalsAvailable: financeResult.status === 'fulfilled',
       });
       if (financeResult.status === 'rejected') setError('Không tải được danh sách đề nghị chi; các biểu đồ báo cáo vẫn đã được tải.');
+    };
+    // Hiện ngay số liệu lần trước (nếu có) trong lúc tải bản mới ở nền.
+    if (cached) { apply(cached); setLoading(false); } else { setLoading(true); setData(null); }
+    Promise.allSettled([
+      api.get('/head-office/dashboard', { params: { month: operationsMonth, ...(reportBranchId ? { branchId: reportBranchId } : {}) } }),
+      api.get('/head-office/finance/requests/pending'),
+      financeApi.financialOverview(overviewParams(periodType, periodValue, reportBranchId)),
+    ]).then((results) => {
+      if (!active) return;
+      if (results[0].status === 'fulfilled' && results[2].status === 'fulfilled') writeStale(cacheKey, results);
+      apply(results);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [periodType, periodValue, reportBranchId]);
 
   useEffect(() => {
     let active = true;
+    const cacheKey = staleKey('executive-income', incomePeriodType, incomePeriodValue, incomeBranchId);
+    const toRows = (result) => (result.branches || []).map((row) => ({ ...row, revenue: Number(row.revenue) || 0 }));
+    const cached = readStale(cacheKey);
+    if (cached) setIncomeRows(toRows(cached));
     financeApi.financialOverview(overviewParams(incomePeriodType, incomePeriodValue, incomeBranchId)).then((result) => {
-      if (active) setIncomeRows((result.branches || []).map((row) => ({ ...row, revenue: Number(row.revenue) || 0 })));
+      writeStale(cacheKey, result);
+      if (active) setIncomeRows(toRows(result));
     }).catch(() => { if (active) setIncomeRows([]); });
     return () => { active = false; };
   }, [incomePeriodType, incomePeriodValue, incomeBranchId]);
 
   useEffect(() => {
     let active = true;
-    setTrendLoading(true);
+    const cacheKey = staleKey('executive-trend', trendPeriodType, trendPeriodValue);
+    const cached = readStale(cacheKey);
+    if (cached) { setTrendRows(cached.series || []); setTrendLoading(false); } else setTrendLoading(true);
     financeApi.financialOverview(overviewParams(trendPeriodType, trendPeriodValue)).then((result) => {
+      writeStale(cacheKey, result);
       if (active) setTrendRows(result.series || []);
     }).catch(() => { if (active) setTrendRows([]); }).finally(() => { if (active) setTrendLoading(false); });
     return () => { active = false; };

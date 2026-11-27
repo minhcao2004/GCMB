@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.gcmb.backend.dashboard.ReportCache;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -12,9 +13,11 @@ import org.springframework.stereotype.Repository;
 public class DashboardRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ReportCache reportCache;
 
-    public DashboardRepository(JdbcTemplate jdbcTemplate) {
+    public DashboardRepository(JdbcTemplate jdbcTemplate, ReportCache reportCache) {
         this.jdbcTemplate = jdbcTemplate;
+        this.reportCache = reportCache;
     }
 
     public List<Map<String, Object>> findActiveBranchOptions() {
@@ -61,6 +64,10 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> customerSourceCounts(LocalDate from, LocalDate toExclusive, UUID branchId) {
+        return reportCache.get("DashboardRepository.customerSourceCounts", () -> customerSourceCountsQuery(from, toExclusive, branchId), from, toExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> customerSourceCountsQuery(LocalDate from, LocalDate toExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
             WITH channels(channel, sort_order) AS (
               VALUES ('FACEBOOK',1), ('ZALO',2), ('TIKTOK',3), ('INSTAGRAM',4)
@@ -115,6 +122,10 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> revenueMix(LocalDate start, LocalDate endExclusive, UUID branchId) {
+        return reportCache.get("DashboardRepository.revenueMix", () -> revenueMixQuery(start, endExclusive, branchId), start, endExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> revenueMixQuery(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
             WITH revenue_mix AS (
               SELECT CASE WHEN p.method='BANK_TRANSFER' THEN 'Chuyển khoản'
@@ -150,6 +161,10 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> roomTypePerformance(LocalDate start, LocalDate endExclusive, UUID branchId) {
+        return reportCache.get("DashboardRepository.roomTypePerformance", () -> roomTypePerformanceQuery(start, endExclusive, branchId), start, endExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> roomTypePerformanceQuery(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
             SELECT rt.name,COUNT(DISTINCT a.id) AS count,COALESCE(SUM(bl.amount),0) AS revenue,
               COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(a.actual_end,a.ends_at)-COALESCE(a.actual_start,a.starts_at)))/60),0) AS minutes
@@ -169,6 +184,10 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> hourlyOccupancy(LocalDate start, LocalDate endExclusive, UUID branchId) {
+        return reportCache.get("DashboardRepository.hourlyOccupancy", () -> hourlyOccupancyQuery(start, endExclusive, branchId), start, endExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> hourlyOccupancyQuery(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
             SELECT EXTRACT(ISODOW FROM local_day)::int AS weekday, hour_slot AS hour,
               COUNT(*) AS occupied_room_hours
@@ -178,12 +197,15 @@ public class DashboardRepository {
               CROSS JOIN generate_series(8,19) h(hour_slot)
             ) slots
             JOIN gcmb.branch br ON br.id=?
-            JOIN gcmb.room_allocation a ON a.branch_id=br.id
-              AND a.state IN ('OCCUPIED','FINISHED')
+            -- Lọc trước theo khoảng ngày để không ghép mọi lượt phân phòng với từng khung giờ; điều kiện theo khung giờ vẫn quyết định kết quả.
+            JOIN (SELECT a.* FROM gcmb.room_allocation a JOIN gcmb.branch ab ON ab.id=a.branch_id
+              WHERE a.state IN ('OCCUPIED','FINISHED')
+                AND a.starts_at < ((?::date - 1 + interval '20 hours') AT TIME ZONE ab.timezone)
+                AND COALESCE(a.actual_end,a.ends_at) > ((?::date + interval '8 hours') AT TIME ZONE ab.timezone)) a ON a.branch_id=br.id
               AND a.starts_at < ((slots.local_day + slots.hour_slot * interval '1 hour' + interval '1 hour') AT TIME ZONE br.timezone)
               AND COALESCE(a.actual_end,a.ends_at) > ((slots.local_day + slots.hour_slot * interval '1 hour') AT TIME ZONE br.timezone)
             GROUP BY weekday,hour_slot ORDER BY weekday,hour_slot
-            """, start, endExclusive, branchId);
+            """, start, endExclusive, branchId, endExclusive, start);
     }
 
     public List<Map<String, Object>> openIncidents(UUID branchId) {
@@ -216,6 +238,10 @@ public class DashboardRepository {
     }
 
     public List<Map<String, Object>> topItems(LocalDate start, LocalDate endExclusive, UUID branchId) {
+        return reportCache.get("DashboardRepository.topItems", () -> topItemsQuery(start, endExclusive, branchId), start, endExclusive, branchId);
+    }
+
+    private List<Map<String, Object>> topItemsQuery(LocalDate start, LocalDate endExclusive, UUID branchId) {
         return jdbcTemplate.queryForList("""
             SELECT ol.name_snapshot AS name,COALESCE(SUM(ol.quantity),0) AS quantity,
               COALESCE(SUM(bl.amount),0) AS revenue

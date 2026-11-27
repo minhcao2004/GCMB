@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../../api/client';
 import { apiErrors } from '../../auth/services/authApi';
+import { readStale, staleKey, writeStale } from '../../../shared/utils/staleCache';
 import '../styles/business-assistant.css';
 
 const base = '/head-office/business-assistant';
@@ -88,9 +89,13 @@ export default function BusinessAssistant({ user }) {
   useEffect(() => {
     if (!open || user?.role !== 'HEAD_OFFICE_MANAGER') return undefined;
     let active = true;
-    setLoading(true); setError('');
+    setError('');
+    // Hiện ngay ngữ cảnh lần trước (nếu có) trong lúc tải bản mới ở nền.
+    const cacheKey = staleKey('assistant-context', month);
+    const cached = readStale(cacheKey);
+    if (cached) { setContext(cached); setLoading(false); } else setLoading(true);
     api.get(`${base}/context`, { params: { month } })
-      .then(({ data }) => { if (active) setContext(data); })
+      .then(({ data }) => { writeStale(cacheKey, data); if (active) setContext(data); })
       .catch((failure) => { if (active) { setContext(null); setError(Object.values(apiErrors(failure)).join(' ')); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };

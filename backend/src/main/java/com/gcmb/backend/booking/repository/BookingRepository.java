@@ -804,9 +804,10 @@ public class BookingRepository {
              LEFT JOIN gcmb.room r ON r.id=latest.room_id
              LEFT JOIN gcmb.room_type rt ON rt.id=r.room_type_id
              LEFT JOIN gcmb.room_type requested_rt ON requested_rt.id=b.room_type_id
-            LEFT JOIN (SELECT booking_id,SUM(amount) AS amount FROM gcmb.booking_charge WHERE status='ACTIVE' GROUP BY booking_id) ch ON ch.booking_id=b.id
+            -- LATERAL chỉ tổng hợp cho booking của cơ sở đang xem, không cộng toàn bộ bảng mỗi lần tải trang.
+            LEFT JOIN LATERAL (SELECT SUM(amount) AS amount FROM gcmb.booking_charge WHERE booking_id=b.id AND status='ACTIVE') ch ON true
             LEFT JOIN gcmb.deposit d ON d.booking_id=b.id
-            LEFT JOIN gcmb.v_deposit_balance dep ON dep.id=d.id
+            LEFT JOIN LATERAL (SELECT * FROM gcmb.v_deposit_balance v WHERE v.id=d.id) dep ON true
             LEFT JOIN LATERAL (
                 SELECT GREATEST(
                     COALESCE((

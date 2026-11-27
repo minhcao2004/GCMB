@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.gcmb.backend.dashboard.ReportCache;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -48,9 +49,11 @@ public class BusinessAssistantRepository {
       """;
 
   private final JdbcTemplate jdbcTemplate;
+  private final ReportCache reportCache;
 
-  public BusinessAssistantRepository(JdbcTemplate jdbcTemplate) {
+  public BusinessAssistantRepository(JdbcTemplate jdbcTemplate, ReportCache reportCache) {
     this.jdbcTemplate = jdbcTemplate;
+    this.reportCache = reportCache;
   }
 
   public boolean isActiveHeadOfficeManager(UUID userId) {
@@ -78,6 +81,10 @@ public class BusinessAssistantRepository {
   }
 
   public List<Map<String, Object>> roomUsage(LocalDate from, LocalDate to, UUID branchId) {
+    return reportCache.get("BusinessAssistantRepository.roomUsage", () -> roomUsageQuery(from, to, branchId), from, to, branchId);
+  }
+
+  private List<Map<String, Object>> roomUsageQuery(LocalDate from, LocalDate to, UUID branchId) {
     return jdbcTemplate.queryForList("""
       SELECT b.name AS branch,rt.mode,count(DISTINCT a.id) AS allocations,
         round(sum(greatest(0,extract(epoch FROM (
@@ -94,6 +101,10 @@ public class BusinessAssistantRepository {
   }
 
   public List<Map<String, Object>> roomBilledRevenue(LocalDate from, LocalDate to, UUID branchId) {
+    return reportCache.get("BusinessAssistantRepository.roomBilledRevenue", () -> roomBilledRevenueQuery(from, to, branchId), from, to, branchId);
+  }
+
+  private List<Map<String, Object>> roomBilledRevenueQuery(LocalDate from, LocalDate to, UUID branchId) {
     return jdbcTemplate.queryForList("""
       SELECT br.name AS branch,rt.mode,sum(l.amount) AS room_line_amount
       FROM gcmb.bill_line l JOIN gcmb.bill b ON b.id=l.bill_id
@@ -119,6 +130,10 @@ public class BusinessAssistantRepository {
 
   // Liệt kê các tháng có hoạt động ghi nhận của từng cơ sở, tính đến ngày asOf.
   public List<Map<String, Object>> activityMonthsByBranch(LocalDate asOf) {
+    return reportCache.get("BusinessAssistantRepository.activityMonthsByBranch", () -> activityMonthsByBranchQuery(asOf), asOf);
+  }
+
+  private List<Map<String, Object>> activityMonthsByBranchQuery(LocalDate asOf) {
     return jdbcTemplate.queryForList("""
       WITH activity AS (
         SELECT x.branch_id,(x.planned_start AT TIME ZONE b.timezone)::date AS activity_day FROM gcmb.booking x JOIN gcmb.branch b ON b.id=x.branch_id
@@ -140,6 +155,10 @@ public class BusinessAssistantRepository {
   }
 
   public Map<String, Object> popularityComboCoverage(LocalDate from, LocalDate until, UUID branchId) {
+    return reportCache.get("BusinessAssistantRepository.popularityComboCoverage", () -> popularityComboCoverageQuery(from, until, branchId), from, until, branchId);
+  }
+
+  private Map<String, Object> popularityComboCoverageQuery(LocalDate from, LocalDate until, UUID branchId) {
     return jdbcTemplate.queryForMap(COMBO_SCOPE + """
         SELECT count(*) AS "eligibleBookings",count(*) FILTER (WHERE EXISTS (
           SELECT 1 FROM gcmb.booking_charge c WHERE c.booking_id=scoped.id AND c.status='ACTIVE' AND c.kind='COMBO'
@@ -148,6 +167,10 @@ public class BusinessAssistantRepository {
   }
 
   public List<Map<String, Object>> popularityComboRanking(LocalDate from, LocalDate until, UUID branchId, int limit) {
+    return reportCache.get("BusinessAssistantRepository.popularityComboRanking", () -> popularityComboRankingQuery(from, until, branchId, limit), from, until, branchId, limit);
+  }
+
+  private List<Map<String, Object>> popularityComboRankingQuery(LocalDate from, LocalDate until, UUID branchId, int limit) {
     return jdbcTemplate.queryForList(COMBO_SCOPE + """
         , grouped AS (
           SELECT COALESCE(NULLIF(c.pricing_snapshot->>'name',''),c.description,p.name,'Combo chưa rõ tên') AS "comboName",
@@ -167,6 +190,10 @@ public class BusinessAssistantRepository {
   }
 
   public Map<String, Object> popularityChannelCoverage(LocalDate from, LocalDate until, UUID branchId) {
+    return reportCache.get("BusinessAssistantRepository.popularityChannelCoverage", () -> popularityChannelCoverageQuery(from, until, branchId), from, until, branchId);
+  }
+
+  private Map<String, Object> popularityChannelCoverageQuery(LocalDate from, LocalDate until, UUID branchId) {
     return jdbcTemplate.queryForMap(CHANNEL_SCOPE + """
         SELECT count(*) AS "eligibleBookings",
           count(*) FILTER (WHERE channel<>'UNKNOWN') AS "bookingsWithKnownChannel",
@@ -175,6 +202,10 @@ public class BusinessAssistantRepository {
   }
 
   public List<Map<String, Object>> popularityChannelRanking(LocalDate from, LocalDate until, UUID branchId, int limit) {
+    return reportCache.get("BusinessAssistantRepository.popularityChannelRanking", () -> popularityChannelRankingQuery(from, until, branchId, limit), from, until, branchId, limit);
+  }
+
+  private List<Map<String, Object>> popularityChannelRankingQuery(LocalDate from, LocalDate until, UUID branchId, int limit) {
     return jdbcTemplate.queryForList(CHANNEL_SCOPE + """
         , grouped AS (
           SELECT CASE channel WHEN 'FACEBOOK' THEN 'Facebook' WHEN 'TIKTOK' THEN 'TikTok'
@@ -189,6 +220,10 @@ public class BusinessAssistantRepository {
   }
 
   public Map<String, Object> popularityFnbItemCoverage(LocalDate from, LocalDate until, UUID branchId) {
+    return reportCache.get("BusinessAssistantRepository.popularityFnbItemCoverage", () -> popularityFnbItemCoverageQuery(from, until, branchId), from, until, branchId);
+  }
+
+  private Map<String, Object> popularityFnbItemCoverageQuery(LocalDate from, LocalDate until, UUID branchId) {
     return jdbcTemplate.queryForMap(FNB_ITEM_SCOPE + """
         SELECT count(*) FILTER (WHERE booking_combo_item_id IS NULL AND unit_price>0) AS "paidItemLines",
           COALESCE(sum(quantity) FILTER (WHERE booking_combo_item_id IS NOT NULL OR unit_price=0),0) AS "excludedGiftQuantity"
@@ -197,6 +232,10 @@ public class BusinessAssistantRepository {
   }
 
   public List<Map<String, Object>> popularityFnbItemRanking(LocalDate from, LocalDate until, UUID branchId, int limit) {
+    return reportCache.get("BusinessAssistantRepository.popularityFnbItemRanking", () -> popularityFnbItemRankingQuery(from, until, branchId, limit), from, until, branchId, limit);
+  }
+
+  private List<Map<String, Object>> popularityFnbItemRankingQuery(LocalDate from, LocalDate until, UUID branchId, int limit) {
     return jdbcTemplate.queryForList(FNB_ITEM_SCOPE + """
         , grouped AS (
           SELECT min(name_snapshot) AS "productName",min(category) AS category,sum(quantity) AS "soldQuantity",
