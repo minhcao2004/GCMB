@@ -1,119 +1,21 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Manual unit cases for UC-72 View Equipment Incidents.
- */
 package com.gcmb.backend.manual.equipmentmaintenance;
 
-import static com.gcmb.backend.manual.equipmentmaintenance.EquipmentMaintenanceManualRunner.*;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ViewEquipmentIncidentsManualCases {
-    private static final String UC = "UC-72 View Equipment Incidents";
-    private static final String FILE = "UC-72 - View Equipment Incidents.docx";
-    private static final String PRE = "Người dùng đã đăng nhập; dữ liệu sự cố của HN_HOA_BANG tồn tại hoặc được thiết lập rỗng theo từng TC; thao tác xem không thay đổi bản ghi nghiệp vụ.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ViewEquipmentIncidentsManualCases {
     private ViewEquipmentIncidentsManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("EMM-032", "Branch Manager xem danh sách sự cố của cơ sở được phân công.",
-                "Trả sự cố ASSET-HN01-0001 thuộc HN_HOA_BANG; không thay đổi dữ liệu.",
-                "Normal", "", "", "Black-box", ViewEquipmentIncidentsManualCases::branchManagerList),
-            tc("EMM-033", "Receptionist xem danh sách sự cố của cơ sở được phân công.",
-                "Trả danh sách trong phạm vi HN_HOA_BANG; không thay đổi dữ liệu.",
-                "Normal", "BR-41", "", "Black-box", ViewEquipmentIncidentsManualCases::receptionistList),
-            tc("EMM-034", "Head Office Manager chọn branchId=HN_HOA_BANG.",
-                "Trả danh sách sự cố của cơ sở đã chọn.",
-                "Normal", "", "", "Black-box", ViewEquipmentIncidentsManualCases::headOfficeList),
-            tc("EMM-035", "search='  máy chiếu  '; status=IN_PROGRESS.",
-                "Chuẩn hóa search thành 'máy chiếu' và chuyển đúng bộ lọc trạng thái xuống repository.",
-                "Normal", "", "", "White-box", ViewEquipmentIncidentsManualCases::filterForwarding),
-            tc("EMM-036", "search=null; status=null.",
-                "Chuẩn hóa cả hai thành chuỗi rỗng và trả danh sách trong phạm vi.",
-                "Boundary", "", "", "White-box", ViewEquipmentIncidentsManualCases::nullFilters),
-            tc("EMM-037", "Không có sự cố phù hợp với tiêu chí tìm kiếm.",
-                "Trả danh sách rỗng; không thay đổi bất kỳ bản ghi nghiệp vụ nào.",
-                "Abnormal", "", "", "Black-box", ViewEquipmentIncidentsManualCases::emptyResult),
-            tc("EMM-038", "Receptionist HN_HOA_BANG yêu cầu branchId của cơ sở khác.",
-                "Hiển thị “Bạn không có quyền xem đối với sự cố thiết bị.”; không truy vấn ngoài phạm vi.",
-                "Abnormal", "BR-41", "MSG24", "Black-box", ViewEquipmentIncidentsManualCases::wrongBranch),
-            tc("EMM-039", "Branch Manager mở tiến trình của incident đang tồn tại trong cơ sở.",
-                "Trả lịch sử tiến trình theo thứ tự repository cung cấp; không thay đổi dữ liệu.",
-                "Normal", "", "", "Black-box", ViewEquipmentIncidentsManualCases::progress),
-            tc("EMM-040", "Branch Manager mở chứng từ invoice của lần sửa gần nhất.",
-                "Trả tên hoa-don.pdf, MIME application/pdf và đúng nội dung file.",
-                "Normal", "BR-46", "", "White-box", ViewEquipmentIncidentsManualCases::repairAttachment)
+            new ManualCase("EMM-018", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"314ecbed-8d46-3fcc-9b61-ca65a2496de1\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \"\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả đúng sự cố đã chuẩn bị, thông tin thiết bị/phòng, severity/priority và trạng thái tại cơ sở được phép; không thay đổi dữ liệu.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-019", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"a95fabea-f609-3379-9e48-787d7d99da90\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \"\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả đúng sự cố đã chuẩn bị, thông tin thiết bị/phòng, severity/priority và trạng thái tại cơ sở được phép; không thay đổi dữ liệu.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-020", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nSự cố \"89986b3e-ee8d-3928-8491-d60a146d654c\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \"\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả danh sách sự cố của cơ sở đã chọn.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-021", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"3755cc97-d7dc-3595-8c96-014ff74f8c26\" tồn tại: trạng thái \"IN_PROGRESS\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \" máy chiếu \";\ntrạng thái = \"IN_PROGRESS\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả sự cố đã chuẩn bị khớp tên thiết bị \"Máy chiếu\" sau trim và status=\"IN_PROGRESS\"; không sửa sự cố.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-022", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"3af8cac2-e300-3d4f-8e74-38bb2e348ed1\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \"\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Chuẩn hóa cả hai thành chuỗi rỗng và trả danh sách trong phạm vi.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-023", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"0c0e0125-62a4-3642-8768-15f6d1f6ba73\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HN_HOA_BANG\";\ntừ khóa = \"UT_NO_INCIDENT_135ca0b0\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả danh sách rỗng; không thay đổi bất kỳ bản ghi nghiệp vụ nào.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-024", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"29a3c841-8255-390f-8c03-3f4d34bf9a79\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ncơ sở = \"HCM_AU_CO\";\ntừ khóa = \"\";\ntrạng thái = không truyền giá trị.\nĐịnh danh đối chiếu: HCM_AU_CO có ID \"8f8d0321-f9e8-4b9b-a739-43c479926a8b\".", "Hiển thị “Bạn không có quyền xem đối với sự cố thiết bị.”; không truy vấn ngoài phạm vi.", List.of("UC-72", "BR-41", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "incidents", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.lang.String", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java"),
+            new ManualCase("EMM-025", "equipmentmaintenance", "UC-72 View Equipment Incidents", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"ed25561b-aa8d-3299-9821-7966e8ec547e\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xem/cập nhật tiến độ xử lý:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nmã định danh = \"ed25561b-aa8d-3299-9821-7966e8ec547e\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả lịch sử tiến độ vừa được service.suggest ghi cho incident đã chuẩn bị với ghi chú \"Đề xuất: Kiểm tra dây nguồn UT\", người thực hiện là lễ tân; chỉ xem, không tạo thêm tiến độ.", List.of("UC-72"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "progress", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/ViewEquipmentIncidentsManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentIncidentService.incidents/progress/repairAttachment", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentIncidentService.incidents/progress/repairAttachment/branch", method), action);
-    }
-
-    private static TestResult branchManagerList() throws Exception {
-        var f = fixture();
-        var result = f.service().incidents(branchManager(), null, "", "");
-        return check(result.size() == 1 && INCIDENT_ID.equals(result.get(0).id()), "incidents=" + result);
-    }
-
-    private static TestResult receptionistList() throws Exception {
-        var f = fixture();
-        var result = f.service().incidents(receptionist(), null, "", "");
-        return check(result.size() == 1 && BRANCH_ID.equals(result.get(0).branchId()), "incidents=" + result);
-    }
-
-    private static TestResult headOfficeList() throws Exception {
-        var f = fixture();
-        var result = f.service().incidents(headOfficeManager(), BRANCH_ID, "", "");
-        return check(result.size() == 1 && BRANCH_ID.equals(result.get(0).branchId()), "incidents=" + result);
-    }
-
-    private static TestResult filterForwarding() throws Exception {
-        var f = fixture();
-        f.service().incidents(branchManager(), null, "  máy chiếu  ", "IN_PROGRESS");
-        verify(f.repository()).incidents(BRANCH_ID, "máy chiếu", "IN_PROGRESS");
-        return check(true, "repository received search='máy chiếu'; status=IN_PROGRESS");
-    }
-
-    private static TestResult nullFilters() throws Exception {
-        var f = fixture();
-        f.service().incidents(branchManager(), null, null, null);
-        verify(f.repository()).incidents(BRANCH_ID, "", "");
-        return check(true, "repository received empty search and status");
-    }
-
-    private static TestResult emptyResult() throws Exception {
-        var f = fixture();
-        when(f.repository().incidents(BRANCH_ID, "không tồn tại", "")).thenReturn(List.of());
-        var result = f.service().incidents(branchManager(), null, "không tồn tại", "");
-        return check(result.isEmpty(), "result size=" + result.size());
-    }
-
-    private static TestResult wrongBranch() throws Exception {
-        var f = fixture();
-        return expectStatus(() -> f.service().incidents(receptionist(), OTHER_BRANCH_ID, "", ""), 403,
-                "Bạn không có quyền xem đối với sự cố thiết bị.");
-    }
-
-    private static TestResult progress() throws Exception {
-        var f = fixture();
-        var result = f.service().progress(branchManager(), null, INCIDENT_ID);
-        return check(result.size() == 1 && PROGRESS_ID.equals(result.get(0).id()), "progress=" + result);
-    }
-
-    private static TestResult repairAttachment() throws Exception {
-        var f = fixture();
-        var result = f.service().repairAttachment(branchManager(), INCIDENT_ID, "invoice");
-        return check("hoa-don.pdf".equals(result.originalName()) && "application/pdf".equals(result.mimeType())
-                && result.bytes().length > 0, "name=" + result.originalName() + "; mime=" + result.mimeType()
-                + "; bytes=" + result.bytes().length);
     }
 }

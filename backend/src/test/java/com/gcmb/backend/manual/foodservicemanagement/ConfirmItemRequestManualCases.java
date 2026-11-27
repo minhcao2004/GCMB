@@ -1,137 +1,22 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-53 Confirm Item Request manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.ConfirmRequest;
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.ItemRequest;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.ComboAllowance;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.OrderLock;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.PendingLine;
-import java.math.BigDecimal;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ConfirmItemRequestManualCases {
-    private static final String UC = "UC-53 Confirm Item Request";
-    private static final String PRE = "Lễ tân letan.hoabang đăng nhập; order ROOM_QR/PENDING thuộc booking BK-DEMO đang IN_HOUSE; nhân viên phụ trách đang trong ca.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ConfirmItemRequestManualCases {
     private ConfirmItemRequestManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("FSM-059", PRE, "Coca Cola yêu cầu=3, xác nhận=3.", "Order chuyển ACCEPTED, gán nhân viên, tính đúng 3 chai và trừ kho.", "Normal", "BR-27, BR-28, BR-123", "", () -> confirm(3, 3)),
-            tc("FSM-060", PRE, "Coca Cola yêu cầu=3, xác nhận=2.", "Chỉ giữ và tính tiền 2 chai.", "Normal", "BR-28", "", () -> confirm(3, 2)),
-            tc("FSM-061", PRE, "Coca Cola yêu cầu=2, xác nhận=3.", "Hiển thị “Số lượng xác nhận vượt quá số lượng khách đã yêu cầu cho Coca Cola.”; không accept order.", "Boundary", "BR-117", "MSG45", ConfirmItemRequestManualCases::overRequested),
-            tc("FSM-062", PRE, "Tất cả món xác nhận quantity=0.", "Hiển thị “Chọn ít nhất một món để xác nhận hoặc từ chối toàn bộ yêu cầu.”; không accept order.", "Boundary", "BR-117", "MSG02", ConfirmItemRequestManualCases::allZero),
-            tc("FSM-063", PRE.replace("ROOM_QR/PENDING", "STAFF/PENDING"), "Xác nhận order STAFF.", "Hiển thị “Chỉ xác nhận yêu cầu món gửi từ mã MR.”; không thay đổi order.", "Abnormal", "BR-27", "", ConfirmItemRequestManualCases::wrongChannel),
-            tc("FSM-064", PRE + " Nhân viên được chọn đã hết ca.", "Xác nhận order.", "Hiển thị “Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.”; không accept.", "Abnormal", "BR-123", "MSG75", ConfirmItemRequestManualCases::offShift),
-            tc("FSM-065", PRE + " Tồn Coca Cola=2 chai.", "Xác nhận 3 chai.", "Hiển thị “Coca Cola chỉ còn 2 chai. Vui lòng giảm số lượng hoặc chọn món khác.”; không trừ kho.", "Abnormal", "BR-38", "MSG18", ConfirmItemRequestManualCases::stockShortage),
-            tc("FSM-066", PRE + " Combo còn 2 Coca Cola miễn phí.", "Xác nhận 3 chai.", "Hai chai thuộc combo, một chai tính phí.", "Boundary", "BR-30, BR-172", "", ConfirmItemRequestManualCases::combo),
-            tc("FSM-067", PRE + " Tồn kho=10 chai.", "Xác nhận 3 chai rồi gửi lại thao tác.", "Tồn kho chỉ giảm một lần từ 10 xuống 7; không tạo SALE trùng.", "Abnormal", "BR-164", "MSG74", ConfirmItemRequestManualCases::idempotent),
-            tc("FSM-068", PRE + " Một phiên khác đã xử lý order đồng thời.", "Xác nhận order.", "Hiển thị xung đột; không tạo charge hoặc stock movement trùng.", "Abnormal", "BR-164", "MSG74", ConfirmItemRequestManualCases::race)
+            new ManualCase("FSM-048", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"041fc7f6-2350-3f89-8891-db9a05f01733\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"0d772560-5b43-48be-bf0e-f7a5db7345aa\" tồn tại: trạng thái \"PENDING\", booking \"0f80ea2e-adfb-3aff-bcbd-173381a845b5\".\nTồn kho \"52dddd5b-644c-3ada-929e-680703b8b82f\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"0d772560-5b43-48be-bf0e-f7a5db7345aa\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"041fc7f6-2350-3f89-8891-db9a05f01733\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Order chuyển ACCEPTED, gán nhân viên, tính đúng 3 chai và trừ kho.", List.of("UC-53", "BR-27", "BR-28", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-049", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"cd339d52-8303-3a8a-ac3a-d55cb84328d9\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"643388df-4a1d-46cd-afcb-d7a94745d5a8\" tồn tại: trạng thái \"PENDING\", booking \"ca7733ca-31f3-3a3b-8071-5c598a963a5b\".\nTồn kho \"bffbd58a-8481-3ea4-aa17-97e205e69474\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"643388df-4a1d-46cd-afcb-d7a94745d5a8\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"cd339d52-8303-3a8a-ac3a-d55cb84328d9\";\ncác món/mặt hàng 1 — số lượng = \"2\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Chỉ giữ và tính tiền 2 chai.", List.of("UC-53", "BR-27", "BR-28", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-050", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"74b9f5e6-79e3-3f3d-95db-39408c8e0e6e\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"3d47cacd-9030-408a-b6bb-5160ac89c4e6\" tồn tại: trạng thái \"PENDING\", booking \"fdded90e-3ac4-3031-9c27-4485e1fff36f\".\nTồn kho \"40f6ad3e-6905-3612-befa-ddf56e3779f8\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"3d47cacd-9030-408a-b6bb-5160ac89c4e6\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"74b9f5e6-79e3-3f3d-95db-39408c8e0e6e\";\ncác món/mặt hàng 1 — số lượng = \"4\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Không xác nhận 4 chai vượt 3 chai khách yêu cầu; giữ order PENDING và line quantity=3, không xuất kho.", List.of("UC-53", "BR-28"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-051", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"0e60f674-9a60-388c-ae21-c4935a9cb1d4\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"aa5a90c5-b418-4f17-82ba-939e8c74d319\" tồn tại: trạng thái \"PENDING\", booking \"0f27616a-1a59-3f4f-9ec8-5efb5f27de69\".\nTồn kho \"3bb33b80-4772-34bb-af2f-36e01a4b5d62\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"aa5a90c5-b418-4f17-82ba-939e8c74d319\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"0e60f674-9a60-388c-ae21-c4935a9cb1d4\";\ncác món/mặt hàng 1 — số lượng = \"0\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Không xác nhận yêu cầu mà mọi món đều có số lượng 0; yêu cầu chọn món hoặc từ chối toàn bộ; giữ yêu cầu/kho.", List.of("UC-53", "BR-28"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-052", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"7fc6c2a2-76b4-3674-8909-2fb47bd76256\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"fb52eda3-abeb-4084-9955-2cc43a69273a\" tồn tại: trạng thái \"ACCEPTED\", booking \"ce7746df-09b9-351b-8c65-a4eeb21d2477\".\nTồn kho \"7b32a2b8-03e4-3689-a77f-e0c3f4446681\" tồn tại: số lượng \"97.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"fb52eda3-abeb-4084-9955-2cc43a69273a\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"7fc6c2a2-76b4-3674-8909-2fb47bd76256\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Không xác nhận lại qua luồng QR đối với order STAFF; giữ order/kho đã tạo.", List.of("UC-53", "BR-27", "BR-28", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-053", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"05af76f0-9c3b-3e89-a460-03aeb6140695\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"56e736c5-daf2-4c71-8299-fa06148bd2cb\" tồn tại: trạng thái \"PENDING\", booking \"653f1886-5596-3a29-aace-3c81baf04a53\".\nTồn kho \"f65bd7d0-f772-308a-b47b-e8e0b7eda5f8\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"56e736c5-daf2-4c71-8299-fa06148bd2cb\";\nnhân viên phụ trách = \"NV01002\";\ncác món/mặt hàng 1 — món = \"05af76f0-9c3b-3e89-a460-03aeb6140695\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV01002 có ID \"a8f87935-588e-417d-9186-af8cf68cbf04\".", "Hiển thị “Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.”; không accept.", List.of("UC-53", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-054", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"bd91f637-4e46-398c-8bc5-0371c690a806\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"ce79683d-1bc8-40cc-8726-fa461380a881\" tồn tại: trạng thái \"PENDING\", booking \"f661dbe8-2ea3-300d-be7e-f623e4172141\".\nTồn kho \"23f7c07f-a707-366d-8a7f-fd8e0d02981f\" tồn tại: số lượng \"2.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"ce79683d-1bc8-40cc-8726-fa461380a881\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"bd91f637-4e46-398c-8bc5-0371c690a806\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Khách yêu cầu 3 chai nhưng tồn còn 2 tại bước xác nhận phải bị từ chối; không xuất kho hoặc accept yêu cầu.", List.of("UC-53", "BR-27", "BR-28", "BR-123", "BR-38"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-055", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"6b039ff8-f2fa-3163-b1e4-04f7988bf8b2\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"ee935ebc-2bc0-4510-8675-27140020ffa7\" tồn tại: trạng thái \"PENDING\", booking \"eb9b8ae7-e9fc-3f93-a05c-0e95c1122e93\".\nTồn kho \"1b3b985b-9aff-3f6e-92eb-d1b35be5c5dd\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"ee935ebc-2bc0-4510-8675-27140020ffa7\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"6b039ff8-f2fa-3163-b1e4-04f7988bf8b2\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Hai chai thuộc combo, một chai tính phí.", List.of("UC-53", "BR-27", "BR-28", "BR-123", "BR-172"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java"),
+            new ManualCase("FSM-056", "foodservicemanagement", "UC-53 Confirm Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"6f52590d-3771-321a-ac49-92e9a1002cdb\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"83d82c9f-c7ec-4324-b0ae-38d1f9fee7a9\" tồn tại: trạng thái \"ACCEPTED\", booking \"d1ba5bc6-f678-3acd-a874-ea8f649536a3\".\nTồn kho \"7d673192-4e59-3139-bf9b-27d640d910a9\" tồn tại: số lượng \"7.0\", phiên bản \"3\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận yêu cầu gọi món:\nđơn phục vụ = \"83d82c9f-c7ec-4324-b0ae-38d1f9fee7a9\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"6f52590d-3771-321a-ac49-92e9a1002cdb\";\ncác món/mặt hàng 1 — số lượng = \"3\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Xác nhận lại order đã ACCEPTED giữ một lần xuất 3 chai: tồn 10 -> 7, không SALE/charge trùng.", List.of("UC-53", "BR-36", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "confirmRequest", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ConfirmRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ConfirmItemRequestManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.ManualTest tc(String id, String pre, String input,
-            String expected, String type, String br, String msg, FoodServiceManagementManualRunner.CheckedAction action) {
-        return test(id, UC, "FoodOrderService.confirmRequest", pre, input, expected, type,
-                note("UC-53 - Confirm_Item_Request.docx", br, msg, "FoodOrderService.confirmRequest", "White-box"), action);
-    }
-
-    private static OrderLock lock(String channel, String status) {
-        return new OrderLock(ORDER_ID, BRANCH_ID, BOOKING_ID, ALLOCATION_ID, channel, SESSION_ID, status, null, null);
-    }
-
-    private static ConfirmRequest request(int quantity) {
-        return new ConfirmRequest(EMPLOYEE_ID, List.of(new ItemRequest(ITEM_ID, quantity)));
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult confirm(int requested, int accepted) {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().pendingLines(ORDER_ID)).thenReturn(List.of(new PendingLine(LINE_ID, ITEM_ID, "Coca Cola", BigDecimal.valueOf(requested), new BigDecimal("20000"))));
-        var result = f.service().confirmRequest(receptionist(), ORDER_ID, request(accepted));
-        verify(f.orders()).accept(ORDER_ID, BRANCH_ID, ACTOR_ID, EMPLOYEE_ID);
-        return check(result != null, "accepted quantity=" + accepted);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult overRequested() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().pendingLines(ORDER_ID)).thenReturn(List.of(new PendingLine(LINE_ID, ITEM_ID, "Coca Cola", BigDecimal.valueOf(2), new BigDecimal("20000"))));
-        return expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(3)), 400,
-                "Số lượng xác nhận vượt quá số lượng khách đã yêu cầu cho Coca Cola.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult allZero() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        return expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(0)), 400,
-                "Chọn ít nhất một món để xác nhận hoặc từ chối toàn bộ yêu cầu.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult wrongChannel() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("STAFF", "PENDING"));
-        return expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(1)), 409,
-                "Chỉ xác nhận yêu cầu món gửi từ mã MR.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult offShift() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().eligibleOnShift(EMPLOYEE_ID, BRANCH_ID)).thenReturn(false);
-        return expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(1)), 400,
-                "Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult stockShortage() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().lockStock(INVENTORY_ID)).thenReturn(new BigDecimal("2"));
-        var result = expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(3)), 409,
-                "Coca Cola chỉ còn 2 chai. Vui lòng giảm số lượng hoặc chọn món khác.");
-        verify(f.orders(), never()).insertSale(any(), any(), any(), any(), any(), any());
-        return result;
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult combo() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().comboAllowance(BOOKING_ID, ITEM_ID, ORDER_ID))
-                .thenReturn(new ComboAllowance(java.util.UUID.randomUUID(), new BigDecimal("2"), BigDecimal.ZERO));
-        f.service().confirmRequest(receptionist(), ORDER_ID, request(3));
-        verify(f.orders()).updateLine(eq(LINE_ID), any(), eq(new BigDecimal("2")), eq(BigDecimal.ZERO));
-        return check(true, "included=2, paid=1");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult idempotent() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"), lock("ROOM_QR", "ACCEPTED"));
-        f.service().confirmRequest(receptionist(), ORDER_ID, request(3));
-        f.service().confirmRequest(receptionist(), ORDER_ID, request(3));
-        verify(f.orders()).insertSale(INVENTORY_ID, LINE_ID, new BigDecimal("10"), new BigDecimal("3"), ACTOR_ID,
-                "Bán món theo yêu cầu QR đã xác nhận");
-        return check(true, "stock movement created once");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult race() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ROOM_QR", "PENDING"));
-        when(f.orders().accept(ORDER_ID, BRANCH_ID, ACTOR_ID, EMPLOYEE_ID)).thenReturn(0);
-        return expectResponse(() -> f.service().confirmRequest(receptionist(), ORDER_ID, request(3)), 409,
-                "Yêu cầu món vừa được xử lý ở phiên khác; vui lòng tải lại.");
     }
 }

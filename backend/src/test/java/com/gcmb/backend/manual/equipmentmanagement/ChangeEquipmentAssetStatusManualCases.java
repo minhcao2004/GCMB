@@ -1,74 +1,18 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-68 Change Equipment Asset Status manual unit test cases.
- */
 package com.gcmb.backend.manual.equipmentmanagement;
 
-import static com.gcmb.backend.manual.equipmentmanagement.EquipmentManagementManualRunner.*;
-import static org.mockito.Mockito.when;
-
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ChangeEquipmentAssetStatusManualCases {
-    private static final String UC = "UC-68 Change Equipment Asset Status";
-    private static final String FILE = "UC-68 - Change Equipment Asset Status.docx";
-    private static final String PRE = "Quản lý cấp cao qlcc hoặc quản lý cơ sở qlcs.hoabang đã đăng nhập; ASSET-HN01-0001 tồn tại tại HN_HOA_BANG.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ChangeEquipmentAssetStatusManualCases {
     private ChangeEquipmentAssetStatusManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("EQM-031", "Quản lý cơ sở đặt active=false.",
-                "Thiết bị ngừng sử dụng; tình trạng vận hành IN_USE và lịch sử sự cố vẫn giữ nguyên.",
-                "Normal", "", "", "White-box", () -> change(branchManager(), BRANCH_ID, false)),
-            tc("EQM-032", "Quản lý cấp cao chọn HN_HOA_BANG và đặt active=true.",
-                "Thiết bị hoạt động; tình trạng vận hành và lịch sử không thay đổi.",
-                "Normal", "", "", "White-box", () -> change(headOfficeManager(), BRANCH_ID, true)),
-            tc("EQM-033", "active=null.",
-                "Hiển thị “Vui lòng bổ sung trạng thái sử dụng thiết bị.”; trạng thái cũ không đổi.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", ChangeEquipmentAssetStatusManualCases::missingStatus),
-            tc("EQM-034", "Thiết bị đang IN_TRANSIT; yêu cầu active=false.",
-                "Hiển thị “Không đổi trạng thái sử dụng khi thiết bị đang điều chuyển”; không thay đổi dữ liệu.",
-                "Abnormal", "BR-110", "", "White-box", ChangeEquipmentAssetStatusManualCases::inTransit),
-            tc("EQM-035", "Quản lý cơ sở HN_HOA_BANG gửi branchId của cơ sở khác.",
-                "Hiển thị “Bạn không có quyền đổi trạng thái đối với thiết bị.”; trạng thái cũ không đổi.",
-                "Abnormal", "BR-202", "MSG24", "Black-box", ChangeEquipmentAssetStatusManualCases::wrongBranch)
+            new ManualCase("EQM-025", "equipmentmanagement", "UC-68 Change Equipment Asset Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"TS-9-K01-AMTHANH\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Thiết bị ngừng sử dụng; tình trạng vận hành IN_USE và lịch sử sự cố vẫn giữ nguyên.", List.of("UC-68"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/ChangeEquipmentAssetStatusManualCases.java"),
+            new ManualCase("EQM-026", "equipmentmanagement", "UC-68 Change Equipment Asset Status", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"false\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"TS-9-K01-AMTHANH\";\nđang sử dụng = \"true\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Thiết bị hoạt động; tình trạng vận hành và lịch sử không thay đổi.", List.of("UC-68"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/ChangeEquipmentAssetStatusManualCases.java"),
+            new ManualCase("EQM-027", "equipmentmanagement", "UC-68 Change Equipment Asset Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"TS-9-K01-AMTHANH\";\nđang sử dụng = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Vui lòng bổ sung trạng thái sử dụng thiết bị.”; trạng thái cũ không đổi.", List.of("UC-68", "BR-111", "BR-202", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/ChangeEquipmentAssetStatusManualCases.java"),
+            new ManualCase("EQM-028", "equipmentmanagement", "UC-68 Change Equipment Asset Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_TRANSIT\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"TS-9-K01-AMTHANH\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Không đổi trạng thái sử dụng khi thiết bị đang điều chuyển”; không thay đổi dữ liệu.", List.of("UC-68"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/ChangeEquipmentAssetStatusManualCases.java"),
+            new ManualCase("EQM-029", "equipmentmanagement", "UC-68 Change Equipment Asset Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = \"HCM_AU_CO\";\nmã định danh = \"TS-9-K01-AMTHANH\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: HCM_AU_CO có ID \"8f8d0321-f9e8-4b9b-a739-43c479926a8b\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Bạn không có quyền đổi trạng thái đối với thiết bị.”; trạng thái cũ không đổi.", List.of("UC-68", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/ChangeEquipmentAssetStatusManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentAssetService.setActive", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentAssetService.setActive/scope", method), action);
-    }
-
-    private static TestResult change(com.gcmb.backend.auth.dto.Identity actor, java.util.UUID branchId, boolean active) {
-        var f = fixture();
-        var result = f.service().setActive(actor, branchId, ASSET_ID, active);
-        return check(result.active() == active && "IN_USE".equals(result.status()) && INCIDENT_ID.equals(result.latestIncidentId()),
-                "active=" + result.active() + "; status=" + result.status() + "; latestIncidentId=" + result.latestIncidentId());
-    }
-
-    private static TestResult missingStatus() {
-        var f = fixture();
-        return expectStatus(() -> f.service().setActive(branchManager(), BRANCH_ID, ASSET_ID, null), 400,
-                "Vui lòng bổ sung trạng thái sử dụng thiết bị.");
-    }
-
-    private static TestResult inTransit() {
-        var f = fixture();
-        when(f.repository().get(BRANCH_ID, ASSET_ID))
-                .thenReturn(view(ASSET_ID, "ASSET-HN01-0001", "Máy chiếu", "IN_TRANSIT", true, false, null));
-        return expectStatus(() -> f.service().setActive(branchManager(), BRANCH_ID, ASSET_ID, false), 409,
-                "Không đổi trạng thái sử dụng khi thiết bị đang điều chuyển");
-    }
-
-    private static TestResult wrongBranch() {
-        var f = fixture();
-        return expectStatus(() -> f.service().setActive(branchManager(), OTHER_BRANCH_ID, ASSET_ID, false), 403,
-                "Bạn không có quyền đổi trạng thái đối với thiết bị.");
     }
 }

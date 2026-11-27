@@ -1,125 +1,19 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 09/11/2026
- * Description: Manual unit test cases for UC-12 Set Branch Manager.
- */
 package com.gcmb.backend.manual.branchmanagement;
 
-import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.branch;
-import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.check;
-import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.expectStatus;
-import static com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.test;
-
-import com.gcmb.backend.auth.dto.Identity;
-import com.gcmb.backend.branch.service.BranchAdministrationService;
-import com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.ManualTest;
-import com.gcmb.backend.manual.branchmanagement.BranchManagementManualRunner.ScriptedJdbc;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class SetBranchManagerManualCases {
-    private static final String UC = "UC-12 Set Branch Manager";
-    private static final UUID BRANCH_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
-    private static final UUID MANAGER_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
-    private static final UUID ACTOR_ID = UUID.fromString("40000000-0000-0000-0000-000000000001");
-    private static final Identity ACTOR = new Identity(
-            ACTOR_ID, "qlcc", "HEAD_OFFICE_MANAGER", "/head-office", null, null);
-
-    private SetBranchManagerManualCases() {
-    }
-
-    public static List<ManualTest> cases() {
+    private SetBranchManagerManualCases() {}
+    public static List<ManualCase> cases() {
         return List.of(
-                test("BRM-116", UC + " - Danh sách quản lý khả dụng", "BranchAdministrationService.managers",
-                        "Head Office Manager đã đăng nhập; có tài khoản Branch Manager ACTIVE và các tài khoản không đủ điều kiện.",
-                        "Gọi managers().",
-                        "Chỉ trả tài khoản ACTIVE có vai trò BRANCH_MANAGER và không gắn employee INACTIVE; sắp xếp theo họ tên/username rồi ID.", () -> {
-                            ScriptedJdbc db = new ScriptedJdbc();
-                            List<Map<String, Object>> managers = List.of(Map.of(
-                                    "userId", MANAGER_ID, "username", "qlcs.hoabang", "fullName", "Quản lý Hoa Bằng"));
-                            db.mapRows.add(managers);
-                            List<Map<String, Object>> actual = new BranchAdministrationService(db).managers();
-                            String sql = db.reads.get(0).sql();
-                            return check(actual.equals(managers)
-                                            && sql.contains("u.status='ACTIVE'")
-                                            && sql.contains("r.code='BRANCH_MANAGER'")
-                                            && sql.contains("e.status='ACTIVE'")
-                                            && sql.contains("ORDER BY COALESCE(e.full_name,u.username),u.id"),
-                                    "managers=" + actual.size());
-                        }),
-                test("BRM-117", UC + " - Thiếu tài khoản quản lý", "BranchAdministrationService.assign",
-                        "Head Office Manager đã đăng nhập; cơ sở Hoa Bằng đang ACTIVE.",
-                        "Gọi assign(branchId, null, actor).",
-                        "Từ chối HTTP 400 với thông báo: Vui lòng bổ sung tài khoản quản lý cơ sở.; không tạo phân công.", () -> {
-                            ScriptedJdbc db = new ScriptedJdbc();
-                            return expectStatus(() -> new BranchAdministrationService(db).assign(BRANCH_ID, null, ACTOR),
-                                    400, "Vui lòng bổ sung tài khoản quản lý cơ sở.");
-                        }),
-                test("BRM-118", UC + " - Tài khoản không đủ điều kiện", "BranchAdministrationService.assign",
-                        "Head Office Manager đã đăng nhập; cơ sở Hoa Bằng đang ACTIVE; tài khoản được chọn không phải Branch Manager ACTIVE khả dụng.",
-                        "Gọi assign(branchId, ineligibleUserId, actor).",
-                        "Từ chối HTTP 409 với thông báo: Tài khoản được chọn không đủ điều kiện làm Quản lý cơ sở. Vui lòng chọn tài khoản Quản lý cơ sở khả dụng.; không tạo phân công.", () -> {
-                            ScriptedJdbc db = new ScriptedJdbc();
-                            db.typedRows.add(List.of());
-                            return expectStatus(() -> new BranchAdministrationService(db).assign(BRANCH_ID, MANAGER_ID, ACTOR),
-                                    409, "Tài khoản được chọn không đủ điều kiện làm Quản lý cơ sở. Vui lòng chọn tài khoản Quản lý cơ sở khả dụng.");
-                        }),
-                test("BRM-119", UC + " - Cơ sở không hoạt động", "BranchAdministrationService.assign",
-                        "Head Office Manager đã đăng nhập; tài khoản Branch Manager ACTIVE khả dụng; cơ sở Hoa Bằng đang SUSPENDED.",
-                        "Gọi assign(branchId, managerId, actor).",
-                        "Từ chối HTTP 409 với thông báo: Cơ sở GenZ Cinema Hoa Bằng hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công.; giữ nguyên phân công.", () -> {
-                            ScriptedJdbc db = eligibleManagerAndLockedBranch("SUSPENDED");
-                            return expectStatus(() -> new BranchAdministrationService(db).assign(BRANCH_ID, MANAGER_ID, ACTOR),
-                                    409, "Cơ sở GenZ Cinema Hoa Bằng hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công.");
-                        }),
-                test("BRM-120", UC + " - Gán lặp cùng quản lý", "BranchAdministrationService.assign",
-                        "Head Office Manager đã đăng nhập; cơ sở Hoa Bằng ACTIVE; quản lý đã được phân công tại cơ sở này.",
-                        "Gọi lại assign với cùng branchId và managerId.",
-                        "Trả phân công hiện có, không tạo dòng hoặc audit trùng và không làm mất phân công khác.", () -> {
-                            ScriptedJdbc db = eligibleManagerAndLockedBranch("ACTIVE");
-                            db.typedRows.add(List.of(BRANCH_ID));
-                            db.mapRows.add(List.of(branch(BRANCH_ID, "ACTIVE")));
-                            Map<String, Object> actual = new BranchAdministrationService(db).assign(BRANCH_ID, MANAGER_ID, ACTOR);
-                            return check(BRANCH_ID.equals(actual.get("branchId")) && db.updates.isEmpty(),
-                                    "branchId=" + actual.get("branchId") + ", updates=" + db.updates.size());
-                        }),
-                test("BRM-121", UC + " - Đủ hai quản lý", "BranchAdministrationService.assign",
-                        "Head Office Manager đã đăng nhập; cơ sở Hoa Bằng ACTIVE đã có hai quản lý; tài khoản thứ ba đủ điều kiện.",
-                        "Gọi assign với manager thứ ba.",
-                        "Từ chối HTTP 409 với thông báo: Cơ sở đã có đủ 2 quản lý. Hãy chuyển hoặc thu hồi phân công một quản lý trước.; tổng số quản lý không vượt 2.", () -> {
-                            ScriptedJdbc db = eligibleManagerAndLockedBranch("ACTIVE");
-                            db.typedRows.add(List.of());
-                            db.objects.add(2);
-                            return expectStatus(() -> new BranchAdministrationService(db).assign(BRANCH_ID, MANAGER_ID, ACTOR),
-                                    409, "Cơ sở đã có đủ 2 quản lý. Hãy chuyển hoặc thu hồi phân công một quản lý trước.");
-                        }),
-                test("BRM-122", UC + " - Gán quản lý thành công", "BranchAdministrationService.assign",
-                        "Head Office Manager qlcc đã đăng nhập; cơ sở Hoa Bằng ACTIVE còn chỗ; tài khoản Branch Manager ACTIVE khả dụng và chưa được gán tại cơ sở.",
-                        "Gọi assign(branchId, managerId, actor).",
-                        "Tạo đúng một phân công, giữ các phân công khác, đồng bộ branch mặc định khi trống và ghi audit ASSIGN_BRANCH_MANAGER.", () -> {
-                            ScriptedJdbc db = eligibleManagerAndLockedBranch("ACTIVE");
-                            db.typedRows.add(List.of());
-                            db.objects.add(1);
-                            db.mapRows.add(List.of(branch(BRANCH_ID, "ACTIVE")));
-                            Map<String, Object> actual = new BranchAdministrationService(db).assign(BRANCH_ID, MANAGER_ID, ACTOR);
-                            boolean assignment = db.updates.stream().anyMatch(call -> call.sql().contains("INSERT INTO gcmb.branch_manager_assignment"));
-                            boolean defaultBranch = db.updates.stream().anyMatch(call -> call.sql().contains("branch_id=COALESCE"));
-                            boolean audit = db.updates.stream().anyMatch(call -> call.sql().contains("ASSIGN_BRANCH_MANAGER"));
-                            return check(BRANCH_ID.equals(actual.get("branchId")) && db.updates.size() == 4
-                                            && assignment && defaultBranch && audit,
-                                    "updates=" + db.updates.size() + ", assignment=" + assignment + ", audit=" + audit);
-                        })
+            new ManualCase("BRM-041", "branchmanagement", "UC-12 Set Branch Manager - Danh sách quản lý khả dụng", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\", số điện thoại \"0877155379\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem cơ sở trong phạm vi quyền của tài khoản đã đăng nhập.", "Chỉ trả tài khoản ACTIVE có vai trò BRANCH_MANAGER và không gắn employee INACTIVE; sắp xếp theo họ tên/username rồi ID.", List.of("UC-12"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "managers", List.of())), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java"),
+            new ManualCase("BRM-042", "branchmanagement", "UC-12 Set Branch Manager - Thiếu tài khoản quản lý", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\", số điện thoại \"0877155379\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật phân công và phạm vi cơ sở:\ncơ sở = \"HN_HOA_BANG\";\ntài khoản = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Từ chối với thông báo: Vui lòng bổ sung tài khoản quản lý cơ sở.; không tạo phân công.", List.of("UC-12", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "assign", List.of("java.util.UUID", "java.util.UUID", "com.gcmb.backend.auth.dto.Identity"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java"),
+            new ManualCase("BRM-043", "branchmanagement", "UC-12 Set Branch Manager - Tài khoản không đủ điều kiện", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\", số điện thoại \"0877155379\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật phân công và phạm vi cơ sở:\ncơ sở = \"HN_HOA_BANG\";\ntài khoản = \"builanhan\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; builanhan có ID \"8f1377e7-bb7e-277c-53c8-831714edc867\".", "Từ chối với thông báo: Tài khoản được chọn không đủ điều kiện làm Quản lý cơ sở. Vui lòng chọn tài khoản Quản lý cơ sở khả dụng.; không tạo phân công.", List.of("UC-12", "MSG41"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "assign", List.of("java.util.UUID", "java.util.UUID", "com.gcmb.backend.auth.dto.Identity"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java"),
+            new ManualCase("BRM-044", "branchmanagement", "UC-12 Set Branch Manager - Cơ sở không hoạt động", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"SUSPENDED\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"SUSPENDED\", số điện thoại \"0877155379\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật phân công và phạm vi cơ sở:\ncơ sở = \"HN_HOA_BANG\";\ntài khoản = \"buitienanh\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; buitienanh có ID \"1c5dfa2c-ad1e-19a7-68b1-e4d2800d6a53\".", "Từ chối với thông báo: Cơ sở GenZ Cinema Hoa Bằng hiện không hoạt động. Vui lòng chọn cơ sở đang hoạt động để phân công.; giữ nguyên phân công.", List.of("UC-12", "BR-132", "MSG40"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "assign", List.of("java.util.UUID", "java.util.UUID", "com.gcmb.backend.auth.dto.Identity"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java"),
+            new ManualCase("BRM-045", "branchmanagement", "UC-12 Set Branch Manager - Gán lặp cùng quản lý", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\", số điện thoại \"0877155379\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"BRANCH_MANAGER\", email \"qlcs.hoabang@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật phân công và phạm vi cơ sở:\ncơ sở = \"HN_HOA_BANG\";\ntài khoản = \"qlcs.hoabang\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; qlcs.hoabang có ID \"47570000-0000-4000-8000-000000000003\".", "Trả phân công hiện có, không tạo dòng hoặc audit trùng và không làm mất phân công khác.", List.of("UC-12", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "assign", List.of("java.util.UUID", "java.util.UUID", "com.gcmb.backend.auth.dto.Identity"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java"),
+            new ManualCase("BRM-046", "branchmanagement", "UC-12 Set Branch Manager - Gán quản lý thành công", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\", số điện thoại \"0877155379\".\nTài khoản \"buitienanh\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật phân công và phạm vi cơ sở:\ncơ sở = \"HN_HOA_BANG\";\ntài khoản = \"buitienanh\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; buitienanh có ID \"1c5dfa2c-ad1e-19a7-68b1-e4d2800d6a53\".", "Tạo đúng một phân công, giữ các phân công khác, đồng bộ cơ sở mặc định khi trống và ghi audit ASSIGN_BRANCH_MANAGER.", List.of("UC-12", "BR-132"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchAdministrationService", "assign", List.of("java.util.UUID", "java.util.UUID", "com.gcmb.backend.auth.dto.Identity"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/branchmanagement/SetBranchManagerManualCases.java")
         );
-    }
-
-    private static ScriptedJdbc eligibleManagerAndLockedBranch(String status) {
-        ScriptedJdbc db = new ScriptedJdbc();
-        db.typedRows.add(List.of(MANAGER_ID));
-        db.typedRows.add(List.of(BRANCH_ID));
-        db.mapRows.add(List.of(branch(BRANCH_ID, status)));
-        return db;
     }
 }

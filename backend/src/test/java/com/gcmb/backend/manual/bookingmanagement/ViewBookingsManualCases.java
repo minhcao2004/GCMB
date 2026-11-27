@@ -1,150 +1,21 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 29/10/2026
- * Description: Manual unit cases for UC-35 View Bookings.
- */
 package com.gcmb.backend.manual.bookingmanagement;
 
-import static com.gcmb.backend.manual.bookingmanagement.BookingManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.booking.dto.BookingDtos;
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ViewBookingsManualCases {
-    private static final String UC = "UC-35 View Bookings";
-    private static final String PRE = "Receptionist uc3437.demo đã đăng nhập, được phân công tại DEMO-UC3437 active; booking demo UC34-37 đã tồn tại.";
-
-    private ViewBookingsManualCases() {
-    }
-
-    static List<ManualTest> cases() {
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ViewBookingsManualCases {
+    private ViewBookingsManualCases() {}
+    public static List<ManualCase> cases() {
         return List.of(
-            t("BKM-028", "BookingService.list", "Không filter, page=0, size=20",
-                "Trả đúng page trong branch và không ghi dữ liệu", "Normal", () -> {
-                    Fixture f = fresh();
-                    BookingDtos.BookingSummary summary = summary();
-                    when(f.repository().countBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null)).thenReturn(1L);
-                    when(f.repository().findBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null, 0, 20))
-                            .thenReturn(List.of(summary));
-                    BookingDtos.BookingPage actual = f.service().list(identity(), null, null, null, null, null, 0, 20);
-                    verify(f.repository(), never()).updateBooking(any(), any(), any(), any(), any(), any());
-                    return check(actual.totalElements() == 1 && actual.items().equals(List.of(summary)), actual.toString());
-                }),
-            t("BKM-029", "BookingService.list", "Status/date/search/hasDeposit hợp lệ",
-                "Trả đúng kết quả đồng thời thỏa filter", "Normal", () -> {
-                    Fixture f = fresh();
-                    LocalDate from = LocalDate.now(), to = from.plusDays(1);
-                    when(f.repository().countBookings(BRANCH_ID, "CONFIRMED", from, to,
-                            BRANCH.timezone(), "Nguyễn", true)).thenReturn(1L);
-                    when(f.repository().findBookings(BRANCH_ID, "CONFIRMED", from, to,
-                            BRANCH.timezone(), "Nguyễn", true, 0, 10)).thenReturn(List.of(summary()));
-                    BookingDtos.BookingPage actual = f.service().list(identity(), " confirmed ", from, to,
-                            " Nguyễn ", true, 0, 10);
-                    verify(f.repository()).findBookings(BRANCH_ID, "CONFIRMED", from, to,
-                            BRANCH.timezone(), "Nguyễn", true, 0, 10);
-                    return check(actual.totalElements() == 1 && actual.items().size() == 1, actual.toString());
-                }),
-            t("BKM-030", "BookingService.list", "Filter hợp lệ nhưng không có kết quả",
-                "Page rỗng, total=0, không mutation", "Normal", () -> {
-                    Fixture f = fresh();
-                    when(f.repository().countBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), "không-có", null))
-                            .thenReturn(0L);
-                    when(f.repository().findBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), "không-có", null, 0, 20))
-                            .thenReturn(List.of());
-                    BookingDtos.BookingPage actual = f.service().list(identity(), null, null, null,
-                            "không-có", null, 0, 20);
-                    return check(actual.items().isEmpty() && actual.totalElements() == 0 && actual.totalPages() == 0,
-                            actual.toString());
-                }),
-            t("BKM-031", "BookingService.list", "status=UNKNOWN",
-                "Từ chối status sai trước khi query", "Abnormal", () -> {
-                    Fixture f = fresh();
-                    TestResult result = expectFailure(() -> f.service().list(identity(), "UNKNOWN",
-                            null, null, null, null, 0, 20), 400, "Trạng thái booking không hợp lệ");
-                    verify(f.repository(), never()).findBookings(any(), any(), any(), any(), any(), any(), any(),
-                            org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
-                    return result;
-                }),
-            t("BKM-032", "BookingService.detail", "Booking thuộc DEMO-UC3437",
-                "Trả summary, allocation, charge và deposit; không mutation", "Normal", () -> {
-                    Fixture f = fresh();
-                    when(f.repository().charges(BOOKING_ID)).thenReturn(List.of(hourlyCharge()));
-                    BookingDtos.BookingDetail actual = f.service().detail(identity(), BOOKING_ID);
-                    return check(actual.branchId().equals(BRANCH_ID)
-                                    && actual.allocations().size() == 1
-                                    && actual.charges().size() == 1
-                                    && actual.booking().expectedAmount().compareTo(new BigDecimal("360000")) == 0,
-                            "branch=" + actual.branchId() + ", allocations=" + actual.allocations().size()
-                                    + ", charges=" + actual.charges().size());
-                }),
-            t("BKM-033", "BookingService.detail", "Booking ID ngoài branch assignment",
-                "Bạn không có quyền truy cập đối với booking.; không trả dữ liệu", "Abnormal", () -> {
-                    Fixture f = fresh();
-                    when(f.repository().booking(BOOKING_ID, BRANCH_ID)).thenReturn(null);
-                    when(f.repository().bookingExists(BOOKING_ID)).thenReturn(true);
-                    return expectFailure(() -> f.service().detail(identity(), BOOKING_ID), 403,
-                            "Bạn không có quyền truy cập đối với booking.");
-                }),
-            t("BKM-034", "BookingService.list/detail", "Receptionist không có active assignment",
-                "Bạn không có quyền truy cập đối với booking.; không trả booking", "Abnormal", () -> {
-                    Fixture listFixture = fresh();
-                    when(listFixture.repository().branchScope(ACTOR_ID)).thenReturn(null);
-                    TestResult a = expectFailure(() -> listFixture.service().list(identityWithoutBranch(),
-                            null, null, null, null, null, 0, 20), 403,
-                            "Bạn không có quyền truy cập đối với booking.");
-                    Fixture detailFixture = fresh();
-                    when(detailFixture.repository().branchScope(ACTOR_ID)).thenReturn(null);
-                    TestResult b = expectFailure(() -> detailFixture.service().detail(identityWithoutBranch(), BOOKING_ID),
-                            403, "Bạn không có quyền truy cập đối với booking.");
-                    return combine(a, b);
-                }),
-            t("BKM-035", "BookingService.detail", "Catalog đã đổi, booking có snapshot giá cũ",
-                "Trả đúng giá/snapshot đã chốt", "Normal", () -> {
-                    Fixture f = fresh();
-                    when(f.repository().charges(BOOKING_ID)).thenReturn(List.of(hourlyCharge()));
-                    when(f.repository().activeChargeTotal(BOOKING_ID)).thenReturn(new BigDecimal("360000"));
-                    BookingDtos.BookingDetail actual = f.service().detail(identity(), BOOKING_ID);
-                    BookingDtos.ChargeView charge = actual.charges().get(0);
-                    boolean ok = actual.booking().expectedAmount().compareTo(new BigDecimal("360000")) == 0
-                            && charge.amount().compareTo(new BigDecimal("360000")) == 0
-                            && "HOURLY".equals(charge.pricingSnapshot().get("pricingMode"));
-                    return check(ok, "expectedAmount=" + actual.booking().expectedAmount()
-                            + ", snapshot=" + charge.pricingSnapshot());
-                }),
-            t("BKM-067", "BookingService.list/detail", "Cơ sở DEMO-UC3437 đang SUSPENDED",
-                "Vẫn xem được danh sách và chi tiết; không thực hiện mutation", "Normal", () -> {
-                    Fixture f = fresh();
-                    when(f.repository().countBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null)).thenReturn(1L);
-                    when(f.repository().findBookings(BRANCH_ID, null, null, null, BRANCH.timezone(), null, null, 0, 20))
-                            .thenReturn(List.of(summary()));
-                    BookingDtos.BookingPage page = f.service().list(identity(), null, null, null, null, null, 0, 20);
-                    BookingDtos.BookingDetail detail = f.service().detail(identity(), BOOKING_ID);
-                    verify(f.repository(), never()).requireActiveBranch(BRANCH_ID);
-                    return check(page.totalElements() == 1 && detail != null, "list=1, detail available");
-                })
+            new ManualCase("BKM-031", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_AB818B0F77883C68\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:39 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:39 28/11/2026 (UTC+07:00)\".\nBooking \"UT_C5FE104B4C063D32\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:39 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:39 27/11/2026 (UTC+07:00)\".\nLượt phân phòng \"98c7ab9e-6a85-390a-ab62-b949b65bc25c\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:39 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:39 27/11/2026 (UTC+07:00)\", booking \"UT_C5FE104B4C063D32\".\nLượt phân phòng \"fe2f14ed-4e7b-39bd-9c77-1398d2228166\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:39 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:39 28/11/2026 (UTC+07:00)\", booking \"UT_AB818B0F77883C68\".\nKhoản phí booking \"UT_C5FE104B4C063D32\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_C5FE104B4C063D32\".\nKhoản phí booking \"UT_AB818B0F77883C68\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_AB818B0F77883C68\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\ntrạng thái cần tìm = \"\";\ntừ ngày = không truyền giá trị;\nđến ngày = không truyền giá trị;\ntừ khóa = \"\";\ncó tiền cọc = không truyền giá trị;\ntrang = \"0\";\nsố bản ghi mỗi trang = \"100\".", "Trả các booking thuộc cơ sở \"HN_HOA_BANG\" và thỏa bộ lọc đã chọn, bao gồm các booking đã chuẩn bị cho case; không trả booking của cơ sở khác. Không thay đổi booking.", List.of("UC-35", "BR-1"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String", "java.time.LocalDate", "java.time.LocalDate", "java.lang.String", "java.lang.Boolean", "int", "int"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-032", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_07AC7B5FA58931CB\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:40 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:40 28/11/2026 (UTC+07:00)\".\nBooking \"UT_5A4BA2E0F6A63175\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:40 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:40 27/11/2026 (UTC+07:00)\".\nLượt phân phòng \"0243fda8-e7f7-3de4-a206-e5dcf6c9bfeb\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:40 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:40 28/11/2026 (UTC+07:00)\", booking \"UT_07AC7B5FA58931CB\".\nLượt phân phòng \"3fd91eb1-01f4-3719-a9b3-b78b39833c55\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:40 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:40 27/11/2026 (UTC+07:00)\", booking \"UT_5A4BA2E0F6A63175\".\nKhoản phí booking \"UT_07AC7B5FA58931CB\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_07AC7B5FA58931CB\".\nKhoản phí booking \"UT_5A4BA2E0F6A63175\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_5A4BA2E0F6A63175\".\nBút toán cọc \"UT_07AC7B5FA58931CB\" tồn tại: số tiền \"57600\", booking \"UT_07AC7B5FA58931CB\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\ntrạng thái cần tìm = \"CONFIRMED\";\ntừ ngày = không truyền giá trị;\nđến ngày = không truyền giá trị;\ntừ khóa = \"UT_07AC7B5FA58931CB\";\ncó tiền cọc = \"true\";\ntrang = \"0\";\nsố bản ghi mỗi trang = \"100\".", "Lọc status=\"CONFIRMED\", search=mã booking đã chuẩn bị, hasDeposit=true trả đúng booking xác nhận có số cọc 57600 đ; không sửa dữ liệu.", List.of("UC-35", "BR-1"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String", "java.time.LocalDate", "java.time.LocalDate", "java.lang.String", "java.lang.Boolean", "int", "int"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-033", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_0532DD14B05D3007\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:41 28/11/2026 (UTC+07:00)\".\nBooking \"UT_E9BABB17EA843A1D\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:41 27/11/2026 (UTC+07:00)\".\nLượt phân phòng \"3b79a40c-2633-316f-b35a-7e0fc92acc0b\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:41 27/11/2026 (UTC+07:00)\", booking \"UT_E9BABB17EA843A1D\".\nLượt phân phòng \"d708bff3-caf7-36d4-a2d9-f7604bf5653f\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:41 28/11/2026 (UTC+07:00)\", booking \"UT_0532DD14B05D3007\".\nKhoản phí booking \"UT_0532DD14B05D3007\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_0532DD14B05D3007\".\nKhoản phí booking \"UT_E9BABB17EA843A1D\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_E9BABB17EA843A1D\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\ntrạng thái cần tìm = \"\";\ntừ ngày = không truyền giá trị;\nđến ngày = không truyền giá trị;\ntừ khóa = \"UT_NO_BOOKING_12bf85\";\ncó tiền cọc = không truyền giá trị;\ntrang = \"0\";\nsố bản ghi mỗi trang = \"100\".", "Tìm \"UT_NO_BOOKING_12bf85\" trả items rỗng, total=0, không thay đổi DB.", List.of("UC-35", "BR-1"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String", "java.time.LocalDate", "java.time.LocalDate", "java.lang.String", "java.lang.Boolean", "int", "int"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-034", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_946E1423040D3287\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:41 27/11/2026 (UTC+07:00)\".\nBooking \"UT_BC9F2DE976DC39E7\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:41 28/11/2026 (UTC+07:00)\".\nLượt phân phòng \"b2f80052-cb6a-3569-9d77-42e0ede411fd\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:41 28/11/2026 (UTC+07:00)\", booking \"UT_BC9F2DE976DC39E7\".\nLượt phân phòng \"b40f4caa-ede6-34c3-9363-d92958f99233\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:41 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:41 27/11/2026 (UTC+07:00)\", booking \"UT_946E1423040D3287\".\nKhoản phí booking \"UT_946E1423040D3287\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_946E1423040D3287\".\nKhoản phí booking \"UT_BC9F2DE976DC39E7\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_BC9F2DE976DC39E7\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\nbooking = \"UT_BC9F2DE976DC39E7\".\nĐịnh danh đối chiếu: UT_BC9F2DE976DC39E7 có ID \"bc9f2de9-76dc-39e7-a4a9-eb9bf8d37fe5\".", "Trả booking CONFIRMED đã chuẩn bị, allocation RESERVED, giá đã chốt 192000 đ và tài khoản cọc; không sửa booking.", List.of("UC-35", "BR-13"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "detail", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-035", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"dangmanhtai\" đã đăng nhập. Phạm vi cơ sở \"HCM_AU_CO\".\nBooking \"UT_7CFCEB8730093676\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:34:37 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:34:37 27/11/2026 (UTC+07:00)\".\nBooking \"UT_CDE1B3BFD7813F74\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:34:37 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:34:37 28/11/2026 (UTC+07:00)\".\nLượt phân phòng \"242bcacb-7fbe-3678-b80c-ad4506e9216b\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:34:37 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:34:37 27/11/2026 (UTC+07:00)\", booking \"UT_7CFCEB8730093676\".\nLượt phân phòng \"ae900c26-e164-3cbb-8664-1aaca335e282\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:34:37 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:34:37 28/11/2026 (UTC+07:00)\", booking \"UT_CDE1B3BFD7813F74\".\nKhoản phí booking \"UT_CDE1B3BFD7813F74\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_CDE1B3BFD7813F74\".\nKhoản phí booking \"UT_7CFCEB8730093676\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_7CFCEB8730093676\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\nbooking = \"UT_CDE1B3BFD7813F74\".\nĐịnh danh đối chiếu: UT_CDE1B3BFD7813F74 có ID \"cde1b3bf-d781-3f74-85fe-7e816e2c93b2\".", "Bạn không có quyền truy cập đối với booking.; không trả dữ liệu booking ngoài phạm vi.", List.of("UC-35", "BR-1", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "detail", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-036", "bookingmanagement", "UC-35 View Bookings", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_85CB0A3749A63A70\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:42 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:42 27/11/2026 (UTC+07:00)\".\nBooking \"UT_A025C9B42C7B3556\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:42 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:42 28/11/2026 (UTC+07:00)\".\nLượt phân phòng \"3e7cc06f-d62b-3522-98be-3b3890426eaa\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:42 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:42 28/11/2026 (UTC+07:00)\", booking \"UT_A025C9B42C7B3556\".\nLượt phân phòng \"d456be80-13f9-33ff-bd10-092a4b115772\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:42 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:42 27/11/2026 (UTC+07:00)\", booking \"UT_85CB0A3749A63A70\".\nKhoản phí booking \"UT_85CB0A3749A63A70\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_85CB0A3749A63A70\".\nKhoản phí booking \"UT_A025C9B42C7B3556\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_A025C9B42C7B3556\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\ntrạng thái cần tìm = \"\";\ntừ ngày = không truyền giá trị;\nđến ngày = không truyền giá trị;\ntừ khóa = \"\";\ncó tiền cọc = không truyền giá trị;\ntrang = \"0\";\nsố bản ghi mỗi trang = \"100\".", "Bạn không có quyền truy cập đối với booking.; không trả dữ liệu booking.", List.of("UC-35", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String", "java.time.LocalDate", "java.time.LocalDate", "java.lang.String", "java.lang.Boolean", "int", "int"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-037", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_9A5FF249E2B1336A\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:43 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:43 27/11/2026 (UTC+07:00)\".\nBooking \"UT_9E3B8D0FDC163ED2\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:43 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:43 28/11/2026 (UTC+07:00)\".\nLượt phân phòng \"69f9bd15-b1f4-38c7-9592-a493e16fa8ef\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:43 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:43 28/11/2026 (UTC+07:00)\", booking \"UT_9E3B8D0FDC163ED2\".\nLượt phân phòng \"857ac7f6-67d8-37e5-bd7c-dfaf097d86d4\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:43 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:43 27/11/2026 (UTC+07:00)\", booking \"UT_9A5FF249E2B1336A\".\nKhoản phí booking \"UT_9E3B8D0FDC163ED2\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_9E3B8D0FDC163ED2\".\nKhoản phí booking \"UT_9A5FF249E2B1336A\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_9A5FF249E2B1336A\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\nbooking = \"UT_9E3B8D0FDC163ED2\".\nĐịnh danh đối chiếu: UT_9E3B8D0FDC163ED2 có ID \"9e3b8d0f-dc16-3ed2-a31a-4f5190c34ef0\".", "Dù catalog đổi 120000/giờ, chi tiết vẫn trả charge/snapshot đã chốt 2×96000=192000 đ; không sửa giá lịch sử.", List.of("UC-35", "BR-13"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "detail", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java"),
+            new ManualCase("BKM-038", "bookingmanagement", "UC-35 View Bookings", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nBooking \"UT_803A1A4453913613\" tồn tại: trạng thái \"CONFIRMED\", giờ bắt đầu \"23:17:44 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:44 28/11/2026 (UTC+07:00)\".\nBooking \"UT_DE19783B3A1F379D\" tồn tại: trạng thái \"IN_HOUSE\", giờ bắt đầu \"18:17:44 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:44 27/11/2026 (UTC+07:00)\".\nLượt phân phòng \"7d92a8a7-e6bd-32f4-a756-d6fafec928e6\" tồn tại: trạng thái phân phòng \"OCCUPIED\", giờ bắt đầu \"18:17:44 27/11/2026 (UTC+07:00)\", giờ kết thúc \"21:17:44 27/11/2026 (UTC+07:00)\", booking \"UT_DE19783B3A1F379D\".\nLượt phân phòng \"c875f051-9a45-327f-bbb9-8c70e12feb8a\" tồn tại: trạng thái phân phòng \"RESERVED\", giờ bắt đầu \"23:17:44 27/11/2026 (UTC+07:00)\", giờ kết thúc \"01:17:44 28/11/2026 (UTC+07:00)\", booking \"UT_803A1A4453913613\".\nKhoản phí booking \"UT_DE19783B3A1F379D\" tồn tại: trạng thái \"ACTIVE\", số tiền \"288000\", số lượng \"3.0\", booking \"UT_DE19783B3A1F379D\".\nKhoản phí booking \"UT_803A1A4453913613\" tồn tại: trạng thái \"ACTIVE\", số tiền \"192000\", số lượng \"2.0\", booking \"UT_803A1A4453913613\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem booking:\ntrạng thái cần tìm = \"\";\ntừ ngày = không truyền giá trị;\nđến ngày = không truyền giá trị;\ntừ khóa = \"\";\ncó tiền cọc = không truyền giá trị;\ntrang = \"0\";\nsố bản ghi mỗi trang = \"100\".", "Lễ tân vẫn xem danh sách booking tại cơ sở SUSPENDED; không ghi thay đổi.", List.of("UC-35", "BR-177"), List.of(new MethodTarget("com.gcmb.backend.booking.service.BookingService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String", "java.time.LocalDate", "java.time.LocalDate", "java.lang.String", "java.lang.Boolean", "int", "int"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/bookingmanagement/ViewBookingsManualCases.java")
         );
-    }
-
-    private static BookingDtos.BookingSummary summary() {
-        return new BookingDtos.BookingSummary(BOOKING_ID, "DEMO-UC3437-EDIT", "Nguyễn Khách Cập Nhật",
-                "0900000101", "PHONE", futureMinutes(180), futureMinutes(300), null, "CONFIRMED",
-                ROOM_ID, "DEMO-MB-01", "Music Box demo 01", "Music Box demo",
-                new BigDecimal("360000"), BigDecimal.ZERO, BigDecimal.ZERO, 2, "AVAILABLE");
-    }
-
-    private static ManualTest t(String id, String source, String input, String expected,
-            String type, CheckedAction action) {
-        return test(id, UC, source, PRE, input, expected, type,
-                "Nguồn: UC-35_View_Bookings.docx; Production: " + source
-                        + ". Phương pháp kiểm thử: White-box.", action);
     }
 }

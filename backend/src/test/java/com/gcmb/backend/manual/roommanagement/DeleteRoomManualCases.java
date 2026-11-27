@@ -1,93 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 29/10/2026
- * Description: Manual unit test cases for UC-31 Delete Room.
- */
 package com.gcmb.backend.manual.roommanagement;
 
-import static com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.Fixture;
-import com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.ManualTest;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class DeleteRoomManualCases {
-    private static final String UC = "UC-31 Delete Room";
-    private DeleteRoomManualCases() {
-    }
-
-    public static List<ManualTest> cases() {
+    private DeleteRoomManualCases() {}
+    public static List<ManualCase> cases() {
         return List.of(
-                test("RM-019", "Chọn xóa phòng không có dữ liệu nghiệp vụ tham chiếu và xác nhận",
-                        "Hoàn tất không exception và repository nhận đúng branch/roomId.", "Normal", () -> {
-                            Fixture f = fixture();
-                            when(f.repository().delete(BRANCH_ID, ROOM_ID)).thenReturn(true);
-                            f.service().delete(f.identity(), ROOM_ID);
-                            verify(f.repository()).delete(BRANCH_ID, ROOM_ID);
-                            return check(true, "delete completed once");
-                        }),
-                test("RM-020", "Chọn xóa phòng đang được booking, thiết bị hoặc lịch sử tham chiếu",
-                        "Từ chối với thông báo “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; phòng vẫn còn.", "Abnormal", () -> {
-                            Fixture f = fixture();
-                            when(f.repository().delete(BRANCH_ID, ROOM_ID)).thenReturn(false);
-                            return expectStatus(() -> f.service().delete(f.identity(), ROOM_ID), 409,
-                                    "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.");
-                        }),
-                test("RM-021", "Tài khoản Branch Manager chưa được gán cơ sở",
-                        "Từ chối với thông báo “Bạn không có quyền xóa đối với phòng.”; không gọi repository.", "Abnormal", () -> {
-                            Fixture f = fixture();
-                            TestResult result = expectStatus(
-                                    () -> f.service().delete(identityWithoutBranch(), ROOM_ID), 403,
-                                    "Bạn không có quyền xóa đối với phòng.");
-                            verify(f.repository(), never()).delete(any(), any());
-                            return result;
-                        }),
-                test("RM-039", "Xóa phòng tại cơ sở đang tạm ngừng hoạt động",
-                        SUSPENDED_MESSAGE + "; không xóa phòng.", "Abnormal", () -> {
-                            Fixture f = fixture();
-                            suspended(f);
-                            TestResult result = expectStatus(
-                                    () -> f.service().delete(f.identity(), ROOM_ID), 403, SUSPENDED_MESSAGE);
-                            verify(f.repository(), never()).delete(any(), any());
-                            return result;
-                        })
+            new ManualCase("RM-021", "roommanagement", "UC-31 Delete Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"UT_CE705B22378E31C2\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa phòng:\nmã định danh = \"UT_CE705B22378E31C2\".\nĐịnh danh đối chiếu: UT_CE705B22378E31C2 có ID \"ce705b22-378e-31c2-8c36-3c18ba429bc3\".", "Xóa đúng phòng được chọn khi chưa có tham chiếu nghiệp vụ; không xóa hoặc thay đổi bản ghi khác.", List.of("UC-31", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/DeleteRoomManualCases.java"),
+            new ManualCase("RM-022", "roommanagement", "UC-31 Delete Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q03\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"UT_7AF1FD4CDA103F87\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa phòng:\nmã định danh = \"Q03\".\nĐịnh danh đối chiếu: Q03 có ID \"65d5a52f-b310-4265-a556-ca058ed415bb\".", "Từ chối với thông báo “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; phòng vẫn còn.", List.of("UC-31", "BR-118", "MSG104"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/DeleteRoomManualCases.java"),
+            new ManualCase("RM-023", "roommanagement", "UC-31 Delete Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Chưa chọn/không được gán cơ sở.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa phòng:\nmã định danh = \"Q01\".\nĐịnh danh đối chiếu: Q01 có ID \"cec0740f-5b44-4d13-9c7b-2de627b23b5f\".", "Từ chối với thông báo “Bạn không có quyền xóa đối với phòng.”; không thay đổi dữ liệu.", List.of("UC-31", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/DeleteRoomManualCases.java"),
+            new ManualCase("RM-024", "roommanagement", "UC-31 Delete Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"SUSPENDED\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa phòng:\nmã định danh = \"Q01\".\nĐịnh danh đối chiếu: Q01 có ID \"cec0740f-5b44-4d13-9c7b-2de627b23b5f\".", "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.; không xóa phòng.", List.of("UC-31", "BR-177", "MSG43"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/DeleteRoomManualCases.java")
         );
-    }
-
-    private static ManualTest test(String id, String input, String expected, String type, CheckedAction action) {
-        return new ManualTest(id, UC, "BranchRoomService.delete", precondition(id), input, expected, type, note(id), action);
-    }
-
-    private static String precondition(String id) {
-        String validScope = "Branch Manager qlcs.hoabang đã đăng nhập, đang ACTIVE và được phân công quản lý cơ sở Hoa Bằng. ";
-        String unit = "BranchRoomService thật; BranchRoomRepository mock; không xóa dữ liệu demo thật.";
-        return switch (id) {
-            case "RM-019" -> validScope
-                    + "Phòng cần xóa tồn tại trong cơ sở và không có room allocation, thiết bị hoặc asset transfer tham chiếu. " + unit;
-            case "RM-020" -> validScope
-                    + "Phòng cần xóa tồn tại trong cơ sở và đang có booking, thiết bị hoặc lịch sử/bản ghi liên quan phải được bảo toàn. " + unit;
-            case "RM-021" -> "Branch Manager qlcs.hoabang đã đăng nhập và đang ACTIVE nhưng tài khoản chưa được gán cơ sở. "
-                    + "Không thực hiện truy vấn xóa trước khi xác định branch scope. " + unit;
-            case "RM-039" -> "Branch Manager qlcs.hoabang đã đăng nhập và được phân công quản lý cơ sở Hoa Bằng; cơ sở đang tạm ngừng hoạt động. "
-                    + "Phòng cần xóa tồn tại trong cơ sở. " + unit;
-            default -> throw new IllegalArgumentException("Unknown test case: " + id);
-        };
-    }
-
-    private static String note(String id) {
-        String source = "Nguồn: UC-31_Delete_Room.docx; ";
-        return source + switch (id) {
-            case "RM-019" -> "BR-118; Production: BranchRoomService.delete. Phương pháp kiểm thử: White-box.";
-            case "RM-020" -> "BR-118; MSG104; Production: BranchRoomService.delete. Phương pháp kiểm thử: White-box.";
-            case "RM-021" -> "MSG24; Production: BranchRoomService.delete. Phương pháp kiểm thử: White-box.";
-            case "RM-039" -> "BR-177; Production: BranchRoomService.delete; BranchRoomRepository.requireActive. Phương pháp kiểm thử: White-box.";
-            default -> throw new IllegalArgumentException("Unknown test case: " + id);
-        };
     }
 }

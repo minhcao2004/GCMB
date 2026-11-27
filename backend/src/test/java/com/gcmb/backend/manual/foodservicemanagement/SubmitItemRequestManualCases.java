@@ -1,94 +1,18 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-51 Submit Item Request manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.ItemRequest;
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.RoomRequest;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.ExistingOrder;
-import java.math.BigDecimal;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class SubmitItemRequestManualCases {
-    private static final String UC = "UC-51 Submit Item Request";
-    private static final String PRE = "Khách đã quét MR hợp lệ; phiên phòng còn hạn; booking BK-DEMO đang IN_HOUSE; Coca Cola đang bán.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class SubmitItemRequestManualCases {
     private SubmitItemRequestManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("FSM-049", PRE, "Coca Cola quantity=2; idempotencyKey=room-1.", "Tạo yêu cầu ROOM_QR/PENDING; chưa tính tiền hoặc trừ kho.", "Normal", "BR-27, BR-117", "", SubmitItemRequestManualCases::valid),
-            tc("FSM-050", PRE, "Coca Cola quantity=0.", "Hiển thị “Số lượng phải là số nguyên lớn hơn 0.”; không tạo yêu cầu.", "Boundary", "BR-117", "MSG45", SubmitItemRequestManualCases::zero),
-            tc("FSM-051", PRE + " Tồn kho Coca Cola=0 chai.", "Coca Cola quantity=1.", "Hiển thị “Coca Cola chỉ còn 0 chai. Vui lòng giảm số lượng hoặc chọn món khác.”; không tạo yêu cầu.", "Boundary", "BR-38", "MSG18", SubmitItemRequestManualCases::outOfStock),
-            tc("FSM-052", "Khách dùng mã MR không hợp lệ hoặc phiên phòng đã hết hạn.", "Gửi yêu cầu món.", "Hiển thị “Phiên gọi món đã hết hạn hoặc phòng đã đổi lượt. Hãy quét lại mã MR trong phòng.”; không tạo yêu cầu.", "Abnormal", "BR-27", "", SubmitItemRequestManualCases::expired),
-            tc("FSM-053", PRE, "Coca Cola xuất hiện hai lần.", "Hiển thị “Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.”; không tạo yêu cầu.", "Abnormal", "BR-117", "", SubmitItemRequestManualCases::duplicate),
-            tc("FSM-054", PRE + " idempotencyKey đã tạo yêu cầu này.", "Gửi lại cùng key.", "Trả yêu cầu hiện có; không tạo order hoặc line trùng.", "Abnormal", "BR-164", "MSG74", SubmitItemRequestManualCases::idempotent)
+            new ManualCase("FSM-040", "foodservicemanagement", "UC-51 Submit Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"a7113baa-0932-3983-af6f-6d1ee127bf72\" tồn tại: đang sử dụng \"true\".\nTồn kho \"55156fc9-09d1-351d-9dd9-f7a3c78dc1b5\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Gửi yêu cầu gọi món:\nmã phiên gọi món tại phòng = \"MR-73470B38BB2949D5AD0BF3E87008133F\";\nmã phiên = \"4jc7mvhYsW6B-BfUVuE8uB_AU6gNu57VS9fI4JeUDWQ\";\ncác món/mặt hàng 1 — món = \"a7113baa-0932-3983-af6f-6d1ee127bf72\";\ncác món/mặt hàng 1 — số lượng = \"2\";\nmã xác nhận chống ghi trùng = \"UT_5D7FDCBB7B133CC7\".", "Tạo yêu cầu ROOM_QR/PENDING; chưa tính tiền hoặc trừ kho.", List.of("UC-51", "BR-27", "BR-117"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "submitRoomRequest", List.of("java.lang.String", "java.lang.String", "com.gcmb.backend.inventory.dto.FoodOrderDtos$RoomRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/SubmitItemRequestManualCases.java"),
+            new ManualCase("FSM-041", "foodservicemanagement", "UC-51 Submit Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"3985d06d-ecce-3aba-87f8-b1dc97a05fb0\" tồn tại: đang sử dụng \"true\".\nTồn kho \"e01f6ef9-a6bb-37e5-b2b9-41554b652827\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Gửi yêu cầu gọi món:\nmã phiên gọi món tại phòng = \"MR-73470B38BB2949D5AD0BF3E87008133F\";\nmã phiên = \"h1z2U-wpRDSEW08SlaBQ6PCtD0G1YxkS-RpBGPZAS1Q\";\ncác món/mặt hàng 1 — món = \"3985d06d-ecce-3aba-87f8-b1dc97a05fb0\";\ncác món/mặt hàng 1 — số lượng = \"0\";\nmã xác nhận chống ghi trùng = \"UT_4E1499D483583763\".", "Hiển thị “Số lượng phải là số nguyên lớn hơn 0.”; không tạo yêu cầu.", List.of("UC-51", "BR-117", "MSG44"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "submitRoomRequest", List.of("java.lang.String", "java.lang.String", "com.gcmb.backend.inventory.dto.FoodOrderDtos$RoomRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/SubmitItemRequestManualCases.java"),
+            new ManualCase("FSM-042", "foodservicemanagement", "UC-51 Submit Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"88f48fd3-4b89-357e-9ab3-331ecf437a40\" tồn tại: đang sử dụng \"true\".\nTồn kho \"fc7b0321-2b08-304e-bf73-d664d4d68946\" tồn tại: số lượng \"0.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Gửi yêu cầu gọi món:\nmã phiên gọi món tại phòng = \"MR-73470B38BB2949D5AD0BF3E87008133F\";\nmã phiên = \"kan32_3ffphUD8tmSSs4cCMC8602NA46g89iWhUVGNo\";\ncác món/mặt hàng 1 — món = \"88f48fd3-4b89-357e-9ab3-331ecf437a40\";\ncác món/mặt hàng 1 — số lượng = \"2\";\nmã xác nhận chống ghi trùng = \"UT_4C5843172C043494\".", "Từ chối 2 chai khi tồn 0; thông báo Coca Cola UT chỉ còn 0 chai; không tạo order/line/SALE.", List.of("UC-51", "BR-36", "MSG18", "BR-38"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "submitRoomRequest", List.of("java.lang.String", "java.lang.String", "com.gcmb.backend.inventory.dto.FoodOrderDtos$RoomRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/SubmitItemRequestManualCases.java"),
+            new ManualCase("FSM-043", "foodservicemanagement", "UC-51 Submit Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"e2efe82b-4aa8-3278-a65e-1d77a0cc7912\" tồn tại: đang sử dụng \"true\".\nTồn kho \"32aefede-08ff-34d1-b31b-6ebd5d1e1c3b\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Gửi yêu cầu gọi món:\nmã phiên gọi món tại phòng = \"MR-73470B38BB2949D5AD0BF3E87008133F\";\nmã phiên = \"UT_EXPIRED_ROOM_SESSION\";\ncác món/mặt hàng 1 — món = \"e2efe82b-4aa8-3278-a65e-1d77a0cc7912\";\ncác món/mặt hàng 1 — số lượng = \"2\";\nmã xác nhận chống ghi trùng = \"UT_A808819E18C63C2B\".", "Token phiên không hợp lệ/hết hạn bị từ chối, yêu cầu quét lại mã MR; không tạo yêu cầu món.", List.of("UC-51", "BR-27"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "submitRoomRequest", List.of("java.lang.String", "java.lang.String", "com.gcmb.backend.inventory.dto.FoodOrderDtos$RoomRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/SubmitItemRequestManualCases.java"),
+            new ManualCase("FSM-044", "foodservicemanagement", "UC-51 Submit Item Request", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"45ef619a-52e6-3afc-95c7-c9a2bfa4d8d0\" tồn tại: đang sử dụng \"true\".\nTồn kho \"d81f80d6-76bd-36a2-a2d2-af552fdc2296\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Gửi yêu cầu gọi món:\nmã phiên gọi món tại phòng = \"MR-73470B38BB2949D5AD0BF3E87008133F\";\nmã phiên = \"6D2dSnrwRSM6g5fMbrLd1b06B5GfvbeIRMwUog0F78o\";\ncác món/mặt hàng 1 — món = \"45ef619a-52e6-3afc-95c7-c9a2bfa4d8d0\";\ncác món/mặt hàng 1 — số lượng = \"2\";\nmã xác nhận chống ghi trùng = \"UT_F3A9955D37003E71\".", "Gửi lại cùng khóa và phiên trả yêu cầu cũ; chỉ một ROOM_QR/PENDING, chưa SALE/tính phí.", List.of("UC-51", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "submitRoomRequest", List.of("java.lang.String", "java.lang.String", "com.gcmb.backend.inventory.dto.FoodOrderDtos$RoomRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/SubmitItemRequestManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.ManualTest tc(String id, String pre, String input,
-            String expected, String type, String br, String msg, FoodServiceManagementManualRunner.CheckedAction action) {
-        return test(id, UC, "FoodOrderService.submitRoomRequest", pre, input, expected, type,
-                note("UC-51 - Submit_Item_Request.docx", br, msg, "FoodOrderService.submitRoomRequest", "White-box"), action);
-    }
-
-    private static RoomRequest request(int quantity, String key) {
-        return new RoomRequest(List.of(new ItemRequest(ITEM_ID, quantity)), key);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult valid() {
-        var f = foodFixture();
-        var result = f.service().submitRoomRequest(MR_CODE, TOKEN, request(2, "room-1"));
-        verify(f.orders(), never()).insertSale(any(), any(), any(), any(), any(), any());
-        return check("PENDING".equals(result.status()), "status=" + result.status() + "; no stock movement");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult zero() {
-        var f = foodFixture();
-        return expectResponse(() -> f.service().submitRoomRequest(MR_CODE, TOKEN, request(0, "room-zero")), 400,
-                "Số lượng phải là số nguyên lớn hơn 0.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult outOfStock() {
-        var f = foodFixture();
-        when(f.orders().sellableItems(eq(BRANCH_ID), any())).thenReturn(List.of(sellable(BigDecimal.ZERO)));
-        return expectResponse(() -> f.service().submitRoomRequest(MR_CODE, TOKEN, request(1, "room-stock")), 409,
-                "Coca Cola chỉ còn 0 chai. Vui lòng giảm số lượng hoặc chọn món khác.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult expired() {
-        var f = foodFixture();
-        when(f.orders().validSession(eq(MR_CODE), any())).thenReturn(null);
-        return expectResponse(() -> f.service().submitRoomRequest(MR_CODE, TOKEN, request(1, "room-expired")), 401,
-                "Phiên gọi món đã hết hạn hoặc phòng đã đổi lượt. Hãy quét lại mã MR trong phòng.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult duplicate() {
-        var f = foodFixture();
-        var request = new RoomRequest(List.of(new ItemRequest(ITEM_ID, 1), new ItemRequest(ITEM_ID, 1)), "room-dup");
-        return expectResponse(() -> f.service().submitRoomRequest(MR_CODE, TOKEN, request), 400,
-                "Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult idempotent() {
-        var f = foodFixture();
-        when(f.orders().createOrder(any(), any(), any(), any(), any(), any(), any(), any(), any(), eq("same-room-key"))).thenReturn(null);
-        when(f.orders().existingByKey("same-room-key"))
-                .thenReturn(new ExistingOrder(ORDER_ID, BRANCH_ID, BOOKING_ID, "ROOM_QR", SESSION_ID));
-        var result = f.service().submitRoomRequest(MR_CODE, TOKEN, request(1, "same-room-key"));
-        verify(f.orders(), never()).insertLine(any(), any(), any(), any(), any(), any(), any(), any());
-        return check(result != null, "returned existing request=" + result.code());
     }
 }

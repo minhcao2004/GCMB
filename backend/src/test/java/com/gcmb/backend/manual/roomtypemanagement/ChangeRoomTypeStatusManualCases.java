@@ -1,69 +1,15 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 09/11/2026
- * Description: Manual unit test cases for UC-17 Change Room Type Status.
- */
 package com.gcmb.backend.manual.roomtypemanagement;
 
-import static com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.check;
-import static com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.expectStatus;
-import static com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.roomType;
-import static com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.test;
-
-import com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.ManualTest;
-import com.gcmb.backend.manual.roomtypemanagement.RoomTypeManagementManualRunner.ScriptedJdbc;
-import com.gcmb.backend.pricing.dto.RoomTypeView;
-import com.gcmb.backend.pricing.service.RoomCatalogService;
 import java.util.List;
-import java.util.UUID;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class ChangeRoomTypeStatusManualCases {
-    private static final String UC = "UC-17 Change Room Type Status";
-    private static final String PRE = "Head Office Manager đã đăng nhập; room type cần đổi trạng thái tồn tại theo điều kiện test case.";
-
-    private ChangeRoomTypeStatusManualCases() {
-    }
-
-    public static List<ManualTest> cases() {
+    private ChangeRoomTypeStatusManualCases() {}
+    public static List<ManualCase> cases() {
         return List.of(
-                tc("RTM-084", "Ngừng sử dụng thành công",
-                        "Room type RT-QN đang active; chọn ngừng sử dụng.",
-                        "Trạng thái chuyển thành inactive; dữ liệu hạng phòng và lịch sử liên quan vẫn được giữ nguyên.", () -> {
-                            UUID id = UUID.fromString("50000000-0000-0000-0000-000000000004");
-                            ScriptedJdbc db = new ScriptedJdbc();
-                            db.queryRows.add(List.of(roomType(id, "RT-QN", "Queen", false)));
-                            RoomTypeView actual = new RoomCatalogService(db).deactivateRoomType(id);
-                            return check(!actual.active() && db.updates.size() == 1
-                                            && db.updates.get(0).sql().contains("SET active=false")
-                                            && id.equals(db.updates.get(0).args()[0]),
-                                    "active=" + actual.active() + ", updates=" + db.updates.size());
-                        }, "RoomCatalogService.deactivateRoomType"),
-                tc("RTM-085", "Hạng phòng không tồn tại",
-                        "UUID không thuộc room type nào; chọn ngừng sử dụng.",
-                        "Từ chối HTTP 404 với thông báo: Không tìm thấy hạng phòng.; không thay đổi dữ liệu.", () -> {
-                            ScriptedJdbc db = new ScriptedJdbc();
-                            db.updateResults.add(0);
-                            UUID id = UUID.fromString("50000000-0000-0000-0000-000000000099");
-                            return expectStatus(() -> new RoomCatalogService(db).deactivateRoomType(id),
-                                    404, "Không tìm thấy hạng phòng.");
-                        }, "RoomCatalogService.deactivateRoomType"),
-                tc("RTM-086", "Kích hoạt lại hạng phòng",
-                        "Room type RT-KG đang inactive và lịch sử liên quan còn tồn tại; chọn kích hoạt lại.",
-                        "Có thao tác production chuyển inactive thành active mà không tạo room type mới hoặc xóa lịch sử liên quan.", () -> {
-                            try {
-                                RoomCatalogService.class.getDeclaredMethod("reactivateRoomType", UUID.class);
-                                return check(true, "Production có phương thức reactivateRoomType(UUID)");
-                            } catch (NoSuchMethodException failure) {
-                                return check(false, "Production chưa có phương thức reactivateRoomType(UUID)");
-                            }
-                        }, "RoomCatalogService status contract")
+            new ManualCase("RTM-022", "roomtypemanagement", "UC-17 Change Room Type Status - Ngừng sử dụng thành công", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem hạng phòng:\nmã định danh = \"RT-QN\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Chuyển trạng thái thành inactive; giữ nguyên dữ liệu hạng phòng và lịch sử liên quan.", List.of("UC-17"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deactivateRoomType", List.of("java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roomtypemanagement/ChangeRoomTypeStatusManualCases.java"),
+            new ManualCase("RTM-023", "roomtypemanagement", "UC-17 Change Room Type Status - Hạng phòng không tồn tại", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem hạng phòng:\nmã định danh = \"49c99a3f-6c41-3476-9fce-8ccebe222a49\".", "Từ chối với thông báo: Không tìm thấy hạng phòng.; không thay đổi dữ liệu.", List.of("UC-17"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deactivateRoomType", List.of("java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roomtypemanagement/ChangeRoomTypeStatusManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String title, String input, String expected,
-            RoomTypeManagementManualRunner.CheckedAction action, String source) {
-        return test(id, UC + " - " + title, source, PRE, input, expected, action);
     }
 }

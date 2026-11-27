@@ -1,233 +1,30 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 27/10/2026
- * Description: Manual unit test cases for UC-128 Login using Flyway demo accounts.
- */
 package com.gcmb.backend.manual.personalaccount;
 
-import com.gcmb.backend.manual.personalaccount.PersonalAccountManualRunner.CheckedAction;
-import com.gcmb.backend.manual.personalaccount.PersonalAccountManualRunner.ManualTest;
-import com.gcmb.backend.manual.personalaccount.PersonalAccountManualRunner.TestResult;
-
-import static com.gcmb.backend.manual.personalaccount.PersonalAccountManualRunner.check;
-import static com.gcmb.backend.manual.personalaccount.PersonalAccountManualRunner.expectAuthFailure;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.auth.dto.LoginResult;
-import com.gcmb.backend.auth.repository.AuthRepository;
-import com.gcmb.backend.auth.repository.model.Account;
-import com.gcmb.backend.auth.security.AuthCrypto;
-import com.gcmb.backend.auth.service.AuthService;
-import com.gcmb.backend.auth.service.RecoveryMailer;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class LoginManualCases {
-    private static final String UC = "UC-128 Login";
-    private static final String PRE = "Tài khoản demo đã được tạo bởi V14/V15 và người dùng chưa đăng nhập.";
-    private static final String NOTE = "Nguồn: UC-128_Login.docx; BR-111, BR-131; MSG02, MSG03, MSG08, MSG24, MSG33; Flyway V14/V15.";
-    private static final String NOTE_ACCOUNT_STATE = "Nguồn: UC-128 - Login.docx; BR-131; MSG33; "
-            + "Flyway V1 status constraint; Production: AuthService.login/active. Phương pháp kiểm thử: Black-box.";
-    private static final String NOTE_BRANCH_SCOPE = "Nguồn: UC-128 - Login.docx; MSG24; "
-            + "Production: AuthService.login. Phương pháp kiểm thử: White-box.";
-
-    private LoginManualCases() {
-    }
-
-    public static List<ManualTest> cases() {
-        List<ManualTest> cases = new ArrayList<>();
-        cases.add(roleCase("PAM-001", "RECEPTIONIST", PersonalAccountDemoData.RECEPTIONIST_ID,
-                PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL,
-                PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "/le-tan"));
-        cases.add(roleCase("PAM-002", "BRANCH_MANAGER", PersonalAccountDemoData.BRANCH_MANAGER_ID,
-                "qlcs.hoabang", "qlcs.hoabang@example.invalid",
-                PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "/quan-ly-chi-nhanh"));
-        cases.add(roleCase("PAM-003", "HEAD_OFFICE_MANAGER", PersonalAccountDemoData.HEAD_OFFICE_MANAGER_ID,
-                "qlcc", "qlcc@example.invalid", null, "/quan-ly-he-thong"));
-        cases.add(roleCase("PAM-004", "ACCOUNTANT", PersonalAccountDemoData.ACCOUNTANT_ID,
-                "ketoan", "ketoan@example.invalid", null, "/ke-toan"));
-
-        cases.add(test("PAM-005", "username='  letan.hoabang  ', password hợp lệ, remember=false",
-                "Đăng nhập thành công; username được trim; thời hạn cookie phiên=-1.", "Normal", () -> {
-                    Fixture f = fixture();
-                    when(f.repository.findByUsername(PersonalAccountDemoData.USERNAME))
-                            .thenReturn(PersonalAccountDemoData.receptionistAccount());
-                    when(f.crypto.matches(PersonalAccountDemoData.CURRENT_PASSWORD,
-                            PersonalAccountDemoData.PASSWORD_HASH)).thenReturn(true);
-                    LoginResult result = f.service.login("  " + PersonalAccountDemoData.USERNAME + "  ",
-                            PersonalAccountDemoData.CURRENT_PASSWORD, false);
-                    return check(result.seconds() == -1 && PersonalAccountDemoData.USERNAME.equals(result.user().username()),
-                            "username=" + result.user().username() + ", seconds=" + result.seconds());
-                }));
-        cases.add(test("PAM-006", "username và password hợp lệ, remember=true",
-                "Đăng nhập thành công; thời hạn cookie ghi nhớ=Integer.MAX_VALUE.", "Normal", () -> {
-                    Fixture f = successFixture(PersonalAccountDemoData.receptionistAccount());
-                    LoginResult result = f.service.login(PersonalAccountDemoData.USERNAME,
-                            PersonalAccountDemoData.CURRENT_PASSWORD, true);
-                    return check(result.seconds() == Integer.MAX_VALUE,
-                            "seconds=" + result.seconds() + ", tokenLength=" + result.token().length());
-                }));
-        cases.add(test("PAM-007", "username=null, password hợp lệ",
-                "Từ chối 400 và hiển thị MSG02: Vui lòng bổ sung Tên đăng nhập.", "Abnormal",
-                () -> expectAuthFailure(() -> fixture().service.login(null,
-                        PersonalAccountDemoData.CURRENT_PASSWORD, false), 400,
-                        "Vui lòng bổ sung Tên đăng nhập.")));
-        cases.add(test("PAM-008", "username chỉ gồm khoảng trắng, password hợp lệ",
-                "Từ chối 400 và hiển thị MSG02: Vui lòng bổ sung Tên đăng nhập.", "Abnormal",
-                () -> expectAuthFailure(() -> fixture().service.login(" \u00A0\uFEFF ",
-                        PersonalAccountDemoData.CURRENT_PASSWORD, false), 400,
-                        "Vui lòng bổ sung Tên đăng nhập.")));
-        cases.add(test("PAM-009", "username hợp lệ, password=null",
-                "Từ chối 400 và hiển thị MSG02: Vui lòng bổ sung Mật khẩu.", "Abnormal",
-                () -> expectAuthFailure(() -> fixture().service.login(PersonalAccountDemoData.USERNAME,
-                        null, false), 400, "Vui lòng bổ sung Mật khẩu.")));
-        cases.add(test("PAM-010", "username không tồn tại, password bất kỳ",
-                "Từ chối 401 và hiển thị đúng MSG08.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    when(f.repository.findByUsername("khong.ton.tai")).thenReturn(null);
-                    return expectAuthFailure(() -> f.service.login("khong.ton.tai", "Sai@1234", false),
-                            401, "Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.");
-                }));
-        cases.add(test("PAM-011", "tài khoản tồn tại, password sai",
-                "Từ chối 401 và hiển thị đúng MSG08.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    when(f.repository.findByUsername(PersonalAccountDemoData.USERNAME))
-                            .thenReturn(PersonalAccountDemoData.receptionistAccount());
-                    when(f.crypto.matches("Sai@1234", PersonalAccountDemoData.PASSWORD_HASH)).thenReturn(false);
-                    return expectAuthFailure(() -> f.service.login(PersonalAccountDemoData.USERNAME,
-                            "Sai@1234", false), 401,
-                            "Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.");
-                }));
-        cases.add(inactiveCase("PAM-012", "REVOKED"));
-        cases.add(inactiveCase("PAM-013", "LOCKED"));
-        cases.add(test("PAM-014",
-                "Tài khoản Branch Manager đã đăng ký, trạng thái ACTIVE nhưng chưa được gán branch; "
-                        + "người dùng chưa đăng nhập.",
-                "Đăng nhập bằng username và mật khẩu hợp lệ của Branch Manager.",
-                "Từ chối với mã 403. Hiển thị: Bạn không có quyền đăng nhập đối với tài khoản. "
-                        + "Không tạo phiên.",
-                "Abnormal", () -> {
-                    Fixture f = fixture();
-                    Account account = PersonalAccountDemoData.account(PersonalAccountDemoData.BRANCH_MANAGER_ID,
-                            "qlcs.hoabang", "qlcs.hoabang@example.invalid", "ACTIVE", "BRANCH_MANAGER", null, null);
-                    when(f.repository.findByUsername(account.username())).thenReturn(account);
-                    TestResult result = expectAuthFailure(() -> f.service.login(account.username(),
-                            PersonalAccountDemoData.CURRENT_PASSWORD, false), 403,
-                            "Bạn không có quyền đăng nhập đối với tài khoản.");
-                    verify(f.repository, never()).createSession(any(), anyString());
-                    return result;
-                }, NOTE_BRANCH_SCOPE));
-        cases.add(test("PAM-015", "username có đúng 100 ký tự và tài khoản ACTIVE",
-                "Chấp nhận biên 100 ký tự và đăng nhập thành công.", "Boundary", () -> {
-                    String username = "u".repeat(100);
-                    Account account = PersonalAccountDemoData.account(UUID.randomUUID(), username,
-                            "boundary@example.invalid", "ACTIVE", "RECEPTIONIST",
-                            PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "GenZ Cinema Hoa Bằng");
-                    Fixture f = successFixture(account);
-                    LoginResult result = f.service.login(username, PersonalAccountDemoData.CURRENT_PASSWORD, false);
-                    return check(username.equals(result.user().username()), "acceptedLength=" + username.length());
-                }));
-        cases.add(test("PAM-016", "username có 101 ký tự",
-                "Từ chối 400 và hiển thị MSG03: Tên đăng nhập chỉ được chứa tối đa 100 ký tự.", "Boundary",
-                () -> expectAuthFailure(() -> fixture().service.login("u".repeat(101),
-                        PersonalAccountDemoData.CURRENT_PASSWORD, false), 400,
-                        "Tên đăng nhập chỉ được chứa tối đa 100 ký tự.")));
-        cases.add(test("PAM-017", "tài khoản ACTIVE nhưng role không thuộc bốn role được cấp",
-                "Từ chối 403, không tạo phiên cho role không hợp lệ.", "Abnormal", () -> {
-                    Account account = PersonalAccountDemoData.account(UUID.randomUUID(), "role.invalid",
-                            "role.invalid@example.invalid", "ACTIVE", "UNKNOWN", null, null);
-                    Fixture f = successFixture(account);
-                    TestResult result = expectAuthFailure(() -> f.service.login(account.username(),
-                            PersonalAccountDemoData.CURRENT_PASSWORD, false), 403,
-                            "Tài khoản chưa được cấp vai trò hợp lệ");
-                    verify(f.repository, never()).createSession(any(), anyString());
-                    return result;
-                }));
-        cases.add(test("PAM-018", "tài khoản demo ACTIVE và thông tin đăng nhập hợp lệ",
-                "Lưu thời điểm đăng nhập và chỉ lưu SHA-256 của token phiên, không lưu token gốc.", "Normal", () -> {
-                    Fixture f = successFixture(PersonalAccountDemoData.receptionistAccount());
-                    LoginResult result = f.service.login(PersonalAccountDemoData.USERNAME,
-                            PersonalAccountDemoData.CURRENT_PASSWORD, false);
-                    verify(f.repository).recordLogin(eq(PersonalAccountDemoData.RECEPTIONIST_ID), any());
-                    verify(f.repository).createSession(PersonalAccountDemoData.RECEPTIONIST_ID,
-                            AuthCrypto.hash(PersonalAccountDemoData.TOKEN));
-                    return check(!AuthCrypto.hash(result.token()).equals(result.token()),
-                            "rawTokenReturned=true, storedHash=" + AuthCrypto.hash(result.token()));
-                }));
-        return List.copyOf(cases);
-    }
-
-    private static ManualTest roleCase(String id, String role, UUID idValue, String username, String email,
-            UUID branchId, String destination) {
-        return test(id, "username=" + username + ", password demo hợp lệ, remember=false",
-                "Đăng nhập thành công và điều hướng " + destination + " theo vai trò " + role + ".",
-                "Normal", () -> {
-                    Account account = PersonalAccountDemoData.account(idValue, username, email, "ACTIVE", role,
-                            branchId, branchId == null ? null : "GenZ Cinema Hoa Bằng");
-                    Fixture f = successFixture(account);
-                    LoginResult result = f.service.login(username, PersonalAccountDemoData.CURRENT_PASSWORD, false);
-                    return check(destination.equals(result.user().destination())
-                                    && role.equals(result.user().role()),
-                            "role=" + result.user().role() + ", destination=" + result.user().destination());
-                });
-    }
-
-    private static ManualTest inactiveCase(String id, String status) {
-        return test(id,
-                "Tài khoản đã đăng ký, trạng thái " + status + "; người dùng chưa đăng nhập.",
-                "Đăng nhập bằng username và mật khẩu của tài khoản " + status + ".",
-                "Từ chối với mã 403. Hiển thị: Tài khoản đã bị vô hiệu hóa. "
-                        + "Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ. Không tạo phiên và không ghi nhận đăng nhập.",
-                "Abnormal", () -> {
-                    Fixture f = fixture();
-                    Account account = PersonalAccountDemoData.account(PersonalAccountDemoData.RECEPTIONIST_ID,
-                            PersonalAccountDemoData.USERNAME, PersonalAccountDemoData.EMAIL, status,
-                            "RECEPTIONIST", PersonalAccountDemoData.HOA_BANG_BRANCH_ID, "GenZ Cinema Hoa Bằng");
-                    when(f.repository.findByUsername(account.username())).thenReturn(account);
-                    return expectAuthFailure(() -> f.service.login(account.username(),
-                            PersonalAccountDemoData.CURRENT_PASSWORD, false), 403,
-                            "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.");
-                }, NOTE_ACCOUNT_STATE);
-    }
-
-    private static ManualTest test(String id, String input, String expected, String type,
-            CheckedAction action) {
-        return new ManualTest(id, UC, "AuthService.login", PRE, input, expected, type, NOTE, action);
-    }
-
-    private static ManualTest test(String id, String preconditions, String input, String expected, String type,
-            CheckedAction action, String note) {
-        return new ManualTest(id, UC, "AuthService.login", preconditions, input, expected, type, note, action);
-    }
-
-    private static Fixture successFixture(Account account) {
-        Fixture fixture = fixture();
-        when(fixture.repository.findByUsername(account.username())).thenReturn(account);
-        when(fixture.crypto.matches(PersonalAccountDemoData.CURRENT_PASSWORD, account.hash())).thenReturn(true);
-        return fixture;
-    }
-
-    private static Fixture fixture() {
-        AuthRepository repository = mock(AuthRepository.class);
-        AuthCrypto crypto = mock(AuthCrypto.class);
-        RecoveryMailer mailer = mock(RecoveryMailer.class);
-        when(crypto.token()).thenReturn(PersonalAccountDemoData.TOKEN);
-        when(crypto.encode(anyString())).thenAnswer(invocation -> "encoded:" + invocation.getArgument(0));
-        AuthService service = new AuthService(repository, crypto, mailer);
-        return new Fixture(repository, crypto, service);
-    }
-
-    private record Fixture(AuthRepository repository, AuthCrypto crypto, AuthService service) {
+    private LoginManualCases() {}
+    public static List<ManualCase> cases() {
+        return List.of(
+            new ManualCase("PAM-001", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-002", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"qlcs.hoabang\" tồn tại, vai trò \"Quản lý cơ sở\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"qlcs.hoabang\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"BRANCH_MANAGER\", email \"qlcs.hoabang@example.invalid\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"qlcs.hoabang\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-003", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"qlcc\" tồn tại, vai trò \"Quản lý cấp cao\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"qlcc\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"qlcc\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"HEAD_OFFICE_MANAGER\", email \"qlcc@example.invalid\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"qlcc\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-004", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"ketoan\" tồn tại, vai trò \"Kế toán\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"ketoan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"ketoan\" tồn tại: trạng thái \"ACTIVE\", số lần đăng nhập sai \"0\", vai trò \"ACCOUNTANT\", email \"ketoan@example.invalid\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"ketoan\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-005", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Kiểm thử tên đăng nhập \"  builanhan  \"; kết quả tra cứu tài khoản được ghi trong điều kiện dữ liệu bên dưới.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"  builanhan  \" của tên đăng nhập Tài khoản chưa tồn tại trong phạm vi kiểm tra.\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"  builanhan  \";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-006", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"true\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-007", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản không truyền giá trị tồn tại, vai trò không truyền giá trị.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nPhiên/yêu cầu xác minh \"5af3ca5b-6239-3c23-8e8f-6c378a8a20f5\" tồn tại: hết hiệu lực lúc \"19:33:42 27/11/2026 (UTC+07:00)\".\nPhiên/yêu cầu xác minh \"adc054f8-04e6-3a37-a336-0dfd1366b015\" tồn tại: hết hiệu lực lúc \"19:23:42 28/11/2026 (UTC+07:00)\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = không truyền giá trị;\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập; không tạo phiên. Khi thiếu tên đăng nhập, thông báo: \"Vui lòng bổ sung tên đăng nhập.\"", List.of("UC-128", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-008", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Kiểm thử tên đăng nhập \"   \"; kết quả tra cứu tài khoản được ghi trong điều kiện dữ liệu bên dưới.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"   \" của tên đăng nhập Tài khoản chưa tồn tại trong phạm vi kiểm tra.\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"   \";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập; không tạo phiên. Khi thiếu tên đăng nhập, thông báo: \"Vui lòng bổ sung tên đăng nhập.\"", List.of("UC-128", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-009", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = không truyền giá trị;\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập; không tạo phiên. Khi thiếu mật khẩu, thông báo: \"Vui lòng bổ sung mật khẩu.\"", List.of("UC-128", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-010", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Kiểm thử tên đăng nhập \"ut_missing_username\"; kết quả tra cứu tài khoản được ghi trong điều kiện dữ liệu bên dưới.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"ut_missing_username\" của tên đăng nhập Tài khoản chưa tồn tại trong phạm vi kiểm tra.\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"ut_missing_username\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập, không tạo phiên. Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.", List.of("UC-128", "MSG08"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-011", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"Incorrect@1234\";\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập, không tạo phiên. Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra và thử lại.", List.of("UC-128", "MSG08"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-012", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"REVOKED\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"REVOKED\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"REVOKED\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Không cho tài khoản đã bị vô hiệu hóa đăng nhập; không tạo phiên. Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.", List.of("UC-128", "BR-131", "MSG33"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-013", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"LOCKED\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"LOCKED\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"LOCKED\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Không cho tài khoản đã bị vô hiệu hóa đăng nhập; không tạo phiên. Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Quản lý cấp cao để được hỗ trợ.", List.of("UC-128", "BR-131", "MSG33"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-014", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"qlcs.hoabang\" tồn tại, vai trò \"Quản lý cơ sở\".\nĐã loại các phân công quản lý cơ sở còn hiệu lực của \"qlcs.hoabang\" trong giao dịch kiểm thử; trước khi đăng nhập tài khoản không có cơ sở được phân công quản lý.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"qlcs.hoabang\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"qlcs.hoabang\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"BRANCH_MANAGER\", email \"qlcs.hoabang@example.invalid\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"qlcs.hoabang\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Từ chối đăng nhập tài khoản quản lý cơ sở \"qlcs.hoabang\" khi không có phân công cơ sở còn hiệu lực; không cấp phiên có quyền truy cập nghiệp vụ cơ sở.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-015", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Kiểm thử tên đăng nhập \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"; kết quả tra cứu tài khoản được ghi trong điều kiện dữ liệu bên dưới.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Username 100 ký tự hợp lệ được xác thực và trả đúng vai trò tài khoản.", List.of("UC-128", "BR-129"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-016", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Kiểm thử tên đăng nhập \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"; kết quả tra cứu tài khoản được ghi trong điều kiện dữ liệu bên dưới.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\" của tên đăng nhập Tài khoản chưa tồn tại trong phạm vi kiểm tra.\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";\nmật khẩu = \"123\";\nghi nhớ đăng nhập = \"false\".", "Username vượt 100 ký tự bị từ chối; không tạo phiên. Tên đăng nhập phải có từ 3 đến 100 ký tự và chỉ được dùng chữ cái không dấu, chữ số, dấu chấm (.), dấu gạch dưới (_) hoặc dấu gạch nối (-).", List.of("UC-128", "BR-129", "MSG36"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java"),
+            new ManualCase("PAM-017", "personalaccount", "UC-128 Login", "Người dùng chưa đăng nhập. Tài khoản \"builanhan\" tồn tại, vai trò \"Lễ tân\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\".\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", email \"builanhan@genzcinema.vn\".\nNhân viên \"NV09007\" tồn tại: họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\".\nGiá trị \"builanhan\" của tên đăng nhập Tài khoản đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nTài khoản \"builanhan\" tồn tại: trạng thái \"ACTIVE\", cơ sở \"HN_HOA_BANG\", số lần đăng nhập sai \"0\", vai trò \"RECEPTIONIST\", email \"builanhan@genzcinema.vn\".\nNhân viên \"GENZ-MGR-HOA-BANG\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"BRANCH_MANAGER\", họ tên \"Phạm Hoàng Long\", số điện thoại \"0980900837\", ngày vào làm \"13/11/2026\".\nNhân viên \"NV09007\" tồn tại: trạng thái \"ACTIVE\", vị trí công việc \"RECEPTIONIST\", họ tên \"Bùi Lan Hân\", số điện thoại \"0905650210\", ngày vào làm \"15/01/2026\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Đăng nhập:\ntên đăng nhập = \"builanhan\";\nmật khẩu = \"ten123456@\";\nghi nhớ đăng nhập = \"false\".", "Xác thực thành công, trả đúng danh tính, vai trò và đích điều hướng của tài khoản; tạo phiên cho tài khoản đó, không cấp vai trò khác.", List.of("UC-128"), List.of(new MethodTarget("com.gcmb.backend.auth.service.AuthService", "login", List.of("java.lang.String", "java.lang.String", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/personalaccount/LoginManualCases.java")
+        );
     }
 }
-
-

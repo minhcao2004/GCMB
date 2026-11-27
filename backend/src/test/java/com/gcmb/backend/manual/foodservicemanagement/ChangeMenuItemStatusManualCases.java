@@ -1,49 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-48 Change Menu Item Status manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemStatusCommand;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ChangeMenuItemStatusManualCases {
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ChangeMenuItemStatusManualCases {
     private ChangeMenuItemStatusManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
-        String uc = "UC-48 Change Menu Item Status";
-        String pre = "Quản lý quanly.hoabang đăng nhập; HN_HOA_BANG hoạt động; món FB-001 tồn tại.";
+    public static List<ManualCase> cases() {
         return List.of(
-            test("FSM-029", uc, "MenuItemService.changeStatus", pre + " Món đang bán và đã có order lịch sử.", "active=false.", "Món ngừng bán; dữ liệu order lịch sử được giữ nguyên.", "Normal", note("UC-48 - Change_Menu_Item_Status.docx", "BR-38", "", "MenuItemService.changeStatus", "White-box"), () -> status(false)),
-            test("FSM-030", uc, "MenuItemService.changeStatus", pre + " Món đang ngừng bán.", "active=true.", "Món được bán lại.", "Normal", note("UC-48 - Change_Menu_Item_Status.docx", "BR-38", "", "MenuItemService.changeStatus", "Black-box"), () -> status(true)),
-            test("FSM-031", uc, "MenuItemService.changeStatus", pre, "active=null.", "Hiển thị “Vui lòng chọn trạng thái bán hợp lệ.”; không cập nhật.", "Abnormal", note("UC-48 - Change_Menu_Item_Status.docx", "BR-111", "MSG02", "MenuItemService.changeStatus", "White-box"), ChangeMenuItemStatusManualCases::nullStatus),
-            test("FSM-032", uc, "MenuItemService.changeStatus", "Quản lý đăng nhập; món không tồn tại hoặc thuộc cơ sở khác.", "active=false.", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không cập nhật.", "Abnormal", note("UC-48 - Change_Menu_Item_Status.docx", "BR-177", "", "MenuItemService.changeStatus", "White-box"), ChangeMenuItemStatusManualCases::notFound)
+            new ManualCase("FSM-021", "foodservicemanagement", "UC-48 Change Menu Item Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"c0a05fee-9e8c-39f6-9740-f601f47ea038\" tồn tại: đang sử dụng \"true\".\nTồn kho \"a87d96b3-973c-368f-93b5-7e16bbd3a244\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái:\nmã định danh = \"c0a05fee-9e8c-39f6-9740-f601f47ea038\";\nđang sử dụng = \"false\".", "Món ngừng bán; dữ liệu order lịch sử được giữ nguyên.", List.of("UC-48"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "changeStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ChangeMenuItemStatusManualCases.java"),
+            new ManualCase("FSM-022", "foodservicemanagement", "UC-48 Change Menu Item Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"b2afde24-e3fb-3463-a777-d73e3ae2d3b9\" tồn tại: đang sử dụng \"false\".\nTồn kho \"f29698d9-f339-358c-a7b4-48a5155ce57c\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái:\nmã định danh = \"b2afde24-e3fb-3463-a777-d73e3ae2d3b9\";\nđang sử dụng = \"true\".", "Món được bán lại.", List.of("UC-48"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "changeStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ChangeMenuItemStatusManualCases.java"),
+            new ManualCase("FSM-023", "foodservicemanagement", "UC-48 Change Menu Item Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"9a9bbb4b-fbe1-3587-b17b-301402d09459\" tồn tại: đang sử dụng \"true\".\nTồn kho \"ca08c2cd-d9a8-35fa-874f-ec98f3c88ac4\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái:\nmã định danh = \"9a9bbb4b-fbe1-3587-b17b-301402d09459\";\nđang sử dụng = không truyền giá trị.", "Hiển thị “Vui lòng chọn trạng thái bán hợp lệ.”; không cập nhật.", List.of("UC-48", "BR-111"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "changeStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ChangeMenuItemStatusManualCases.java"),
+            new ManualCase("FSM-024", "foodservicemanagement", "UC-48 Change Menu Item Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"94dcc4af-8ebe-3ec3-8742-99c21a6f1fd6\" tồn tại: đang sử dụng \"true\".\nTồn kho \"86289c2e-4f60-3453-a020-6cd9ce7091b0\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái:\nmã định danh = \"93c768d5-9ad3-3a56-84d8-56f635d36dc1\";\nđang sử dụng = \"false\".", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không cập nhật.", List.of("UC-48"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "changeStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ChangeMenuItemStatusManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult status(boolean active) {
-        var f = menuFixture();
-        var row = f.service().changeStatus(manager(), ITEM_ID, new MenuItemStatusCommand(active));
-        return check(row.active() == active, "active=" + row.active());
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult nullStatus() {
-        var f = menuFixture();
-        return expectResponse(() -> f.service().changeStatus(manager(), ITEM_ID, new MenuItemStatusCommand(null)),
-                400, "Vui lòng chọn trạng thái bán hợp lệ.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult notFound() {
-        var f = menuFixture();
-        when(f.repository().changeStatus(BRANCH_ID, ITEM_ID, false)).thenReturn(null);
-        return expectResponse(() -> f.service().changeStatus(manager(), ITEM_ID, new MenuItemStatusCommand(false)),
-                404, "Không tìm thấy món trong cơ sở được phân quyền.");
     }
 }

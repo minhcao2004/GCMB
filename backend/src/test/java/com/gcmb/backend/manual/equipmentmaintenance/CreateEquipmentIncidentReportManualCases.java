@@ -1,218 +1,24 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Manual unit cases for UC-70 Create Equipment Incident Report.
- */
 package com.gcmb.backend.manual.equipmentmaintenance;
 
-import static com.gcmb.backend.manual.equipmentmaintenance.EquipmentMaintenanceManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.EquipmentIncidentDtos.IncidentCommand;
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
-import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.web.server.ResponseStatusException;
+import com.gcmb.backend.manual.support.*;
 
-final class CreateEquipmentIncidentReportManualCases {
-    private static final String UC = "UC-70 Create Equipment Incident Report";
-    private static final String FILE = "UC-70 - Create Equipment Incident Report.docx";
-    private static final String PRE = "Người dùng đã đăng nhập; cơ sở HN_HOA_BANG đang hoạt động; thiết bị ASSET-HN01-0001 đang hoạt động tại cơ sở; vai trò và phạm vi cụ thể theo từng TC.";
-    private static final String REQUIRED = "Thiết bị, severity, priority, phương án, đơn vị sửa chữa/thay thế và ngày dự kiến là bắt buộc; chi phí dự kiến không được âm, phương án thay thế cần mô tả thiết bị thay thế";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class CreateEquipmentIncidentReportManualCases {
     private CreateEquipmentIncidentReportManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("EMM-001", "Receptionist HN_HOA_BANG gửi báo cáo REPAIR hợp lệ, không đính kèm file.",
-                "Tạo báo cáo thành công trong đúng cơ sở; trả về incidentId; trạng thái khởi tạo do repository xác định theo vai trò.",
-                "Normal", "BR-41, BR-111", "", "White-box", CreateEquipmentIncidentReportManualCases::receptionistCreate),
-            tc("EMM-002", "Branch Manager HN_HOA_BANG gửi báo cáo REPAIR hợp lệ.",
-                "Tạo báo cáo thành công và cập nhật tình trạng thiết bị theo kế hoạch REPAIR.",
-                "Normal", "BR-41, BR-42", "", "White-box", CreateEquipmentIncidentReportManualCases::managerCreate),
-            tc("EMM-003", "Head Office Manager chọn HN_HOA_BANG và gửi báo cáo hợp lệ.",
-                "Theo đặc tả UC-70, Head Office Manager tạo báo cáo thành công trong cơ sở đã chọn.",
-                "Normal", "BR-41", "", "Black-box", CreateEquipmentIncidentReportManualCases::headOfficeCreate),
-            tc("EMM-004", "Receptionist xem danh sách thiết bị có thể báo sự cố tại cơ sở được phân công.",
-                "Trả đúng ASSET-HN01-0001 thuộc HN_HOA_BANG.",
-                "Normal", "BR-41", "", "Black-box", CreateEquipmentIncidentReportManualCases::receptionistAssets),
-            tc("EMM-005", "Head Office Manager chọn HN_HOA_BANG để lấy danh sách thiết bị.",
-                "Trả danh sách thiết bị của cơ sở được chọn.",
-                "Normal", "BR-41", "", "Black-box", CreateEquipmentIncidentReportManualCases::headOfficeAssets),
-            tc("EMM-006", "Receptionist HN_HOA_BANG gửi requestedBranchId của cơ sở khác.",
-                "Hiển thị “Bạn không có quyền báo cáo đối với sự cố thiết bị.”; không tạo báo cáo ngoài phạm vi.",
-                "Abnormal", "BR-41", "MSG24", "Black-box", CreateEquipmentIncidentReportManualCases::wrongBranch),
-            tc("EMM-007", "command=null.",
-                "Hiển thị “Vui lòng bổ sung thông tin báo cáo sự cố.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::nullCommand),
-            tc("EMM-008", "assetId=null.",
-                "Hiển thị “Vui lòng bổ sung thiết bị.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::missingAsset),
-            tc("EMM-009", "description chỉ chứa khoảng trắng.",
-                "Hiển thị “Vui lòng bổ sung mô tả sự cố.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::blankDescription),
-            tc("EMM-010", "expectedCompletionOn=null.",
-                "Hiển thị “Vui lòng bổ sung ngày dự kiến hoàn thành.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::missingExpectedDate),
-            tc("EMM-011", "handlingPlan=null.",
-                "Hiển thị “Vui lòng bổ sung phương án xử lý.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::missingPlan),
-            tc("EMM-012", "serviceProvider chỉ chứa khoảng trắng.",
-                "Hiển thị “Vui lòng bổ sung đơn vị sửa chữa/thay thế.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::blankProvider),
-            tc("EMM-013", "estimatedCost=-1.",
-                "Từ chối với HTTP 400 và thông báo “" + REQUIRED + "”; không tạo dữ liệu.",
-                "Boundary", "BR-111", "", "White-box", CreateEquipmentIncidentReportManualCases::negativeCost),
-            tc("EMM-014", "handlingPlan=REPLACE nhưng replacementDetails chỉ chứa khoảng trắng.",
-                "Hiển thị “Vui lòng bổ sung mô tả thiết bị thay thế.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", CreateEquipmentIncidentReportManualCases::missingReplacementDetails),
-            tc("EMM-015", "Repository xác định asset không thuộc cơ sở hoặc đã ngừng sử dụng.",
-                "Hiển thị “Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng”; không tạo báo cáo.",
-                "Abnormal", "BR-41", "", "White-box", CreateEquipmentIncidentReportManualCases::inactiveAsset),
-            tc("EMM-016", "Báo cáo hợp lệ kèm một ảnh chứng cứ đã qua kiểm tra định dạng/dung lượng.",
-                "Lưu metadata, liên kết chứng cứ với đúng incident và trả incidentId.",
-                "Normal", "BR-115, BR-116", "", "White-box", CreateEquipmentIncidentReportManualCases::evidenceSuccess),
-            tc("EMM-017", "File đã lưu nhưng incident không còn tồn tại khi liên kết chứng cứ.",
-                "Hiển thị “Không tìm thấy báo cáo sự cố” và xóa file vừa lưu để không để lại dữ liệu rác.",
-                "Abnormal", "BR-115, BR-116", "", "White-box", CreateEquipmentIncidentReportManualCases::evidenceRollback)
+            new ManualCase("EMM-001", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"6da06319-e691-3f11-a09a-cfc41cfee6bd\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Quản lý cơ sở ghi báo cáo mô tả \"Máy chiếu bị chập chờn UT\", severity=\"MEDIUM\", priority=\"NORMAL\", kế hoạch REPAIR và ngày dự kiến; lưu người/thời gian báo cáo và kế hoạch đã xác nhận.", List.of("UC-70", "BR-42"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-002", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nSự cố \"50ef6e73-9cb9-32a1-92a7-5a1b213de5d5\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Theo đặc tả UC-70, Head Office Manager tạo báo cáo thành công trong cơ sở đã chọn.", List.of("UC-70"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-003", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"bca29535-b858-3559-9689-c02dea9aa3d7\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả các thiết bị đã chuẩn bị của cơ sở được phép để báo sự cố; không trả thiết bị ngoài cơ sở và không thay đổi tài sản.", List.of("UC-70"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "assets", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-004", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nSự cố \"83d89a59-6cd8-3559-b01f-4e2489feed31\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Trả các thiết bị đã chuẩn bị của cơ sở được phép để báo sự cố; không trả thiết bị ngoài cơ sở và không thay đổi tài sản.", List.of("UC-70"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "assets", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-005", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"0957e2d5-7b8d-32bf-b949-840525a0899a\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HCM_AU_CO\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HCM_AU_CO có ID \"8f8d0321-f9e8-4b9b-a739-43c479926a8b\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Bạn không có quyền báo cáo đối với sự cố thiết bị.”; không tạo báo cáo ngoài phạm vi.", List.of("UC-70", "BR-41"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-006", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"512be367-caaa-3641-9df2-ed6aedfe149f\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthông tin nghiệp vụ = không truyền giá trị;\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Hiển thị “Vui lòng bổ sung thông tin báo cáo sự cố.”; không tạo dữ liệu.", List.of("UC-70", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-007", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"8d1a0e31-84d4-3abe-be1d-81b6b3488b83\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = không truyền giá trị;\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Hiển thị “Vui lòng bổ sung thiết bị.”; không tạo dữ liệu.", List.of("UC-70", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-008", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"7babad03-c03e-3a35-9a14-f04618227491\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"   \";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Vui lòng bổ sung mô tả sự cố.”; không tạo dữ liệu.", List.of("UC-70", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-009", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"c6429046-20d1-391d-aef5-ec1a7c6ec1b3\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = không truyền giá trị;\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Vui lòng bổ sung ngày dự kiến hoàn thành.”; không tạo dữ liệu.", List.of("UC-70", "BR-42", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-010", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"c1707d14-73c4-36ec-9fa0-c2797293cefe\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"TS-9-K01-AMTHANH\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = không truyền giá trị;\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Vui lòng bổ sung phương án xử lý.”; không tạo dữ liệu.", List.of("UC-70", "BR-42", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java"),
+            new ManualCase("EMM-011", "equipmentmaintenance", "UC-70 Create Equipment Incident Report", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nSự cố \"677aebd9-ce12-33b9-ab45-fa62a94ef73e\" tồn tại: trạng thái \"REPORTED\", cơ sở \"HN_HOA_BANG\", thiết bị \"TS-9-K01-AMTHANH\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo sự cố thiết bị:\ngiá trị đề nghị = \"HN_HOA_BANG\";\nthiết bị = \"1721d9ee-7f82-335b-86bb-7c4ba3dddad7\";\nmô tả = \"Máy chiếu bị chập chờn UT\";\nphòng không thể sử dụng = \"false\";\nmức độ sự cố = \"MEDIUM\";\nmức ưu tiên = \"NORMAL\";\nngày dự kiến hoàn tất = \"2026-11-28\";\nphương án xử lý = \"REPAIR\";\nđơn vị dịch vụ = \"Đơn vị sửa chữa UT\";\nchi tiết thay thế = không truyền giá trị;\nchi phí dự kiến = \"100000\";\ngiải pháp đề nghị = \"Kiểm tra dây nguồn UT\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\".", "Hiển thị “Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng”; không tạo báo cáo.", List.of("UC-70"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentIncidentService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentIncidentDtos$IncidentCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmaintenance/CreateEquipmentIncidentReportManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentIncidentService.create/assets", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentIncidentService.create/assets/branch", method), action);
-    }
-
-    private static TestResult receptionistCreate() throws Exception {
-        var f = fixture();
-        var id = f.service().create(receptionist(), null, validIncident(), null);
-        verify(f.repository()).createIncident(BRANCH_ID, RECEPTIONIST_ID, "RECEPTIONIST", validIncident());
-        return check(INCIDENT_ID.equals(id), "incidentId=" + id);
-    }
-
-    private static TestResult managerCreate() throws Exception {
-        var f = fixture();
-        var id = f.service().create(branchManager(), null, validIncident(), null);
-        verify(f.repository()).updateAssetForPlan(BRANCH_ID, INCIDENT_ID, "REPAIR");
-        return check(INCIDENT_ID.equals(id), "incidentId=" + id + "; asset plan updated");
-    }
-
-    private static TestResult headOfficeCreate() throws Exception {
-        var f = fixture();
-        try {
-            var id = f.service().create(headOfficeManager(), BRANCH_ID, validIncident(), null);
-            return check(INCIDENT_ID.equals(id), "incidentId=" + id);
-        } catch (ResponseStatusException failure) {
-            return check(false, "HTTP " + failure.getStatusCode().value() + "; message=" + failure.getReason());
-        }
-    }
-
-    private static TestResult receptionistAssets() throws Exception {
-        var f = fixture();
-        var result = f.service().assets(receptionist(), null);
-        return check(result.size() == 1 && ASSET_ID.equals(result.get(0).id()), "assets=" + result);
-    }
-
-    private static TestResult headOfficeAssets() throws Exception {
-        var f = fixture();
-        var result = f.service().assets(headOfficeManager(), BRANCH_ID);
-        return check(result.size() == 1 && ASSET_ID.equals(result.get(0).id()), "assets=" + result);
-    }
-
-    private static TestResult wrongBranch() throws Exception {
-        var f = fixture();
-        return expectStatus(() -> f.service().create(receptionist(), OTHER_BRANCH_ID, validIncident(), null), 403,
-                "Bạn không có quyền báo cáo đối với sự cố thiết bị.");
-    }
-
-    private static TestResult nullCommand() throws Exception {
-        var f = fixture();
-        return expectStatus(() -> f.service().create(receptionist(), null, null, null), 400,
-                "Vui lòng bổ sung thông tin báo cáo sự cố.");
-    }
-
-    private static TestResult missingAsset() throws Exception {
-        var f = fixture();
-        IncidentCommand c = new IncidentCommand(null, "Mất nguồn", true, "HIGH", "URGENT",
-                LocalDate.of(2026, 11, 15), "REPAIR", "Nhà cung cấp A", null, BigDecimal.TEN, null);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400, "Vui lòng bổ sung thiết bị.");
-    }
-
-    private static TestResult blankDescription() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("   ", LocalDate.of(2026, 11, 15), "REPAIR", "Nhà cung cấp A", null, BigDecimal.TEN);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400,
-                "Vui lòng bổ sung mô tả sự cố.");
-    }
-
-    private static TestResult missingExpectedDate() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("Mất nguồn", null, "REPAIR", "Nhà cung cấp A", null, BigDecimal.TEN);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400,
-                "Vui lòng bổ sung ngày dự kiến hoàn thành.");
-    }
-
-    private static TestResult missingPlan() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("Mất nguồn", LocalDate.of(2026, 11, 15), null, "Nhà cung cấp A", null, BigDecimal.TEN);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400,
-                "Vui lòng bổ sung phương án xử lý.");
-    }
-
-    private static TestResult blankProvider() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("Mất nguồn", LocalDate.of(2026, 11, 15), "REPAIR", "   ", null, BigDecimal.TEN);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400,
-                "Vui lòng bổ sung đơn vị sửa chữa/thay thế.");
-    }
-
-    private static TestResult negativeCost() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("Mất nguồn", LocalDate.of(2026, 11, 15), "REPAIR", "Nhà cung cấp A", null,
-                BigDecimal.ONE.negate());
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400, REQUIRED);
-    }
-
-    private static TestResult missingReplacementDetails() throws Exception {
-        var f = fixture();
-        var c = incidentCommand("Mất nguồn", LocalDate.of(2026, 11, 15), "REPLACE", "Nhà cung cấp A", "   ",
-                BigDecimal.TEN);
-        return expectStatus(() -> f.service().create(receptionist(), null, c, null), 400,
-                "Vui lòng bổ sung mô tả thiết bị thay thế.");
-    }
-
-    private static TestResult inactiveAsset() throws Exception {
-        var f = fixture();
-        when(f.repository().createIncident(eq(BRANCH_ID), eq(RECEPTIONIST_ID), eq("RECEPTIONIST"), any())).thenReturn(null);
-        return expectStatus(() -> f.service().create(receptionist(), null, validIncident(), null), 400,
-                "Thiết bị không thuộc cơ sở hoặc đã ngừng sử dụng");
-    }
-
-    private static TestResult evidenceSuccess() throws Exception {
-        var f = fixture();
-        var file = new MockMultipartFile("evidence", "incident.png", "image/png", new byte[]{1});
-        var id = f.service().create(receptionist(), null, validIncident(), file);
-        verify(f.repository()).saveEvidence(any(), eq(RECEPTIONIST_ID));
-        verify(f.repository()).setIncidentEvidence(BRANCH_ID, INCIDENT_ID, evidenceFile().id());
-        return check(INCIDENT_ID.equals(id), "incidentId=" + id + "; evidence linked");
-    }
-
-    private static TestResult evidenceRollback() throws Exception {
-        var f = fixture();
-        when(f.repository().setIncidentEvidence(BRANCH_ID, INCIDENT_ID, evidenceFile().id())).thenReturn(false);
-        var file = new MockMultipartFile("evidence", "incident.png", "image/png", new byte[]{1});
-        TestResult result = expectStatus(() -> f.service().create(receptionist(), null, validIncident(), file), 404,
-                "Không tìm thấy báo cáo sự cố");
-        verify(f.fileStorage()).deleteQuietly(evidenceFile().objectKey());
-        verify(f.repository(), never()).updateAssetForPlan(eq(BRANCH_ID), eq(INCIDENT_ID), any());
-        return result;
     }
 }

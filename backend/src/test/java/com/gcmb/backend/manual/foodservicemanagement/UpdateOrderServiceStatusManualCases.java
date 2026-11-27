@@ -1,92 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-126 Update Order Service Status manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.ServiceStatusCommand;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.OrderLock;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class UpdateOrderServiceStatusManualCases {
-    private static final String UC = "UC-126 Update Order Service Status";
-    private static final String PRE = "Lễ tân letan.hoabang đăng nhập; order thuộc HN_HOA_BANG và được phân công cho chính tài khoản này.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class UpdateOrderServiceStatusManualCases {
     private UpdateOrderServiceStatusManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("FSM-069", PRE + " Order đang ACCEPTED.", "status=SERVED.", "Order chuyển SERVED và trả dữ liệu cập nhật.", "Normal", "BR-123", "", () -> status("ACCEPTED", ACTOR_ID, new ServiceStatusCommand("SERVED"))),
-            tc("FSM-070", PRE.replace("chính tài khoản này", "lễ tân khác"), "status=SERVED.", "Hiển thị “Chỉ lễ tân được phân công phụ trách đơn này mới có thể cập nhật tiến độ phục vụ.”; không cập nhật.", "Abnormal", "BR-123", "MSG76", UpdateOrderServiceStatusManualCases::otherUser),
-            tc("FSM-071", PRE + " Order đang ACCEPTED.", "status=null.", "Hiển thị “Chọn trạng thái phục vụ hợp lệ.”; không cập nhật.", "Abnormal", "BR-111", "MSG02", () -> status("ACCEPTED", ACTOR_ID, new ServiceStatusCommand(null))),
-            tc("FSM-072", PRE + " Order đang PENDING.", "status=SERVED.", "Hiển thị “Chỉ cập nhật tiến độ cho order đã được xác nhận.”; không cập nhật.", "Abnormal", "BR-123", "", () -> status("PENDING", ACTOR_ID, new ServiceStatusCommand("SERVED"))),
-            tc("FSM-073", PRE + " Order đã SERVED.", "status=SERVED lần nữa.", "Trả order hiện có; không ghi trạng thái lần hai.", "Abnormal", "BR-164", "MSG74", UpdateOrderServiceStatusManualCases::alreadyServed),
-            tc("FSM-074", PRE + " Order đang ACCEPTED và đã có charge/stock movement.", "status=SERVED.", "Chỉ cập nhật trạng thái; charge và stock không thay đổi.", "Normal", "BR-27, BR-38, BR-123", "", UpdateOrderServiceStatusManualCases::onlyStatus)
+            new ManualCase("FSM-057", "foodservicemanagement", "UC-126 Update Order Service Status", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"57db73cd-55f6-3beb-a502-ad6cea2da019\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"737f367a-3aed-4cb2-8062-5302b14efcbb\" tồn tại: trạng thái \"ACCEPTED\", booking \"e0d7798a-bcac-3d4b-b71f-2843c5a53b88\".\nTồn kho \"a518faf9-b981-3a0f-b42e-289a3e8b6a97\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái phục vụ món:\nđơn phục vụ = \"737f367a-3aed-4cb2-8062-5302b14efcbb\";\ntrạng thái = \"SERVED\".", "Order chuyển SERVED và trả dữ liệu cập nhật.", List.of("UC-126", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "updateServiceStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ServiceStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateOrderServiceStatusManualCases.java"),
+            new ManualCase("FSM-058", "foodservicemanagement", "UC-126 Update Order Service Status", "Lễ tân \"dangmanhtai\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"98aa6ef3-e7a2-3d82-b6a6-caa97096af68\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"072fc086-3276-4354-8539-f71e239d88c1\" tồn tại: trạng thái \"ACCEPTED\", booking \"284551fb-60e7-3a2b-a3ec-6ea07a4c9423\".\nTồn kho \"acd45a16-aea9-3a5f-86c1-7b709a2dd0bf\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái phục vụ món:\nđơn phục vụ = \"072fc086-3276-4354-8539-f71e239d88c1\";\ntrạng thái = \"SERVED\".", "Từ chối lễ tân khác cùng cơ sở chưa được phân công phụ trách đơn; thông báo chỉ lễ tân được phân công mới được cập nhật tiến độ; giữ order/kho/charge.", List.of("UC-126", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "updateServiceStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ServiceStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateOrderServiceStatusManualCases.java"),
+            new ManualCase("FSM-059", "foodservicemanagement", "UC-126 Update Order Service Status", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"f68c6a58-3917-3ca7-862e-467c4de357eb\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"8f225518-85e7-47bb-9b9c-90ffed094a92\" tồn tại: trạng thái \"SERVED\", booking \"976b173e-6bd7-31f6-8f24-443ebf3810fe\".\nTồn kho \"36e242ff-9136-3e0b-b3af-86277e876b29\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái phục vụ món:\nđơn phục vụ = \"8f225518-85e7-47bb-9b9c-90ffed094a92\";\ntrạng thái = \"SERVED\".", "Trả order hiện có; không ghi trạng thái lần hai.", List.of("UC-126", "BR-123", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "updateServiceStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ServiceStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateOrderServiceStatusManualCases.java"),
+            new ManualCase("FSM-060", "foodservicemanagement", "UC-126 Update Order Service Status", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"669bde29-5273-302c-9c44-6a1e1d33d261\" tồn tại: đang sử dụng \"true\".\nĐơn phục vụ \"225b72d9-b404-418c-b963-bd7966d099f0\" tồn tại: trạng thái \"ACCEPTED\", booking \"f3530b8f-a271-3927-906b-508296c5646d\".\nTồn kho \"149e2fa3-93c2-3817-9c63-4ea8fda42c99\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái phục vụ món:\nđơn phục vụ = \"225b72d9-b404-418c-b963-bd7966d099f0\";\ntrạng thái = \"SERVED\".", "Chỉ cập nhật trạng thái; charge và stock không thay đổi.", List.of("UC-126", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "updateServiceStatus", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.FoodOrderDtos$ServiceStatusCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateOrderServiceStatusManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.ManualTest tc(String id, String pre, String input,
-            String expected, String type, String br, String msg, FoodServiceManagementManualRunner.CheckedAction action) {
-        return test(id, UC, "FoodOrderService.updateServiceStatus", pre, input, expected, type,
-                note("UC-126 - Update_Order_Service_Status.docx", br, msg, "FoodOrderService.updateServiceStatus", "White-box"), action);
-    }
-
-    private static OrderLock lock(String status, java.util.UUID assignedUser) {
-        return new OrderLock(ORDER_ID, BRANCH_ID, BOOKING_ID, ALLOCATION_ID, "STAFF", null,
-                status, EMPLOYEE_ID, assignedUser);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult status(String current, java.util.UUID assignedUser,
-            ServiceStatusCommand command) {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock(current, assignedUser));
-        if (command == null || !"SERVED".equals(command.status())) {
-            return expectResponse(() -> f.service().updateServiceStatus(receptionist(), ORDER_ID, command), 400,
-                    "Chọn trạng thái phục vụ hợp lệ.");
-        }
-        if (!"ACCEPTED".equals(current)) {
-            return expectResponse(() -> f.service().updateServiceStatus(receptionist(), ORDER_ID, command), 409,
-                    "Chỉ cập nhật tiến độ cho order đã được xác nhận.");
-        }
-        when(f.orders().order(ORDER_ID, BRANCH_ID)).thenReturn(order("SERVED", "STAFF", EMPLOYEE_ID));
-        var row = f.service().updateServiceStatus(receptionist(), ORDER_ID, command);
-        return check("SERVED".equals(row.status()), "status=" + row.status());
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult otherUser() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ACCEPTED", OTHER_ACTOR_ID));
-        return expectResponse(() -> f.service().updateServiceStatus(receptionist(), ORDER_ID, new ServiceStatusCommand("SERVED")), 403,
-                "Chỉ lễ tân được phân công phụ trách đơn này mới có thể cập nhật tiến độ phục vụ.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult alreadyServed() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("SERVED", ACTOR_ID));
-        when(f.orders().order(ORDER_ID, BRANCH_ID)).thenReturn(order("SERVED", "STAFF", EMPLOYEE_ID));
-        var row = f.service().updateServiceStatus(receptionist(), ORDER_ID, new ServiceStatusCommand("SERVED"));
-        verify(f.orders(), never()).serve(any(), any());
-        return check("SERVED".equals(row.status()), "status already SERVED; no update");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult onlyStatus() {
-        var f = foodFixture();
-        when(f.orders().lockOrder(ORDER_ID, BRANCH_ID)).thenReturn(lock("ACCEPTED", ACTOR_ID));
-        when(f.orders().order(ORDER_ID, BRANCH_ID)).thenReturn(order("SERVED", "STAFF", EMPLOYEE_ID));
-        f.service().updateServiceStatus(receptionist(), ORDER_ID, new ServiceStatusCommand("SERVED"));
-        verify(f.orders()).serve(ORDER_ID, BRANCH_ID);
-        verify(f.orders(), never()).insertSale(any(), any(), any(), any(), any(), any());
-        verify(f.orders(), never()).updateLine(any(), any(), any(), any());
-        return check(true, "only fb_order status update was requested");
     }
 }

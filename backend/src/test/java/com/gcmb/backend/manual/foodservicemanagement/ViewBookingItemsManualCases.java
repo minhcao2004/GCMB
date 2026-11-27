@@ -1,59 +1,16 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-52 View Booking Items manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ViewBookingItemsManualCases {
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ViewBookingItemsManualCases {
     private ViewBookingItemsManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
-        String uc = "UC-52 View Booking Items";
-        String pre = "Lễ tân letan.hoabang đăng nhập tại HN_HOA_BANG; order món đã tồn tại.";
+    public static List<ManualCase> cases() {
         return List.of(
-            test("FSM-055", uc, "FoodOrderService.list", pre, "status=ALL.", "Trả chi tiết order của cơ sở ở các trạng thái; không ghi dữ liệu.", "Normal", note("UC-52 - View_Booking_Items.docx", "BR-27, BR-177", "", "FoodOrderService.list", "Black-box"), ViewBookingItemsManualCases::all),
-            test("FSM-056", uc, "FoodOrderService.list", pre, "status=UNKNOWN.", "Hiển thị “Trạng thái order không hợp lệ.”; không truy vấn danh sách.", "Abnormal", note("UC-52 - View_Booking_Items.docx", "BR-111", "MSG02", "FoodOrderService.list", "White-box"), ViewBookingItemsManualCases::invalid),
-            test("FSM-057", uc, "FoodOrderService.list", pre, "status=REJECTED nhưng không có kết quả.", "Trả danh sách rỗng; không ghi dữ liệu.", "Normal", note("UC-52 - View_Booking_Items.docx", "BR-27", "", "FoodOrderService.list", "Black-box"), ViewBookingItemsManualCases::empty),
-            test("FSM-058", uc, "FoodOrderService.list", pre + " Cơ sở khác có order.", "Xem status=ALL.", "Chỉ truy vấn và trả order HN_HOA_BANG.", "Abnormal", note("UC-52 - View_Booking_Items.docx", "BR-177", "", "FoodOrderService.list", "White-box"), ViewBookingItemsManualCases::branch)
+            new ManualCase("FSM-045", "foodservicemanagement", "UC-52 View Booking Items", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"dd862928-a379-3120-94c1-776b21994e8b\" tồn tại: đang sử dụng \"true\".\nTồn kho \"715635ef-f96b-3210-b91a-d02c433e9a9b\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem món và đơn phục vụ:\ntrạng thái = \"ALL\".", "Trả đơn đã chuẩn bị ACCEPTED thuộc đúng cơ sở actor và giữ nguyên order/kho/charge.", List.of("UC-52"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ViewBookingItemsManualCases.java"),
+            new ManualCase("FSM-046", "foodservicemanagement", "UC-52 View Booking Items", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"1e982497-b395-357a-9ce9-916fc0a10b03\" tồn tại: đang sử dụng \"true\".\nTồn kho \"70368744-c808-323f-99d2-835b8367a816\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem món và đơn phục vụ:\ntrạng thái = \"ALL\".", "Trả danh sách rỗng khi chưa có đơn đã chuẩn bị.", List.of("UC-52"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ViewBookingItemsManualCases.java"),
+            new ManualCase("FSM-047", "foodservicemanagement", "UC-52 View Booking Items", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"ccd1e4a0-e53c-3490-9911-7f7726498ea9\" tồn tại: đang sử dụng \"true\".\nTồn kho \"bb9b98da-6efe-3917-a707-20803f0701da\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem món và đơn phục vụ:\ntrạng thái = \"ALL\".", "Trả đơn đã chuẩn bị ACCEPTED thuộc đúng cơ sở actor và giữ nguyên order/kho/charge.", List.of("UC-52"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "list", List.of("com.gcmb.backend.auth.dto.Identity", "java.lang.String"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/ViewBookingItemsManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult all() {
-        var f = foodFixture();
-        when(f.orders().orders(BRANCH_ID, null)).thenReturn(List.of(order("PENDING", "ROOM_QR", null), order("ACCEPTED", "STAFF", EMPLOYEE_ID)));
-        var rows = f.service().list(receptionist(), "ALL");
-        return check(rows.size() == 2, "rows=" + rows.size());
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult invalid() {
-        var f = foodFixture();
-        var result = expectResponse(() -> f.service().list(receptionist(), "UNKNOWN"), 400, "Trạng thái order không hợp lệ.");
-        verify(f.orders(), never()).orders(any(), any());
-        return result;
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult empty() {
-        var f = foodFixture();
-        when(f.orders().orders(BRANCH_ID, "REJECTED")).thenReturn(List.of());
-        return check(f.service().list(receptionist(), "REJECTED").isEmpty(), "rows=0");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult branch() {
-        var f = foodFixture();
-        f.service().list(receptionist(), "ALL");
-        verify(f.orders()).orders(BRANCH_ID, null);
-        return check(true, "repository queried branch=" + BRANCH_ID);
     }
 }

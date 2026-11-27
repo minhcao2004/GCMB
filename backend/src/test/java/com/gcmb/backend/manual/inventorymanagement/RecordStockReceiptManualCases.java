@@ -1,189 +1,21 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-58 Record Stock Receipt manual unit test cases.
- */
 package com.gcmb.backend.manual.inventorymanagement;
 
-import static com.gcmb.backend.manual.inventorymanagement.InventoryManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.booking.exception.BookingFailure;
-import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemView;
-import com.gcmb.backend.inventory.dto.InventoryDtos.ReceiptLineCommand;
-import com.gcmb.backend.inventory.dto.InventoryDtos.StockReceiptCommand;
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
-import org.springframework.web.multipart.MultipartFile;
+import com.gcmb.backend.manual.support.*;
 
-final class RecordStockReceiptManualCases {
-    private static final String UC = "UC-58 Record Stock Receipt";
-    private static final String PRE = "Quản lý cơ sở qlcs.hoabang đã đăng nhập; HN_HOA_BANG đang ACTIVE; mặt hàng nhập thuộc cơ sở và đang active.";
-    private static final String FILE = "UC-58 - Record_Stock_Receipt.docx";
-    private static final UUID SECOND_ITEM_ID = UUID.fromString("54590000-0000-4000-8000-000000000009");
-    private static final UUID SECOND_LINE_ID = UUID.fromString("54590000-0000-4000-8000-000000000010");
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class RecordStockReceiptManualCases {
     private RecordStockReceiptManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("INM-034", "receivedAt hợp lệ; nhà cung cấp Demo; 1 dòng số lượng=2, đơn giá=1000; không có file.",
-                "Tạo NK-0001, post phiếu, cộng tồn từ 10 lên 12, thành tiền 2.000đ; không ghi thanh toán nhà cung cấp.",
-                "Normal", "BR-31, BR-32, BR-33, BR-40, BR-197", "", RecordStockReceiptManualCases::single),
-            tc("INM-035", "Hai mặt hàng: 2.5×1001đ và 3×2000đ.",
-                "Tổng số lượng=5.5; từng dòng làm tròn HALF_UP; tổng giá trị=8.503đ; mỗi mặt hàng chỉ cộng kho một lần.",
-                "Boundary", "BR-31, BR-32, BR-33, BR-40, BR-197", "", RecordStockReceiptManualCases::multiple),
-            tc("INM-036", "command=null.", "Hiển thị “Vui lòng bổ sung thông tin phiếu nhập.”; không tạo phiếu hoặc biến động.",
-                "Abnormal", "BR-111", "MSG02", () -> invalid(null, "Vui lòng bổ sung thông tin phiếu nhập.")),
-            tc("INM-037", "Lần lượt thiếu receivedAt, supplierName và danh sách mặt hàng.",
-                "Lần lượt hiển thị “Vui lòng nhập ngày nhận hàng.”, “Vui lòng bổ sung nhà cung cấp.” và “Thêm ít nhất một mặt hàng vào phiếu nhập.”; không tạo phiếu.",
-                "Abnormal", "BR-111", "MSG02", RecordStockReceiptManualCases::requiredFields),
-            tc("INM-038", "Dòng nhập không chọn item; sau đó cùng item xuất hiện hai lần.",
-                "Lần lượt hiển thị “Vui lòng chọn mặt hàng cho từng dòng nhập.” và “Mỗi mặt hàng chỉ xuất hiện một lần trong phiếu nhập.”; không tạo phiếu.",
-                "Abnormal", "BR-31, BR-111", "MSG02", RecordStockReceiptManualCases::invalidLines),
-            tc("INM-039", "Mặt hàng đã inactive hoặc không thuộc HN_HOA_BANG.",
-                "Hiển thị “Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.”; không tạo phiếu.",
-                "Abnormal", "BR-31, BR-177", "", RecordStockReceiptManualCases::inactiveItem),
-            tc("INM-040", "quantity lần lượt bằng 0, -1 và 1.0001.",
-                "Mỗi giá trị bị từ chối với “Số lượng nhận phải lớn hơn 0 và tối đa 3 chữ số thập phân.”; không tạo phiếu.",
-                "Boundary", "BR-31", "MSG44", RecordStockReceiptManualCases::quantityBoundary),
-            tc("INM-041", "unitCost lần lượt -1, 1.5 và 1000000000000000000.",
-                "Mỗi giá trị bị từ chối với “Đơn giá phải là số nguyên VND không âm, tối đa 18 chữ số.”; không tạo phiếu.",
-                "Boundary", "BR-33", "MSG45, MSG47", RecordStockReceiptManualCases::costBoundary),
-            tc("INM-042", "Tải lên file TXT không được hỗ trợ.",
-                "Hiển thị “Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác.”; không post phiếu.",
-                "Abnormal", "BR-115, BR-116", "MSG78, MSG79, MSG80", RecordStockReceiptManualCases::invalidEvidence),
-            tc("INM-043", "Cơ sở HN_HOA_BANG đang SUSPENDED.",
-                "Hiển thị “Cơ sở GenZ Cinema Hoa Bằng đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.”; không tạo phiếu.",
-                "Abnormal", "BR-177", "MSG43", RecordStockReceiptManualCases::suspended),
-            tc("INM-044", "Tài khoản RECEPTIONIST ghi nhận phiếu nhập.",
-                "Hiển thị “Bạn không có quyền tạo đối với phiếu nhập kho.”; không tạo phiếu.",
-                "Abnormal", "BR-31, BR-111", "MSG24", RecordStockReceiptManualCases::denied)
+            new ManualCase("INM-023", "inventorymanagement", "UC-58 Record Stock Receipt", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_CE5D6397933E3C41\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nMặt hàng kho \"UT_F4FF554EE42B382E\" tồn tại: đang sử dụng \"true\", số lượng \"0.0\", phiên bản \"0\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:13.868472500Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_CE5D6397933E3C41\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\ncác món/mặt hàng 2 — mặt hàng kho = \"UT_F4FF554EE42B382E\";\ncác món/mặt hàng 2 — số lượng = \"3\";\ncác món/mặt hàng 2 — đơn giá nhập = \"2000\";\ncác món/mặt hàng 2 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_CE5D6397933E3C41 có ID \"ce5d6397-933e-3c41-a032-4c6ea279e40f\"; UT_F4FF554EE42B382E có ID \"f4ff554e-e42b-382e-ba05-32da1cd4e324\".", "Nhập hai mặt hàng 2.5×1000=2500 và 3×2000=6000 đồng: tổng số lượng 5.5, tổng giá trị 8500; tồn thứ nhất tăng 100→102.5, thứ hai 0→3, mỗi dòng cộng một lần; không ghi thanh toán nhà cung cấp.", List.of("UC-58", "BR-31", "BR-32", "BR-33", "BR-40", "BR-197"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-024", "inventorymanagement", "UC-58 Record Stock Receipt", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_0873FAE0ED3F3713\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthông tin nghiệp vụ = không truyền giá trị;\nchứng từ = không truyền giá trị.", "Hiển thị “Vui lòng bổ sung thông tin phiếu nhập.”; không tạo phiếu hoặc biến động.", List.of("UC-58", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-025", "inventorymanagement", "UC-58 Record Stock Receipt", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_6B7E9B1762FF3A65\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Xác nhận tiếp nhận:\nthời điểm nhận = không truyền giá trị;\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_6B7E9B1762FF3A65\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_6B7E9B1762FF3A65 có ID \"6b7e9b17-62ff-3a65-9169-9efa66494682\".\n\nBiến thể 2: Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:15.199259500Z\";\nnhà cung cấp = \"   \";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_6B7E9B1762FF3A65\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_6B7E9B1762FF3A65 có ID \"6b7e9b17-62ff-3a65-9169-9efa66494682\".\n\nBiến thể 3: Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:15.665290900Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng = danh sách rỗng;\nchứng từ = không truyền giá trị.", "Lần lượt hiển thị “Vui lòng nhập ngày nhận hàng.”, “Vui lòng bổ sung nhà cung cấp.” và “Thêm ít nhất một mặt hàng vào phiếu nhập.”; không tạo phiếu.", List.of("UC-58", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-026", "inventorymanagement", "UC-58 Record Stock Receipt", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_BCB645524FFE3FB9\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:16.199943800Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = không truyền giá trị;\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.", "Từ chối vì dòng nhập chưa chọn mặt hàng; không tạo phiếu nhập hoặc biến động kho.", List.of("UC-58", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-027", "inventorymanagement", "UC-58 Record Stock Receipt", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_632AE459CDC0318C\" tồn tại: đang sử dụng \"false\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:16.702001400Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_632AE459CDC0318C\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_632AE459CDC0318C có ID \"632ae459-cdc0-318c-9508-47f4aaa48edf\".", "Hiển thị “Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.”; không tạo phiếu.", List.of("UC-58"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-028", "inventorymanagement", "UC-58 Record Stock Receipt", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_AFE87B5E438C3598\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:17.355213700Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_AFE87B5E438C3598\";\ncác món/mặt hàng 1 — số lượng = \"0\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_AFE87B5E438C3598 có ID \"afe87b5e-438c-3598-a513-7650ac66c352\".\n\nBiến thể 2: Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:17.865579100Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_AFE87B5E438C3598\";\ncác món/mặt hàng 1 — số lượng = \"-1\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_AFE87B5E438C3598 có ID \"afe87b5e-438c-3598-a513-7650ac66c352\".", "Từ chối số lượng nhận bằng 0 hoặc âm; không tạo phiếu nhập hoặc cộng tồn kho.", List.of("UC-58", "BR-31"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-029", "inventorymanagement", "UC-58 Record Stock Receipt", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_7ED8A0EBBB473EFA\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:18.307033100Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_7ED8A0EBBB473EFA\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_7ED8A0EBBB473EFA có ID \"7ed8a0eb-bb47-3efa-9c12-4e31822364a7\".", "Từ chối thay đổi dữ liệu tại cơ sở đã chuẩn bị SUSPENDED; giải thích cơ sở đang tạm ngừng và chỉ được xem, giữ nguyên dữ liệu.", List.of("UC-58", "BR-177"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java"),
+            new ManualCase("INM-030", "inventorymanagement", "UC-58 Record Stock Receipt", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_88791C44E41A3717\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xác nhận tiếp nhận:\nthời điểm nhận = \"2026-11-27T12:23:18.733396900Z\";\nnhà cung cấp = \"Nhà cung cấp UT\";\nsố hóa đơn nhà cung cấp = \"UT-INVOICE-01\";\ncác món/mặt hàng 1 — mặt hàng kho = \"UT_88791C44E41A3717\";\ncác món/mặt hàng 1 — số lượng = \"2.5\";\ncác món/mặt hàng 1 — đơn giá nhập = \"1000\";\ncác món/mặt hàng 1 — ngày hết hạn = \"2027-11-27\";\nchứng từ = không truyền giá trị.\nĐịnh danh đối chiếu: UT_88791C44E41A3717 có ID \"88791c44-e41a-3717-bab8-fbaa2a1be5cc\".", "Hiển thị “Bạn không có quyền tạo đối với phiếu nhập kho.”; không tạo phiếu.", List.of("UC-58", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "receive", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.InventoryDtos$StockReceiptCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/RecordStockReceiptManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            CheckedAction action) {
-        return test(id, UC, "InventoryService.receive", PRE, input, expected, type,
-                note(FILE, br, msg, "InventoryService.receive/validateReceipt"), action);
-    }
-
-    private static StockReceiptCommand command(List<ReceiptLineCommand> lines) {
-        return new StockReceiptCommand(NOW, "Nhà cung cấp Demo", "HD-001", lines);
-    }
-
-    private static ReceiptLineCommand line(UUID itemId, String quantity, String cost) {
-        return new ReceiptLineCommand(itemId, new BigDecimal(quantity), new BigDecimal(cost));
-    }
-
-    private static TestResult single() {
-        var f = fixture();
-        var result = f.service().receive(manager(), command(List.of(line(ITEM_ID, "2", "1000"))), null);
-        verify(f.repository()).postReceipt(RECEIPT_ID, ACTOR_ID);
-        verify(f.repository()).insertReceiptMovement(org.mockito.ArgumentMatchers.eq(ITEM_ID),
-                org.mockito.ArgumentMatchers.eq(LINE_ID), org.mockito.ArgumentMatchers.eq(new BigDecimal("2")),
-                org.mockito.ArgumentMatchers.eq(new BigDecimal("10")),
-                org.mockito.ArgumentMatchers.argThat(value -> value.compareTo(new BigDecimal("1000")) == 0),
-                org.mockito.ArgumentMatchers.eq(ACTOR_ID),
-                org.mockito.ArgumentMatchers.eq("Nhập hàng theo phiếu NK-0001"));
-        return check(result.itemCount() == 1 && result.totalQuantity().compareTo(new BigDecimal("2")) == 0
-                        && result.totalValue().compareTo(new BigDecimal("2000")) == 0
-                        && result.items().get(0).quantityAfter().compareTo(new BigDecimal("12")) == 0,
-                "code=" + result.code() + "; quantity=" + result.totalQuantity() + "; value=" + result.totalValue()
-                        + "; after=" + result.items().get(0).quantityAfter());
-    }
-
-    private static TestResult multiple() {
-        var f = fixture();
-        InventoryItemView second = new InventoryItemView(SECOND_ITEM_ID, "INV-002", "Bắp", "Nguyên liệu", UNIT_ID,
-                "Cái", "MANUAL", new BigDecimal("4"), BigDecimal.ONE, 1L, true, true, "AVAILABLE");
-        when(f.repository().get(BRANCH_ID, SECOND_ITEM_ID)).thenReturn(second);
-        when(f.repository().lockItem(BRANCH_ID, SECOND_ITEM_ID)).thenReturn(new com.gcmb.backend.inventory.repository.InventoryRepository.LockedItem(
-                SECOND_ITEM_ID, UNIT_ID, true, new BigDecimal("4"), 1L));
-        when(f.repository().insertReceiptLine(any(), any(), any())).thenReturn(LINE_ID, SECOND_LINE_ID);
-        var result = f.service().receive(manager(), command(List.of(line(ITEM_ID, "2.5", "1001"),
-                line(SECOND_ITEM_ID, "3", "2000"))), null);
-        return check(result.itemCount() == 2 && result.totalQuantity().compareTo(new BigDecimal("5.5")) == 0
-                        && result.totalValue().compareTo(new BigDecimal("8503")) == 0,
-                "items=" + result.itemCount() + "; quantity=" + result.totalQuantity() + "; value=" + result.totalValue());
-    }
-
-    private static TestResult invalid(StockReceiptCommand input, String expected) {
-        var f = fixture();
-        TestResult result = expectStatus(() -> f.service().receive(manager(), input, null), 400, expected);
-        verify(f.repository(), never()).insertReceipt(any(), any(), any(), any(), any(), any(), any(), any(), any());
-        return result;
-    }
-
-    private static TestResult requiredFields() {
-        TestResult date = invalid(new StockReceiptCommand(null, "Nhà cung cấp", null, List.of(line(ITEM_ID, "1", "0"))),
-                "Vui lòng nhập ngày nhận hàng.");
-        TestResult supplier = invalid(new StockReceiptCommand(NOW, "   ", null, List.of(line(ITEM_ID, "1", "0"))),
-                "Vui lòng bổ sung nhà cung cấp.");
-        TestResult items = invalid(new StockReceiptCommand(NOW, "Nhà cung cấp", null, List.of()),
-                "Thêm ít nhất một mặt hàng vào phiếu nhập.");
-        return check(date.passed() && supplier.passed() && items.passed(),
-                "date=" + date.actual() + "; supplier=" + supplier.actual() + "; items=" + items.actual());
-    }
-
-    private static TestResult invalidLines() {
-        TestResult missing = invalid(command(List.of(line(null, "1", "0"))), "Vui lòng chọn mặt hàng cho từng dòng nhập.");
-        TestResult duplicate = invalid(command(List.of(line(ITEM_ID, "1", "0"), line(ITEM_ID, "2", "0"))),
-                "Mỗi mặt hàng chỉ xuất hiện một lần trong phiếu nhập.");
-        return check(missing.passed() && duplicate.passed(), "missing=" + missing.actual() + "; duplicate=" + duplicate.actual());
-    }
-
-    private static TestResult inactiveItem() {
-        var f = fixture();
-        when(f.repository().get(BRANCH_ID, ITEM_ID)).thenReturn(item(ITEM_ID, UNIT_ID, false, new BigDecimal("10"), 2L, true));
-        return expectStatus(() -> f.service().receive(manager(), command(List.of(line(ITEM_ID, "1", "0"))), null), 409,
-                "Một mặt hàng đã ngừng dùng hoặc không thuộc cơ sở này. Hãy tải lại danh sách.");
-    }
-
-    private static TestResult quantityBoundary() {
-        String expected = "Số lượng nhận phải lớn hơn 0 và tối đa 3 chữ số thập phân.";
-        TestResult zero = invalid(command(List.of(line(ITEM_ID, "0", "0"))), expected);
-        TestResult negative = invalid(command(List.of(line(ITEM_ID, "-1", "0"))), expected);
-        TestResult scale = invalid(command(List.of(line(ITEM_ID, "1.0001", "0"))), expected);
-        return check(zero.passed() && negative.passed() && scale.passed(),
-                "zero=" + zero.actual() + "; negative=" + negative.actual() + "; scale4=" + scale.actual());
-    }
-
-    private static TestResult costBoundary() {
-        String expected = "Đơn giá phải là số nguyên VND không âm, tối đa 18 chữ số.";
-        TestResult negative = invalid(command(List.of(line(ITEM_ID, "1", "-1"))), expected);
-        TestResult decimal = invalid(command(List.of(line(ITEM_ID, "1", "1.5"))), expected);
-        TestResult large = invalid(command(List.of(line(ITEM_ID, "1", "1000000000000000000"))), expected);
-        return check(negative.passed() && decimal.passed() && large.passed(),
-                "negative=" + negative.actual() + "; decimal=" + decimal.actual() + "; large=" + large.actual());
-    }
-
-    private static TestResult invalidEvidence() {
-        var f = fixture();
-        MultipartFile file = mock(MultipartFile.class);
-        when(f.storage().store(file)).thenThrow(new BookingFailure(400, "image",
-                "Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác."));
-        return expectStatus(() -> f.service().receive(manager(), command(List.of(line(ITEM_ID, "1", "0"))), file), 400,
-                "Chỉ hỗ trợ tệp JPEG, PNG, WebP, HEIC, HEIF hoặc PDF. Vui lòng chọn tệp khác.");
-    }
-
-    private static TestResult suspended() {
-        var f = fixture();
-        when(f.repository().activeBranch(BRANCH_ID)).thenReturn(false);
-        return expectStatus(() -> f.service().receive(manager(), command(List.of(line(ITEM_ID, "1", "0"))), null), 403,
-                "Cơ sở GenZ Cinema Hoa Bằng đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
-    }
-
-    private static TestResult denied() {
-        var f = fixture();
-        return expectStatus(() -> f.service().receive(receptionist(), command(List.of(line(ITEM_ID, "1", "0"))), null), 403,
-                "Bạn không có quyền tạo đối với phiếu nhập kho.");
     }
 }

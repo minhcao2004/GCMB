@@ -1,49 +1,16 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-49 Delete Menu Item manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class DeleteMenuItemManualCases {
+/** Manual service UT. Results are reviewed by the tester. */
+public final class DeleteMenuItemManualCases {
     private DeleteMenuItemManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
-        String uc = "UC-49 Delete Menu Item";
+    public static List<ManualCase> cases() {
         return List.of(
-            test("FSM-033", uc, "MenuItemService.delete", "Quản lý quanly.hoabang đăng nhập; cơ sở hoạt động; món tồn tại và đã có order lịch sử.", "Xóa món FB-001.", "Soft-delete món, ngừng bán; giữ order lịch sử.", "Normal", note("UC-49 - Delete_Menu_Item.docx", "BR-27, BR-38", "", "MenuItemService.delete", "White-box"), DeleteMenuItemManualCases::delete),
-            test("FSM-034", uc, "MenuItemService.delete", "Quản lý đăng nhập; món không tồn tại hoặc đã bị xóa.", "Xóa ITEM_ID.", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không thay đổi dữ liệu.", "Abnormal", note("UC-49 - Delete_Menu_Item.docx", "BR-177", "", "MenuItemService.delete", "White-box"), DeleteMenuItemManualCases::notFound),
-            test("FSM-035", uc, "MenuItemService.delete", "Quản lý quanly.hoabang đăng nhập; HN_HOA_BANG đang tạm ngừng.", "Xóa món FB-001.", "Hiển thị “Cơ sở HN_HOA_BANG đang tạm ngưng hoạt động nên chưa thể thực hiện thao tác này.”; không xóa.", "Abnormal", note("UC-49 - Delete_Menu_Item.docx", "BR-177", "MSG43", "MenuItemService.delete", "White-box"), DeleteMenuItemManualCases::suspended)
+            new ManualCase("FSM-025", "foodservicemanagement", "UC-49 Delete Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"90ab976f-7e38-3295-a1c6-a1946957c658\" tồn tại: đang sử dụng \"true\".\nTồn kho \"78a95de7-02f8-3ed0-b2c7-94f50dbd6e77\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa món và đơn phục vụ:\nmã định danh = \"90ab976f-7e38-3295-a1c6-a1946957c658\".", "Soft-delete món, ngừng bán; giữ order lịch sử.", List.of("UC-49", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/DeleteMenuItemManualCases.java"),
+            new ManualCase("FSM-026", "foodservicemanagement", "UC-49 Delete Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"afcbc67d-1ad6-3fa3-ad36-7e4b64693146\" tồn tại: đang sử dụng \"true\".\nTồn kho \"908bb5b3-fb02-3128-8a8c-6b4f05054241\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa món và đơn phục vụ:\nmã định danh = \"b30a4f26-5868-30c9-802a-25e39030cc92\".", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không thay đổi dữ liệu.", List.of("UC-49", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/DeleteMenuItemManualCases.java"),
+            new ManualCase("FSM-027", "foodservicemanagement", "UC-49 Delete Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"34b9b950-ba63-3359-bfc8-a920c624b693\" tồn tại: đang sử dụng \"true\".\nTồn kho \"8c5139df-c7b2-312b-96d1-76f84dfd0b20\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa món và đơn phục vụ:\nmã định danh = \"34b9b950-ba63-3359-bfc8-a920c624b693\".", "Từ chối xóa món tại cơ sở đã chuẩn bị SUSPENDED, chỉ cho xem; giữ món và lịch sử.", List.of("UC-49", "BR-177", "MSG43"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/DeleteMenuItemManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult delete() {
-        var f = menuFixture();
-        f.service().delete(manager(), ITEM_ID);
-        verify(f.repository()).softDelete(BRANCH_ID, ITEM_ID, ACTOR_ID);
-        return check(true, "softDelete called once; order tables untouched");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult notFound() {
-        var f = menuFixture();
-        when(f.repository().softDelete(BRANCH_ID, ITEM_ID, ACTOR_ID)).thenReturn(false);
-        return expectResponse(() -> f.service().delete(manager(), ITEM_ID), 404,
-                "Không tìm thấy món trong cơ sở được phân quyền.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult suspended() {
-        var f = menuFixture();
-        when(f.repository().activeBranch(BRANCH_ID)).thenReturn(false);
-        return expectResponse(() -> f.service().delete(manager(), ITEM_ID), 403,
-                "Cơ sở HN_HOA_BANG đang tạm ngưng hoạt động nên chưa thể thực hiện thao tác này.");
     }
 }

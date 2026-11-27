@@ -1,94 +1,18 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-60 Create Equipment Category manual unit test cases.
- */
 package com.gcmb.backend.manual.equipmentcategorymanagement;
 
-import static com.gcmb.backend.manual.equipmentcategorymanagement.EquipmentCategoryManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.EquipmentCategoryDtos.Command;
 import java.util.List;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.gcmb.backend.manual.support.*;
 
-final class CreateEquipmentCategoryManualCases {
-    private static final String UC = "UC-60 Create Equipment Category";
-    private static final String FILE = "UC-60 - Create Equipment Category.docx";
-    private static final String PRE = "Quản lý cấp cao qlcc đã đăng nhập; mở quản lý nhóm thiết bị; danh mục dùng chung toàn chuỗi sẵn sàng.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class CreateEquipmentCategoryManualCases {
     private CreateEquipmentCategoryManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("ECM-001", "code=' EQ-LIGHT '; name=' Thiết bị ánh sáng '; description có khoảng trắng đầu/cuối.",
-                "Tạo nhóm thành công; dữ liệu được chuẩn hóa; nhóm mới ở trạng thái hoạt động và chưa có thiết bị liên kết.",
-                "Normal", "BR-111", "", "White-box", CreateEquipmentCategoryManualCases::success),
-            tc("ECM-002", "command=null.", "Hiển thị “Vui lòng bổ sung thông tin nhóm thiết bị.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box",
-                () -> invalid(null, "Vui lòng bổ sung thông tin nhóm thiết bị.")),
-            tc("ECM-003", "code chỉ chứa khoảng trắng.", "Hiển thị “Vui lòng bổ sung mã nhóm thiết bị.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box",
-                () -> invalid(command("   ", "Thiết bị ánh sáng"), "Vui lòng bổ sung mã nhóm thiết bị.")),
-            tc("ECM-004", "name chỉ chứa khoảng trắng.", "Hiển thị “Vui lòng bổ sung tên nhóm thiết bị.”; không tạo dữ liệu.",
-                "Abnormal", "BR-111", "MSG02", "Black-box",
-                () -> invalid(command("EQ-LIGHT", "   "), "Vui lòng bổ sung tên nhóm thiết bị.")),
-            tc("ECM-005", "code=EQ-AUDIO đã tồn tại trong danh mục toàn chuỗi.",
-                "Hiển thị “Mã nhóm thiết bị “EQ-AUDIO” đã tồn tại trong danh mục toàn chuỗi. Vui lòng nhập mã khác.”; không tạo trùng.",
-                "Abnormal", "BR-111", "MSG38", "Black-box", CreateEquipmentCategoryManualCases::duplicate),
-            tc("ECM-006", "Quản lý cơ sở qlcs.hoabang gửi yêu cầu tạo nhóm.",
-                "Hiển thị “Bạn không có quyền tạo đối với nhóm thiết bị.”; không tạo dữ liệu.",
-                "Abnormal", "", "MSG24", "Black-box", CreateEquipmentCategoryManualCases::branchManagerDenied)
+            new ManualCase("ECM-001", "equipmentcategorymanagement", "UC-60 Create Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \" EQ-UT-NEW \" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã = \" EQ-UT-NEW \";\ntên = \" Thiết bị ánh sáng \";\nmô tả = \" Mô tả nhóm UT \".", "Tạo một nhóm hoạt động, code=\"EQ-UT-NEW\", name=\"Thiết bị ánh sáng\", description=\"Mô tả nhóm UT\" sau chuẩn hóa khoảng trắng; chưa có thiết bị tham chiếu.", List.of("UC-60"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/CreateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-002", "equipmentcategorymanagement", "UC-60 Create Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo nhóm thiết bị:\ncơ sở = không truyền giá trị;\nthông tin cập nhật = không truyền giá trị.", "Hiển thị “Vui lòng bổ sung thông tin nhóm thiết bị.”; không tạo dữ liệu.", List.of("UC-60", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/CreateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-003", "equipmentcategorymanagement", "UC-60 Create Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \"   \" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã = \"   \";\ntên = \" Thiết bị ánh sáng \";\nmô tả = \" Mô tả nhóm UT \".", "Hiển thị “Vui lòng bổ sung mã nhóm thiết bị.”; không tạo dữ liệu.", List.of("UC-60", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/CreateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-004", "equipmentcategorymanagement", "UC-60 Create Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \" EQ-UT-NEW \" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã = \" EQ-UT-NEW \";\ntên = \"   \";\nmô tả = \" Mô tả nhóm UT \".", "Hiển thị “Vui lòng bổ sung tên nhóm thiết bị.”; không tạo dữ liệu.", List.of("UC-60", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/CreateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-005", "equipmentcategorymanagement", "UC-60 Create Equipment Category", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \" EQ-UT-NEW \" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã = \" EQ-UT-NEW \";\ntên = \" Thiết bị ánh sáng \";\nmô tả = \" Mô tả nhóm UT \".", "Hiển thị “Bạn không có quyền tạo đối với nhóm thiết bị.”; không tạo dữ liệu.", List.of("UC-60", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/CreateEquipmentCategoryManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentCategoryService.create", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentCategoryService.create/validate", method), action);
-    }
-
-    private static Command command(String code, String name) {
-        return new Command(code, name, "Danh mục thiết bị dùng chung");
-    }
-
-    private static TestResult success() {
-        var f = fixture();
-        var result = f.service().create(headOfficeManager(), null,
-                new Command(" EQ-LIGHT ", " Thiết bị ánh sáng ", " Danh mục thiết bị dùng chung "));
-        verify(f.repository()).create(isNull(),
-                eq(new Command("EQ-LIGHT", "Thiết bị ánh sáng", "Danh mục thiết bị dùng chung")));
-        return check(NEW_CATEGORY_ID.equals(result.id()) && result.active() && result.assetCount() == 0,
-                "id=" + result.id() + "; active=" + result.active() + "; assetCount=" + result.assetCount());
-    }
-
-    private static TestResult invalid(Command command, String message) {
-        var f = fixture();
-        TestResult result = expectStatus(() -> f.service().create(headOfficeManager(), null, command), 400, message);
-        verify(f.repository(), never()).create(isNull(), any());
-        return result;
-    }
-
-    private static TestResult duplicate() {
-        var f = fixture();
-        when(f.repository().create(isNull(), any())).thenThrow(new DataIntegrityViolationException("duplicate"));
-        return expectStatus(() -> f.service().create(headOfficeManager(), null, command("EQ-AUDIO", "Thiết bị âm thanh")),
-                409, "Mã nhóm thiết bị “EQ-AUDIO” đã tồn tại trong danh mục toàn chuỗi. Vui lòng nhập mã khác.");
-    }
-
-    private static TestResult branchManagerDenied() {
-        var f = fixture();
-        TestResult result = expectStatus(() -> f.service().create(branchManager(), BRANCH_ID,
-                command("EQ-LIGHT", "Thiết bị ánh sáng")), 403,
-                "Bạn không có quyền tạo đối với nhóm thiết bị.");
-        verify(f.repository(), never()).create(isNull(), any());
-        return result;
     }
 }

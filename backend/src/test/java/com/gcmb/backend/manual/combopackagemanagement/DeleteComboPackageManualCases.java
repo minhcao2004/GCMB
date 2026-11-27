@@ -1,48 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 29/10/2026
- * Description: Approved UC-27 DeleteComboPackage manual cases, retaining the spreadsheet CPM IDs.
- */
 package com.gcmb.backend.manual.combopackagemanagement;
 
 import java.util.List;
-import static com.gcmb.backend.manual.combopackagemanagement.ComboPackageManagementManualRunner.*;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class DeleteComboPackageManualCases {
     private DeleteComboPackageManualCases() {}
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-                test("CPM-117", "UC-27 DeleteComboPackage",
-                "Nguồn: UC-27_Delete_Combo_Package.docx; BR-118; Production: RoomCatalogService.deletePrice. Phương pháp kiểm thử: White-box.",
-                "Recording JDBC chứa CIN_4H_QN active và không có tham chiếu nghiệp vụ.",
-                                "Chọn xóa và xác nhận.",
-                "RoomCatalogService.deletePrice xóa đúng combo được chọn và không xóa record không liên quan.",
-                                () -> delete(false)),
-                test("CPM-118", "UC-27 DeleteComboPackage",
-                "Nguồn: UC-27_Delete_Combo_Package.docx; UC existing-record precondition; BR-118; Production: RoomCatalogService.deletePrice. Phương pháp kiểm thử: White-box.",
-                "Recording JDBC chứa CIN_4H_QN inactive và không có tham chiếu nghiệp vụ.",
-                                "Yêu cầu xóa I và xác nhận.",
-                "RoomCatalogService.deletePrice xóa combo inactive khi không có tham chiếu nghiệp vụ.",
-                                () -> delete(true)),
-                test("CPM-125", "UC-27 DeleteComboPackage",
-                                "Nguồn: UC-27_Delete_Combo_Package.docx; UC existing-record precondition; Flyway V3, V14; Production: RoomCatalogService.deletePrice; RoomCatalogService.price. Phương pháp kiểm thử: White-box.",
-                                "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; CSRF hợp lệ khi ghi; hạng RT-QN/Queen và RT-KG/King active trong seed V3/V14; UUID 00000000-0000-0000-0000-000000000000 không tồn tại trong seed",
-                                "Yêu cầu xóa combo không tồn tại.",
-                                "Báo không tìm thấy; không xóa combo khác.",
-                                () -> notFound(true)),
-                test("CPM-140", "UC-27 DeleteComboPackage",
-                                "Nguồn: UC-27_Delete_Combo_Package.docx; BR-118; MSG104; Production: RoomCatalogService.deletePrice. Phương pháp kiểm thử: White-box.",
-                                "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; combo CIN_4H_QN tồn tại và đang được dữ liệu nghiệp vụ tham chiếu.",
-                                "Chọn xóa combo CIN_4H_QN và xác nhận.",
-                                "Từ chối xóa với thông báo “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; combo vẫn còn.",
-                                () -> deleteReferenced())
+            new ManualCase("CPM-069", "combopackagemanagement", "UC-27 DeleteComboPackage", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nCombo \"UT_B2ACB9CF364E3B08\" tồn tại: đang sử dụng \"true\", hạng phòng \"RT-QN\", giá \"236000\", số phút sử dụng \"120\", phiên bản \"1\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa combo:\nloại = \"COMBO\";\nmã định danh = \"UT_B2ACB9CF364E3B08\".\nĐịnh danh đối chiếu: UT_B2ACB9CF364E3B08 có ID \"b2acb9cf-364e-3b08-bc60-d3c4778bbb4b\".", "RoomCatalogService.deletePrice xóa đúng combo được chọn và không xóa record không liên quan.", List.of("UC-27", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deletePrice", List.of("java.lang.String", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/DeleteComboPackageManualCases.java"),
+            new ManualCase("CPM-070", "combopackagemanagement", "UC-27 DeleteComboPackage", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nCombo \"UT_61D52D39E6123198\" tồn tại: đang sử dụng \"false\", hạng phòng \"RT-QN\", giá \"236000\", số phút sử dụng \"120\", phiên bản \"1\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa combo:\nloại = \"COMBO\";\nmã định danh = \"UT_61D52D39E6123198\".\nĐịnh danh đối chiếu: UT_61D52D39E6123198 có ID \"61d52d39-e612-3198-8ae4-489b8054c7e2\".", "RoomCatalogService.deletePrice xóa combo inactive khi không có tham chiếu nghiệp vụ.", List.of("UC-27", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deletePrice", List.of("java.lang.String", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/DeleteComboPackageManualCases.java"),
+            new ManualCase("CPM-071", "combopackagemanagement", "UC-27 DeleteComboPackage", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa combo:\nloại = \"COMBO\";\nmã định danh = \"33baeb99-6b0c-3d2f-98c5-70a08523e81f\".", "Báo không tìm thấy; không xóa combo khác.", List.of("UC-27"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deletePrice", List.of("java.lang.String", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/DeleteComboPackageManualCases.java"),
+            new ManualCase("CPM-072", "combopackagemanagement", "UC-27 DeleteComboPackage", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nCombo \"CIN_C1_QN\" tồn tại: đang sử dụng \"true\", hạng phòng \"RT-QN\", giá \"236000\", số phút sử dụng \"120\", phiên bản \"1\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa combo:\nloại = \"COMBO\";\nmã định danh = \"CIN_C1_QN\".\nĐịnh danh đối chiếu: CIN_C1_QN có ID \"39ac927b-d8a7-4685-a1e5-818197642048\".", "Từ chối xóa với thông báo “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; combo vẫn còn.", List.of("UC-27", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "deletePrice", List.of("java.lang.String", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/DeleteComboPackageManualCases.java")
         );
     }
 }
-
-
-
-
-

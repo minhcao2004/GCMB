@@ -1,147 +1,26 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-50 Add Items to Booking manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.auth.dto.Identity;
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.StaffItemRequest;
-import com.gcmb.backend.inventory.dto.FoodOrderDtos.StaffOrderRequest;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.ComboAllowance;
-import com.gcmb.backend.inventory.repository.FoodOrderRepository.ExistingOrder;
-import java.math.BigDecimal;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class AddItemsToBookingManualCases {
-    private static final String UC = "UC-50 Add Items to Booking";
-    private static final String PRE = "Lễ tân letan.hoabang đăng nhập; booking BK-DEMO đang IN_HOUSE tại HN_HOA_BANG; lễ tân phụ trách đang trong ca; Coca Cola đang bán.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class AddItemsToBookingManualCases {
     private AddItemsToBookingManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("FSM-036", PRE, "Coca Cola: quantity=2; unitPrice=20.000đ.", "Tạo order ACCEPTED, tổng tiền 40.000đ và gắn booking.", "Normal", "BR-27, BR-28", "", () -> add(2, new BigDecimal("20000"))),
-            tc("FSM-037", PRE + " Combo còn 2 Coca Cola miễn phí.", "Coca Cola: quantity=2.", "Hai chai được ghi nhận là phần combo, đơn giá 0đ.", "Normal", "BR-30, BR-172", "", () -> combo(2, 2)),
-            tc("FSM-038", PRE + " Combo còn 2 Coca Cola miễn phí.", "Coca Cola: quantity=3.", "Hai chai miễn phí và một chai tính 20.000đ.", "Boundary", "BR-30, BR-172", "", () -> combo(3, 2)),
-            tc("FSM-039", PRE + " Tồn kho Coca Cola=10 chai.", "Coca Cola: quantity=3.", "Tạo đúng một stock movement SALE; tồn sau=7.", "Normal", "BR-38", "", AddItemsToBookingManualCases::stockDeduction),
-            tc("FSM-040", PRE + " Tồn kho Coca Cola=2 chai.", "Coca Cola: quantity=3.", "Hiển thị “Coca Cola chỉ còn 2 chai. Vui lòng giảm số lượng hoặc chọn món khác.”; không tạo SALE.", "Abnormal", "BR-38", "MSG18", AddItemsToBookingManualCases::stockShortage),
-            tc("FSM-041", PRE, "Coca Cola: quantity=0.", "Hiển thị “Số lượng phải là số nguyên lớn hơn 0.”; không tạo order.", "Boundary", "BR-117", "MSG45", AddItemsToBookingManualCases::zeroQuantity),
-            tc("FSM-042", "Lễ tân đăng nhập; booking không còn IN_HOUSE hoặc đã kết thúc.", "Thêm Coca Cola.", "Từ chối; không tạo order hoặc charge.", "Abnormal", "BR-27", "", AddItemsToBookingManualCases::inactiveBooking),
-            tc("FSM-043", PRE, "Cùng Coca Cola xuất hiện hai lần trong request.", "Hiển thị “Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.”; không tạo order.", "Abnormal", "BR-117", "", AddItemsToBookingManualCases::duplicateItem),
-            tc("FSM-044", PRE + " Nhân viên được chọn không làm ca hiện tại.", "Thêm Coca Cola và gán nhân viên ngoài ca.", "Hiển thị “Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.”; không tạo order.", "Abnormal", "BR-123", "MSG75", AddItemsToBookingManualCases::offShift),
-            tc("FSM-045", PRE + " Món đã ngừng bán hoặc thuộc cơ sở khác.", "Thêm món không hợp lệ.", "Từ chối; không tạo order hoặc charge.", "Abnormal", "BR-38, BR-177", "", AddItemsToBookingManualCases::unavailableItem),
-            tc("FSM-046", PRE + " idempotencyKey đã tạo đúng order của booking.", "Gửi lại cùng request/key.", "Trả order hiện có; không tạo order/line/SALE trùng.", "Abnormal", "BR-164", "MSG74", () -> idempotent(false)),
-            tc("FSM-047", PRE + " idempotencyKey đã dùng cho booking khác.", "Gửi request với key trùng.", "Hiển thị “Mã gửi món đã được dùng cho một booking khác.”; không lộ order kia.", "Abnormal", "BR-164", "MSG74", () -> idempotent(true)),
-            tc("FSM-048", "Kế toán ketoan đăng nhập; booking đang IN_HOUSE.", "Kế toán thêm món.", "Hiển thị “Bạn không có quyền thêm món đối với booking.”; không đọc/ghi order.", "Abnormal", "Không có BR riêng", "MSG24", AddItemsToBookingManualCases::wrongRole)
+            new ManualCase("FSM-028", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"d834ccd5-8353-3525-a5ef-08749ae9db0f\" tồn tại: đang sử dụng \"true\".\nTồn kho \"fc75005e-2de3-3f23-a41d-e0d7b5ff8b1a\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"5b1d5c56-709b-3974-8d84-716d00559afa\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"d834ccd5-8353-3525-a5ef-08749ae9db0f\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_3EB3CEA067BA311B\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Tạo order ACCEPTED, tổng tiền 40.000đ và gắn booking.", List.of("UC-50", "BR-27", "BR-28", "BR-29"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-029", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"925b388b-956a-3c56-8ecd-949a420cc34f\" tồn tại: đang sử dụng \"true\".\nTồn kho \"d51e231b-afeb-3cdb-8507-0204835d62c6\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"de13658b-18dc-352f-8721-d2f14dc1efdd\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"925b388b-956a-3c56-8ecd-949a420cc34f\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_4533D462C6903F58\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Hai chai được ghi nhận là phần combo, đơn giá 0đ.", List.of("UC-50", "BR-27", "BR-28", "BR-29", "BR-172"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-030", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"23f13096-64e7-3cdb-9c37-90c5efdea0c0\" tồn tại: đang sử dụng \"true\".\nTồn kho \"cac32f78-121c-3124-9d27-a031c4f7e3ef\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"023490e1-e67b-3f3a-bce8-d4d85b3bf919\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"23f13096-64e7-3cdb-9c37-90c5efdea0c0\";\ncác món/mặt hàng 1 — số lượng = \"3\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_C6E48A67129A3F99\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Hai chai miễn phí và một chai tính 20.000đ.", List.of("UC-50", "BR-27", "BR-28", "BR-29", "BR-172"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-031", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"aea2dc5f-dd09-38bd-acae-d1390765d406\" tồn tại: đang sử dụng \"true\".\nTồn kho \"98520912-9501-3d3b-9cd9-f7132d965776\" tồn tại: số lượng \"10.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"aaaa5ff8-9c17-3660-8350-3b8053275419\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"aea2dc5f-dd09-38bd-acae-d1390765d406\";\ncác món/mặt hàng 1 — số lượng = \"3\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_7B6E5A593DE7355C\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Tạo order 3 chai × 20000 đ, ghi đúng một SALE -3; tồn 10 -> 7.", List.of("UC-50", "BR-36"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-032", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"803f9859-980e-309f-a8a4-e0c980e3e09c\" tồn tại: đang sử dụng \"true\".\nTồn kho \"eec46c46-cddf-3ba0-b0eb-14947686af14\" tồn tại: số lượng \"2.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"961dd013-11ce-3d6c-9650-1fddbb323885\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"803f9859-980e-309f-a8a4-e0c980e3e09c\";\ncác món/mặt hàng 1 — số lượng = \"3\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_9DBF388490C63B6D\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Từ chối bán 3 chai khi tồn 2; thông báo Coca Cola UT chỉ còn 2 chai; không SALE/charge/order.", List.of("UC-50", "BR-36", "MSG18", "BR-38"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-033", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"a0da216b-f29c-360c-b94e-865cde77d526\" tồn tại: đang sử dụng \"true\".\nTồn kho \"4202a9ab-d304-31b4-9056-4c59389f3273\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"325e738e-dbdf-3944-8f3c-5e1787d59fe1\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"a0da216b-f29c-360c-b94e-865cde77d526\";\ncác món/mặt hàng 1 — số lượng = \"0\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_DB5B20D72B5D3A79\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Hiển thị “Số lượng phải là số nguyên lớn hơn 0.”; không tạo order.", List.of("UC-50", "BR-117", "MSG44"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-034", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"fc851666-2440-3d5a-81e8-589224bc8381\" tồn tại: đang sử dụng \"false\".\nTồn kho \"37b35cfd-e0c3-3517-9f46-fdf77608d0f2\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"c9129d69-227c-3b74-a20e-22efd2e1b54b\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"fc851666-2440-3d5a-81e8-589224bc8381\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_69D37819491F3BD2\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Từ chối món đã ngừng bán, không tạo order/line/charge/SALE.", List.of("UC-50", "BR-27", "BR-28", "BR-29"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-035", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"b6255275-6aaa-392d-8dfc-3df14abb64f9\" tồn tại: đang sử dụng \"true\".\nTồn kho \"affa72a5-037c-3761-9716-c8837fcafcb9\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"c25bc7c5-51a2-3c94-bab6-a72c5fa503d4\";\nnhân viên phụ trách = \"NV01002\";\ncác món/mặt hàng 1 — món = \"b6255275-6aaa-392d-8dfc-3df14abb64f9\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_6820408265AE35D6\".\nĐịnh danh đối chiếu: NV01002 có ID \"a8f87935-588e-417d-9186-af8cf68cbf04\".", "Hiển thị “Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.”; không tạo order.", List.of("UC-50", "BR-123"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-036", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"af792654-9dd1-36a4-bc91-5ed3add56ef5\" tồn tại: đang sử dụng \"true\".\nTồn kho \"de5cd0c8-fa25-39ba-b917-f913b0572f15\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"1e50f113-0c16-3d25-b69a-7dd540efc7f0\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"af792654-9dd1-36a4-bc91-5ed3add56ef5\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_C74ED01668DD3258\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Từ chối booking CONFIRMED chưa sử dụng phòng, không gắn đơn món vào lượt chưa IN_HOUSE.", List.of("UC-50", "BR-27"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-037", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"f86e508a-cba5-3b01-bcd5-b8b7df7e7816\" tồn tại: đang sử dụng \"true\".\nTồn kho \"3c4c2791-8fc0-3e35-84b1-22830a505a28\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"4434a86a-06c5-3ba4-823e-b36dc67d4b89\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"f86e508a-cba5-3b01-bcd5-b8b7df7e7816\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_BFC8D1860FB33AF8\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Gửi lại cùng idempotencyKey/booking trả đúng order cũ, chỉ một order/line và một SALE -2.", List.of("UC-50", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-038", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"df4c5765-5a58-3605-b768-49de323e0cd3\" tồn tại: đang sử dụng \"true\".\nTồn kho \"783ae4a6-4e0b-305f-a238-66ac3ce88144\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"733a4978-5001-37fb-b4bc-86b4b8f3473a\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"df4c5765-5a58-3605-b768-49de323e0cd3\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_A71B3D04340E3A97\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Khóa đã dùng cho booking khác phải bị từ chối, không trả nội dung order khác hoặc tạo order/SALE mới.", List.of("UC-50", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-039", "foodservicemanagement", "UC-50 Add Items to Booking", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"f7f16eca-f14f-30b7-b38a-7a298c3632e3\" tồn tại: đang sử dụng \"true\".\nTồn kho \"2f87b28d-1f10-3fec-b8cc-d6942ce6805d\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"a7620746-3d5e-358d-8d50-0c06daf80d5c\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"f7f16eca-f14f-30b7-b38a-7a298c3632e3\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"20000\";\nmã xác nhận chống ghi trùng = \"UT_DF3EB3C10DBC317B\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Hiển thị “Bạn không có quyền thêm món đối với booking.”; không đọc/ghi order.", List.of("UC-50", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java"),
+            new ManualCase("FSM-074", "foodservicemanagement", "UC-50 Add Items to Booking", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"f5a52237-3bfc-3c96-86fc-652030739c3a\" tồn tại: đang sử dụng \"true\".\nTồn kho \"4baa7477-2897-3f69-9430-35d5d9c71cc0\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Thêm món vào booking:\nbooking = \"fd6c67fc-eef0-328b-bda3-fcbebff9433c\";\nnhân viên phụ trách = \"NV09007\";\ncác món/mặt hàng 1 — món = \"f5a52237-3bfc-3c96-86fc-652030739c3a\";\ncác món/mặt hàng 1 — số lượng = \"2\";\ncác món/mặt hàng 1 — đơn giá = \"25000\";\nmã xác nhận chống ghi trùng = \"UT_ADE5E4D09CB0342F\".\nĐịnh danh đối chiếu: NV09007 có ID \"e86e7b56-0714-0479-0a0e-90298ce6096d\".", "Thêm 2 món chế biến giá 25000 đ vào booking: order ACCEPTED tổng 50000 đ, không tự động xuất kho nguyên liệu; tồn kho đã chuẩn bị giữ 100 và không phát sinh SALE.", List.of("UC-50", "BR-27", "BR-28", "BR-39"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.FoodOrderService", "addItems", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.inventory.dto.FoodOrderDtos$StaffOrderRequest"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/AddItemsToBookingManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.ManualTest tc(String id, String pre, String input,
-            String expected, String type, String br, String msg, FoodServiceManagementManualRunner.CheckedAction action) {
-        return test(id, UC, "FoodOrderService.addItems", pre, input, expected, type,
-                note("UC-50 - Add_Items_to_Booking.docx", br, msg, "FoodOrderService.addItems", "White-box"), action);
-    }
-
-    private static StaffOrderRequest request(int quantity, BigDecimal price, String key) {
-        return new StaffOrderRequest(BOOKING_ID, EMPLOYEE_ID,
-                List.of(new StaffItemRequest(ITEM_ID, quantity, price)), key);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult add(int quantity, BigDecimal price) {
-        var f = foodFixture();
-        var result = f.service().addItems(receptionist(), request(quantity, price, "fsm-add"));
-        return check(result != null && "ACCEPTED".equals(result.status()), "status=" + result.status());
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult combo(int quantity, int included) {
-        var f = foodFixture();
-        when(f.orders().comboAllowance(BOOKING_ID, ITEM_ID, ORDER_ID))
-                .thenReturn(new ComboAllowance(java.util.UUID.randomUUID(), BigDecimal.valueOf(included), BigDecimal.ZERO));
-        f.service().addItems(receptionist(), request(quantity, null, "fsm-combo-" + quantity));
-        verify(f.orders()).updateLine(eq(LINE_ID), any(), eq(BigDecimal.valueOf(Math.min(quantity, included))), eq(BigDecimal.ZERO));
-        return check(true, "included=" + Math.min(quantity, included) + ", paid=" + Math.max(0, quantity - included));
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult stockDeduction() {
-        var f = foodFixture();
-        f.service().addItems(receptionist(), request(3, new BigDecimal("20000"), "fsm-stock"));
-        verify(f.orders()).insertSale(INVENTORY_ID, LINE_ID, new BigDecimal("10"), new BigDecimal("3"), ACTOR_ID,
-                "Bán món do lễ tân thêm vào booking");
-        return check(true, "stock movement: before=10, quantity=3, after=7");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult stockShortage() {
-        var f = foodFixture();
-        when(f.orders().lockStock(INVENTORY_ID)).thenReturn(new BigDecimal("2"));
-        var result = expectResponse(() -> f.service().addItems(receptionist(), request(3, null, "fsm-short")), 409,
-                "Coca Cola chỉ còn 2 chai. Vui lòng giảm số lượng hoặc chọn món khác.");
-        verify(f.orders(), never()).insertSale(any(), any(), any(), any(), any(), any());
-        return result;
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult zeroQuantity() {
-        var f = foodFixture();
-        return expectResponse(() -> f.service().addItems(receptionist(), request(0, null, "fsm-zero")), 400,
-                "Số lượng phải là số nguyên lớn hơn 0.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult inactiveBooking() {
-        var f = foodFixture();
-        when(f.orders().lockActiveBooking(BOOKING_ID, BRANCH_ID)).thenReturn(null);
-        return expectResponse(() -> f.service().addItems(receptionist(), request(1, null, "fsm-inactive")), 409,
-                "Booking không còn lượt sử dụng đang hoạt động tại cơ sở này.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult duplicateItem() {
-        var f = foodFixture();
-        var request = new StaffOrderRequest(BOOKING_ID, EMPLOYEE_ID,
-                List.of(new StaffItemRequest(ITEM_ID, 1, null), new StaffItemRequest(ITEM_ID, 1, null)), "fsm-duplicate");
-        return expectResponse(() -> f.service().addItems(receptionist(), request), 400,
-                "Mỗi món chỉ được xuất hiện một lần trong cùng yêu cầu.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult offShift() {
-        var f = foodFixture();
-        when(f.orders().eligibleOnShift(EMPLOYEE_ID, BRANCH_ID)).thenReturn(false);
-        return expectResponse(() -> f.service().addItems(receptionist(), request(1, null, "fsm-shift")), 400,
-                "Vui lòng chọn Lễ tân đang làm ca hiện tại tại cơ sở của booking để phụ trách đơn.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult unavailableItem() {
-        var f = foodFixture();
-        when(f.orders().sellableItems(eq(BRANCH_ID), any())).thenReturn(List.of());
-        return expectResponse(() -> f.service().addItems(receptionist(), request(1, null, "fsm-item")), 409,
-                "Một hoặc nhiều món đã ngừng bán hoặc không thuộc cơ sở của booking.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult idempotent(boolean otherBooking) {
-        var f = foodFixture();
-        var booking = otherBooking ? java.util.UUID.randomUUID() : BOOKING_ID;
-        when(f.orders().existingByKey("same-key")).thenReturn(new ExistingOrder(ORDER_ID, BRANCH_ID, booking, "STAFF", null));
-        if (otherBooking) {
-            return expectResponse(() -> f.service().addItems(receptionist(), request(1, null, "same-key")), 409,
-                    "Mã gửi món đã được dùng cho một booking khác.");
-        }
-        var row = f.service().addItems(receptionist(), request(1, null, "same-key"));
-        verify(f.orders(), never()).createOrder(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
-        return check(row != null, "returned existing order=" + row.id());
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult wrongRole() {
-        var f = foodFixture();
-        Identity accountant = new Identity(ACTOR_ID, "ketoan", "ACCOUNTANT", "/accounting", null, null);
-        return expectResponse(() -> f.service().addItems(accountant, request(1, null, "fsm-role")), 403,
-                "Bạn không có quyền thêm món đối với booking.");
     }
 }

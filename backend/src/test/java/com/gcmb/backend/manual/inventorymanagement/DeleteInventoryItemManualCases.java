@@ -1,97 +1,19 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-57 Delete Inventory Item manual unit test cases.
- */
 package com.gcmb.backend.manual.inventorymanagement;
 
-import static com.gcmb.backend.manual.inventorymanagement.InventoryManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.math.BigDecimal;
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class DeleteInventoryItemManualCases {
-    private static final String UC = "UC-57 Delete Inventory Item";
-    private static final String PRE = "Quản lý cơ sở qlcs.hoabang đã đăng nhập; HN_HOA_BANG đang ACTIVE; mặt hàng INV-001 tồn tại tại cơ sở này.";
-    private static final String FILE = "UC-57 - Delete_Inventory_Item.docx";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class DeleteInventoryItemManualCases {
     private DeleteInventoryItemManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("INM-028", "Xóa mặt hàng ACTIVE không còn liên kết F&B đang bán.",
-                "Mặt hàng bị loại khỏi sử dụng bằng archive; lịch sử kho không bị xóa.", "Normal", "BR-118", "", DeleteInventoryItemManualCases::success),
-            tc("INM-029", "Xóa lại mặt hàng đã inactive.", "Trả thành công idempotent; không archive lần hai và giữ lịch sử.",
-                "Abnormal", "BR-118", "", DeleteInventoryItemManualCases::alreadyInactive),
-            tc("INM-030", "itemId không tồn tại tại cơ sở.", "Hiển thị “Không tìm thấy mặt hàng kho tại cơ sở này.”; không archive.",
-                "Abnormal", "BR-118", "", DeleteInventoryItemManualCases::missing),
-            tc("INM-031", "Mặt hàng còn gắn với món F&B đang bán.",
-                "Hiển thị “Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi xóa.”; không archive.",
-                "Abnormal", "BR-118", "", DeleteInventoryItemManualCases::linked),
-            tc("INM-032", "Cơ sở HN_HOA_BANG đang SUSPENDED.",
-                "Hiển thị “Cơ sở GenZ Cinema Hoa Bằng đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.”; không archive.",
-                "Abnormal", "BR-177", "MSG43", DeleteInventoryItemManualCases::suspended),
-            tc("INM-033", "Tài khoản RECEPTIONIST gọi xóa.",
-                "Hiển thị “Bạn không có quyền xóa đối với mặt hàng kho.”; không archive.",
-                "Abnormal", "BR-118", "MSG24", DeleteInventoryItemManualCases::denied)
+            new ManualCase("INM-017", "inventorymanagement", "UC-57 Delete Inventory Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_FE19374CCA383DA9\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"UT_FE19374CCA383DA9\".\nĐịnh danh đối chiếu: UT_FE19374CCA383DA9 có ID \"fe19374c-ca38-3da9-afbb-4b0ce0c6dc52\".", "Mặt hàng bị loại khỏi sử dụng bằng archive; lịch sử kho không bị xóa.", List.of("UC-57", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java"),
+            new ManualCase("INM-018", "inventorymanagement", "UC-57 Delete Inventory Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_B02B0657CAF23B37\" tồn tại: đang sử dụng \"false\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"UT_B02B0657CAF23B37\".\nĐịnh danh đối chiếu: UT_B02B0657CAF23B37 có ID \"b02b0657-caf2-3b37-af2a-0d504571df97\".", "Trả thành công idempotent; không archive lần hai và giữ lịch sử.", List.of("UC-57", "BR-118", "BR-164"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java"),
+            new ManualCase("INM-019", "inventorymanagement", "UC-57 Delete Inventory Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_362663D77B5E374C\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"27144a14-26e7-37d5-9273-a4c3b798d3df\".", "Hiển thị “Không tìm thấy mặt hàng kho tại cơ sở này.”; không archive.", List.of("UC-57"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java"),
+            new ManualCase("INM-020", "inventorymanagement", "UC-57 Delete Inventory Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_5553E7F5C7303D71\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"UT_5553E7F5C7303D71\".\nĐịnh danh đối chiếu: UT_5553E7F5C7303D71 có ID \"5553e7f5-c730-3d71-bb7a-4cdedf9adb8a\".", "Hiển thị “Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi xóa.”; không archive.", List.of("UC-57", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java"),
+            new ManualCase("INM-021", "inventorymanagement", "UC-57 Delete Inventory Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_835348521DC33384\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"UT_835348521DC33384\".\nĐịnh danh đối chiếu: UT_835348521DC33384 có ID \"83534852-1dc3-3384-aebb-c6ebdc37d4bc\".", "Từ chối thay đổi dữ liệu tại cơ sở đã chuẩn bị SUSPENDED; giải thích cơ sở đang tạm ngừng và chỉ được xem, giữ nguyên dữ liệu.", List.of("UC-57", "BR-177"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java"),
+            new ManualCase("INM-022", "inventorymanagement", "UC-57 Delete Inventory Item", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMặt hàng kho \"UT_E4B50C57595C33D4\" tồn tại: đang sử dụng \"true\", số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa mặt hàng kho:\nmã định danh = \"UT_E4B50C57595C33D4\".\nĐịnh danh đối chiếu: UT_E4B50C57595C33D4 có ID \"e4b50c57-595c-33d4-a333-5a29985989e0\".", "Hiển thị “Bạn không có quyền xóa đối với mặt hàng kho.”; không archive.", List.of("UC-57", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.InventoryService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/inventorymanagement/DeleteInventoryItemManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            CheckedAction action) {
-        return test(id, UC, "InventoryService.delete", PRE, input, expected, type,
-                note(FILE, br, msg, "InventoryService.delete/InventoryRepository.archive"), action);
-    }
-
-    private static TestResult success() {
-        var f = fixture();
-        f.service().delete(manager(), ITEM_ID);
-        verify(f.repository()).archive(BRANCH_ID, ITEM_ID);
-        return check(true, "archive requested once; no physical delete operation exists");
-    }
-
-    private static TestResult alreadyInactive() {
-        var f = fixture();
-        when(f.repository().lockItem(BRANCH_ID, ITEM_ID)).thenReturn(locked(false, UNIT_ID, new BigDecimal("10"), 2L));
-        f.service().delete(manager(), ITEM_ID);
-        verify(f.repository(), never()).archive(any(), any());
-        return check(true, "inactive item returned without second archive");
-    }
-
-    private static TestResult missing() {
-        var f = fixture();
-        when(f.repository().lockItem(BRANCH_ID, ITEM_ID)).thenReturn(null);
-        TestResult result = expectStatus(() -> f.service().delete(manager(), ITEM_ID), 404,
-                "Không tìm thấy mặt hàng kho tại cơ sở này.");
-        verify(f.repository(), never()).archive(any(), any());
-        return result;
-    }
-
-    private static TestResult linked() {
-        var f = fixture();
-        when(f.repository().hasActiveMenuLink(ITEM_ID)).thenReturn(true);
-        TestResult result = expectStatus(() -> f.service().delete(manager(), ITEM_ID), 409,
-                "Mặt hàng đang được gắn với món F&B đang bán. Hãy ngừng bán hoặc bỏ liên kết trước khi xóa.");
-        verify(f.repository(), never()).archive(any(), any());
-        return result;
-    }
-
-    private static TestResult suspended() {
-        var f = fixture();
-        when(f.repository().activeBranch(BRANCH_ID)).thenReturn(false);
-        return expectStatus(() -> f.service().delete(manager(), ITEM_ID), 403,
-                "Cơ sở GenZ Cinema Hoa Bằng đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.");
-    }
-
-    private static TestResult denied() {
-        var f = fixture();
-        return expectStatus(() -> f.service().delete(receptionist(), ITEM_ID), 403,
-                "Bạn không có quyền xóa đối với mặt hàng kho.");
     }
 }

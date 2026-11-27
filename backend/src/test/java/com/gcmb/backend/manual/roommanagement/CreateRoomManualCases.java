@@ -1,188 +1,24 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 29/10/2026
- * Description: Manual unit test cases for UC-28 Create Room.
- */
 package com.gcmb.backend.manual.roommanagement;
 
-import static com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.branch.dto.RoomCommand;
-import com.gcmb.backend.branch.dto.RoomView;
-import com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.Fixture;
-import com.gcmb.backend.manual.roommanagement.RoomManagementManualRunner.ManualTest;
-import java.util.ArrayList;
 import java.util.List;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class CreateRoomManualCases {
-    private static final String UC = "UC-28 Create Room";
-    private CreateRoomManualCases() {
-    }
-
-    public static List<ManualTest> cases() {
-        List<ManualTest> cases = new ArrayList<>();
-        cases.add(test("RM-001", "Tạo phòng RM-UT-01 với thông tin hợp lệ",
-                "Trả RoomView và gọi repository đúng một lần với branch từ identity.", "Normal", () -> {
-                    Fixture f = fixture();
-                    RoomCommand command = validCommand();
-                    RoomView expected = room("Phòng kiểm thử", "AVAILABLE");
-                    when(f.repository().create(BRANCH_ID, command)).thenReturn(expected);
-                    RoomView actual = f.service().create(f.identity(), command);
-                    verify(f.repository()).create(BRANCH_ID, command);
-                    return check(expected.equals(actual), "returned=" + actual);
-                }));
-        cases.add(test("RM-002", "Xác nhận tạo phòng nhưng không cung cấp thông tin phòng",
-                "Từ chối với thông báo “Vui lòng bổ sung Thông tin phòng.”; không gọi repository.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    var result = expectStatus(() -> f.service().create(f.identity(), null), 400,
-                            "Vui lòng bổ sung Thông tin phòng.");
-                    verify(f.repository(), never()).create(any(), any());
-                    return result;
-                }));
-        cases.add(test("RM-003", "V01 chưa đăng nhập; V02 tài khoản chưa được gán cơ sở",
-                "Từ chối với thông báo “Bạn không có quyền tạo đối với phòng.”; không gọi repository.", "Abnormal", () ->
-                        combine(missingScope(null), missingScope(identityWithoutBranch()))));
-        cases.add(test("RM-004", "V01 mã phòng null; V02 rỗng; V03 chỉ có khoảng trắng",
-                "Mỗi biến thể bị từ chối với thông báo “Vui lòng bổ sung Mã phòng.”; không gọi repository.", "Abnormal", () ->
-                        combine(invalidRequired(command(null, "Phòng", 1, ROOM_TYPE_ID, 1, null), "Mã phòng"),
-                                invalidRequired(command("", "Phòng", 1, ROOM_TYPE_ID, 1, null), "Mã phòng"),
-                                invalidRequired(command("   ", "Phòng", 1, ROOM_TYPE_ID, 1, null), "Mã phòng"))));
-        cases.add(test("RM-005", "V01 tên phòng null; V02 rỗng; V03 chỉ có khoảng trắng",
-                "Mỗi biến thể bị từ chối với thông báo “Vui lòng bổ sung Tên phòng.”; không gọi repository.", "Abnormal", () ->
-                        combine(invalidRequired(command("RM-UT-01", null, 1, ROOM_TYPE_ID, 1, null), "Tên phòng"),
-                                invalidRequired(command("RM-UT-01", "", 1, ROOM_TYPE_ID, 1, null), "Tên phòng"),
-                                invalidRequired(command("RM-UT-01", "   ", 1, ROOM_TYPE_ID, 1, null), "Tên phòng"))));
-        cases.add(test("RM-006", "Không chọn loại phòng",
-                "Từ chối với thông báo “Vui lòng bổ sung Loại phòng.”; không gọi repository.", "Abnormal", () ->
-                        invalidRequired(command("RM-UT-01", "Phòng", 1, null, 1, null), "Loại phòng")));
-        cases.add(test("RM-007", "Không nhập tầng",
-                "Từ chối với thông báo “Vui lòng bổ sung Tầng.”; không gọi repository.", "Abnormal", () ->
-                        invalidRequired(command("RM-UT-01", "Phòng", null, ROOM_TYPE_ID, 1, null), "Tầng")));
-        cases.add(test("RM-008", "V01 sức chứa null; V02 -1; V03 0; V04 1",
-                "V01 hiển thị “Vui lòng bổ sung Sức chứa.”; V02–V03 hiển thị “Sức chứa phải là số nguyên lớn hơn 0.”; V04 tạo thành công.", "Boundary", () ->
-                        combine(invalidCapacity(null, true), invalidCapacity(-1, false), invalidCapacity(0, false),
-                                validCapacityOne())));
-        cases.add(test("RM-009", "V01 tên phòng dài 200; V02 dài 201 ký tự",
-                "V01 được chấp nhận; V02 bị từ chối với thông báo “Tên phòng chỉ được chứa tối đa 200 ký tự.”.", "Boundary", () ->
-                        combine(nameLength(200, true), nameLength(201, false))));
-        cases.add(test("RM-010", "Mã RM-UT-01 trùng do một giao dịch đồng thời vừa ghi trước khi lưu",
-                "Từ chối với thông báo “Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.”.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    RoomCommand command = validCommand();
-                    when(f.repository().create(BRANCH_ID, command))
-                            .thenThrow(new DataIntegrityViolationException("duplicate"));
-                    return expectStatus(() -> f.service().create(f.identity(), command), 409,
-                            "Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.");
-                }));
-        cases.add(test("RM-035", "Tạo phòng tại cơ sở đang tạm ngừng hoạt động",
-                SUSPENDED_MESSAGE + "; không kiểm tra trùng và không tạo phòng.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    suspended(f);
-                    TestResult result = expectStatus(() -> f.service().create(f.identity(), validCommand()), 403,
-                            SUSPENDED_MESSAGE);
-                    verify(f.repository(), never()).codeExists(any(), any(), any());
-                    verify(f.repository(), never()).create(any(), any());
-                    return result;
-                }));
-        cases.add(test("RM-036", "Tạo phòng với mã RM-UT-01 đã tồn tại trong cơ sở Hoa Bằng",
-                "Từ chối với thông báo “Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.”; không tạo phòng.", "Abnormal", () -> {
-                    Fixture f = fixture();
-                    when(f.repository().codeExists(BRANCH_ID, "RM-UT-01", null)).thenReturn(true);
-                    TestResult result = expectStatus(() -> f.service().create(f.identity(), validCommand()), 409,
-                            "Mã phòng “RM-UT-01” đã tồn tại trong cơ sở Hoa Bằng. Vui lòng nhập mã khác.");
-                    verify(f.repository(), never()).create(any(), any());
-                    return result;
-                }));
-        return List.copyOf(cases);
-    }
-
-    private static ManualTest test(String id, String input, String expected, String type, CheckedAction action) {
-        return new ManualTest(id, UC, "BranchRoomService.create", precondition(id), input, expected, type, note(id), action);
-    }
-
-    private static String precondition(String id) {
-        String validScope = "Branch Manager qlcs.hoabang đã đăng nhập, đang ACTIVE và được phân công quản lý cơ sở Hoa Bằng. ";
-        String activeType = "Loại phòng RT-QN tồn tại và đang hoạt động theo dữ liệu Flyway V14. ";
-        String unit = "BranchRoomService thật; BranchRoomRepository mock; không ghi database.";
-        return switch (id) {
-            case "RM-001" -> validScope + activeType
-                    + "Mã RM-UT-01 chưa được sử dụng trong cơ sở. " + unit;
-            case "RM-002" -> validScope + activeType
-                    + "Request không cung cấp RoomCommand. " + unit;
-            case "RM-003" -> "V01 request không có authenticated Identity; V02 Branch Manager đã đăng nhập nhưng tài khoản chưa được gán cơ sở. " + unit;
-            case "RM-004", "RM-005", "RM-006", "RM-007", "RM-008", "RM-009" -> validScope
-                    + activeType + "Các trường không được nêu trong Input đều hợp lệ. " + unit;
-            case "RM-010", "RM-036" -> validScope + activeType
-                    + "Một phòng khác trong cơ sở Hoa Bằng đã sử dụng mã RM-UT-01. " + unit;
-            case "RM-035" -> "Branch Manager qlcs.hoabang đã đăng nhập và được phân công quản lý cơ sở Hoa Bằng; cơ sở đang tạm ngừng hoạt động. "
-                    + activeType + unit;
-            default -> throw new IllegalArgumentException("Unknown test case: " + id);
-        };
-    }
-
-    private static String note(String id) {
-        String source = "Nguồn: UC-28_Create_Room.docx; ";
-        return source + switch (id) {
-            case "RM-001" -> "BR-111, BR-139, BR-164, BR-173, BR-179; Flyway V14; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-002", "RM-004", "RM-005", "RM-006", "RM-007" -> "BR-111; MSG02; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-003" -> "MSG24; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-008" -> "BR-111, BR-139; MSG02, MSG44; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-009" -> "BR-179; MSG03; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-010", "RM-036" -> "BR-173; MSG38; Production: BranchRoomService.create. Phương pháp kiểm thử: White-box.";
-            case "RM-035" -> "BR-177; Production: BranchRoomService.create; BranchRoomRepository.requireActive. Phương pháp kiểm thử: White-box.";
-            default -> throw new IllegalArgumentException("Unknown test case: " + id);
-        };
-    }
-
-    private static TestResult missingScope(com.gcmb.backend.auth.dto.Identity identity) {
-        Fixture f = fixture();
-        TestResult result = expectStatus(() -> f.service().create(identity, validCommand()), 403,
-                "Bạn không có quyền tạo đối với phòng.");
-        verify(f.repository(), never()).create(any(), any());
-        return result;
-    }
-
-    private static TestResult invalidRequired(RoomCommand command, String field) {
-        Fixture f = fixture();
-        TestResult result = expectStatus(() -> f.service().create(f.identity(), command), 400,
-                "Vui lòng bổ sung " + field + ".");
-        verify(f.repository(), never()).create(any(), any());
-        return result;
-    }
-
-    private static TestResult invalidCapacity(Integer capacity, boolean missing) {
-        Fixture f = fixture();
-        RoomCommand command = command("RM-UT-01", "Phòng", 1, ROOM_TYPE_ID, capacity, null);
-        String message = missing ? "Vui lòng bổ sung Sức chứa." : "Sức chứa phải là số nguyên lớn hơn 0.";
-        TestResult result = expectStatus(() -> f.service().create(f.identity(), command), 400, message);
-        verify(f.repository(), never()).create(any(), any());
-        return result;
-    }
-
-    private static TestResult validCapacityOne() {
-        Fixture f = fixture();
-        RoomCommand command = command("RM-UT-01", "Phòng", 1, ROOM_TYPE_ID, 1, null);
-        RoomView expected = room("Phòng", "AVAILABLE");
-        when(f.repository().create(BRANCH_ID, command)).thenReturn(expected);
-        return check(expected.equals(f.service().create(f.identity(), command)), "capacity=1 accepted");
-    }
-
-    private static TestResult nameLength(int length, boolean valid) {
-        Fixture f = fixture();
-        RoomCommand command = command("RM-UT-01", "N".repeat(length), 1, ROOM_TYPE_ID, 1, null);
-        if (!valid) {
-            return expectStatus(() -> f.service().create(f.identity(), command), 400,
-                    "Tên phòng chỉ được chứa tối đa 200 ký tự.");
-        }
-        when(f.repository().create(BRANCH_ID, command)).thenReturn(room("N".repeat(length), "AVAILABLE"));
-        f.service().create(f.identity(), command);
-        return check(true, "acceptedLength=" + length);
+    private CreateRoomManualCases() {}
+    public static List<ManualCase> cases() {
+        return List.of(
+            new ManualCase("RM-001", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_B4D65703E7BE3EA8\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nmã = \"UT_B4D65703E7BE3EA8\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Tạo đúng một phòng thuộc cơ sở của quản lý, giữ mã/tên/tầng/hạng phòng/sức chứa đã xác nhận và trả thông tin phòng đã lưu.", List.of("UC-28"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-002", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nthông tin nghiệp vụ = không truyền giá trị.", "Từ chối với thông báo “Vui lòng bổ sung Thông tin phòng.”; không thay đổi dữ liệu.", List.of("UC-28", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-003", "roommanagement", "UC-28 Create Room", "Biến thể 1: Người dùng chưa đăng nhập; chưa có danh tính hoặc phạm vi cơ sở được xác thực.\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_B2DB4F6B7EB93CF5\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nBiến thể 2: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Chưa chọn/không được gán cơ sở.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Tạo phòng:\nmã = \"UT_B2DB4F6B7EB93CF5\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 2: Tạo phòng:\nmã = \"UT_B2DB4F6B7EB93CF5\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Từ chối với thông báo “Bạn không có quyền tạo đối với phòng.”; không thay đổi dữ liệu.", List.of("UC-28", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-004", "roommanagement", "UC-28 Create Room", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nGiá trị \"   \" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Tạo phòng:\nmã = không truyền giá trị;\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 2: Tạo phòng:\nmã = \"\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 3: Tạo phòng:\nmã = \"   \";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Mỗi biến thể bị từ chối với thông báo “Vui lòng bổ sung Mã phòng.”; không thay đổi dữ liệu.", List.of("UC-28", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-005", "roommanagement", "UC-28 Create Room", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_00A37A28FC343057\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Tạo phòng:\nmã = \"UT_00A37A28FC343057\";\ntên = không truyền giá trị;\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 2: Tạo phòng:\nmã = \"UT_00A37A28FC343057\";\ntên = \"\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 3: Tạo phòng:\nmã = \"UT_00A37A28FC343057\";\ntên = \"   \";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Mỗi biến thể bị từ chối với thông báo “Vui lòng bổ sung Tên phòng.”; không thay đổi dữ liệu.", List.of("UC-28", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-006", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_A25FC769F9B23979\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nmã = \"UT_A25FC769F9B23979\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = không truyền giá trị;\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".", "Từ chối với thông báo “Vui lòng bổ sung Loại phòng.”; không thay đổi dữ liệu.", List.of("UC-28", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-007", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_B4DD032C3E5A3BB6\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nmã = \"UT_B4DD032C3E5A3BB6\";\ntên = \"Dữ liệu UT\";\ntầng = không truyền giá trị;\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Từ chối với thông báo “Vui lòng bổ sung Tầng.”; không thay đổi dữ liệu.", List.of("UC-28", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-008", "roommanagement", "UC-28 Create Room", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_A6F8CA99F6123D5F\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Tạo phòng:\nmã = \"UT_A6F8CA99F6123D5F\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = không truyền giá trị;\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 2: Tạo phòng:\nmã = \"UT_A6F8CA99F6123D5F\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"-1\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 3: Tạo phòng:\nmã = \"UT_A6F8CA99F6123D5F\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"0\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 4: Tạo phòng:\nmã = \"UT_A6F8CA99F6123D5F\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"1\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "V01 hiển thị “Vui lòng bổ sung Sức chứa.”; V02–V03 hiển thị “Sức chứa phải là số nguyên lớn hơn 0.”; V04 tạo thành công.", List.of("UC-28", "BR-111", "BR-139", "MSG02", "MSG44"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-009", "roommanagement", "UC-28 Create Room", "Biến thể 1: Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_0ABE15FAD8643BBD\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Biến thể 1: Tạo phòng:\nmã = \"UT_0ABE15FAD8643BBD\";\ntên = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".\n\nBiến thể 2: Tạo phòng:\nmã = \"UT_0ABE15FAD8643BBD\";\ntên = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "V01 được chấp nhận; V02 bị từ chối với thông báo “Tên phòng chỉ được chứa tối đa 200 ký tự.”.", List.of("UC-28", "BR-179", "MSG03"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-010", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"SUSPENDED\".\nPhòng \"Q01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"UT_40AA2AD7C9E3393A\" của mã Phòng chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nmã = \"UT_40AA2AD7C9E3393A\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Cơ sở đang tạm ngừng hoạt động. Bạn có thể xem dữ liệu nhưng không thể thực hiện thay đổi.; không tạo phòng.", List.of("UC-28", "BR-177", "MSG43"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java"),
+            new ManualCase("RM-011", "roommanagement", "UC-28 Create Room", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nCơ sở \"HN_HOA_BANG\" tồn tại: trạng thái \"ACTIVE\".\nPhòng \"Q02\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nPhòng \"RM-UT-01\" tồn tại: trạng thái phòng \"AVAILABLE\", sức chứa/số chỗ \"4\", hạng phòng \"RT-QN\", cơ sở \"HN_HOA_BANG\".\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nGiá trị \"RM-UT-01\" của mã Phòng đã tồn tại trong phạm vi kiểm tra (\"1\" bản ghi).\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tạo phòng:\nmã = \"RM-UT-01\";\ntên = \"Dữ liệu UT\";\ntầng = \"1\";\nhạng phòng = \"RT-QN\";\nsức chứa/số chỗ = \"4\";\nmô tả = \"Dữ liệu UT\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Từ chối tạo/cập nhật mã trùng trong cùng cơ sở; \"Mã phòng “RM-UT-01” đã tồn tại trong cơ sở GenZ Cinema Hoa Bằng. Vui lòng nhập mã khác.\" Không lưu thay đổi.", List.of("UC-28", "BR-173", "MSG38"), List.of(new MethodTarget("com.gcmb.backend.branch.service.BranchRoomService", "create", List.of("com.gcmb.backend.auth.dto.Identity", "com.gcmb.backend.branch.dto.RoomCommand"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/roommanagement/CreateRoomManualCases.java")
+        );
     }
 }

@@ -1,106 +1,18 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-47 Update Menu Item manual unit test cases.
- */
 package com.gcmb.backend.manual.foodservicemanagement;
 
-import static com.gcmb.backend.manual.foodservicemanagement.CreateMenuItemManualCases.note;
-import static com.gcmb.backend.manual.foodservicemanagement.FoodServiceManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.booking.service.RefundEvidenceStorageService.StoredEvidence;
-import com.gcmb.backend.inventory.dto.MenuItemDtos.ImageAsset;
-import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemCommand;
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
-import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.gcmb.backend.manual.support.*;
 
-final class UpdateMenuItemManualCases {
-    private static final String UC = "UC-47 Update Menu Item";
-    private static final String PRE = "Quản lý quanly.hoabang đăng nhập; HN_HOA_BANG hoạt động; món FB-001 tồn tại tại cơ sở.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class UpdateMenuItemManualCases {
     private UpdateMenuItemManualCases() {}
-
-    static List<FoodServiceManagementManualRunner.ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("FSM-022", PRE + " Món đã xuất hiện trong order lịch sử.", "Đổi tên và giá món.", "Cập nhật món; order lịch sử vẫn giữ snapshot cũ.", "Normal", "BR-27, BR-38", "", UpdateMenuItemManualCases::validUpdate),
-            tc("FSM-023", PRE + " Món PACKAGED đang liên kết kho Coca Cola.", "Cập nhật mô tả, giữ liên kết kho.", "Cập nhật thành công và giữ inventoryItemId.", "Normal", "BR-38", "", UpdateMenuItemManualCases::keepInventory),
-            tc("FSM-024", "Quản lý quanly.hoabang đăng nhập; món không tồn tại hoặc thuộc cơ sở khác.", "Cập nhật ITEM_ID.", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không ghi dữ liệu.", "Abnormal", "BR-177", "", UpdateMenuItemManualCases::notFound),
-            tc("FSM-025", PRE, "Tên món rỗng.", "Hiển thị “Vui lòng bổ sung tên món.”; không cập nhật.", "Abnormal", "BR-111", "MSG02", () -> invalid(command(" ", "20000"), "Vui lòng bổ sung tên món.")),
-            tc("FSM-026", PRE, "Giá bán=-1đ.", "Hiển thị “Giá bán phải lớn hơn hoặc bằng 0.”; không cập nhật.", "Boundary", "BR-137", "MSG45", () -> invalid(command("Coca Cola", "-1"), "Giá bán phải lớn hơn hoặc bằng 0.")),
-            tc("FSM-027", PRE + " Món có ảnh old.png.", "Tải ảnh new.png hợp lệ và transaction commit.", "Lưu ảnh mới; chỉ xóa ảnh cũ sau commit.", "Normal", "BR-115, BR-116", "", () -> replaceImage(TransactionSynchronization.STATUS_COMMITTED)),
-            tc("FSM-028", PRE + " Món có ảnh old.png.", "Tải ảnh new.png rồi transaction rollback.", "Xóa ảnh mới; giữ ảnh cũ.", "Abnormal", "BR-115, BR-116", "", () -> replaceImage(TransactionSynchronization.STATUS_ROLLED_BACK))
+            new ManualCase("FSM-016", "foodservicemanagement", "UC-47 Update Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"38f8adbd-83fb-3d9b-8b1e-b2d0c263adcb\" tồn tại: đang sử dụng \"true\".\nTồn kho \"f6aa9d9c-6abf-3da1-8cd7-5efd3da50f1f\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật món và đơn phục vụ:\nmã định danh = \"38f8adbd-83fb-3d9b-8b1e-b2d0c263adcb\";\ntên = \"Coca Cola UT mới\";\nnhóm hàng = \"Đồ uống\";\nloại = \"PACKAGED\";\nmặt hàng kho = \"f6aa9d9c-6abf-3da1-8cd7-5efd3da50f1f\";\ngiá bán = \"25000\";\nđang sử dụng = \"true\";\nmô tả = \"Đổi giá mới UT\";\nxóa hình ảnh = \"false\";\nhình ảnh = không truyền giá trị.", "Cập nhật món thành \"Coca Cola UT mới\", giá 25000 đ, giữ liên kết kho; order đã xác nhận trước đó vẫn giữ name_snapshot=\"Coca Cola UT\", quantity=2, unit_price=20000, tổng 40000 đ.", List.of("UC-47"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateMenuItemManualCases.java"),
+            new ManualCase("FSM-017", "foodservicemanagement", "UC-47 Update Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"68c63005-48e7-3b5c-928c-0d8b1569a49d\" tồn tại: đang sử dụng \"true\".\nTồn kho \"4416b7c5-7aba-350f-890e-19616e4e1754\" tồn tại: số lượng \"98.0\", phiên bản \"2\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật món và đơn phục vụ:\nmã định danh = \"68c63005-48e7-3b5c-928c-0d8b1569a49d\";\ntên = \"Coca Cola UT mới\";\nnhóm hàng = \"Đồ uống\";\nloại = \"PACKAGED\";\nmặt hàng kho = \"4416b7c5-7aba-350f-890e-19616e4e1754\";\ngiá bán = \"25000\";\nđang sử dụng = \"true\";\nmô tả = \"Đổi giá mới UT\";\nxóa hình ảnh = \"false\";\nhình ảnh = không truyền giá trị.", "Cập nhật món thành \"Coca Cola UT mới\", giá 25000 đ, giữ liên kết kho; order đã xác nhận trước đó vẫn giữ name_snapshot=\"Coca Cola UT\", quantity=2, unit_price=20000, tổng 40000 đ.", List.of("UC-47"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateMenuItemManualCases.java"),
+            new ManualCase("FSM-018", "foodservicemanagement", "UC-47 Update Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"0f89ebf2-ac50-3d07-acaf-c86bff52591c\" tồn tại: đang sử dụng \"true\".\nTồn kho \"aeb26d81-9828-3440-8af8-99d91408fec2\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật món và đơn phục vụ:\nmã định danh = \"cc716816-bd7d-36c4-8043-f1907090d349\";\ntên = \"Coca Cola UT mới\";\nnhóm hàng = \"Đồ uống\";\nloại = \"PACKAGED\";\nmặt hàng kho = \"aeb26d81-9828-3440-8af8-99d91408fec2\";\ngiá bán = \"25000\";\nđang sử dụng = \"true\";\nmô tả = \"Đổi giá mới UT\";\nxóa hình ảnh = \"false\";\nhình ảnh = không truyền giá trị.", "Hiển thị “Không tìm thấy món trong cơ sở được phân quyền.”; không ghi dữ liệu.", List.of("UC-47"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateMenuItemManualCases.java"),
+            new ManualCase("FSM-019", "foodservicemanagement", "UC-47 Update Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"69b587f1-859b-314e-b689-8817a9426469\" tồn tại: đang sử dụng \"true\".\nTồn kho \"af07be5c-7093-3257-94c3-6f202ae0e810\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật món và đơn phục vụ:\nmã định danh = \"69b587f1-859b-314e-b689-8817a9426469\";\ntên = \"   \";\nnhóm hàng = \"Đồ uống\";\nloại = \"PACKAGED\";\nmặt hàng kho = \"af07be5c-7093-3257-94c3-6f202ae0e810\";\ngiá bán = \"25000\";\nđang sử dụng = \"true\";\nmô tả = \"Đổi giá mới UT\";\nxóa hình ảnh = \"false\";\nhình ảnh = không truyền giá trị.", "Hiển thị “Vui lòng bổ sung tên món.”; không cập nhật.", List.of("UC-47", "BR-201", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateMenuItemManualCases.java"),
+            new ManualCase("FSM-020", "foodservicemanagement", "UC-47 Update Menu Item", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nMón \"2e323aab-c2a4-3998-998d-3dd4635d8420\" tồn tại: đang sử dụng \"true\".\nTồn kho \"320356da-70c8-368f-89a5-321bcf8fcce2\" tồn tại: số lượng \"100.0\", phiên bản \"1\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật món và đơn phục vụ:\nmã định danh = \"2e323aab-c2a4-3998-998d-3dd4635d8420\";\ntên = \"Coca Cola UT mới\";\nnhóm hàng = \"Đồ uống\";\nloại = \"PACKAGED\";\nmặt hàng kho = \"320356da-70c8-368f-89a5-321bcf8fcce2\";\ngiá bán = \"-1\";\nđang sử dụng = \"true\";\nmô tả = \"Đổi giá mới UT\";\nxóa hình ảnh = \"false\";\nhình ảnh = không truyền giá trị.", "Hiển thị “Giá bán phải lớn hơn hoặc bằng 0.”; không cập nhật.", List.of("UC-47", "BR-198"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.MenuItemService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "com.gcmb.backend.inventory.dto.MenuItemDtos$MenuItemCommand", "org.springframework.web.multipart.MultipartFile"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/foodservicemanagement/UpdateMenuItemManualCases.java")
         );
-    }
-
-    private static FoodServiceManagementManualRunner.ManualTest tc(String id, String pre, String input,
-            String expected, String type, String br, String msg, FoodServiceManagementManualRunner.CheckedAction action) {
-        return test(id, UC, "MenuItemService.update", pre, input, expected, type,
-                note("UC-47 - Update_Menu_Item.docx", br, msg, "MenuItemService.update", "White-box"), action);
-    }
-
-    private static MenuItemCommand command(String name, String price) {
-        return new MenuItemCommand(name, "Nước uống", "PACKAGED", INVENTORY_ID,
-                new BigDecimal(price), true, "Cập nhật", false);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult validUpdate() {
-        var f = menuFixture();
-        var result = f.service().update(manager(), ITEM_ID, command("Coca Cola mới", "25000"), null);
-        verify(f.repository()).update(eq(BRANCH_ID), eq(ITEM_ID), any(), any(), eq(false));
-        return check(result != null, "updated=true; order snapshot is not written by update");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult keepInventory() {
-        var f = menuFixture();
-        f.service().update(manager(), ITEM_ID, command("Coca Cola", "20000"), null);
-        verify(f.repository()).activeInventory(BRANCH_ID, INVENTORY_ID);
-        return check(true, "inventoryItemId=" + INVENTORY_ID);
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult notFound() {
-        var f = menuFixture();
-        when(f.repository().get(BRANCH_ID, ITEM_ID)).thenReturn(null);
-        return expectResponse(() -> f.service().update(manager(), ITEM_ID, command("Coca Cola", "20000"), null),
-                404, "Không tìm thấy món trong cơ sở được phân quyền.");
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult invalid(MenuItemCommand command, String expected) {
-        var f = menuFixture();
-        var result = expectResponse(() -> f.service().update(manager(), ITEM_ID, command, null), 400, expected);
-        verify(f.repository(), never()).update(any(), any(), any(), any(), any(Boolean.class));
-        return result;
-    }
-
-    private static FoodServiceManagementManualRunner.TestResult replaceImage(int completionStatus) {
-        var f = menuFixture();
-        when(f.storage().store(any())).thenReturn(new StoredEvidence(UUID.randomUUID(), "s3/new.png", "new.png", "image/png", 8, "hash"));
-        when(f.repository().image(BRANCH_ID, ITEM_ID, false)).thenReturn(new ImageAsset("s3/old.png", "old.png", "image/png"));
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            f.service().update(manager(), ITEM_ID, command("Coca Cola", "20000"),
-                    new MockMultipartFile("image", "new.png", "image/png", new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}));
-            TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCompletion(completionStatus));
-            if (completionStatus == TransactionSynchronization.STATUS_COMMITTED) {
-                verify(f.storage()).deleteQuietly("s3/old.png");
-                verify(f.storage(), never()).deleteQuietly("s3/new.png");
-                return check(true, "commit: deleted old image only");
-            }
-            verify(f.storage()).deleteQuietly("s3/new.png");
-            verify(f.storage(), never()).deleteQuietly("s3/old.png");
-            return check(true, "rollback: deleted new image only");
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
     }
 }

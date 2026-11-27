@@ -1,38 +1,16 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 09/11/2026
- * Description: UC-24 ViewComboPackages manual cases for the updated combo quantities.
- */
 package com.gcmb.backend.manual.combopackagemanagement;
 
 import java.util.List;
-import static com.gcmb.backend.manual.combopackagemanagement.ComboPackageManagementManualRunner.*;
+import com.gcmb.backend.manual.support.*;
 
+/** Manual service UT. Results are reviewed by the tester. */
 public final class ViewComboPackagesManualCases {
     private ViewComboPackagesManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-                test("CPM-136", "UC-24 ViewComboPackages",
-                        "Nguồn: UC-24_View_Combo_Packages.docx; Flyway V3, V36, V37; Production: RoomCatalogService.prices. Phương pháp kiểm thử: White-box.",
-                        "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; seed có CIN_C1_QN active với 2 đồ uống và 1 đồ ăn tặng kèm.",
-                        "Mở danh sách combo, không lọc hạng phòng và không giới hạn trạng thái active.",
-                        "Danh sách trả về CIN_C1_QN cùng số lượng đồ uống = 2 và đồ ăn = 1.",
-                        ComboPackageManagementManualRunner::listWithQuantities),
-                test("CPM-137", "UC-24 ViewComboPackages",
-                        "Nguồn: UC-24_View_Combo_Packages.docx; Flyway V3, V36, V37; Production: RoomCatalogService.prices. Phương pháp kiểm thử: White-box.",
-                        "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; có combo active của RT-QN và combo inactive của RT-KG.",
-                        "Lọc danh sách theo RT-QN/Queen và chỉ lấy combo active.",
-                        "Chỉ trả về combo active thuộc RT-QN; không lẫn combo inactive hoặc hạng khác.",
-                        ComboPackageManagementManualRunner::listActiveByRoom),
-                test("CPM-138", "UC-24 ViewComboPackages",
-                        "Nguồn: UC-24_View_Combo_Packages.docx; MSG01; Production: RoomCatalogService.prices. Phương pháp kiểm thử: White-box.",
-                        "Head Office Manager qlcc đã đăng nhập, phiên hợp lệ; không có combo phù hợp trong nguồn dữ liệu kiểm thử.",
-                        "Mở danh sách combo với điều kiện không có bản ghi phù hợp.",
-                        "Trả về danh sách rỗng để giao diện hiển thị “Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.”",
-                        ComboPackageManagementManualRunner::listEmpty)
+            new ManualCase("CPM-045", "combopackagemanagement", "UC-24 ViewComboPackages", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem combo:\nloại = \"COMBO\";\nhạng phòng = không truyền giá trị;\nactive only = \"false\".", "Danh sách chứa combo đã chuẩn bị với số lượng đồ uống 2 và đồ ăn 1 đã cấu hình; không sửa dữ liệu khi xem.", List.of("UC-24"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "prices", List.of("java.lang.String", "java.util.UUID", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/ViewComboPackagesManualCases.java"),
+            new ManualCase("CPM-046", "combopackagemanagement", "UC-24 ViewComboPackages", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem combo:\nloại = \"COMBO\";\nhạng phòng = \"RT-QN\";\nactive only = \"true\".\nĐịnh danh đối chiếu: RT-QN có ID \"55e8cdc6-ed6b-407b-873b-c49841aa4730\".", "Chỉ trả combo active thuộc hạng phòng đã chuẩn bị đã chọn; không lẫn combo inactive hoặc hạng khác và không ghi dữ liệu.", List.of("UC-24"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "prices", List.of("java.lang.String", "java.util.UUID", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/ViewComboPackagesManualCases.java"),
+            new ManualCase("CPM-047", "combopackagemanagement", "UC-24 ViewComboPackages", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nHạng phòng \"RT-QN\" tồn tại: đang sử dụng \"true\", sức chứa/số chỗ \"4\".\nHạng phòng \"RT-QN\" tồn tại: sức chứa/số chỗ \"4\".\nHạng phòng \"RT-MUSIC\" tồn tại: sức chứa/số chỗ \"4\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Tìm kiếm/xem combo:\nloại = \"COMBO\";\nhạng phòng = \"RT-MUSIC\";\nactive only = \"true\".\nĐịnh danh đối chiếu: RT-MUSIC có ID \"67a13503-e5d5-43fc-80dc-8b6f917c1ef0\".", "Trả danh sách rỗng khi không có combo phù hợp; không thay đổi dữ liệu.", List.of("UC-24", "MSG01"), List.of(new MethodTarget("com.gcmb.backend.pricing.service.RoomCatalogService", "prices", List.of("java.lang.String", "java.util.UUID", "boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/combopackagemanagement/ViewComboPackagesManualCases.java")
         );
     }
 }

@@ -1,89 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-62 Update Equipment Category manual unit test cases.
- */
 package com.gcmb.backend.manual.equipmentcategorymanagement;
 
-import static com.gcmb.backend.manual.equipmentcategorymanagement.EquipmentCategoryManagementManualRunner.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.gcmb.backend.inventory.dto.EquipmentCategoryDtos.Command;
 import java.util.List;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.gcmb.backend.manual.support.*;
 
-final class UpdateEquipmentCategoryManualCases {
-    private static final String UC = "UC-62 Update Equipment Category";
-    private static final String FILE = "UC-62 - Update Equipment Category.docx";
-    private static final String PRE = "Quản lý cấp cao qlcc đã đăng nhập; nhóm EQ-AUDIO tồn tại và đang được 2 thiết bị tham chiếu.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class UpdateEquipmentCategoryManualCases {
     private UpdateEquipmentCategoryManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("ECM-013", "id=EQ-AUDIO; name=' Thiết bị âm thanh sân khấu '.",
-                "Cập nhật thông tin đã chuẩn hóa; nhóm vẫn hoạt động và 2 liên kết thiết bị được giữ nguyên.",
-                "Normal", "BR-111", "", "White-box", UpdateEquipmentCategoryManualCases::success),
-            tc("ECM-014", "code chỉ chứa khoảng trắng.", "Hiển thị “Vui lòng bổ sung mã nhóm thiết bị.”; không cập nhật.",
-                "Abnormal", "BR-111", "MSG02", "Black-box",
-                () -> invalid(new Command("   ", "Thiết bị âm thanh", "Mô tả"), "Vui lòng bổ sung mã nhóm thiết bị.")),
-            tc("ECM-015", "name chỉ chứa khoảng trắng.", "Hiển thị “Vui lòng bổ sung tên nhóm thiết bị.”; không cập nhật.",
-                "Abnormal", "BR-111", "MSG02", "Black-box",
-                () -> invalid(new Command("EQ-AUDIO", "   ", "Mô tả"), "Vui lòng bổ sung tên nhóm thiết bị.")),
-            tc("ECM-016", "đổi code thành EQ-LIGHT đã tồn tại toàn chuỗi.",
-                "Hiển thị “Mã nhóm thiết bị “EQ-LIGHT” đã tồn tại trong danh mục toàn chuỗi. Vui lòng nhập mã khác.”; dữ liệu cũ không đổi.",
-                "Abnormal", "BR-111", "MSG38", "Black-box", UpdateEquipmentCategoryManualCases::duplicate),
-            tc("ECM-017", "Quản lý cơ sở qlcs.hoabang gửi yêu cầu cập nhật EQ-AUDIO.",
-                "Hiển thị “Bạn không có quyền cập nhật đối với nhóm thiết bị.”; dữ liệu không đổi.",
-                "Abnormal", "", "MSG24", "Black-box", UpdateEquipmentCategoryManualCases::branchManagerDenied)
+            new ManualCase("ECM-012", "equipmentcategorymanagement", "UC-62 Update Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \"EQ-UT-AUDIO\" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nmã = \"EQ-UT-AUDIO\";\ntên = \" Thiết bị âm thanh sân khấu \";\nmô tả = \" Mô tả cập nhật UT \".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Cập nhật thông tin đã chuẩn hóa; nhóm vẫn hoạt động và 2 liên kết thiết bị được giữ nguyên.", List.of("UC-62"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/UpdateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-013", "equipmentcategorymanagement", "UC-62 Update Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \"   \" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nmã = \"   \";\ntên = \" Thiết bị âm thanh sân khấu \";\nmô tả = \" Mô tả cập nhật UT \".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Hiển thị “Vui lòng bổ sung mã nhóm thiết bị.”; không cập nhật.", List.of("UC-62", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/UpdateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-014", "equipmentcategorymanagement", "UC-62 Update Equipment Category", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \"EQ-UT-AUDIO\" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nmã = \"EQ-UT-AUDIO\";\ntên = \"   \";\nmô tả = \" Mô tả cập nhật UT \".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Hiển thị “Vui lòng bổ sung tên nhóm thiết bị.”; không cập nhật.", List.of("UC-62", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/UpdateEquipmentCategoryManualCases.java"),
+            new ManualCase("ECM-015", "equipmentcategorymanagement", "UC-62 Update Equipment Category", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nGiá trị \"EQ-UT-AUDIO\" của mã Nhóm thiết bị chưa tồn tại trong phạm vi kiểm tra.\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Cập nhật nhóm thiết bị:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nmã = \"EQ-UT-AUDIO\";\ntên = \" Thiết bị âm thanh sân khấu \";\nmô tả = \" Mô tả cập nhật UT \".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Hiển thị “Bạn không có quyền cập nhật đối với nhóm thiết bị.”; dữ liệu không đổi.", List.of("UC-62", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "update", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "com.gcmb.backend.inventory.dto.EquipmentCategoryDtos$Command"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/UpdateEquipmentCategoryManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentCategoryService.update", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentCategoryService.update/validate", method), action);
-    }
-
-    private static TestResult success() {
-        var f = fixture();
-        var command = new Command(" EQ-AUDIO ", " Thiết bị âm thanh sân khấu ", " Danh mục thiết bị dùng chung ");
-        var result = f.service().update(headOfficeManager(), null, CATEGORY_ID, command);
-        verify(f.repository()).update(isNull(), eq(CATEGORY_ID),
-                eq(new Command("EQ-AUDIO", "Thiết bị âm thanh sân khấu", "Danh mục thiết bị dùng chung")));
-        return check(result.assetCount() == 2 && result.active() && "Thiết bị âm thanh sân khấu".equals(result.name()),
-                "name=" + result.name() + "; active=" + result.active() + "; assetCount=" + result.assetCount());
-    }
-
-    private static TestResult invalid(Command command, String message) {
-        var f = fixture();
-        TestResult result = expectStatus(() -> f.service().update(headOfficeManager(), null, CATEGORY_ID, command), 400, message);
-        verify(f.repository(), never()).update(isNull(), eq(CATEGORY_ID), any());
-        return result;
-    }
-
-    private static TestResult duplicate() {
-        var f = fixture();
-        when(f.repository().update(isNull(), eq(CATEGORY_ID), any()))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
-        return expectStatus(() -> f.service().update(headOfficeManager(), null, CATEGORY_ID,
-                new Command("EQ-LIGHT", "Thiết bị âm thanh", "Mô tả")), 409,
-                "Mã nhóm thiết bị “EQ-LIGHT” đã tồn tại trong danh mục toàn chuỗi. Vui lòng nhập mã khác.");
-    }
-
-    private static TestResult branchManagerDenied() {
-        var f = fixture();
-        TestResult result = expectStatus(() -> f.service().update(branchManager(), BRANCH_ID, CATEGORY_ID,
-                new Command("EQ-AUDIO", "Thiết bị âm thanh", "Mô tả")), 403,
-                "Bạn không có quyền cập nhật đối với nhóm thiết bị.");
-        verify(f.repository(), never()).update(isNull(), eq(CATEGORY_ID), any());
-        return result;
     }
 }

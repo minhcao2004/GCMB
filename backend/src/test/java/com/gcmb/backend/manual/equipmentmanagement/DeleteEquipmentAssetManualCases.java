@@ -1,79 +1,17 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-69 Delete Equipment Asset manual unit test cases.
- */
 package com.gcmb.backend.manual.equipmentmanagement;
 
-import static com.gcmb.backend.manual.equipmentmanagement.EquipmentManagementManualRunner.*;
-import static org.mockito.Mockito.when;
-
 import java.util.List;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.gcmb.backend.manual.support.*;
 
-final class DeleteEquipmentAssetManualCases {
-    private static final String UC = "UC-69 Delete Equipment Asset";
-    private static final String FILE = "UC-69 - Delete Equipment Asset.docx";
-    private static final String PRE = "Quản lý cấp cao qlcc hoặc quản lý cơ sở qlcs.hoabang đã đăng nhập; ASSET-HN01-0001 tồn tại tại HN_HOA_BANG; người dùng đã xác nhận xóa.";
-    private static final String PRESERVE_MESSAGE = "Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class DeleteEquipmentAssetManualCases {
     private DeleteEquipmentAssetManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("EQM-036", "Quản lý cơ sở xóa thiết bị chưa có lịch sử nghiệp vụ.",
-                "Xóa thiết bị thành công trong đúng cơ sở; không ảnh hưởng dữ liệu khác.",
-                "Normal", "BR-118", "", "White-box", DeleteEquipmentAssetManualCases::branchDelete),
-            tc("EQM-037", "Quản lý cấp cao chọn HN_HOA_BANG và xóa thiết bị chưa có lịch sử.",
-                "Xóa đúng thiết bị thuộc HN_HOA_BANG; không ảnh hưởng cơ sở khác.",
-                "Normal", "BR-118", "", "Black-box", DeleteEquipmentAssetManualCases::headOfficeDelete),
-            tc("EQM-038", "Thiết bị đã có sự cố, sửa chữa, điều chuyển hoặc lịch sử thay thế.",
-                "Hiển thị “" + PRESERVE_MESSAGE + "”; thiết bị và lịch sử giữ nguyên.",
-                "Abnormal", "BR-118", "MSG104", "Black-box", DeleteEquipmentAssetManualCases::linkedHistory),
-            tc("EQM-039", "Ràng buộc dữ liệu phát hiện liên kết nghiệp vụ trong lúc xóa.",
-                "Hiển thị “" + PRESERVE_MESSAGE + "”; không mất dữ liệu liên quan.",
-                "Abnormal", "BR-118", "MSG104", "White-box", DeleteEquipmentAssetManualCases::constraintFailure),
-            tc("EQM-040", "Quản lý cơ sở HN_HOA_BANG gửi branchId của cơ sở khác.",
-                "Hiển thị “Bạn không có quyền xóa đối với thiết bị.”; thiết bị giữ nguyên.",
-                "Abnormal", "BR-118", "MSG24", "Black-box", DeleteEquipmentAssetManualCases::wrongBranch)
+            new ManualCase("EQM-030", "equipmentmanagement", "UC-69 Delete Equipment Asset", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nThiết bị \"UT_C646BD8D018D3178\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa thiết bị:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"UT_C646BD8D018D3178\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; UT_C646BD8D018D3178 có ID \"c646bd8d-018d-3178-8abe-c32bc104da42\".", "Xóa thiết bị thành công trong đúng cơ sở; không ảnh hưởng dữ liệu khác.", List.of("UC-69", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/DeleteEquipmentAssetManualCases.java"),
+            new ManualCase("EQM-031", "equipmentmanagement", "UC-69 Delete Equipment Asset", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nThiết bị \"UT_F6BDE2DA44C93BCF\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa thiết bị:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"UT_F6BDE2DA44C93BCF\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; UT_F6BDE2DA44C93BCF có ID \"f6bde2da-44c9-3bcf-a0b6-4915aa27ce10\".", "Xóa đúng thiết bị thuộc cơ sở đã chuẩn bị được chọn; không ảnh hưởng cơ sở khác.", List.of("UC-69", "BR-118"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/DeleteEquipmentAssetManualCases.java"),
+            new ManualCase("EQM-032", "equipmentmanagement", "UC-69 Delete Equipment Asset", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa thiết bị:\ncơ sở = \"HN_HOA_BANG\";\nmã định danh = \"TS-9-K01-AMTHANH\".\nĐịnh danh đối chiếu: HN_HOA_BANG có ID \"1385e7ae-97e4-47a8-a84c-fc4f22f1bb4e\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Không thể thực hiện cách xóa này vì sẽ làm mất hoặc thay đổi dữ liệu liên quan. Lịch sử nghiệp vụ và các bản ghi liên quan phải được giữ nguyên.”; thiết bị và lịch sử giữ nguyên.", List.of("UC-69", "BR-118", "MSG104"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/DeleteEquipmentAssetManualCases.java"),
+            new ManualCase("EQM-033", "equipmentmanagement", "UC-69 Delete Equipment Asset", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Xóa thiết bị:\ncơ sở = \"HCM_AU_CO\";\nmã định danh = \"TS-9-K01-AMTHANH\".\nĐịnh danh đối chiếu: HCM_AU_CO có ID \"8f8d0321-f9e8-4b9b-a739-43c479926a8b\"; TS-9-K01-AMTHANH có ID \"10d27c9e-fedb-aefa-d9f0-3d402df0ece7\".", "Hiển thị “Bạn không có quyền xóa đối với thiết bị.”; thiết bị giữ nguyên.", List.of("UC-69", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentAssetService", "delete", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentmanagement/DeleteEquipmentAssetManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentAssetService.delete", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentAssetService.delete/scope", method), action);
-    }
-
-    private static TestResult branchDelete() {
-        var f = fixture();
-        f.service().delete(branchManager(), BRANCH_ID, ASSET_ID);
-        return check(true, "repository.deleteUnused returned true; delete completed");
-    }
-
-    private static TestResult headOfficeDelete() {
-        var f = fixture();
-        f.service().delete(headOfficeManager(), BRANCH_ID, ASSET_ID);
-        return check(true, "repository.deleteUnused returned true; delete completed");
-    }
-
-    private static TestResult linkedHistory() {
-        var f = fixture();
-        when(f.repository().deleteUnused(BRANCH_ID, ASSET_ID)).thenReturn(false);
-        return expectStatus(() -> f.service().delete(branchManager(), BRANCH_ID, ASSET_ID), 409, PRESERVE_MESSAGE);
-    }
-
-    private static TestResult constraintFailure() {
-        var f = fixture();
-        when(f.repository().deleteUnused(BRANCH_ID, ASSET_ID)).thenThrow(new DataIntegrityViolationException("foreign key"));
-        return expectStatus(() -> f.service().delete(branchManager(), BRANCH_ID, ASSET_ID), 409, PRESERVE_MESSAGE);
-    }
-
-    private static TestResult wrongBranch() {
-        var f = fixture();
-        return expectStatus(() -> f.service().delete(branchManager(), OTHER_BRANCH_ID, ASSET_ID), 403,
-                "Bạn không có quyền xóa đối với thiết bị.");
     }
 }

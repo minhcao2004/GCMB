@@ -1,65 +1,18 @@
-/**
- * Copyright (c) 2026 SEP490-G12.
- *
- * Author: CaoNM
- * Created: 11/11/2026
- * Description: Defines UC-63 Change Equipment Category Status manual unit test cases.
- */
 package com.gcmb.backend.manual.equipmentcategorymanagement;
 
-import static com.gcmb.backend.manual.equipmentcategorymanagement.EquipmentCategoryManagementManualRunner.*;
-
 import java.util.List;
+import com.gcmb.backend.manual.support.*;
 
-final class ChangeEquipmentCategoryStatusManualCases {
-    private static final String UC = "UC-63 Change Equipment Category Status";
-    private static final String FILE = "UC-63 - Change Equipment Category Status.docx";
-    private static final String PRE = "Quản lý cấp cao qlcc hoặc quản lý cơ sở qlcs.hoabang đã đăng nhập; nhóm EQ-AUDIO tồn tại và có 2 thiết bị tham chiếu.";
-
+/** Manual service UT. Results are reviewed by the tester. */
+public final class ChangeEquipmentCategoryStatusManualCases {
     private ChangeEquipmentCategoryStatusManualCases() {}
-
-    static List<ManualTest> cases() {
+    public static List<ManualCase> cases() {
         return List.of(
-            tc("ECM-018", "Quản lý cấp cao đặt active=false.",
-                "Nhóm chuyển ngừng hoạt động; 2 liên kết thiết bị và lịch sử được giữ nguyên.",
-                "Normal", "BR-118, BR-191", "", "White-box", () -> change(headOfficeManager(), null, false)),
-            tc("ECM-019", "Quản lý cấp cao đặt active=true.",
-                "Nhóm chuyển hoạt động; 2 liên kết thiết bị và lịch sử được giữ nguyên.",
-                "Normal", "BR-118, BR-191", "", "White-box", () -> change(headOfficeManager(), null, true)),
-            tc("ECM-020", "Quản lý cơ sở qlcs.hoabang đặt active=false cho nhóm hiện có.",
-                "Nhóm chuyển ngừng hoạt động; các thiết bị tham chiếu không bị xóa hoặc thay đổi.",
-                "Normal", "BR-191", "", "Black-box", () -> change(branchManager(), BRANCH_ID, false)),
-            tc("ECM-021", "active=null.",
-                "Hiển thị “Vui lòng bổ sung trạng thái nhóm thiết bị.”; trạng thái cũ không đổi.",
-                "Abnormal", "BR-111", "MSG02", "Black-box", ChangeEquipmentCategoryStatusManualCases::missingStatus),
-            tc("ECM-022", "Lễ tân yêu cầu đổi trạng thái.",
-                "Hiển thị “Bạn không có quyền đổi trạng thái đối với nhóm thiết bị.”; trạng thái cũ không đổi.",
-                "Abnormal", "", "MSG24", "Black-box", ChangeEquipmentCategoryStatusManualCases::roleDenied)
+            new ManualCase("ECM-016", "equipmentcategorymanagement", "UC-63 Change Equipment Category Status", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Nhóm chuyển ngừng hoạt động; 2 liên kết thiết bị và lịch sử được giữ nguyên.", List.of("UC-63"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/ChangeEquipmentCategoryStatusManualCases.java"),
+            new ManualCase("ECM-017", "equipmentcategorymanagement", "UC-63 Change Equipment Category Status", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"false\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nđang sử dụng = \"true\".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Nhóm chuyển hoạt động; 2 liên kết thiết bị và lịch sử được giữ nguyên.", List.of("UC-63"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/ChangeEquipmentCategoryStatusManualCases.java"),
+            new ManualCase("ECM-018", "equipmentcategorymanagement", "UC-63 Change Equipment Category Status", "Quản lý cơ sở \"qlcs.hoabang\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Nhóm chuyển ngừng hoạt động; các thiết bị tham chiếu không bị xóa hoặc thay đổi.", List.of("UC-63"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/ChangeEquipmentCategoryStatusManualCases.java"),
+            new ManualCase("ECM-019", "equipmentcategorymanagement", "UC-63 Change Equipment Category Status", "Quản lý cấp cao \"qlcc\" đã đăng nhập. Phạm vi toàn chuỗi.\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nđang sử dụng = không truyền giá trị.\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Hiển thị “Vui lòng bổ sung trạng thái nhóm thiết bị.”; trạng thái cũ không đổi.", List.of("UC-63", "BR-111", "MSG02"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/ChangeEquipmentCategoryStatusManualCases.java"),
+            new ManualCase("ECM-020", "equipmentcategorymanagement", "UC-63 Change Equipment Category Status", "Lễ tân \"builanhan\" đã đăng nhập. Phạm vi cơ sở \"HN_HOA_BANG\".\nNhóm thiết bị \"EQ-UT-AUDIO\" tồn tại: đang sử dụng \"true\".\nThiết bị \"TS-9-K01-AMTHANH\" tồn tại: trạng thái \"IN_USE\", đang sử dụng \"true\", cơ sở \"HN_HOA_BANG\".\nRunner chuẩn bị các trạng thái đã nêu trước khi thực hiện nghiệp vụ; ghi nhận kết quả và trạng thái dữ liệu trước rollback. Sau case, toàn bộ thay đổi được rollback.", "Chuyển trạng thái sử dụng:\ncơ sở = không truyền giá trị;\nmã định danh = \"EQ-UT-AUDIO\";\nđang sử dụng = \"false\".\nĐịnh danh đối chiếu: EQ-UT-AUDIO có ID \"423c7364-ae76-c86e-adbd-4778f925c0d1\".", "Hiển thị “Bạn không có quyền đổi trạng thái đối với nhóm thiết bị.”; trạng thái cũ không đổi.", List.of("UC-63", "MSG24"), List.of(new MethodTarget("com.gcmb.backend.inventory.service.EquipmentCategoryService", "setActive", List.of("com.gcmb.backend.auth.dto.Identity", "java.util.UUID", "java.util.UUID", "java.lang.Boolean"))), "UT", "backend/src/test/java/com/gcmb/backend/manual/equipmentcategorymanagement/ChangeEquipmentCategoryStatusManualCases.java")
         );
-    }
-
-    private static ManualTest tc(String id, String input, String expected, String type, String br, String msg,
-            String method, CheckedAction action) {
-        return test(id, UC, "EquipmentCategoryService.setActive", PRE, input, expected, type,
-                note(FILE, br, msg, "EquipmentCategoryService.setActive/requireScope", method), action);
-    }
-
-    private static TestResult change(com.gcmb.backend.auth.dto.Identity actor, java.util.UUID branchId, boolean active) {
-        var f = fixture();
-        var result = f.service().setActive(actor, branchId, CATEGORY_ID, active);
-        return check(result.active() == active && result.assetCount() == 2,
-                "active=" + result.active() + "; assetCount=" + result.assetCount());
-    }
-
-    private static TestResult missingStatus() {
-        var f = fixture();
-        return expectStatus(() -> f.service().setActive(headOfficeManager(), null, CATEGORY_ID, null), 400,
-                "Vui lòng bổ sung trạng thái nhóm thiết bị.");
-    }
-
-    private static TestResult roleDenied() {
-        var f = fixture();
-        return expectStatus(() -> f.service().setActive(receptionist(), BRANCH_ID, CATEGORY_ID, false), 403,
-                "Bạn không có quyền đổi trạng thái đối với nhóm thiết bị.");
     }
 }
