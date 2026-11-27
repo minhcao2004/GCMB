@@ -42,7 +42,7 @@ public final class DepositDtos {
 
     public record RefundRequestQueue(String branchName, List<RefundRequestItem> items) {}
 
-    public record RefundRequestItem(UUID id, UUID bookingId, String bookingCode, String branchName,
+    public record RefundRequestItem(UUID id, UUID bookingId, String bookingCode, UUID branchId, String branchName,
                                     String customerName, String phone,
                                     BigDecimal amount, String reason, String beneficiaryName, String bankName,
                                     String bankAccount, String status, Instant requestedAt, Instant paidAt,

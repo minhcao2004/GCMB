@@ -130,6 +130,33 @@ public class FinancialReportRepository {
         return jdbcTemplate.queryForList("SELECT id,code,name,status FROM gcmb.branch ORDER BY name,id");
     }
 
+    public List<Map<String, Object>> cashFlowRows(Timestamp from, Timestamp until, UUID branchId) {
+        return jdbcTemplate.queryForList("""
+            WITH cash_rows AS (
+              SELECT t.id,t.kind,cash.occurred_at AS "occurredAt",scope.branch_id AS "branchId",
+                b.name AS "branchName",scope.amount
+              FROM gcmb.financial_transaction t
+              LEFT JOIN gcmb.salary_payment salary ON salary.id=t.salary_payment_id
+              CROSS JOIN LATERAL (SELECT coalesce(salary.paid_at,t.occurred_at) AS occurred_at) cash
+              JOIN LATERAL (
+                SELECT sum(e.amount_signed) AS amount,
+                  (array_agg(e.branch_id ORDER BY e.id) FILTER (WHERE e.branch_id IS NOT NULL))[1] AS branch_id
+                FROM gcmb.financial_entry e WHERE e.transaction_id=t.id
+                  AND (CAST(? AS uuid) IS NULL OR e.branch_id=?)
+              ) scope ON scope.amount<>0
+              LEFT JOIN gcmb.branch b ON b.id=scope.branch_id
+              WHERE t.kind<>'OPENING' AND cash.occurred_at>=? AND cash.occurred_at<?
+              UNION ALL
+              SELECT r.id,'EXPENSE',r.paid_at,r.branch_id,b.name,-r.amount
+              FROM gcmb.finance_expense_request r JOIN gcmb.branch b ON b.id=r.branch_id
+              WHERE r.status='PAID' AND r.paid_at>=? AND r.paid_at<?
+                AND (CAST(? AS uuid) IS NULL OR r.branch_id=?)
+            )
+            SELECT *,("occurredAt" AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text AS "cashDate"
+            FROM cash_rows ORDER BY "occurredAt" DESC,id
+            """, branchId, branchId, from, until, from, until, branchId, branchId);
+    }
+
     public void insertOverviewExportAudit(UUID actorId, String afterDataJson) {
         jdbcTemplate.update("INSERT INTO gcmb.audit_event(actor_id,branch_id,action,entity_type,after_data) VALUES (?,NULL,'EXPORT_FINANCIAL_OVERVIEW','REPORT',?::jsonb)",
             actorId, afterDataJson);

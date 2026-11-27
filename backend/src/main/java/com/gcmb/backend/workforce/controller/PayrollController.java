@@ -161,6 +161,25 @@ public class PayrollController {
     return payrollService.pay(actor, month, command, request.getFileMap());
   }
 
+  @GetMapping("/accounting/payroll/payment-history")
+  public ResponseEntity<List<Map<String, Object>>> paymentHistory(@AuthenticationPrincipal Identity actor,
+      @RequestParam String month, @RequestParam(required = false) UUID branchId) {
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(payrollService.paymentHistory(actor, month, branchId));
+  }
+
+  @PostMapping("/accounting/payroll/{month}/payment-batches")
+  public Map<String, Object> payBatch(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month, @RequestBody PaymentBatch command) {
+    return payrollService.payBatch(actor, month, command);
+  }
+
+  @PostMapping("/accounting/payroll/{month}/payment-batches/export")
+  public ResponseEntity<byte[]> exportBatch(@AuthenticationPrincipal Identity actor,
+      @PathVariable String month, @RequestBody BatchSelection selection) {
+    byte[] workbook = PayrollExport.batchXlsx(month, payrollService.exportBatchRecipients(actor, month, selection));
+    return payrollWorkbook(workbook, "salary-transfer-" + month + ".xlsx");
+  }
+
   @GetMapping("/accounting/payroll/payments/{id}/evidence")
   public ResponseEntity<byte[]> paymentEvidence(@AuthenticationPrincipal Identity actor, @PathVariable UUID id) {
     var file = payrollService.paymentEvidence(actor, id);
@@ -178,14 +197,18 @@ public class PayrollController {
     @PathVariable String month,
     @RequestParam(required = false) UUID branchId
   ) {
+    return payrollWorkbook(PayrollExport.xlsx(payrollService.export(actor, month, branchId)), "payroll-" + month + ".xlsx");
+  }
+
+  private ResponseEntity<byte[]> payrollWorkbook(byte[] workbook, String filename) {
     return ResponseEntity.ok()
       .cacheControl(CacheControl.noStore())
-      .header("Content-Disposition", "attachment; filename=payroll-" + month + ".xlsx")
+      .header("Content-Disposition", "attachment; filename=" + filename)
       .contentType(
         MediaType.parseMediaType(
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
       )
-      .body(PayrollExport.xlsx(payrollService.export(actor, month, branchId)));
+      .body(workbook);
   }
 }

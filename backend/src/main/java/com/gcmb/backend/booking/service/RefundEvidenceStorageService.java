@@ -80,6 +80,10 @@ public class RefundEvidenceStorageService {
         return store(file, "thuc-don", true);
     }
 
+    public StoredEvidence storeRefundEvidence(MultipartFile file) {
+        return store(file, "tien-coc", true);
+    }
+
     private StoredEvidence store(MultipartFile file, String area, boolean localFallback) {
         if (file == null || file.isEmpty()) {
             throw new BookingFailure(400, "image", "Tệp phải có dung lượng lớn hơn 0 và không vượt quá 20 MB.");
@@ -123,7 +127,7 @@ public class RefundEvidenceStorageService {
                 Files.write(resolve(localKey), bytes, StandardOpenOption.CREATE_NEW);
             } catch (IOException exception) {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Không thể lưu ảnh món. Vui lòng thử lại sau.", exception);
+                    "Không thể lưu tệp. Vui lòng thử lại sau.", exception);
             }
             return new StoredEvidence(id, localKey, originalName, type.mimeType(), bytes.length, sha256(bytes));
         }

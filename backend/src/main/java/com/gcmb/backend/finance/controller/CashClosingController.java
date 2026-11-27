@@ -63,6 +63,12 @@ public class CashClosingController {
     return cashClosingService.notifications(actor);
   }
 
+  @GetMapping("/api/v1/accounting/cash-closing/unreconciled-count")
+  public Map<String, Long> unreconciledCount(@AuthenticationPrincipal Identity actor, @RequestParam LocalDate from,
+      @RequestParam LocalDate to, @RequestParam(required = false) UUID branchId) {
+    return Map.of("count", cashClosingService.countUnreconciled(actor, from, to, branchId));
+  }
+
   @GetMapping({
     "/api/v1/branch-management/cash-closing/{id}",
     "/api/v1/accounting/cash-closing/{id}",

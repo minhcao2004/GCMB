@@ -33,16 +33,26 @@ public class FinancialController {
     private final MonthlyPerformanceService monthlyPerformanceService;
     private final AccountingWorkbookService accountingWorkbookService;
     private final FinanceAccess financeAccess;
+    private final AccountantCashFlowService accountantCashFlowService;
 
     public FinancialController(FinancialReportRepository financialReportRepository, FinancialTransactionAdjustmentService financialTransactionAdjustmentService,
                                FinancialPeriodService financialPeriodService, MonthlyPerformanceService monthlyPerformanceService,
-                               AccountingWorkbookService accountingWorkbookService, FinanceAccess financeAccess) {
+                               AccountingWorkbookService accountingWorkbookService, FinanceAccess financeAccess,
+                               AccountantCashFlowService accountantCashFlowService) {
         this.financialReportRepository = financialReportRepository;
         this.financialTransactionAdjustmentService = financialTransactionAdjustmentService;
         this.financialPeriodService = financialPeriodService;
         this.monthlyPerformanceService = monthlyPerformanceService;
         this.accountingWorkbookService = accountingWorkbookService;
         this.financeAccess = financeAccess;
+        this.accountantCashFlowService = accountantCashFlowService;
+    }
+
+    @GetMapping("/reports/cash-flow")
+    public Map<String, Object> cashFlow(@AuthenticationPrincipal Identity actor, @RequestParam String from,
+                                        @RequestParam String to, @RequestParam(required=false) UUID branchId,
+                                        @RequestParam(defaultValue="previous-month") String compare) {
+        return accountantCashFlowService.overview(actor, date(from), date(to), branchId, compare);
     }
 
     @GetMapping("/reports/monthly")

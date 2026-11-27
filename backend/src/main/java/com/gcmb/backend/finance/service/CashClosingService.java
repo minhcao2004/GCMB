@@ -223,6 +223,7 @@ public class CashClosingService {
 
   @SuppressWarnings("unchecked")
   private void reportRow(Map<String,Object> closing, boolean history) {
+    String businessDate=closing.get("business_date").toString();
     var reports=cashClosingRepository.findCurrentReport(closing.get("id"));
     closing.put("report_version",0);
     if(!reports.isEmpty()) {
@@ -237,6 +238,7 @@ public class CashClosingService {
       closing.put("submitted_at",current.get("submitted_at"));
       closing.put("submittedBy",current.get("username"));
     }
+    closing.put("business_date",businessDate);
     if(history) closing.put("versions",cashClosingRepository.findReportRevisions(closing.get("id")).stream().map(revision -> {
         revision.put("payload",objectMapper.readValue(revision.get("payload").toString(),Map.class));
         return revision;
@@ -268,6 +270,13 @@ public class CashClosingService {
   public List<Map<String,Object>> notifications(Identity actor) {
     financeAccess.accountant(actor);
     return cashClosingRepository.findNotifications(actor.id());
+  }
+
+  @Transactional(readOnly = true)
+  public long countUnreconciled(Identity actor, LocalDate from, LocalDate to, UUID branchId) {
+    financeAccess.accountant(actor);
+    if (from.isAfter(to) || from.plusYears(2).isBefore(to)) throw bad("Khoảng ngày không hợp lệ, tối đa hai năm.");
+    return cashClosingRepository.countUnreconciled(from, to, branchId);
   }
 
   public Map<String,Object> detail(Identity actor,UUID closingId) {

@@ -158,7 +158,7 @@ public class DepositManagementService {
         if (balance.signum() <= 0 || locked.amount().compareTo(balance) > 0)
             throw new BookingFailure(409, "requestId", "Số tiền yêu cầu vượt quá số dư cọc còn được hoàn");
 
-        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? refundEvidenceStorageService.store(image, "tien-coc") : null;
+        RefundEvidenceStorageService.StoredEvidence evidence = hasImage ? refundEvidenceStorageService.storeRefundEvidence(image) : null;
         if (evidence != null && TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) {

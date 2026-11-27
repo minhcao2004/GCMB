@@ -200,3 +200,35 @@
 .accountant-dash .accountant-table-panel td button { border-color: var(--gcmb-color-primary, #ed188d); border-radius: var(--gcmb-radius-control, 8px); color: color-mix(in srgb, var(--gcmb-color-primary-hover, #d90c7e) 80%, var(--gcmb-color-ink, #1a1a2e)); }
 .accountant-dash .accountant-exception-dialog { border: 0; border-radius: var(--gcmb-radius-panel, 12px); box-shadow: var(--gcmb-shadow-lg, 0 20px 48px rgb(26 26 46 / 20%)); }
 .accountant-dash .accountant-exception-dialog button:last-child { border-color: var(--gcmb-color-primary, #ed188d); color: var(--gcmb-color-on-primary, #000); background: var(--gcmb-color-primary, #ed188d); }
+
+.accountant-dash .accountant-dash-header { align-items: center; }
+.accountant-overview-reload {
+  min-height: 42px;
+  padding: 6px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: var(--gcmb-radius-control);
+  color: var(--ad-ink);
+  background: var(--gcmb-color-panel);
+  font: inherit;
+  cursor: pointer;
+}
+.accountant-overview-reload:disabled { opacity: .55; cursor: wait; }
+.accountant-overview-filterbar .accountant-overview-period {
+  display: flex;
+  flex: 1 1 285px;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+.accountant-overview-filterbar .accountant-overview-period label {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.accountant-overview-filterbar .accountant-overview-period-field > span { padding: 0; color: inherit; }
+.accountant-dash .accountant-kpis { background: transparent; }
+.accountant-dash .accountant-kpi .kpi-comparison { margin-top: auto; }
+.accountant-dash .accountant-kpi > span { font-size: 13px; }
+.accountant-expense-mix .accountant-panel-heading > strong { color: var(--ad-ink); font-variant-numeric: tabular-nums; }
+.accountant-expense-mix .accountant-table-scroll table { min-width: 350px; }
+.accountant-expense-mix .accountant-table-scroll :is(td,th):not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.accountant-expense-mix .accountant-table-scroll td:first-child { white-space: normal; }

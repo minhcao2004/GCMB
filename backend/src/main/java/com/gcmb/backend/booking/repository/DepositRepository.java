@@ -180,7 +180,7 @@ public class DepositRepository {
 
     public List<DepositDtos.RefundRequestItem> refundRequestsForAccounting() {
         return jdbcTemplate.query("""
-            SELECT r.id,r.booking_id,b.code,br.name AS branch_name,b.contact_name,b.contact_phone,r.amount,r.reason,
+            SELECT r.id,r.booking_id,b.code,r.branch_id,br.name AS branch_name,b.contact_name,b.contact_phone,r.amount,r.reason,
                    r.beneficiary_name,r.bank_name,r.bank_account,r.status,r.created_at,r.paid_at,r.external_reference,
                    r.evidence_id IS NOT NULL AS has_evidence
             FROM gcmb.refund_request r
@@ -191,7 +191,8 @@ public class DepositRepository {
                      r.created_at DESC,r.id DESC
             """, (resultSet, rowNumber) -> new DepositDtos.RefundRequestItem(
                 resultSet.getObject("id", UUID.class), resultSet.getObject("booking_id", UUID.class), resultSet.getString("code"),
-                resultSet.getString("branch_name"), resultSet.getString("contact_name"), resultSet.getString("contact_phone"), resultSet.getBigDecimal("amount"),
+                resultSet.getObject("branch_id", UUID.class), resultSet.getString("branch_name"), resultSet.getString("contact_name"),
+                resultSet.getString("contact_phone"), resultSet.getBigDecimal("amount"),
                 resultSet.getString("reason"), resultSet.getString("beneficiary_name"), resultSet.getString("bank_name"),
                 resultSet.getString("bank_account"), resultSet.getString("status"), instant(resultSet, "created_at"),
                 instant(resultSet, "paid_at"), resultSet.getString("external_reference"), resultSet.getBoolean("has_evidence")));

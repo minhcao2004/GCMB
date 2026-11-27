@@ -100,7 +100,8 @@ Cho demo chưa mua tên miền, có thể dùng hostname nhúng IP từ [sslip.i
 - SMTP: điền `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`; xác nhận VPS kết nối được SMTP. Thiếu SMTP vẫn đăng nhập được, nhưng không gửi mã quên mật khẩu.
 - SePay: điền các biến `SEPAY_*`, đăng ký webhook `https://TEN_MIEN/api/v1/payments/sepay/webhook` và cùng khóa `Apikey`. Thiếu cấu hình thì không có luồng chuyển khoản QR đầy đủ. Chỉ test giao dịch theo kế hoạch của nhóm; không coi tiền test là giao dịch giả lập tự động.
 - Ảnh thiết bị: lưu trong volume `attachments`, tiếp tục tồn tại khi recreate container.
-- Chứng từ hoàn cọc/tài chính: code hiện hành sử dụng Cloudinary hoặc S3 cho tệp mới. Cấu hình tài khoản/bucket riêng qua các biến ví dụ nếu cần test các luồng đó; volume local không thay thế dịch vụ cloud này. Khi chuyển dữ liệu cũ, cần cả file hoặc cloud storage gốc tương ứng.
+- Chứng từ hoàn cọc: backend ưu tiên Cloudinary khi bật, sau đó dùng S3 nếu có bucket. Khi tắt Cloudinary và để trống bucket S3, tệp được lưu vào `GCMB_ATTACHMENT_STORAGE_DIR`. Docker Compose gắn đường dẫn này vào volume `attachments`. Khi chuyển dữ liệu cũ, giữ cả thư mục tệp và quyền truy cập dịch vụ cloud đã lưu các tệp gốc.
+- Chứng từ tài chính cần Cloudinary hoặc S3 ở các luồng yêu cầu lưu trữ đám mây. Cấu hình tài khoản hoặc bucket qua các biến ví dụ khi kiểm thử các luồng này.
 - `prod` giữ quy tắc chốt kỳ thông thường (`GCMB_ALLOW_EARLY_PERIOD_CLOSE=false`); nếu nhóm cần test chốt sớm trên dữ liệu demo, thêm biến này bằng `true` rồi tắt lại khi kết thúc.
 
 Sau khi đổi `.env`, chạy `docker compose up -d`. Không chỉ `restart`: container phải được recreate để nhận biến mới.

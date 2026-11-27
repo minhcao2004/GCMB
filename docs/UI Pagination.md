@@ -23,6 +23,9 @@ Các nhóm màn hình sử dụng thành phần dùng chung gồm tài khoản/n
 - **Thiết bị & sự cố** của Quản lý cơ sở dùng 10 bản ghi/trang cho danh sách thiết bị, sự cố và phiếu điều chuyển.
 - Chọn quà combo dùng chung cho đặt phòng và khách đang sử dụng phòng: 10 lựa chọn/trang, giữ kiểm tra tồn và số lượng đã chọn.
 - Bảng chi phí: 5 yêu cầu/trang; chi tiết phân bổ: 10 tháng/trang.
+- **Hoàn tiền cọc** của Kế toán hiển thị 10 yêu cầu/trang sau khi áp dụng bộ lọc.
+- **Đối soát quỹ** của Kế toán dùng một bảng 10 dòng/trang cho cả chế độ ngày và khoảng ngày. Thông báo gửi báo cáo có 5 mục/trang. **Chi định kỳ** và **Cấp tiền két** hiển thị 5 dòng/trang sau khi lọc.
+- **Lương nhân viên** của Kế toán hiển thị 10 nhân viên/trang và 10 giao dịch/trang trong lịch sử. Chọn tất cả nhân viên đủ điều kiện áp dụng trên mọi trang của bộ lọc hiện tại. Các nhân viên được chọn vẫn được giữ khi chuyển trang.
 - Booking Lễ tân: vùng dòng đặt phòng cuộn độc lập trên desktop. Thanh phân trang nằm dưới bảng và chỉ chiếm chiều cao nội dung của chính nó. Đã kiểm tra với 7 booking, hiển thị 5 dòng ở trang đầu và 2 dòng ở trang sau.
 
 ## Kiểm tra khi thay đổi

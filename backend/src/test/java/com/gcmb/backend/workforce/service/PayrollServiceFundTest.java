@@ -6,15 +6,19 @@ import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.workforce.repository.PayrollRepository;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,5 +110,70 @@ class PayrollServiceFundTest {
             () -> service.pay(actor, "2026-11", command(null, "PAID")));
 
         assertTrue(failure.getMessage().contains("Chưa có quỹ kế toán"));
+    }
+
+    @Test
+    void postsTwentyEmployeesAsOneBatchAndUsesActualPaymentDate() {
+        var selection = batchSelection(20);
+        var batch = paymentBatch(selection);
+        when(repository.accountantFundBalance()).thenReturn(amount.multiply(BigDecimal.valueOf(20)));
+
+        assertEquals(Map.of("batchId", batch.requestId(), "count", 20), service.payBatch(actor, "2026-11", batch));
+
+        verify(repository).insertPaymentBatch(batch.requestId(), periodId, selection.branchId(), batch.paymentDate(),
+            "MB", "BANK-BATCH-01", actor.id());
+        verify(repository, times(20)).insertSalaryPayment(any(), any(), eq(amount), eq("PAID"),
+            eq(Timestamp.from(batch.paymentDate().atStartOfDay(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant())),
+            eq("BANK-BATCH-01"), isNull(), eq(actor.id()), any(), eq(batch.requestId()));
+        verify(repository, times(20)).insertPayrollOutflow(any(), eq(financialPeriodId), eq(batch.paymentDate()),
+            eq(false), any(), eq(actor.id()), eq(fundId), eq(selection.branchId()), eq(amount));
+        verify(repository).accountantFundBalance();
+        verify(repository).incrementPeriodVersion(periodId);
+    }
+
+    @Test
+    void rejectsEntireBatchWhenFundOnlyCoversSomeEmployees() {
+        var batch = paymentBatch(batchSelection(3));
+        assertThrows(AuthFailure.class, () -> service.payBatch(actor, "2026-11", batch));
+        verify(repository, never()).insertPaymentBatch(any(), any(), any(), any(), any(), any(), any());
+        verify(repository, never()).insertPayrollOutflow(any(), any(), any(), eq(false), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void exactRetryReturnsExistingBatchWithoutPostingAgain() {
+        var selection = batchSelection(2);
+        var batch = paymentBatch(selection);
+        when(repository.findPaymentBatch(batch.requestId())).thenReturn(List.of(Map.of(
+            "payroll_period_id", periodId, "branch_id", selection.branchId(), "payment_date", batch.paymentDate(),
+            "bank_name", batch.bankName(), "external_reference", batch.reference(), "created_by", actor.id())));
+        when(repository.findBatchEmployees(batch.requestId())).thenReturn(selection.employeeIds());
+
+        assertEquals(batch.requestId(), service.payBatch(actor, "2026-11", batch).get("batchId"));
+        verify(repository, never()).accountantFundBalance();
+        verify(repository, never()).incrementPeriodVersion(any());
+    }
+
+    @Test
+    void rejectsBatchWhenASelectedEmployeeDoesNotBelongToItsBranch() {
+        var selection = batchSelection(2);
+        when(repository.findBatchEntries(periodId, selection.branchId(), selection.employeeIds())).thenReturn(List.of());
+
+        assertThrows(AuthFailure.class, () -> service.payBatch(actor, "2026-11", paymentBatch(selection)));
+        verify(repository, never()).insertPaymentBatch(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    private PayrollService.BatchSelection batchSelection(int size) {
+        var employeeIds = IntStream.range(0, size).mapToObj(index -> UUID.randomUUID()).toList();
+        var selection = new PayrollService.BatchSelection(1, UUID.randomUUID(), employeeIds);
+        when(repository.findBatchEntries(periodId, selection.branchId(), employeeIds)).thenReturn(employeeIds.stream()
+            .map(id -> Map.<String, Object>of("id", UUID.randomUUID(), "employee_id", id, "net_amount", amount,
+                "name", "Nhân viên", "bank_name_snapshot", "MB", "bank_account_snapshot", "001002003",
+                "bank_holder_snapshot", "NHAN VIEN")).toList());
+        return selection;
+    }
+
+    private PayrollService.PaymentBatch paymentBatch(PayrollService.BatchSelection selection) {
+        return new PayrollService.PaymentBatch(UUID.randomUUID(), selection, LocalDate.of(2026, 10, 31),
+            "MB", "BANK-BATCH-01");
     }
 }

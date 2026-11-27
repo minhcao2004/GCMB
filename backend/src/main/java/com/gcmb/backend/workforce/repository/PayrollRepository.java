@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -21,9 +22,11 @@ public class PayrollRepository {
     """;
 
   private final JdbcTemplate jdbcTemplate;
+  private final NamedParameterJdbcTemplate namedJdbc;
 
   public PayrollRepository(JdbcTemplate jdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
+    this.namedJdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
   }
 
   // ---- Nhân viên và đơn giá giờ tại cơ sở ----
@@ -303,7 +306,8 @@ public class PayrollRepository {
 
   public List<Map<String, Object>> findEntryPayments(Object payrollEntryId) {
     return jdbcTemplate.queryForList(
-      "SELECT p.id,p.status,p.amount,p.paid_at,p.external_reference,p.failure_reason,e.original_name AS evidence_name "
+      "SELECT p.id,p.status,p.amount,p.paid_at,(p.paid_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text AS payment_date,"
+        + "p.external_reference,p.failure_reason,e.original_name AS evidence_name "
         + "FROM gcmb.salary_payment p LEFT JOIN gcmb.salary_payment_evidence e ON e.payment_id=p.id "
         + "WHERE p.payroll_entry_id=? ORDER BY p.created_at",
       payrollEntryId);
@@ -413,9 +417,75 @@ public class PayrollRepository {
 
   public void insertSalaryPayment(UUID paymentId, Object payrollEntryId, BigDecimal amount, String status,
       Timestamp paidAt, String externalReference, String failureReason, UUID processedBy, String idempotencyKey) {
+    insertSalaryPayment(paymentId, payrollEntryId, amount, status, paidAt, externalReference,
+      failureReason, processedBy, idempotencyKey, null);
+  }
+
+  public void insertSalaryPayment(UUID paymentId, Object payrollEntryId, BigDecimal amount, String status,
+      Timestamp paidAt, String externalReference, String failureReason, UUID processedBy, String idempotencyKey,
+      UUID batchId) {
     jdbcTemplate.update(
-      "INSERT INTO gcmb.salary_payment(id,payroll_entry_id,amount,status,paid_at,external_reference,failure_reason,processed_by,idempotency_key) VALUES (?,?,?,?,?,?,?,?,?)",
-      paymentId, payrollEntryId, amount, status, paidAt, externalReference, failureReason, processedBy, idempotencyKey);
+      "INSERT INTO gcmb.salary_payment(id,payroll_entry_id,amount,status,paid_at,external_reference,failure_reason,processed_by,idempotency_key,batch_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      paymentId, payrollEntryId, amount, status, paidAt, externalReference, failureReason, processedBy, idempotencyKey, batchId);
+  }
+
+  public List<Map<String, Object>> findBatchEntries(Object periodId, UUID branchId, List<UUID> employeeIds) {
+    return namedJdbc.queryForList("""
+      SELECT e.*, n.code, n.full_name AS name,
+        EXISTS(SELECT 1 FROM gcmb.salary_payment p WHERE p.payroll_entry_id=e.id AND p.status='PAID') AS paid
+      FROM gcmb.payroll_entry e JOIN gcmb.employee n ON n.id=e.employee_id
+      WHERE e.period_id=:periodId AND e.employee_id IN (:employeeIds)
+        AND (e.submitted_branch_id=:branchId OR EXISTS(
+          SELECT 1 FROM gcmb.payroll_component c WHERE c.payroll_entry_id=e.id AND c.branch_id=:branchId
+        ))
+      ORDER BY n.code,e.id
+      """, Map.of("periodId", periodId, "branchId", branchId, "employeeIds", employeeIds));
+  }
+
+  public List<Map<String, Object>> findPaymentBatch(UUID id) {
+    return jdbcTemplate.queryForList("SELECT * FROM gcmb.salary_payment_batch WHERE id=?", id);
+  }
+
+  public List<UUID> findBatchEmployees(UUID id) {
+    return jdbcTemplate.queryForList("""
+      SELECT e.employee_id FROM gcmb.salary_payment p
+      JOIN gcmb.payroll_entry e ON e.id=p.payroll_entry_id WHERE p.batch_id=?
+      """, UUID.class, id);
+  }
+
+  public void insertPaymentBatch(UUID id, Object periodId, UUID branchId, LocalDate paymentDate,
+      String bankName, String reference, UUID actorId) {
+    jdbcTemplate.update("""
+      INSERT INTO gcmb.salary_payment_batch(id,payroll_period_id,branch_id,payment_date,bank_name,external_reference,created_by)
+      VALUES (?,?,?,?,?,?,?)
+      """, id, periodId, branchId, paymentDate, bankName, reference, actorId);
+  }
+
+  public List<Map<String, Object>> findSalaryPaymentHistory(Timestamp from, Timestamp to, UUID branchId) {
+    return jdbcTemplate.queryForList("""
+      SELECT p.id,p.batch_id,p.status,p.amount,p.failure_reason,
+        COALESCE(batch.external_reference,p.external_reference) AS external_reference,
+        batch.bank_name,
+        COALESCE(batch.payment_date,(COALESCE(p.paid_at,p.created_at) AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)::text AS payment_date,
+        COALESCE(batch.created_at,p.created_at) AS recorded_at,
+        to_char(period.month,'YYYY-MM') AS payroll_month, branch.name AS branch_name,
+        n.code AS employee_code,n.full_name AS employee_name,
+        actor.username AS recorded_by, proof.original_name AS evidence_name
+      FROM gcmb.salary_payment p
+      JOIN gcmb.payroll_entry e ON e.id=p.payroll_entry_id
+      JOIN gcmb.payroll_period period ON period.id=e.period_id
+      JOIN gcmb.employee n ON n.id=e.employee_id
+      JOIN gcmb.user_account actor ON actor.id=p.processed_by
+      LEFT JOIN gcmb.salary_payment_batch batch ON batch.id=p.batch_id
+      LEFT JOIN gcmb.branch branch ON branch.id=COALESCE(batch.branch_id,e.submitted_branch_id)
+      LEFT JOIN gcmb.salary_payment_evidence proof ON proof.payment_id=p.id
+      WHERE COALESCE(p.paid_at,p.created_at)>=? AND COALESCE(p.paid_at,p.created_at)<?
+        AND (CAST(? AS uuid) IS NULL OR batch.branch_id=? OR (p.batch_id IS NULL AND
+          (e.submitted_branch_id=? OR EXISTS(
+            SELECT 1 FROM gcmb.payroll_component c WHERE c.payroll_entry_id=e.id AND c.branch_id=?
+          ))))
+      ORDER BY payment_date DESC, recorded_at DESC, COALESCE(p.batch_id,p.id), n.code,p.id
+      """, from, to, branchId, branchId, branchId, branchId);
   }
 
   // ---- Ghi sổ quỹ kế toán ----
