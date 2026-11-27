@@ -1,3 +1,4 @@
+import { formatDateLabel } from '../../../shared/utils/dateLabel';
 /**
  * Copyright (c) 2026 SEP490-G12.
  *
@@ -44,7 +45,7 @@ export const staffStatuses = {
   INACTIVE: 'Đã ngừng',
   RESIGNED: 'Đã nghỉ việc',
 };
-export const dateLabel = (value) => (value ? value.split('-').reverse().join('/') : '—');
+export const dateLabel = formatDateLabel;
 export const timeLabel = (value) =>
   value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 // BR-111, BR-119, BR-199; MSG02, MSG03, MSG04, MSG05, MSG88. The backend repeats these checks.

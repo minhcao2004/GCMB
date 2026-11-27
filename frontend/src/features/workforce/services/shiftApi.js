@@ -1,3 +1,4 @@
+import { formatDateLabel } from '../../../shared/utils/dateLabel';
 /**
  * Author: HuyDV
  * Created: 27/10/2026
@@ -42,7 +43,7 @@ export const today = () => {
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
-export const dateLabel = (date) => date?.split('-').reverse().join('/') || '—';
+export const dateLabel = formatDateLabel;
 export const clock = (minutes) =>
   `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 export const shiftLabel = (template) =>

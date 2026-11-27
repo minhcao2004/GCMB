@@ -1,3 +1,4 @@
+import { formatDateLabel } from '../../../shared/utils/dateLabel';
 import { PaginatedTable, PaginatedList } from '../../../shared/components/Pagination';
 import { useEffect, useState } from 'react';
 import {
@@ -25,7 +26,7 @@ const localTime = (value) => { const date = new Date(value); return Number.isNaN
 const monthStart = (year, month) => `${year}-${String(month).padStart(2, '0')}-01`;
 const monthEnd = (year, month) => `${year}-${String(month).padStart(2, '0')}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(2, '0')}`;
 const addDays = (value, count) => { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10); };
-const dateLabel = (value) => value ? value.split('-').reverse().join('/') : '';
+const dateLabel = (value) => formatDateLabel(value, '');
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 const adjustRangeStart = (value, setStart, currentEnd, setEnd) => {
   setStart(value);

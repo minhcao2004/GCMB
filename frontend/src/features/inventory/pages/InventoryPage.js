@@ -1,3 +1,4 @@
+import { formatDateLabel } from '../../../shared/utils/dateLabel';
 import { PaginatedTable } from '../../../shared/components/Pagination';
 import { ToastStack } from '../../../shared/components/Feedback';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +18,7 @@ const makeLocalDateTime = () => {
 const dateTimeLabel = (value) => value ? new Intl.DateTimeFormat('vi-VN', {
   day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
 }).format(new Date(value)) : '—';
-const dateLabel = (value) => value ? value.split('-').reverse().join('/') : '—';
+const dateLabel = formatDateLabel;
 const normalizeInventorySearch = (value) => value.toLocaleLowerCase('vi-VN').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 const trackingLabel = (mode) => mode === 'AUTO_ON_SALE' ? 'Tự trừ khi bán' : 'Theo dõi thủ công';

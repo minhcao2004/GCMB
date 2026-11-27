@@ -1,8 +1,9 @@
+import { formatDateLabel } from '../../../shared/utils/dateLabel';
 import { periodNames } from './DashboardPeriodControls';
 import '../styles/kpi-comparison.css';
 
 const percentage = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 });
-const formatDate = (date) => date.split('-').reverse().join('/');
+const formatDate = formatDateLabel;
 const icons = {
   up: 'M12 19V5m-5 5 5-5 5 5',
   down: 'M12 5v14m-5-5 5 5 5-5',

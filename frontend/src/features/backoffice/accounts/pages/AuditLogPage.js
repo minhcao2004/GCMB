@@ -439,13 +439,6 @@ export default function AuditLogPage({ onAccounts }) {
           </>
         )}
       </div>
-      <div className="account-access-note audit-readonly">
-        <strong>Nhật ký chỉ đọc</strong>
-        <p>
-          Các thay đổi được giữ lại phục vụ tra cứu và kiểm tra. Thời gian hiển thị theo giờ Việt
-          Nam.
-        </p>
-      </div>
       {selected && <AuditDetail id={selected} onClose={() => setSelected(null)} />}
     </section>
   );

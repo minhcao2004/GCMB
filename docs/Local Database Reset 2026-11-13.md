@@ -1,5 +1,7 @@
 # Làm sạch database local ngày 13/11/2026
 
+Bộ dữ liệu đang dùng ngày 27/11/2026 trên cổng 5432 được mô tả trong [Dữ liệu báo cáo local](Local%20Business%20Data%202026-11-27.md).
+
 ## Phạm vi đã được xác nhận
 
 Theo yêu cầu trực tiếp của người dùng, database PostgreSQL `gcmb` tại `localhost:5432` đã được thay toàn bộ bằng seed nền hiện hành trong source. Tài liệu tham chiếu là `GCMB_Thanh_test_data.md`; đây là danh mục seed/test, không phải bản dump để import trực tiếp.

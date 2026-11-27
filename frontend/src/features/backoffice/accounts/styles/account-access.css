@@ -119,10 +119,6 @@
   align-self: end;
 }
 
-.audit-readonly {
-  margin-top: 20px;
-}
-
 .audit-detail-body {
   flex: 1;
   overflow-y: auto;
