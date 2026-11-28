@@ -199,13 +199,9 @@ public class FinanceService {
         // BR-91, BR-93: đề nghị thanh toán trên 3.000.000đ cần Quản lý cấp cao duyệt; hoàn ứng do Kế toán duyệt.
         String status="PAYMENT".equals(kind)&&amount.compareTo(HEAD_OFFICE_APPROVAL_LIMIT)>0
             ?"WAITING_HEAD_OFFICE":"WAITING_ACCOUNTANT";
-        UUID id=UUID.randomUUID();
-        jdbcTemplate.update("""
-            INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
-              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status)
-            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
-            """,id,code("EXP"),kind,branch,categoryId,categoryType,recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),
-            "","",who.id(),status);
+        UUID requestId=UUID.randomUUID();
+        financeRepository.insertBranchRequest(requestId,code("EXP"),kind,branchId,categoryId,categoryType,
+            recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),actor.id(),status);
         // BR-92, BR-94: requester lấy từ phiên đăng nhập; liên kết phiếu nhập giữ nguyên chứng cứ khoản chi và chặn dùng lại.
         for(var linked:linkedReceipts.entrySet())
             financeRepository.linkStockReceipt(requestId,linked.getKey(),linked.getValue());

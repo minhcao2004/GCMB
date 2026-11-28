@@ -268,8 +268,8 @@ public class CheckoutService {
         }
         // BR-159: hủy order bỏ qua và hoàn kho trước khi trigger khóa thay đổi khi bill được phát hành.
         int cancelledOrderCount = unserved.isEmpty() ? 0 : foodOrderService.cancelUnservedForCheckout(actor, bookingId);
-        UUID id = UUID.randomUUID();
-        String number =
+        UUID billId = UUID.randomUUID();
+        String billNumber =
             "HD" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
         checkoutRepository.insertBill(
             billId,
@@ -299,36 +299,19 @@ public class CheckoutService {
         if (depositApplied.signum() > 0) {
             checkoutRepository.insertDepositApplication(depositId, depositApplied, billId, actor.id(), "CHECKOUT-DEPOSIT-" + billId);
         }
-        audit(
-            actor.id(),
-            branchId,
-            bookingId,
-            "ISSUE_BILL",
-            Map.of(
-                "billId",
-                billId,
-                "amount",
-                amount,
-                "grossAmount",
-                grossAmount,
-                "discountPercent",
-                discountPercent,
-                "discountAmount",
-                discountAmount,
-                "roundingAdjustment",
-                roundingAdjustment,
-                "payableAmount",
-                payableAmount,
-                "depositAmount",
-                depositApplied,
-                "unservedConfirmed",
-                input.unservedConfirmed(),
-                "unservedItemCount",
-                unservedCount(unserved),
-                "cancelledOrderCount",
-                cancelledOrderCount
-            )
-        );
+        var auditDetails = new LinkedHashMap<String, Object>();
+        auditDetails.put("billId", billId);
+        auditDetails.put("amount", amount);
+        auditDetails.put("grossAmount", grossAmount);
+        auditDetails.put("discountPercent", discountPercent);
+        auditDetails.put("discountAmount", discountAmount);
+        auditDetails.put("roundingAdjustment", roundingAdjustment);
+        auditDetails.put("payableAmount", payableAmount);
+        auditDetails.put("depositAmount", depositApplied);
+        auditDetails.put("unservedConfirmed", input.unservedConfirmed());
+        auditDetails.put("unservedItemCount", unservedCount(unserved));
+        auditDetails.put("cancelledOrderCount", cancelledOrderCount);
+        audit(actor.id(), branchId, bookingId, "ISSUE_BILL", auditDetails);
         return bill(actor, billId);
     }
 

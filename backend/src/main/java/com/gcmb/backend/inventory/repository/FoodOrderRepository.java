@@ -204,12 +204,6 @@ public class FoodOrderRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public UUID employeeForUser(UUID userId) {
-        List<UUID> rows = jdbcTemplate.query("SELECT id FROM gcmb.employee WHERE user_id=?",
-            (rs, row) -> rs.getObject(1, UUID.class), userId);
-        return rows.isEmpty() ? null : rows.get(0);
-    }
-
     public UUID createOrder(UUID branchId, UUID bookingId, UUID allocationId, String channel,
                             UUID createdBy, UUID qrSessionId, String status, UUID acceptedBy,
                             UUID assignedEmployeeId, String idempotencyKey) {

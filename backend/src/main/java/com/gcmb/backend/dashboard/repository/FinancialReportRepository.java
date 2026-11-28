@@ -230,10 +230,10 @@ public class FinancialReportRepository {
           payment_reference "paymentReference",origin
         FROM paid_expenses
         WHERE recognition_date>=? AND recognition_date<?
-          AND branch_id=? AND category_id=? AND cost_type=?
+          AND branch_id=? AND category_id=? AND (?='' OR cost_type=?)
           AND (?='' OR concat_ws(' ',cost_type,category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')
         ORDER BY recognition_date DESC,paid_at DESC,expense_code
-        """, start, endExclusive, branchId, categoryId, type, search, search);
+        """, start, endExclusive, branchId, categoryId, type, type, search, search);
     }
 
     // Hóa đơn và chứng từ thanh toán của các đề nghị chi trong chi tiết báo cáo chi phí.
