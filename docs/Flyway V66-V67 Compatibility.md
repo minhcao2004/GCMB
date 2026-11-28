@@ -43,3 +43,11 @@ Kiểm tra sau sửa: Flyway xác thực thành công 67 migration, báo schema 
 ## Quy tắc cho thay đổi tiếp theo
 
 Thêm thay đổi schema bằng migration mới từ V68 trong thư mục dùng chung. Không chỉnh sửa nội dung hoặc đổi số bốn file tương thích V66/V67. Hai bộ chỉ phục vụ lịch sử đã tồn tại, không phải hai nhánh schema để phát triển độc lập.
+
+## Trùng V68 sau merge ngày 28/11/2026
+
+Source sau merge có hai file V68 cho hoàn cọc checkout và trả lương theo lô. Database local `localhost:5432/gcmb` đã áp dụng thành công `V68__checkout_deposit_refunds.sql` với checksum `-373126470`, chưa có bảng `gcmb.salary_payment_batch`. Giữ V68 hoàn cọc và chuyển migration trả lương sang `V69__salary_payment_batches.sql`, giữ nguyên nội dung SQL.
+
+Chạy `npm.cmd start` từ `frontend/` để launcher dựng lại resource migration rồi áp dụng V69. Nếu chạy Maven trực tiếp, cần xóa riêng thư mục sinh ra `backend/target/classes/db/migration/` trước để loại bản V68 trả lương còn sót. Với môi trường đã áp dụng `V68__salary_payment_batches.sql`, cần đối chiếu lịch sử riêng trước khi cập nhật vì thứ tự đã áp dụng khác database local này.
+
+Đã kiểm tra cả hai bộ location có 69 phiên bản duy nhất. Chạy launcher thành công trên database local, Flyway xác thực 69 migration và áp dụng V69. Backend health và health qua proxy frontend trả `UP`, trang đăng nhập trả HTTP 200, frontend biên dịch thành công. Đã dừng phiên kiểm tra và xác nhận cổng 3000/8080 được giải phóng. Phạm vi kiểm tra là khởi động ứng dụng, chưa kiểm thử nghiệp vụ trả lương theo lô.
