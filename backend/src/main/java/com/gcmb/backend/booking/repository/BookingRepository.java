@@ -591,6 +591,12 @@ public class BookingRepository {
             allocationId, bookingId);
     }
 
+    // Giữ nguyên giá đã chốt khi thay phòng ngay trước check-in.
+    public void moveActiveCharges(UUID previousAllocationId, UUID newAllocationId) {
+        jdbcTemplate.update("UPDATE gcmb.booking_charge SET allocation_id=? WHERE allocation_id=? AND status='ACTIVE'",
+            newAllocationId, previousAllocationId);
+    }
+
     // Lấy toàn bộ dòng phí, kể cả dòng đã bị thay thế.
     public List<ChargeRow> charges(UUID bookingId) {
         return jdbcTemplate.query("""
@@ -800,7 +806,9 @@ public class BookingRepository {
         if (Boolean.FALSE.equals(hasDeposit)) where.append(" AND COALESCE(received.amount,0)=0");
         String from = """
             FROM gcmb.booking b
-            LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
+            LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id
+                AND (b.status NOT IN ('CONFIRMED','IN_HOUSE') OR a.state IN ('RESERVED','OCCUPIED'))
+                ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
              LEFT JOIN gcmb.room r ON r.id=latest.room_id
              LEFT JOIN gcmb.room_type rt ON rt.id=r.room_type_id
              LEFT JOIN gcmb.room_type requested_rt ON requested_rt.id=b.room_type_id

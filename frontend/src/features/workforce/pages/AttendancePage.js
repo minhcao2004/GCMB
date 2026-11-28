@@ -341,7 +341,7 @@ export default function AttendancePage({
                   </tbody>
                 </PaginatedTable>
               ) : (
-                <PaginatedTable pageSize={10} className="attendance-table">
+                <PaginatedTable pageSize={5} className="attendance-table">
                   <thead>
                     <tr>
                       <th>Nhân viên</th>

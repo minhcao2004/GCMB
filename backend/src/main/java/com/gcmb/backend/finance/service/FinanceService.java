@@ -261,8 +261,8 @@ public class FinanceService {
         UUID id=UUID.randomUUID();
         jdbcTemplate.update("""
             INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
-              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,payment_method,requested_by,status)
-            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?,?)
+              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status)
+            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
             """,id,code("EXP"),kind,branch,categoryId,categoryType,recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),
             "","",who.id(),status);
         // BR-92, BR-94: requester lấy từ phiên đăng nhập; liên kết phiếu nhập giữ nguyên chứng cứ khoản chi và chặn dùng lại.

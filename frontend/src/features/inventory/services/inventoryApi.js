@@ -1,4 +1,5 @@
 import apiClient from '../../../api/client';
+import menuItemApi from './menuItemApi';
 
 const base = '/branch-management/inventory';
 
@@ -47,6 +48,24 @@ const inventoryApi = {
   },
   async createItem(command) {
     return writeJson('post', `${base}/items`, command);
+  },
+  async createItemWithMenu(item, salePrice) {
+    try {
+      return { item: await writeJson('post', `${base}/items/with-menu`, { item, salePrice }), menuError: null };
+    } catch (error) {
+      // Older servers route /items/with-menu to /items/{id} and answer 405.
+      if (![404, 405].includes(error.response?.status)) throw error;
+    }
+    const created = await writeJson('post', `${base}/items`, item);
+    try {
+      // BR-111: packaged menu items must link to an existing inventory item.
+      await menuItemApi.create({ name: created.name, category: created.category, kind: 'PACKAGED',
+        inventoryItemId: created.id, salePrice, active: true, description: null, removeImage: false });
+      return { item: created, menuError: null };
+    } catch (menuError) {
+      // Keep the created inventory item visible so a retry cannot create a duplicate.
+      return { item: created, menuError };
+    }
   },
   async updateItem(id, command) {
     return writeJson('put', `${base}/items/${id}`, command);

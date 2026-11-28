@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,14 +39,19 @@ class BookingServiceCheckInTest {
         UUID actorId = UUID.randomUUID();
         UUID branchId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();
+        UUID roomTypeId = UUID.randomUUID();
         Instant start = Instant.now().minus(Duration.ofMinutes(50));
         Instant end = start.plus(Duration.ofHours(1));
-        BookingRow booking = new BookingRow(bookingId, branchId, "BK-LATE", "Khách đến muộn", null, 2,
+        BookingRow booking = new BookingRow(bookingId, branchId, roomTypeId, "BK-LATE", "Khách đến muộn", null, 2,
             "PHONE", start, end, null, null, "CONFIRMED", null, null, 40, actorId, null, start);
         when(repository.branchScope(actorId)).thenReturn(new BranchScope(branchId, "Chi nhánh", ZoneId.of("Asia/Ho_Chi_Minh")));
         when(repository.booking(bookingId, branchId)).thenReturn(booking);
+        when(repository.currentAllocation(bookingId)).thenReturn(new AllocationRow(UUID.randomUUID(), bookingId,
+            UUID.randomUUID(), roomTypeId, "K03", "King 03", "King", "AVAILABLE", start, end, "RESERVED", null, start));
+        when(repository.availableRoomsForEdit(eq(branchId), any(Instant.class), any(Instant.class), eq(bookingId), eq(true)))
+            .thenReturn(List.of(new BookingRepository.RoomRow(UUID.randomUUID(), "K04", "King 04", 4, "AVAILABLE", roomTypeId, "King")));
 
-        service.checkInRooms(new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId);
+        assertEquals(1, service.checkInRooms(new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId).size());
 
         ArgumentCaptor<Instant> shiftedStart = ArgumentCaptor.forClass(Instant.class);
         ArgumentCaptor<Instant> shiftedEnd = ArgumentCaptor.forClass(Instant.class);
@@ -156,5 +162,104 @@ class BookingServiceCheckInTest {
         ArgumentCaptor<Instant> shiftedEnd = ArgumentCaptor.forClass(Instant.class);
         verify(repository).hasRoomOverlap(eq(roomId), any(Instant.class), shiftedEnd.capture(), eq(bookingId));
         assertTrue(shiftedEnd.getValue().isAfter(end));
+    }
+
+    @Test
+    void changesReservedRoomDuringCheckInAndKeepsAgreedCharges() {
+        BookingRepository repository = mock(BookingRepository.class);
+        BookingService service = new BookingService(repository, mock(BookingPricingService.class), new ObjectMapper(),
+            mock(FoodOrderService.class), mock(FinancialPeriodService.class));
+        UUID actorId = UUID.randomUUID();
+        UUID branchId = UUID.randomUUID();
+        UUID bookingId = UUID.randomUUID();
+        UUID roomTypeId = UUID.randomUUID();
+        UUID oldRoomId = UUID.randomUUID();
+        UUID newRoomId = UUID.randomUUID();
+        UUID oldAllocationId = UUID.randomUUID();
+        UUID newAllocationId = UUID.randomUUID();
+        Instant start = Instant.now().plus(Duration.ofMinutes(5));
+        Instant end = start.plus(Duration.ofHours(2));
+        BookingRow booking = new BookingRow(bookingId, branchId, roomTypeId, "BK-ROOM", "Khách", null, 2,
+            "FACEBOOK", start, end, null, null, "CONFIRMED", null, null, 40, actorId, null, start);
+        AllocationRow oldAllocation = new AllocationRow(oldAllocationId, bookingId, oldRoomId, roomTypeId,
+            "K03", "King 03", "King", "AVAILABLE", start, end, "RESERVED", null, start);
+        AllocationRow newAllocation = new AllocationRow(newAllocationId, bookingId, newRoomId, roomTypeId,
+            "K04", "King 04", "King", "AVAILABLE", start, end, "RESERVED", null, start);
+        BookingRepository.RoomRow target = new BookingRepository.RoomRow(newRoomId, "K04", "King 04", 4,
+            "AVAILABLE", roomTypeId, "King");
+        when(repository.branchScope(actorId)).thenReturn(new BranchScope(branchId, "Chi nhánh", ZoneId.of("Asia/Ho_Chi_Minh")));
+        when(repository.lockBookingId(bookingId, branchId)).thenReturn(bookingId);
+        when(repository.booking(bookingId, branchId)).thenReturn(booking);
+        when(repository.currentAllocationForUpdate(bookingId)).thenReturn(oldAllocation, newAllocation);
+        when(repository.lockAvailableRoom(newRoomId, branchId)).thenReturn(target);
+        when(repository.availableRoomsForEdit(eq(branchId), any(Instant.class), any(Instant.class), eq(bookingId), eq(true)))
+            .thenReturn(List.of(target));
+        when(repository.insertAllocation(eq(branchId), eq(bookingId), eq(newRoomId), any(Instant.class), any(Instant.class), eq(actorId)))
+            .thenReturn(newAllocationId);
+        when(repository.comboGiftRequirements(bookingId, branchId)).thenReturn(new BookingRepository.ComboGiftRequirements(0, 0));
+        when(repository.checkInBooking(eq(bookingId), any(Instant.class), any(Instant.class))).thenReturn(1);
+        when(repository.shiftAndOccupyAllocation(eq(newAllocationId), any(Instant.class), any(Instant.class), any(Instant.class))).thenReturn(1);
+        when(repository.allocations(bookingId)).thenReturn(List.of(oldAllocation, newAllocation));
+        when(repository.charges(bookingId)).thenReturn(List.of());
+        when(repository.depositBalance(bookingId)).thenReturn(BigDecimal.ZERO);
+        when(repository.depositReceivedAmount(bookingId)).thenReturn(BigDecimal.ZERO);
+
+        service.checkIn(new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh"), bookingId,
+            new com.gcmb.backend.booking.dto.BookingDtos.CheckInRequest(newRoomId, List.of(), List.of()));
+
+        verify(repository).releaseAllocation(oldAllocationId, "Đổi phòng khi check-in");
+        verify(repository).moveActiveCharges(oldAllocationId, newAllocationId);
+        verify(repository).shiftAndOccupyAllocation(eq(newAllocationId), any(Instant.class), any(Instant.class), any(Instant.class));
+        verify(repository, never()).shiftAndOccupyAllocation(eq(oldAllocationId), any(Instant.class), any(Instant.class), any(Instant.class));
+    }
+
+    @Test
+    void releasedDemoRoomDoesNotHideAvailableRoomsDuringEdit() {
+        BookingRepository repository = mock(BookingRepository.class);
+        BookingService service = new BookingService(repository, mock(BookingPricingService.class), new ObjectMapper(),
+            mock(FoodOrderService.class), mock(FinancialPeriodService.class));
+        UUID actorId = UUID.randomUUID();
+        UUID branchId = UUID.randomUUID();
+        UUID bookingId = UUID.randomUUID();
+        UUID roomTypeId = UUID.randomUUID();
+        UUID comboId = UUID.randomUUID();
+        UUID k02 = UUID.randomUUID();
+        UUID allocationId = UUID.randomUUID();
+        Instant start = Instant.now().plus(Duration.ofHours(2));
+        Instant end = start.plus(Duration.ofHours(2));
+        BookingRow booking = new BookingRow(bookingId, branchId, roomTypeId, "BK-DEMO", "Khách", null, 2,
+            "FACEBOOK", start, end, null, null, "CONFIRMED", null, null, 40, actorId, null, start);
+        AllocationRow released = new AllocationRow(UUID.randomUUID(), bookingId, UUID.randomUUID(), roomTypeId,
+            "K01", "King 01", "King", "AVAILABLE", start, end, "RELEASED", null, start.minusSeconds(60));
+        AllocationRow reserved = new AllocationRow(allocationId, bookingId, k02, roomTypeId,
+            "K02", "King 02", "King", "AVAILABLE", start, end, "RESERVED", null, start);
+        BookingRepository.RoomRow room = new BookingRepository.RoomRow(k02, "K02", "King 02", 6,
+            "AVAILABLE", roomTypeId, "King");
+        ChargeRow charge = new ChargeRow(UUID.randomUUID(), null, "COMBO", "Gói King", BigDecimal.ONE,
+            new BigDecimal("230000"), new BigDecimal("230000"), "ACTIVE", null, comboId,
+            "{\"durationMinutes\":120,\"overtimeHourlyPrice\":100000}", start);
+        Identity actor = new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh");
+        when(repository.branchScope(actorId)).thenReturn(new BranchScope(branchId, "Chi nhánh", ZoneId.of("Asia/Ho_Chi_Minh")));
+        when(repository.booking(bookingId, branchId)).thenReturn(booking);
+        when(repository.allocations(bookingId)).thenReturn(List.of(released), List.of(released, reserved));
+        when(repository.charges(bookingId)).thenReturn(List.of(charge));
+        when(repository.activeChargeTotal(bookingId)).thenReturn(new BigDecimal("230000"));
+        when(repository.availableRoomsForEdit(eq(branchId), eq(start), eq(end), eq(bookingId)))
+            .thenReturn(List.of(room));
+        when(repository.unassignedBookings(branchId, roomTypeId, start, end, bookingId)).thenReturn(0);
+        when(repository.lockBookingId(bookingId, branchId)).thenReturn(bookingId);
+        when(repository.lockRoomType(roomTypeId)).thenReturn(new BookingRepository.RoomTypeRow(roomTypeId, "KING", "King", "COMBO", 6));
+        when(repository.availableRooms(branchId, roomTypeId, start, end)).thenReturn(List.of(room));
+        when(repository.lockAvailableRoom(k02, branchId)).thenReturn(room);
+        when(repository.insertAllocation(eq(branchId), eq(bookingId), eq(k02), eq(start), eq(end), eq(actorId)))
+            .thenReturn(allocationId);
+
+        assertNull(service.detail(actor, bookingId).booking().roomId());
+        assertEquals(k02, service.editOptions(actor, bookingId, start, end, "COMBO", comboId).rooms().get(0).id());
+        var updated = service.update(actor, bookingId, new com.gcmb.backend.booking.dto.BookingDtos.UpdateBookingRequest(
+            k02, start, end, "COMBO", comboId, null, null, null));
+
+        assertEquals(k02, updated.booking().roomId());
+        verify(repository).insertCharge(eq(bookingId), eq(allocationId), any());
     }
 }

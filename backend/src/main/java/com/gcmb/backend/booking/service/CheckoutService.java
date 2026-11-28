@@ -200,13 +200,13 @@ public class CheckoutService {
             409,
             "Cọc đang có yêu cầu hoàn xử lý. Cần giải quyết yêu cầu trước khi lập bill."
         );
-        // BR-159; MSG71: cảnh báo và tiếp tục sau xác nhận, không bắt buộc phục vụ/hủy order.
+        // BR-159; MSG71: cảnh báo trước khi lễ tân chọn bỏ qua các order chưa phục vụ.
         var unserved = pendingOrders(bookingId);
         if (!unserved.isEmpty() && !input.unservedConfirmed()) throw fail(
             409,
             "Booking còn " +
                 unservedCount(unserved).toPlainString() +
-                " món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Bạn có muốn tiếp tục?"
+                " món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Khi chốt bill, các order này sẽ được hủy. Bạn có muốn tiếp tục?"
         );
         // BR-164/170/215: chốt theo báo giá server đã ký, tối đa 5 phút để lễ tân đọc và xác nhận.
         // Không so với tiền chạy từng giây lúc POST vì sẽ khiến mọi báo giá vừa xem đều bị lệch.
@@ -292,6 +292,8 @@ public class CheckoutService {
         if (input.payableAmount() == null || input.payableAmount().compareTo(payableAmount) != 0) {
             throw fail(409, "Báo giá đã thay đổi. Vui lòng cập nhật tiền phòng và xác nhận lại.");
         }
+        // BR-159: hủy order bỏ qua và hoàn kho trước khi trigger khóa thay đổi khi bill được phát hành.
+        int cancelledOrderCount = unserved.isEmpty() ? 0 : foodOrderService.cancelUnservedForCheckout(actor, bookingId);
         UUID id = UUID.randomUUID();
         String number =
             "HD" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase();
@@ -360,7 +362,9 @@ public class CheckoutService {
                 "unservedConfirmed",
                 input.unservedConfirmed(),
                 "unservedItemCount",
-                unservedCount(unserved)
+                unservedCount(unserved),
+                "cancelledOrderCount",
+                cancelledOrderCount
             )
         );
         return bill(actor, id);

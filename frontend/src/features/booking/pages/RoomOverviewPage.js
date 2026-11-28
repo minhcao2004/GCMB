@@ -124,8 +124,6 @@ export default function RoomOverviewPage() {
   const [incomingOrderError, setIncomingOrderError] = useState('');
   const [checkingRoomOrders, setCheckingRoomOrders] = useState(false);
   const [roomOrderCheckError, setRoomOrderCheckError] = useState('');
-  const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
-  const [orderSoundError, setOrderSoundError] = useState('');
   const [orderEmployeeId, setOrderEmployeeId] = useState('');
   const [orderQuantities, setOrderQuantities] = useState({});
   const [orderLoading, setOrderLoading] = useState(false);
@@ -135,7 +133,6 @@ export default function RoomOverviewPage() {
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const orderAudioContext = useRef(null);
   const knownPendingQrOrderIds = useRef(null);
   const pendingOrderPollInProgress = useRef(false);
 
@@ -175,26 +172,6 @@ export default function RoomOverviewPage() {
     return () => { active = false; };
   }, [user]);
 
-  const playOrderSound = useCallback(() => {
-    const context = orderAudioContext.current;
-    if (!orderSoundEnabled || !context || context.state !== 'running') return;
-    const nowAt = context.currentTime;
-    [[880, 0], [660, 0.16], [880, 0.32]].forEach(([frequency, offset]) => {
-      const startAt = nowAt + offset;
-      const oscillator = context.createOscillator();
-      const volume = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(frequency, startAt);
-      volume.gain.setValueAtTime(0.0001, startAt);
-      volume.gain.exponentialRampToValueAtTime(0.16, startAt + 0.015);
-      volume.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14);
-      oscillator.connect(volume);
-      volume.connect(context.destination);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + 0.15);
-    });
-  }, [orderSoundEnabled]);
-
   const refreshPendingRoomOrders = useCallback(async () => {
     if (pendingOrderPollInProgress.current) return;
     pendingOrderPollInProgress.current = true;
@@ -220,13 +197,12 @@ export default function RoomOverviewPage() {
         const queuedIds = new Set(refreshed.map((order) => order.id));
         return [...refreshed, ...newOrders.filter((order) => !queuedIds.has(order.id))];
       });
-      if (!firstLoad && newOrders.length > 0) playOrderSound();
     } catch {
       // The next interval retries without interrupting room operations.
     } finally {
       pendingOrderPollInProgress.current = false;
     }
-  }, [playOrderSound]);
+  }, []);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -234,30 +210,6 @@ export default function RoomOverviewPage() {
     const timer = window.setInterval(refreshPendingRoomOrders, 5000);
     return () => window.clearInterval(timer);
   }, [refreshPendingRoomOrders, user]);
-
-  useEffect(() => () => { orderAudioContext.current?.close(); }, []);
-
-  const toggleOrderSound = async () => {
-    setOrderSoundError('');
-    if (orderSoundEnabled) {
-      setOrderSoundEnabled(false);
-      await orderAudioContext.current?.suspend();
-      return;
-    }
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      setOrderSoundError('Trình duyệt này không hỗ trợ âm báo.');
-      return;
-    }
-    try {
-      orderAudioContext.current ||= new AudioContextClass();
-      await orderAudioContext.current.resume();
-      if (orderAudioContext.current.state !== 'running') throw new Error('Audio context is not running.');
-      setOrderSoundEnabled(true);
-    } catch {
-      setOrderSoundError('Chưa bật được âm báo. Hãy kiểm tra âm lượng và quyền âm thanh của trình duyệt.');
-    }
-  };
 
   const currentMinute = Math.floor(now / 60000);
   const date = selectedDate || toLocalDateInput(new Date((currentMinute + 5) * 60000));
@@ -606,7 +558,7 @@ export default function RoomOverviewPage() {
   if (!user) return <main className="booking-auth-state">{authError ? <div className="booking-auth-message" role="alert">{authError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div> : <p role="status">Đang kiểm tra phiên đăng nhập…</p>}</main>;
 
   return <AppShell user={user} branchName={options?.branchName} busy={busy} onLogout={logout} breadcrumb="Phòng" search={search} onSearchChange={setSearch} activeTab="rooms" hideSearch>
-    <div className="booking-page-heading room-page-heading"><div><h1>Phòng</h1></div><div className="room-page-heading-actions">{orderSoundError && <span role="status">{orderSoundError}</span>}<button type="button" className={`room-order-sound-toggle${orderSoundEnabled ? ' is-enabled' : ''}`} aria-pressed={orderSoundEnabled} onClick={toggleOrderSound}>{orderSoundEnabled ? 'Tắt âm báo order' : 'Bật âm báo order'}</button></div></div>
+    <div className="booking-page-heading room-page-heading"><h1>Phòng</h1></div>
     {roomOrderCheckError && <div className="booking-inline-error" role="alert">{roomOrderCheckError}<button type="button" onClick={() => setRoomOrderCheckError('')}>Đóng</button></div>}
     <ToastStack notice={notice} onCloseNotice={() => setNotice('')} />
     {loadError && <div className="booking-inline-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></div>}
@@ -673,7 +625,7 @@ export default function RoomOverviewPage() {
               <span>Mở Booking ngày {dateInputText(date)} với bộ lọc phòng {selected.code} được chọn sẵn.</span>
             </button>
           </>}
-          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Booking</dt><dd>{currentBooking.code}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}<small>Combo đang dùng: {activeCombo || 'Theo giờ'}</small></section>}<div className="room-detail-total"><span>Tạm tính cần thanh toán</span><strong>{checkoutAmountText}</strong></div></>}
+          {currentBooking && selected.status !== 'reserved' && <><div className="room-detail-divider" /><dl className="room-detail-facts"><div><dt>Combo đang dùng</dt><dd>{activeCombo || 'Theo giờ'}</dd></div><div><dt>Khách hàng</dt><dd>{currentBooking.contactName}</dd></div><div><dt>Nhận phòng</dt><dd>{dateTimeText(currentBooking.actualCheckin || currentBooking.plannedStart, timezone)}</dd></div><div><dt>Giờ trả dự kiến</dt><dd>{dateTimeText(currentBooking.plannedEnd, timezone)}</dd></div></dl>{selected.status === 'occupied' && <section className="room-usage"><span>Thời gian sử dụng</span><strong>{elapsedText}</strong>{usageStopped && <small className={selectedOverdue ? 'is-overdue' : 'is-ended'}>Đã dừng tại giờ trả dự kiến</small>}</section>}<div className="room-detail-total"><span>Tạm tính cần thanh toán</span><strong>{checkoutAmountText}</strong></div></>}
           {selectedPendingOrders.length > 0 && <section className="room-pending-orders" aria-label="Yêu cầu món đang chờ">
             <div className="room-pending-orders-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></div>
             <div><strong>{selectedPendingOrders.length} order QR đang chờ</strong><span>{selectedPendingOrders.map((order) => order.code).join(' · ')}</span></div>

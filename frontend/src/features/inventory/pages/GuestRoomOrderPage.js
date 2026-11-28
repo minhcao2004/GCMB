@@ -138,7 +138,7 @@ export default function GuestRoomOrderPage() {
     setMessage('');
     try {
       // BR-27: gửi mã MR của phòng hiện tại để server gắn món với đúng booking đang sử dụng.
-      const result = await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
+      await foodOrderApi.submitRoomOrder(normalizedCode, token.current, {
         idempotencyKey: pendingKey.current,
         items: cartLines.map((item) => ({ menuItemId: item.id, quantity: cart[item.id] })),
       });
@@ -166,6 +166,15 @@ export default function GuestRoomOrderPage() {
       {error && <div className="food-alert" role="alert"><span>{error}</span><button onClick={() => load(true)}>Tải lại thực đơn</button></div>}
     <ToastStack notice={message} onCloseNotice={() => setMessage('')} />
       {loading ? <div className="food-loading" role="status">Đang tải thực đơn phòng…</div> : room && <>
+        <section className="food-order-history">
+          <div className="food-section-title"><h2>Yêu cầu gần đây</h2><button onClick={() => refreshOrders()}>Làm mới</button></div>
+          {ordersError ? <p role="status">Không tải được yêu cầu gần đây. {ordersError}</p>
+            : orders.length === 0 ? <p>Chưa có yêu cầu món trong phiên này.</p> : <PaginatedList as="div" pageSize={5} className="food-history-list">{orders.map((order) => <article key={order.code}>
+            <div><strong>{order.code} <span>{order.roomCode}</span></strong><small>{new Date(order.createdAt).toLocaleString('vi-VN')}</small></div>
+            <ul>{order.items.map((line, index) => <li key={`${line.name}-${index}`}>{line.name} × {Number(line.quantity)}</li>)}</ul>
+            <div className={`food-order-status status-${order.status.toLowerCase()}`}>{statusText[order.status] || order.status}</div>
+          </article>)}</PaginatedList>}
+        </section>
         {items.length === 0 ? <div className="food-empty"><h2>Chưa có món đang bán</h2><p>Vui lòng gọi lễ tân nếu bạn cần hỗ trợ.</p></div> : <>
           <nav className="food-categories" aria-label="Nhóm món">
             {categories.map((entry) => <button key={entry} className={category === entry ? 'is-active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
@@ -191,15 +200,6 @@ export default function GuestRoomOrderPage() {
             </aside>
           </div>
         </>}
-        <section className="food-order-history">
-          <div className="food-section-title"><h2>Yêu cầu gần đây</h2><button onClick={() => refreshOrders()}>Làm mới</button></div>
-          {ordersError ? <p role="status">Không tải được yêu cầu gần đây. {ordersError}</p>
-            : orders.length === 0 ? <p>Chưa có yêu cầu món trong phiên này.</p> : <PaginatedList as="div" pageSize={5} className="food-history-list">{orders.map((order) => <article key={order.code}>
-            <div><strong>{order.code} <span>{order.roomCode}</span></strong><small>{new Date(order.createdAt).toLocaleString('vi-VN')}</small></div>
-            <ul>{order.items.map((line, index) => <li key={`${line.name}-${index}`}>{line.name} × {Number(line.quantity)}</li>)}</ul>
-            <div className={`food-order-status status-${order.status.toLowerCase()}`}>{statusText[order.status] || order.status}</div>
-          </article>)}</PaginatedList>}
-        </section>
       </>}
       {!loading && !room && !error && <div className="food-empty"><h2>Không mở được mã phòng</h2><p>Vui lòng quét lại mã MR hoặc gọi lễ tân.</p></div>}
     </div>

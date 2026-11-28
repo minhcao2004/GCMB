@@ -386,34 +386,32 @@ export default function CheckoutPage() {
                 <h2>2 Order F&B</h2>
                 <Lines lines={data.lines.filter((line) => line.category === 'FNB')} />
                 {data.pendingOrders?.length > 0 && (
-                  <div className="co-warning">
-                    <p>
-                      Booking còn {data.unservedItemCount} món chưa phục vụ. Bạn vẫn có thể tiếp tục
-                      trả phòng.
-                    </p>
+                  <div className={`co-unserved${unservedConfirmed ? ' is-confirmed' : ''}`}>
+                    <div className="co-unserved-heading">
+                      <div>
+                        <span className="co-unserved-kicker">{unservedConfirmed ? 'ĐÃ XÁC NHẬN' : 'CẦN XÁC NHẬN'}</span>
+                        <h3>Order chưa phục vụ</h3>
+                      </div>
+                      <span className="co-unserved-count">{data.unservedItemCount} món</span>
+                    </div>
+                    <p>Bạn vẫn có thể tiếp tục trả phòng. Khi lập bill, các order này sẽ chuyển sang <strong>Đã hủy</strong>.</p>
                     <button
                       type="button"
+                      className="co-unserved-link"
                       disabled={busy}
                       onClick={() => navigate(`/le-tan/don-mon?bookingId=${data.bookingId}`)}
                     >
-                      Xem chi tiết order
+                      Xem chi tiết order <span aria-hidden="true">→</span>
                     </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        setUnservedConfirmed(
-                          window.confirm(
-                            `Booking còn ${data.unservedItemCount} món chưa phục vụ. Bạn vẫn có thể tiếp tục trả phòng. Bạn có muốn tiếp tục?`
-                          )
-                        )
-                      }
-                    >
-                      Xác nhận tiếp tục trả phòng
-                    </button>
-                    {unservedConfirmed && (
-                      <p role="status">Đã xác nhận tiếp tục với các món chưa phục vụ.</p>
-                    )}
+                    <label className="co-unserved-confirm">
+                      <input
+                        type="checkbox"
+                        checked={unservedConfirmed}
+                        disabled={busy}
+                        onChange={(event) => setUnservedConfirmed(event.target.checked)}
+                      />
+                      <span>Tôi xác nhận hủy các order chưa phục vụ khi lập bill</span>
+                    </label>
                   </div>
                 )}
               </section>

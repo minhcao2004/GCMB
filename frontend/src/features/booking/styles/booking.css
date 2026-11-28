@@ -644,6 +644,7 @@
 }
 .booking-edit-dialog .booking-edit-combo { grid-column: 2; margin: 0; }
 .booking-edit-dialog .booking-edit-combo small { font-size: 10px; line-height: 1.35; }
+.booking-edit-dialog .booking-edit-room-help { color: #66758a; font-size: 11px; line-height: 1.4; }
 .booking-edit-dialog .booking-edit-summary { gap: 8px 14px; margin: 2px 0 0; padding: 9px 12px; font-size: 10px; }
 .booking-edit-dialog .booking-edit-summary strong { font-size: 11px; }
 .booking-edit-dialog .booking-note-field textarea { min-height: 64px; }

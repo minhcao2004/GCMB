@@ -25,6 +25,7 @@ const errorText = (error) => error.response?.data?.detail || error.response?.dat
 const dateValue = (value) => value || '';
 // UC-66: Trình bày ngày bảo hành theo định dạng ngày/tháng/năm.
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN') : '—';
+const pageSizeForHeight = (height) => height < 700 ? 6 : height < 900 ? 8 : 10;
 
 export default function EquipmentAssetsPage({ user, headOffice = false }) {
   const [branches, setBranches] = useState([]), [branchId, setBranchId] = useState(user?.branchId || '');
@@ -34,9 +35,19 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
   const [imageFile, setImageFile] = useState(null), [imagePreview, setImagePreview] = useState(''), [imageMime, setImageMime] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pageSize, setPageSize] = useState(() => pageSizeForHeight(window.visualViewport?.height || window.innerHeight));
   const optionsRequest = useRef(0);
   const codeHintId = useId();
   const scopedHeadOffice = useMemo(() => headOffice, [headOffice]);
+  useEffect(() => {
+    const updatePageSize = () => setPageSize(pageSizeForHeight(window.visualViewport?.height || window.innerHeight));
+    window.addEventListener('resize', updatePageSize);
+    window.visualViewport?.addEventListener('resize', updatePageSize);
+    return () => {
+      window.removeEventListener('resize', updatePageSize);
+      window.visualViewport?.removeEventListener('resize', updatePageSize);
+    };
+  }, []);
 
   // UC-66: Quản lý cấp cao chọn chi nhánh; quản lý cơ sở nhận phạm vi từ phiên đăng nhập.
   useEffect(() => {
@@ -190,7 +201,7 @@ export default function EquipmentAssetsPage({ user, headOffice = false }) {
       <small>Phạm vi: {branchName} · {rows.length} thiết bị</small>
     </section>
     {error && !drawer && <p className="ea-error" role="alert">{error}</p>}
-    <div className="ea-table-wrap"><PaginatedTable pageSize={5}><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
+    <div className="ea-table-wrap"><PaginatedTable pageSize={pageSize}><thead><tr><th>Mã / tên</th><th>Nhóm</th><th>Vị trí</th><th>Bảo hành</th><th>Trạng thái</th><th>Sử dụng</th></tr></thead>
       <tbody>{rows.map((item) => <tr key={item.id} onClick={() => openDrawer(item)} tabIndex="0" onKeyDown={(e) => e.key === 'Enter' && openDrawer(item)}>
         <td><strong>{item.code} · {item.name}</strong></td><td>{item.categoryName}</td><td>{item.roomCode ? `${item.roomCode}${item.roomName ? ` · ${item.roomName}` : ''}` : item.locationNote || '—'}</td><td>{formatDate(item.warrantyExpiry)}</td>
         <td>{statusName(item.status)}</td><td>{item.active ? 'Đang sử dụng' : 'Ngừng sử dụng'}</td>

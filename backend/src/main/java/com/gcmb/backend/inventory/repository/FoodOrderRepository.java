@@ -322,6 +322,29 @@ public class FoodOrderRepository {
                 rs.getBigDecimal("quantity")),bookingId,branchId,bookingId);
     }
 
+    public List<SaleMovement> unservedSales(UUID branchId, UUID bookingId) {
+        return jdbcTemplate.query("""
+            SELECT sm.id,sm.inventory_item_id,-sm.quantity_delta AS quantity
+            FROM gcmb.stock_movement sm
+            JOIN gcmb.order_line l ON l.id=sm.order_line_id
+            JOIN gcmb.fb_order o ON o.id=l.order_id
+            WHERE o.branch_id=? AND o.booking_id=? AND o.status IN ('PENDING','ACCEPTED')
+              AND sm.kind='SALE' AND NOT EXISTS (
+                SELECT 1 FROM gcmb.stock_movement reversal
+                WHERE reversal.kind='RETURN' AND reversal.reverses_id=sm.id)
+            ORDER BY sm.inventory_item_id,sm.id FOR UPDATE OF sm
+            """, (rs, row) -> new SaleMovement(rs.getObject("id", UUID.class),
+                rs.getObject("inventory_item_id", UUID.class), rs.getBigDecimal("quantity")),
+            branchId, bookingId);
+    }
+
+    public int cancelUnservedOrders(UUID branchId, UUID bookingId) {
+        return jdbcTemplate.update("""
+            UPDATE gcmb.fb_order SET status='CANCELLED'
+            WHERE branch_id=? AND booking_id=? AND status IN ('PENDING','ACCEPTED')
+            """, branchId, bookingId);
+    }
+
     public UUID comboGiftOrderId(UUID branchId, UUID bookingId) {
         List<UUID> ids = jdbcTemplate.query("""
             SELECT id FROM gcmb.fb_order
@@ -414,7 +437,8 @@ public class FoodOrderRepository {
         }
         if (date != null) {
             ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
-            predicate += " AND o.created_at>=? AND o.created_at<?";
+            String dateColumn = "SERVED".equals(status) ? "COALESCE(o.served_at,o.created_at)" : "o.created_at";
+            predicate += " AND " + dateColumn + ">=? AND " + dateColumn + "<?";
             args.add(Timestamp.from(date.atStartOfDay(zone).toInstant()));
             args.add(Timestamp.from(date.plusDays(1).atStartOfDay(zone).toInstant()));
         }
@@ -451,7 +475,7 @@ public class FoodOrderRepository {
             LEFT JOIN gcmb.employee e ON e.id=o.assigned_employee_id
             """ + " WHERE " + predicate + statusClause
                 + (prioritizeActive ? " ORDER BY CASE o.status WHEN 'PENDING' THEN 0 WHEN 'ACCEPTED' THEN 1 ELSE 2 END," : " ORDER BY ")
-                + "o.created_at DESC,o.id DESC LIMIT ?",
+                + ("SERVED".equals(status) ? "COALESCE(o.served_at,o.created_at)" : "o.created_at") + " DESC,o.id DESC LIMIT ?",
             (rs, row) -> new OrderHeader(rs.getObject("id", UUID.class), rs.getObject("booking_id", UUID.class),
                 rs.getString("booking_code"), rs.getString("room_code"), rs.getString("room_name"),
                 rs.getString("contact_name"), rs.getString("channel"), rs.getString("status"),

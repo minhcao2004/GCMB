@@ -115,7 +115,7 @@ function depositDispositionLabel(outcome, receivedAmount, balance, forfeitedAmou
   if (bookingStatus === 'CANCELLED' && receivedAmount > 0) return 'Chưa xác định cách xử lý cọc';
   return receivedAmount > 0 ? `Còn giữ ${formatVnd(balance)}` : null;
 }
-// BR-05; MSG55/MSG59: dùng đúng hướng dẫn đã định nghĩa cho phòng bảo trì và phòng chưa sẵn sàng.
+// BR-05, BR-155; MSG56/MSG60: hướng dẫn phòng bảo trì và phòng chưa sẵn sàng.
 function checkInRoomTitle(booking, roomReady) {
   if (booking.status === 'IN_HOUSE') return `${booking.roomCode || 'Phòng'} đang được sử dụng cho booking này`;
   if (!booking.roomCode) return 'Booking chưa được gán phòng';
@@ -470,10 +470,10 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   }, []);
   useEffect(() => {
     let active = true;
-    setSelectedRoomId('');
+    setSelectedRoomId(booking?.roomId || '');
     setAvailableRooms([]);
     setRoomError('');
-    if (!booking?.id || booking.status !== 'CONFIRMED' || booking.roomId
+    if (!booking?.id || booking.status !== 'CONFIRMED'
       || new Date(booking.plannedEnd).getTime() <= Date.now()) return () => { active = false; };
     setRoomLoading(true);
     bookingApi.checkInRooms(booking.id).then((rooms) => {
@@ -525,7 +525,7 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
   const depositDisposition = depositDispositionLabel(depositOutcome, depositReceived, depositBalance, Number(depositDetail?.forfeitedAmount ?? 0), booking?.status);
   const selectedRoom = availableRooms.find((room) => room.id === selectedRoomId);
   const checkInRoom = selectedRoom ? { ...booking, roomCode: selectedRoom.code, roomName: selectedRoom.name, roomOperatingStatus: selectedRoom.operatingStatus } : booking;
-  const roomReady = checkInRoom?.roomOperatingStatus === 'AVAILABLE' && Boolean(checkInRoom?.roomCode);
+  const roomReady = Boolean(selectedRoom && selectedRoom.operatingStatus === 'AVAILABLE');
   const plannedEndMs = booking ? new Date(booking.plannedEnd).getTime() : NaN;
   const checkInTimeValid = booking && plannedEndMs > now.getTime();
   const giftMenuRequired = (giftRequirements?.drinkQuantity || 0) + (giftRequirements?.foodQuantity || 0) > 0;
@@ -548,16 +548,18 @@ function CheckInPanel({ booking, detail, timezone, onClose, onConfirm, busy, err
           <div><span>Hạng phòng</span><strong>{booking.roomTypeName || booking.roomName || '—'}</strong></div><div><span>Phòng</span><strong>{checkInRoom.roomCode ? `${checkInRoom.roomCode} · ${checkInRoom.roomName || ''}` : 'Chọn bên dưới'}</strong></div>
         </div></section>
         {booking.status === 'CONFIRMED' && !checkInTimeValid && <p className="booking-checkin-time-note" role="alert">Booking đã kết thúc lúc {timeText(booking.plannedEnd, timezone)} ngày {dateText(booking.plannedEnd, timezone)}, không thể check-in.</p>}
-        {booking.status === 'CONFIRMED' && !booking.roomId && checkInTimeValid && <section className="booking-checkin-section">
-          <h3>Chọn phòng cụ thể *</h3>
+        {booking.status === 'CONFIRMED' && checkInTimeValid && <section className="booking-checkin-section">
+          <h3>{booking.roomId ? 'Xác nhận hoặc đổi phòng *' : 'Chọn phòng cụ thể *'}</h3>
           <label className="booking-form-field"><span>Phòng hạng {booking.roomTypeName || 'đã đặt'}</span>
             <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} disabled={roomLoading || busy} required>
               <option value="">{roomLoading ? 'Đang kiểm tra phòng trống…' : 'Chọn phòng còn trống'}</option>
+              {booking.roomId && !roomLoading && !availableRooms.some((room) => room.id === booking.roomId) && <option value={booking.roomId} disabled>{booking.roomCode || booking.roomName || 'Phòng đã giữ'} · hiện không sẵn sàng</option>}
               {availableRooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name} · tối đa {room.capacity} khách</option>)}
             </select>
           </label>
           {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
           {!roomLoading && !roomError && !availableRooms.length && <p className="booking-checkin-time-note">Chưa có phòng phù hợp để nhận khách. Vui lòng kiểm tra lịch phòng hoặc sắp xếp lại booking.</p>}
+          {booking.roomId && !roomLoading && !roomError && !availableRooms.some((room) => room.id === booking.roomId) && availableRooms.length > 0 && <p className="booking-checkin-time-note">Phòng đã giữ không còn phù hợp. Vui lòng chọn phòng khác trước khi check-in.</p>}
         </section>}
         {booking.status === 'CONFIRMED' && (giftMenuRequired || giftRequirementsError || giftLoading) && <section className="booking-checkin-section booking-checkin-gifts"><h3>Đồ ăn, đồ uống tặng theo combo</h3>
           {giftLoading && <small>Đang tải danh sách F&amp;B…</small>}
