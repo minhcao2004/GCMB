@@ -16,11 +16,13 @@ package com.gcmb.backend.auth.exception;
 
 import com.gcmb.backend.auth.service.RecoveryMailer;
 
+import java.sql.SQLException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.server.ResponseStatusException;
@@ -73,6 +75,15 @@ public class AuthErrors {
     // Phương thức không được hỗ trợ là lỗi yêu cầu, không phải sự cố máy chủ 503.
     ResponseEntity<?> unsupportedMethod() {
         return error(405, "Máy chủ chưa hỗ trợ thao tác này. Vui lòng kiểm tra phiên bản máy chủ và thử lại.");
+    }
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<?> integrity(DataIntegrityViolationException e) {
+        Throwable cause = e.getMostSpecificCause();
+        if (cause instanceof SQLException sql && "23514".equals(sql.getSQLState())
+                && cause.getMessage() != null && cause.getMessage().contains("Bill đã chốt")) {
+            return error(409, "Bill đã chốt; không được thay đổi phí hoặc order.");
+        }
+        return unexpected(e);
     }
     @ExceptionHandler(Exception.class)
     // Ghi stack trace phía server nhưng che chi tiết nội bộ khỏi client.
