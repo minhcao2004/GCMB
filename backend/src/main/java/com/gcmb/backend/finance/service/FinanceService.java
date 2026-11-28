@@ -7,11 +7,13 @@ import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService.Store
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -25,17 +27,18 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional
 public class FinanceService {
-    private static final BigDecimal HEAD_OFFICE_APPROVAL_LIMIT = new BigDecimal("3000000");
     // Chi trực tiếp mặc định không chờ Quản lý cấp cao; đổi ngưỡng này nếu nghiệp vụ yêu cầu duyệt.
     private static final BigDecimal DIRECT_EXPENSE_HEAD_OFFICE_APPROVAL_LIMIT = BigDecimal.valueOf(Long.MAX_VALUE);
     private final FinanceRepository financeRepository;
     private final EquipmentAssetFileStorageService equipmentAssetFileStorageService;
     private final FinancialPeriodService financialPeriodService;
+    private final OperatingPolicyService operatingPolicyService;
 
-    public FinanceService(FinanceRepository financeRepository, EquipmentAssetFileStorageService equipmentAssetFileStorageService, FinancialPeriodService financialPeriodService) {
+    public FinanceService(FinanceRepository financeRepository, EquipmentAssetFileStorageService equipmentAssetFileStorageService, FinancialPeriodService financialPeriodService, OperatingPolicyService operatingPolicyService) {
         this.financeRepository = financeRepository;
         this.equipmentAssetFileStorageService = equipmentAssetFileStorageService;
         this.financialPeriodService = financialPeriodService;
+        this.operatingPolicyService = operatingPolicyService;
     }
 
     public Map<String,Object> summary(Identity actor) {
@@ -169,7 +172,7 @@ public class FinanceService {
                     bad("Phiếu nhập không thuộc cơ sở hoặc chưa được xác nhận.");
                 List<String> claimStatuses=financeRepository.findActiveClaimStatuses(receiptId);
                 if(!claimStatuses.isEmpty()) {
-                    // BR-94 / MSG99: khoản đã hoàn ứng không được dùng lần nữa.
+                    // BR-94: cùng một khoản chi cá nhân không được hoàn ứng lần thứ hai.
                     if("PAID".equals(claimStatuses.get(0))) conflict("Khoản chi này đã được hoàn ứng. Vui lòng kiểm tra khoản hoàn ứng đã ghi nhận.");
                     conflict("Phiếu nhập đã có trong đề nghị đang xử lý. Vui lòng tải lại danh sách.");
                 }
@@ -196,17 +199,20 @@ public class FinanceService {
         financialPeriodService.requireOpen(expenseOn, "tạo đề nghị chi hoặc hoàn ứng");
         if(clean(description,1000).isBlank()) bad("Vui lòng nhập nội dung chi.");
         if(clean(beneficiaryName,160).isBlank()) bad("Vui lòng nhập người nhận tiền.");
-        // BR-91, BR-93: đề nghị thanh toán trên 3.000.000đ cần Quản lý cấp cao duyệt; hoàn ứng do Kế toán duyệt.
-        String status="PAYMENT".equals(kind)&&amount.compareTo(HEAD_OFFICE_APPROVAL_LIMIT)>0
+        // BR-91, BR-93: chốt ngưỡng tại lúc gửi; hoàn ứng luôn do Kế toán duyệt.
+        BigDecimal approvalLimit = "PAYMENT".equals(kind)
+            ? operatingPolicyService.paymentLimitForNewRequest()
+            : null;
+        String status="PAYMENT".equals(kind)&&amount.compareTo(approvalLimit)>0
             ?"WAITING_HEAD_OFFICE":"WAITING_ACCOUNTANT";
         UUID requestId=UUID.randomUUID();
         financeRepository.insertBranchRequest(requestId,code("EXP"),kind,branchId,categoryId,categoryType,
-            recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),actor.id(),status);
+            recognitionMode,allocationMonths,amount,expenseOn,clean(description,1000),clean(beneficiaryName,160),actor.id(),status,approvalLimit);
         // BR-92, BR-94: requester lấy từ phiên đăng nhập; liên kết phiếu nhập giữ nguyên chứng cứ khoản chi và chặn dùng lại.
         for(var linked:linkedReceipts.entrySet())
             financeRepository.linkStockReceipt(requestId,linked.getKey(),linked.getValue());
         financeRepository.insertHistory(requestId,actor.id(),"SUBMITTED",
-            status.equals("WAITING_HEAD_OFFICE")?"Gửi quản lý cấp cao duyệt do khoản chi trên 3.000.000đ":"Gửi kế toán duyệt");
+            status.equals("WAITING_HEAD_OFFICE")?"Gửi quản lý cấp cao duyệt do khoản chi trên " + NumberFormat.getIntegerInstance(Locale.forLanguageTag("vi-VN")).format(approvalLimit) + "đ":"Gửi kế toán duyệt");
         return request(requestId);
     }
 
@@ -279,18 +285,12 @@ public class FinanceService {
         requireRole(actor,"ACCOUNTANT");
         Map<String,Object> expenseRequest=request(requestId);
         financialPeriodService.requireOpen(toLocalDate(expenseRequest.get("expense_on")), "xét duyệt và thanh toán đề nghị chi hoặc hoàn ứng");
-        // BR-90, BR-91: only a request in the accountant queue may be approved and paid with its evidence in one transaction.
+        // BR-91: only a request in the accountant queue may be approved and paid in one transaction.
         if(!"WAITING_ACCOUNTANT".equals(expenseRequest.get("status"))) conflict("Đề nghị này không chờ kế toán xét duyệt.");
-        requirePaymentProof(proof);
         int approvedCount=financeRepository.approveWaitingAccountantRequest(requestId,actor.id());
         if(approvedCount==0) conflict("Đề nghị vừa được xử lý ở phiên khác. Vui lòng tải lại.");
         financeRepository.insertHistory(requestId,actor.id(),"APPROVED",clean(note,1000));
         return recordApprovedPayment(actor,requestId,reference,proof,paymentMethod,bankAccount,bankName,allocationMonths,allocationStart,true);
-    }
-
-    private static void requirePaymentProof(MultipartFile proof) {
-        if (proof == null || proof.isEmpty())
-            bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90.
     }
 
     private Map<String,Object> recordApprovedPayment(Identity actor, UUID requestId, String reference, MultipartFile proof,
@@ -299,7 +299,8 @@ public class FinanceService {
         Map<String,Object> expenseRequest=request(requestId);
         financialPeriodService.requireOpen(toLocalDate(expenseRequest.get("expense_on")), "ghi nhận thanh toán đề nghị chi hoặc hoàn ứng");
         if(!"APPROVED_TO_PAY".equals(expenseRequest.get("status"))) conflict("Chỉ có thể ghi nhận đã thanh toán khi đề nghị đã được phê duyệt và việc thanh toán đã được xác nhận."); // MSG97 / BR-207.
-        requirePaymentProof(proof);
+        if(!"BRANCH_MANAGER".equals(expenseRequest.get("origin")) && (proof==null||proof.isEmpty()))
+            bad("Vui lòng đính kèm chứng từ hoặc minh chứng cho khoản đề nghị thanh toán."); // MSG95 / BR-90: chi trực tiếp và chi định kỳ.
         if(requireCategoryInvoice&&Boolean.TRUE.equals(expenseRequest.get("invoice_required"))&&attachments(requestId).stream().noneMatch(attachment->"INVOICE".equals(attachment.get("kind"))))
             bad("Hạng mục này bắt buộc có hóa đơn. Vui lòng tải hóa đơn trước khi thanh toán.");
         // BR-90, BR-207: chỉ ghi cách chi thực tế sau khi kế toán xác nhận thanh toán.

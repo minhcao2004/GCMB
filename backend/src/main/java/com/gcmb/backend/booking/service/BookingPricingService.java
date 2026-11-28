@@ -45,6 +45,7 @@ public class BookingPricingService {
         return new BookingDtos.PriceQuote(result.pricingMode(), result.expectedAmount(), depositFor(result.expectedAmount()), result.charges());
     }
 
+    // BR-178: cọc đặt trước bằng 30% báo giá, làm tròn lên bội số 1.000 VND.
     public static BigDecimal depositFor(BigDecimal amount) {
         // HuyDV: cọc 30%, làm tròn lên bội số 1.000đ để không thu tiền lẻ.
         return amount.multiply(new BigDecimal("0.30")).divide(BigDecimal.valueOf(1000), 0, RoundingMode.CEILING)

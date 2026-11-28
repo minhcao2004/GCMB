@@ -131,12 +131,10 @@ export default function ReceptionOrdersPage() {
     try {
       const pendingOrders = await foodOrderApi.staffOrders('PENDING');
       const knownIds = knownPendingOrderIds.current;
-      let hasNewPending = false;
       if (knownIds === null) {
         knownPendingOrderIds.current = new Set(pendingOrders.map((order) => order.id));
       } else {
         const newOrders = pendingOrders.filter((order) => !knownIds.has(order.id));
-        hasNewPending = newOrders.length > 0;
         pendingOrders.forEach((order) => knownIds.add(order.id));
         if (newOrders.length > 0) {
           const roomNames = [...new Set(newOrders.map((order) => order.roomName).filter(Boolean))];

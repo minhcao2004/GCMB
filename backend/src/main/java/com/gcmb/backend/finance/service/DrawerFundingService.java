@@ -88,6 +88,7 @@ public class DrawerFundingService {
     return publicRow(drawerFundingRepository.getFunding(fundingId));
   }
 
+  // BR-238, BR-239: chỉ xin cấp khi két bằng 0, từ 500.000 đến 1.000.000 VND và không có yêu cầu chờ.
   public Map<String,Object> request(Identity actor,Request input) {
     financeAccess.lock();
     UUID branchId=financeAccess.branch(actor,true);
@@ -122,6 +123,7 @@ public class DrawerFundingService {
     return pay(actor,fundingId,input,null);
   }
 
+  // BR-84, BR-85, BR-240: kế toán cấp két bằng chuyển quỹ nội bộ, ghi giảm quỹ nguồn và tăng két cùng khoản tiền.
   public Map<String,Object> pay(Identity actor,UUID fundingId,Payment input,MultipartFile proof) {
     financeAccess.accountant(actor);
     financeAccess.lock(); // Same lock as expense and payroll payments; one shared fund cannot be overspent.
@@ -129,6 +131,7 @@ public class DrawerFundingService {
     if(current.get("recipient_name")==null) throw conflict("Yêu cầu chưa có thông tin nhận tiền. QLCS đã gửi cần bổ sung từ Thông tin tài khoản trước khi thanh toán.");
     if(!input.confirmed()) throw bad("Vui lòng xác nhận đã thực tế thanh toán tiền cấp két cho cơ sở.");
     var account=drawerFundingRepository.lockDrawerAccount(current.get("account_id"));
+    // BR-212: không cấp két cho cơ sở hoặc két đã ngừng hoạt động.
     if(!Boolean.TRUE.equals(account.get("active")) || !"CASH_DRAWER".equals(account.get("kind"))
       || !"ACTIVE".equals(account.get("status")) || !Objects.equals(account.get("branch_id"),current.get("branch_id")))
       throw conflict("Cơ sở hoặc két tiền mặt đã ngừng hoạt động; chưa thể thanh toán yêu cầu.");

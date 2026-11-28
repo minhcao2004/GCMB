@@ -134,6 +134,7 @@ public class MenuItemService {
         }
     }
 
+    // BR-201: món trong thực đơn phải có tên và giá bán.
     private MenuItemCommand validate(UUID branchId, MenuItemCommand input, UUID existingInventoryId) {
         if (input == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung thông tin món.");
         String name = required(input.name(), "Tên món", 200);

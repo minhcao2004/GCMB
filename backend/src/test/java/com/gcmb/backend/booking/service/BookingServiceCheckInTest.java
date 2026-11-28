@@ -241,6 +241,9 @@ class BookingServiceCheckInTest {
         Identity actor = new Identity(actorId, "le-tan", "RECEPTIONIST", "/le-tan", branchId, "Chi nhánh");
         when(repository.branchScope(actorId)).thenReturn(new BranchScope(branchId, "Chi nhánh", ZoneId.of("Asia/Ho_Chi_Minh")));
         when(repository.booking(bookingId, branchId)).thenReturn(booking);
+        when(repository.roomType(roomTypeId)).thenReturn(new BookingRepository.RoomTypeRow(roomTypeId, "KING", "King", "COMBO", 6));
+        when(repository.roomTypes()).thenReturn(List.of(new BookingRepository.RoomTypeRow(roomTypeId, "KING", "King", "COMBO", 6)));
+        when(repository.combos(roomTypeId, branchId)).thenReturn(List.of());
         when(repository.allocations(bookingId)).thenReturn(List.of(released), List.of(released, reserved));
         when(repository.charges(bookingId)).thenReturn(List.of(charge));
         when(repository.activeChargeTotal(bookingId)).thenReturn(new BigDecimal("230000"));
@@ -255,9 +258,9 @@ class BookingServiceCheckInTest {
             .thenReturn(allocationId);
 
         assertNull(service.detail(actor, bookingId).booking().roomId());
-        assertEquals(k02, service.editOptions(actor, bookingId, start, end, "COMBO", comboId).rooms().get(0).id());
+        assertEquals(k02, service.editOptions(actor, bookingId, start, end, "COMBO", comboId, roomTypeId).rooms().get(0).id());
         var updated = service.update(actor, bookingId, new com.gcmb.backend.booking.dto.BookingDtos.UpdateBookingRequest(
-            k02, start, end, "COMBO", comboId, null, null, null));
+            k02, roomTypeId, start, end, "COMBO", comboId, null, null, null));
 
         assertEquals(k02, updated.booking().roomId());
         verify(repository).insertCharge(eq(bookingId), eq(allocationId), any());

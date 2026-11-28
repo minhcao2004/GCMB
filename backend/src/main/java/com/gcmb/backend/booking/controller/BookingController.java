@@ -143,8 +143,9 @@ public class BookingController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedStart,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime plannedEnd,
             @RequestParam(required = false) String pricingMode,
-            @RequestParam(required = false) UUID comboId) {
-        return bookingService.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant(), pricingMode, comboId);
+            @RequestParam(required = false) UUID comboId,
+            @RequestParam(required = false) UUID roomTypeId) {
+        return bookingService.editOptions(identity, bookingId, plannedStart.toInstant(), plannedEnd.toInstant(), pricingMode, comboId, roomTypeId);
     }
 
     @GetMapping("/bookings/{bookingId}/stay-options")

@@ -28,7 +28,7 @@ const info = (name, value) => (
   </div>
 );
 
-export default function StaffPage({ user, branchScope, readOnly = false, onAccounts, onBranches }) {
+export default function StaffPage({ user, branchScope, readOnly = false, onAccounts, onBranches, onPolicies }) {
   const [filters, setFilters] = useState(initialFilters);
   const [data, setData] = useState({ items: [], total: 0 });
   const [branches, setBranches] = useState([]);
@@ -323,6 +323,7 @@ export default function StaffPage({ user, branchScope, readOnly = false, onAccou
           <header className="staff-heading">
             <div>
               <h1 id="staff-page-title">{branchScope ? 'Nhân sự cơ sở' : 'Nhân sự toàn chuỗi'}</h1>
+              {onPolicies && <button type="button" className="staff-link" onClick={onPolicies}>Xem chính sách phụ cấp ca đêm</button>}
             </div>
             <button
               type="button"

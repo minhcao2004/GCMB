@@ -77,7 +77,7 @@ public class CheckoutService {
         return result;
     }
 
-    // HuyDV: lễ tân xác nhận cọc chuyển khoản ngoài hệ thống, giữ mức cọc 30%.
+    // BR-137, BR-178: chỉ xác nhận cọc dương đúng mức 30% đã báo giá.
     @Transactional
     public Map<String, Object> confirmDeposit(Identity actor, UUID bookingId, String reference, BigDecimal reviewedAmount) {
         UUID branchId = branch(actor, "thu tiền cọc");
@@ -104,6 +104,7 @@ public class CheckoutService {
         checkoutRepository.cancelOpenDepositRequests(bookingId);
         bookingRepository.receiveDeposit(branchId, bookingId, actor.id(), amount, "MANUAL_TRANSFER", content);
         UUID paymentId = checkoutRepository.findLatestDepositPaymentId(bookingId);
+        // BR-237: ghi khoản cọc chuyển khoản vào tài khoản nguồn riêng, không cộng vào két tiền mặt.
         UUID transactionId = UUID.randomUUID();
         checkoutRepository.insertFinancialTransaction(transactionId, period.get("id"), businessDate, paymentId, content,
             actor.id(), "MANUAL-DEPOSIT-" + paymentId);

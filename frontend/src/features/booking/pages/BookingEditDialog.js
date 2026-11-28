@@ -35,6 +35,7 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
   const [detail, setDetail] = useState(null);
   const [form, setForm] = useState(null);
   const [rooms, setRooms] = useState([]);
+  const [roomTypes, setRoomTypes] = useState([]);
   const [combos, setCombos] = useState([]);
   const [quote, setQuote] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(true);
@@ -64,7 +65,7 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
         startTime: start.time,
         endDate: end.date,
         endTime: end.time,
-        roomId: booking.roomId || '',
+        roomTypeId: booking.roomTypeId,
         pricingMode: activeCombo ? 'COMBO' : 'HOURLY',
         comboId: activeCombo?.comboId || '',
         durationHours: String((new Date(booking.plannedEnd) - new Date(booking.plannedStart)) / 3600000),
@@ -109,9 +110,11 @@ export default function BookingEditDialog({ bookingId, timezone, onClose, onUpda
     setRoomError('');
     const timer = window.setTimeout(() => {
       bookingApi.editOptions(bookingId, { plannedStart, plannedEnd, pricingMode: form.pricingMode,
+        roomTypeId: form.roomTypeId,
         ...(form.pricingMode === 'COMBO' && form.comboId ? { comboId: form.comboId } : {}) }).then((value) => {
         if (active) {
           setRooms(value.rooms || []);
+          setRoomTypes(value.roomTypes || []);
           setCombos(value.combos || []);
           setQuote(value.quote || null);
         }
@@ -159,16 +162,9 @@ if (!periodValid) return setFormError(
 );
     if (form.pricingMode === 'COMBO' && !form.comboId) return setFormError('Vui lòng chọn combo.');
     if (!quote) return setFormError('Chưa có báo giá cho thời gian đã chọn.');
-    if (booking.roomId && !form.roomId) return setFormError('Vui lòng chọn phòng.');
-    const selectedRoom = rooms.find((room) => room.id === form.roomId);
-    if (form.roomId && !selectedRoom) return setFormError('Phòng đã chọn không còn trống trong khung giờ này.');
-    if (selectedRoom && selectedRoom.capacity < Number(booking.guestCount)) {
-      return setFormError(`Phòng này nhận tối đa ${selectedRoom.capacity} khách, booking đang có ${booking.guestCount} khách.`);
-    }
-
     setSubmitting(true);
     const result = await onUpdate(bookingId, {
-      roomId: form.roomId || null,
+      roomTypeId: form.roomTypeId,
       plannedStart,
       plannedEnd,
       pricingMode: form.pricingMode,
@@ -182,8 +178,7 @@ if (!periodValid) return setFormError(
   };
 
   const canEdit = booking?.status === 'CONFIRMED' && new Date(booking.plannedStart) > new Date();
-  // BR-04, BR-07: phòng được chọn phải còn trống cho toàn bộ thời gian booking.
-  const hasRoomOption = rooms.some((room) => room.id === form?.roomId);
+  // BR-03, BR-04, BR-07: hạng đã chọn phải còn đủ phòng cho toàn bộ thời gian booking.
   const displayedCombos = currentCombo && !combos.some((combo) => combo.id === currentCombo.comboId)
     ? [{ id: currentCombo.comboId, name: currentCombo.description, durationMinutes: currentCombo.pricingSnapshot?.durationMinutes, price: currentCombo.unitPrice }, ...combos]
     : combos;
@@ -227,6 +222,22 @@ if (!periodValid) return setFormError(
     setFormError('');
   };
 
+  const changeRoomType = (event) => {
+    const roomTypeId = event.target.value;
+    const selectedType = roomTypes.find((type) => type.id === roomTypeId);
+    const firstCombo = selectedType?.combos?.[0];
+    setForm((current) => {
+      const start = instantInZone(current.startDate, current.startTime, timezone);
+      const pricingMode = current.pricingMode === 'COMBO' && !firstCombo ? 'HOURLY' : current.pricingMode;
+      const end = pricingMode === 'COMBO' && firstCombo?.durationMinutes && start
+        ? partsInZone(new Date(new Date(start).getTime() + Number(firstCombo.durationMinutes) * 60000), timezone) : null;
+      return { ...current, roomTypeId, pricingMode,
+        comboId: pricingMode === 'COMBO' ? firstCombo.id : '',
+        ...(end ? { endDate: end.date, endTime: end.time } : {}) };
+    });
+    setFormError('');
+  };
+
   return <div className="booking-cancel-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="booking-cancel-dialog booking-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-edit-title">
       <div className="booking-cancel-title"><div><h2 id="booking-edit-title">Sửa booking</h2><p>{booking?.code || 'Đang tải booking'}{booking?.contactName ? ` · ${booking.contactName}` : ''}</p></div><button type="button" className="booking-panel-close" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button></div>
@@ -258,22 +269,18 @@ if (!periodValid) return setFormError(
           <small>Thời gian vượt gói được tính phụ phí.</small>
         </label>}
          <div className="booking-section-title-row booking-edit-section-title"><h3>Phòng</h3><span>{loadingRooms ? 'Đang kiểm tra phòng…' : `${rooms.length} phòng phù hợp`}</span></div>
-         <label className="booking-form-field" htmlFor="booking-edit-room">
-          <span>Phòng sử dụng</span>
-          <select id="booking-edit-room" name="roomId" value={form.roomId} onChange={change}>
-            {!booking.roomId && <option value="">Chưa gán phòng · chọn khi check-in</option>}
-            {!hasRoomOption && form.roomId && <option value={form.roomId}>{booking.roomCode || booking.roomName || 'Phòng hiện tại'} · hiện không có trong danh sách trống</option>}
-            {rooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name} · tối đa {room.capacity} khách</option>)}
+         <label className="booking-form-field" htmlFor="booking-edit-room-type">
+          <span>Hạng phòng</span>
+          <select id="booking-edit-room-type" name="roomTypeId" value={form.roomTypeId} onChange={changeRoomType}>
+            {roomTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
           </select>
-          <small className="booking-edit-room-help">{booking.roomId
-            ? `Chỉ hiện phòng hạng ${booking.roomTypeName} còn trống trong toàn bộ thời gian đã chọn.`
-            : `Chỉ hiện phòng hạng ${booking.roomTypeName} còn trống trong toàn bộ thời gian đã chọn. Có thể chọn phòng lúc check-in.`}</small>
+          <small className="booking-edit-room-help">Không chọn số phòng trong màn này; đổi hạng sẽ bỏ phòng đã giữ để chọn lại lúc check-in. {rooms.length} phòng hạng này còn phù hợp với thời gian đã chọn.</small>
          </label>
         {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
         <label className="booking-form-field booking-note-field"><span>Ghi chú booking</span><textarea name="note" rows="3" maxLength="2000" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></label>
         <div className="booking-cancel-deposit-summary booking-edit-summary"><span>Giá hiện tại: <strong>{formatVnd(booking.expectedAmount)}</strong></span><span>Giá sau sửa: <strong>{quote ? formatVnd(quote.expectedAmount) : 'Đang tính…'}</strong></span><span>Tiền cọc đã ghi: <strong>{formatVnd(detail?.deposit?.balance ?? booking.depositBalance)}</strong></span></div>
         {formError && <p className="booking-inline-error" role="alert">{formError}</p>}
-        <div className="booking-cancel-buttons"><button className="booking-button booking-button-primary" type="submit" disabled={submitting || loadingRooms || !periodValid || !quote || (form.roomId && !hasRoomOption) || Boolean(roomError)}>{submitting ? 'Đang lưu…' : 'Lưu thay đổi'}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={submitting}>Quay lại</button></div>
+        <div className="booking-cancel-buttons"><button className="booking-button booking-button-primary" type="submit" disabled={submitting || loadingRooms || !periodValid || !quote || Boolean(roomError)}>{submitting ? 'Đang lưu…' : 'Lưu thay đổi'}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={submitting}>Quay lại</button></div>
       </form>}
       {!loadingDetail && (pageError || !canEdit) && <div className="booking-cancel-buttons"><button className="booking-button booking-button-secondary" type="button" onClick={onClose}>Quay lại</button></div>}
     </section>

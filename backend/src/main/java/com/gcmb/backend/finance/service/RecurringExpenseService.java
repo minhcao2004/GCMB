@@ -97,6 +97,7 @@ public class RecurringExpenseService {
         return template(savedId);
     }
 
+    // BR-246: chấm dứt mẫu để không sinh kỳ mới, giữ lại các kỳ đã phát sinh.
     public Map<String,Object> terminate(Identity actor, UUID id) {
         financeAccess.accountant(actor);
         int updated=recurringExpenseRepository.terminateTemplate(id,actor.id());
@@ -109,6 +110,7 @@ public class RecurringExpenseService {
         return template(id);
     }
 
+    // BR-245: bỏ qua một kỳ đang chờ mà không ảnh hưởng lịch các kỳ sau.
     public Map<String,Object> skipPeriod(Identity actor, UUID id, String reason) {
         financeAccess.accountant(actor);
         String note=required(reason,1000,"Vui lòng nhập lý do bỏ qua kỳ chi.");
@@ -118,6 +120,7 @@ public class RecurringExpenseService {
         return period(id);
     }
 
+    // BR-244: khóa kỳ chi và không tạo thanh toán thứ hai cho kỳ đã PAID.
     public Map<String,Object> payPeriod(Identity actor, UUID id, BigDecimal amount, String reason,
             MultipartFile proof, MultipartFile invoice) {
         financeAccess.accountant(actor);

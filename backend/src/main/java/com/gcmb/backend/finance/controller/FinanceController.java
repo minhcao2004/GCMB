@@ -88,7 +88,7 @@ public class FinanceController {
     }
     @PostMapping(value="/accounting/finance/requests/{id}/pay",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> pay(@AuthenticationPrincipal Identity who,@PathVariable UUID id,
-            @RequestParam(required=false) String reference,@RequestPart("proof") MultipartFile proof,
+            @RequestParam(required=false) String reference,@RequestPart(value="proof",required=false) MultipartFile proof,
             @RequestParam String paymentMethod,@RequestParam(required=false) String bankAccount,
             @RequestParam(required=false) String bankName,
             @RequestParam(required=false) Integer allocationMonths,

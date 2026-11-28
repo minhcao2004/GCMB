@@ -172,6 +172,7 @@ public class MonthlyPerformanceService {
     return rows;
   }
 
+  // BR-109: lợi nhuận vận hành toàn chuỗi là tổng lợi nhuận từng cơ sở trong kỳ.
   private static Map<String, Object> totalsForOverview(List<Map<String, Object>> rows) {
     Map<String, BigDecimal> sums = new LinkedHashMap<>();
     for (String key : List.of("billRevenue","forfeitedDeposits","revenue","operatingExpense","salary","expenses","investment","profit")) sums.put(key, BigDecimal.ZERO);

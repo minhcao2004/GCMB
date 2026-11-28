@@ -11,6 +11,7 @@ public final class ExpenseAllocationCalculator {
 
     private ExpenseAllocationCalculator() {}
 
+    // BR-243: chia phần dư theo từng tháng để tổng phân bổ đúng bằng số tiền gốc.
     public static List<Line> calculate(BigDecimal total, int months) {
         if (months < MIN_MONTHS || months > MAX_MONTHS) {
             throw new IllegalArgumentException("Số tháng phân bổ phải từ 2 đến 60.");

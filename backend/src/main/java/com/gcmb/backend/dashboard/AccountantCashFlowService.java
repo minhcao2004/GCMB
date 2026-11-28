@@ -79,6 +79,7 @@ public class AccountantCashFlowService {
         return (BigDecimal) row.get("amount");
     }
 
+    // BR-106: dòng tiền ròng bằng thực thu trừ thực chi trong kỳ báo cáo.
     private static CashTotals totals(List<Map<String, Object>> rows) {
         BigDecimal income = BigDecimal.ZERO;
         BigDecimal expense = BigDecimal.ZERO;

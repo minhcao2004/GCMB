@@ -117,6 +117,7 @@ public class RoomCatalogService {
         roomCatalogRepository.lockPriceRuleChanges();
         roomType(command.roomTypeId());
         String code = command.code().trim().toUpperCase();
+        // BR-175: mã quy tắc giá đang hoạt động không được trùng.
         if (roomCatalogRepository.activePriceRuleCodeExists(code)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã quy tắc giá “" + code + "” đã tồn tại trong hệ thống. Vui lòng nhập mã khác.");
         }
@@ -157,6 +158,7 @@ public class RoomCatalogService {
         return priceRule(id);
     }
 
+    // BR-228: chặn cấu hình giá cùng hạng phòng giao nhau ở ngày, thứ và khung giờ.
     private void requireNoPriceOverlap(UUID roomTypeId, UUID replacedId, LocalDate validFrom, LocalDate validTo,
             int minuteFrom, int minuteTo, List<Integer> weekdays) {
         String conflict = roomCatalogRepository.overlappingPriceRuleName(
@@ -180,9 +182,11 @@ public class RoomCatalogService {
         if (command.name() == null || command.name().isBlank()) throw bad("Vui lòng bổ sung Tên quy tắc giá.");
         if (command.name().trim().length() > 200) throw bad("Tên quy tắc giá chỉ được chứa tối đa 200 ký tự.");
         if (command.roomTypeId() == null) throw bad("Vui lòng bổ sung Hạng áp dụng.");
+        // BR-147: quy tắc theo giờ phải có ít nhất một thứ áp dụng.
         if (command.weekdays() == null || command.weekdays().isEmpty()) throw bad("Vui lòng chọn ít nhất một ngày trong tuần áp dụng mức giá này.");
         if (command.weekdays().stream().anyMatch(day -> day == null || day < 1 || day > 7)) throw bad("Ngày áp dụng không hợp lệ.");
         if (command.validFrom() == null) throw bad("Vui lòng bổ sung Ngày bắt đầu.");
+        // BR-146: ngày kết thúc hiệu lực, nếu có, không trước ngày bắt đầu.
         if (command.validTo() != null && command.validTo().isBefore(command.validFrom())) throw bad("Ngày kết thúc hiệu lực phải bằng hoặc sau ngày bắt đầu hiệu lực.");
         if (command.minuteFrom() == null) throw bad("Vui lòng bổ sung Bắt đầu.");
         if (command.minuteTo() == null) throw bad("Vui lòng bổ sung Kết thúc.");

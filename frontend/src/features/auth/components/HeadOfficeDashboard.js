@@ -27,12 +27,13 @@ import StaffPage from '../../workforce/pages/StaffPage';
 
 import EquipmentManagementPage from '../../inventory/pages/EquipmentManagementPage';
 import FinancePage from '../../finance/pages/FinancePage';
+import OperatingPolicyPage from '../../finance/pages/OperatingPolicyPage';
 
 
-const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống'];
+const tabs = ['Tổng quan', 'Cơ sở', 'Tài khoản & phân quyền', 'Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi', 'Nhân sự', 'Phòng & bảng giá', 'Thiết bị', 'Nhật ký hệ thống', 'Chính sách vận hành'];
 const navigationGroups = [
   { label: 'Tổng quan', items: ['Tổng quan'] },
-  { label: 'Quản trị hệ thống', items: ['Cơ sở', 'Tài khoản & phân quyền', 'Nhật ký hệ thống'] },
+  { label: 'Quản trị hệ thống', items: ['Cơ sở', 'Tài khoản & phân quyền', 'Chính sách vận hành', 'Nhật ký hệ thống'] },
   { label: 'Vận hành', items: ['Nhân sự', 'Phòng & bảng giá', 'Thiết bị'] },
   { label: 'Kiểm soát & báo cáo', items: ['Báo cáo kinh doanh', 'Báo cáo chi phí', 'Phê duyệt chi'] },
 ];
@@ -49,6 +50,7 @@ const icons = [
   'M3 21V3h12v18 M7 7h4 M7 11h4 M18 8h3v13 M2 21h20',
   'M3 4h18v13H3z M8 21h8 M12 17v4',
   'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5',
+  'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
 ];
 
 // Trang tổng quan cho vai trò quản lý cấp cao.
@@ -141,13 +143,16 @@ export default function HeadOfficeDashboard({ user, busy, onLogout, onProfile })
             selectTab('Tài khoản & phân quyền');
           }}
           onBranches={() => selectTab('Cơ sở')}
+          onPolicies={() => selectTab('Chính sách vận hành')}
         />
       ) : activeTab === 'Nhật ký hệ thống' ? (
         <AuditLogPage onAccounts={() => selectTab('Tài khoản & phân quyền')} />
       ) : activeTab === 'Thiết bị' ? (
         <section className="manager-content manager-content-catalog"><EquipmentManagementPage user={user} headOffice initialSection={new URLSearchParams(location.search).get('equipmentTab')} initialIncidentId={new URLSearchParams(location.search).get('incidentId')} initialBranchId={new URLSearchParams(location.search).get('equipmentBranchId')} /></section>
       ) : activeTab === 'Phê duyệt chi' ? (
-        <section className="manager-content manager-content-catalog"><FinancePage user={user} /></section>
+        <section className="manager-content manager-content-catalog"><FinancePage user={user} onPolicies={() => selectTab('Chính sách vận hành')} /></section>
+      ) : activeTab === 'Chính sách vận hành' ? (
+        <OperatingPolicyPage />
       ) : <section className="manager-content" aria-labelledby="manager-greeting"><h1 id="manager-greeting">Xin chào quản lý cấp cao.</h1></section>}
     <BusinessAssistant key={user.id} user={user} />
   </AppShell>;

@@ -200,13 +200,13 @@
 .executive-kpis { gap:12px; }
 .executive-metric { display:grid; grid-template-columns:minmax(0,1fr); align-content:start; gap:8px; min-height:120px; padding:16px; border:1px solid var(--ed-line); border-radius:13px; background:#fff; box-shadow:0 3px 12px rgba(24,46,69,.035); }
 .executive-metric + .executive-metric { border-left:1px solid var(--ed-line); }
-.executive-metric-heading { display:flex; align-items:center; gap:8px; }
+.executive-metric-heading { grid-column:1 / -1; display:flex; align-items:center; gap:8px; }
 .executive-metric-icon { display:grid; flex:none; width:30px; height:30px; place-items:center; border-radius:9px; background:#edf5f4; color:#176b68; }
 .executive-metric-icon svg { width:17px; height:17px; }
 .executive-metric--occupancy .executive-metric-icon { color:#7259a1; background:#f3effa; }
 .executive-metric--cost .executive-metric-icon { color:#a16620; background:#fff5e8; }
 .executive-metric--profit .executive-metric-icon { color:#187554; background:#eaf6f1; }
-.executive-metric-copy { display:grid; min-width:0; gap:4px; }
+.executive-metric-copy { grid-column:1 / -1; display:grid; min-width:0; gap:4px; }
 .executive-metric-heading h2 { margin:0; color:#607184; font-size:12px; }
 .executive-metric-copy>strong { overflow-wrap:anywhere; color:#172b3d; font-size:clamp(18px,1.65vw,24px); line-height:1.2; font-variant-numeric:tabular-nums; }
 .executive-metric-copy p { margin:1px 0 0; color:#68798a; font-size:10px; line-height:1.4; }

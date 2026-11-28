@@ -7,6 +7,7 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
+import com.gcmb.backend.finance.service.OperatingPolicyService;
 import com.gcmb.backend.inventory.service.EquipmentAssetFileStorageService;
 import com.gcmb.backend.workforce.repository.PayrollRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,7 @@ public class PayrollService {
   private final FinanceAccess financeAccess;
   private final ObjectMapper objectMapper;
   private final FinancialPeriodService financialPeriodService;
+  private final OperatingPolicyService operatingPolicyService;
   private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
   public record BranchSettlement(UUID employeeId, BigDecimal bonus, BigDecimal penalty,
@@ -157,6 +159,7 @@ public class PayrollService {
                                             boolean accrued) {
     BigDecimal wageMinutes = BigDecimal.ZERO;
     long minutes = 0;
+    Map<LocalDate, BigDecimal> nightPremiums = new HashMap<>();
     for (var row : rows) {
       if ("ABSENT".equals(row.get("status"))) continue;
       Instant start = ((Timestamp) row.get("starts_at")).toInstant();
@@ -175,10 +178,13 @@ public class PayrollService {
       boolean night = start.atZone(zone).toLocalTime().equals(LocalTime.MIDNIGHT)
           && end.atZone(zone).toLocalTime().equals(LocalTime.of(7, 0));
       long duration = Duration.between(start, end).toMinutes();
-      BigDecimal hourly = rate.get(0).add(night ? BigDecimal.valueOf(3000) : BigDecimal.ZERO);
+      // BR-67: chọn phụ cấp theo ngày làm việc và lưu mức đã dùng trong snapshot chốt lương.
+      BigDecimal premium = night ? nightPremiums.computeIfAbsent(day,
+          date -> operatingPolicyService.amountAt(OperatingPolicyService.NIGHT_SHIFT_PREMIUM, date)) : BigDecimal.ZERO;
+      BigDecimal hourly = rate.get(0).add(premium);
       // BR-67: lưu cả đơn giá/ngày và phụ cấp đã áp dụng trong snapshot chốt lương.
       row.put("applied_hourly_rate", rate.get(0));
-      row.put("night_hourly_premium", night ? 3000 : 0);
+      row.put("night_hourly_premium", premium);
       row.put("paid_minutes", duration);
       wageMinutes = wageMinutes.add(hourly.multiply(BigDecimal.valueOf(duration)));
       minutes += duration;
@@ -186,6 +192,7 @@ public class PayrollService {
     return Map.of("wage", PayrollCalculator.rounded(wageMinutes), "minutes", minutes);
   }
 
+  // BR-66: quản lý cơ sở lập và xác nhận phần lương của nhân viên tại cơ sở mình.
   public Map<String, Object> branchSettlement(Identity actor, String value, BranchSettlement input, boolean send) {
     if (send) financeAccess.lock();
     UUID branch = financeAccess.branch(actor, send);
@@ -205,6 +212,7 @@ public class PayrollService {
     String reason = text(input.reason(), "Lý do điều chỉnh", bonus.signum() > 0 || penalty.signum() > 0);
     var period = period(monthStart, send);
     boolean singleBranch = branches.size() == 1;
+    // BR-236: vượt 100 giờ công được thưởng 100.000 VND trong tháng.
     BigDecimal reward = singleBranch && minutes > 6000 ? BigDecimal.valueOf(100000) : BigDecimal.ZERO;
     BigDecimal advance = !singleBranch || period == null ? BigDecimal.ZERO
         : advances(input.employeeId(), (UUID) period.get("id"));
@@ -254,6 +262,7 @@ public class PayrollService {
       penalty = penalty.add((BigDecimal) part.get("penalty"));
       minutes += ((Number) part.get("minutes")).longValue();
     }
+    // BR-236: thưởng mốc trên 100 giờ đúng một lần khi gom lương toàn tháng.
     BigDecimal reward = minutes > 6000 ? BigDecimal.valueOf(100000) : BigDecimal.ZERO;
     gross = gross.add(reward);
     BigDecimal deduction = penalty.add(advances(employee, (UUID) period.get("id")));
@@ -276,11 +285,12 @@ public class PayrollService {
   }
 
   public PayrollService(PayrollRepository payrollRepository, FinanceAccess financeAccess, ObjectMapper objectMapper,
-                        FinancialPeriodService financialPeriodService) {
+                         FinancialPeriodService financialPeriodService, OperatingPolicyService operatingPolicyService) {
     this.payrollRepository = payrollRepository;
     this.financeAccess = financeAccess;
     this.objectMapper = objectMapper;
     this.financialPeriodService = financialPeriodService;
+    this.operatingPolicyService = operatingPolicyService;
   }
 
   public record Setting(
@@ -342,6 +352,7 @@ public class PayrollService {
 
   private record PayrollOutflow(UUID accountId, Object periodId) {}
 
+  // BR-65: mọi bảng lương dùng kỳ tháng YYYY-MM.
   private LocalDate month(String value) {
     try {
       var yearMonth = YearMonth.parse(value);
@@ -604,6 +615,7 @@ public class PayrollService {
     return pay(actor, value, input, Map.of());
   }
 
+  // BR-66: chỉ kế toán ghi nhận thanh toán lương sau khi phần lương đã được xác nhận.
   public Map<String, Object> pay(Identity actor, String value, Payments input, Map<String, MultipartFile> proofs) {
     financeAccess.accountant(actor);
     financeAccess.lock();
@@ -658,7 +670,7 @@ public class PayrollService {
         );
         continue;
       }
-      // Unconfirmed attempts stay FAILED in storage so another confirmed attempt can be recorded.
+      // BR-80: lần chi chưa xác nhận hoặc thất bại giữ FAILED, nhân viên chưa được đánh dấu đã trả.
       String status = "PAID".equals(payment.result()) ? "PAID" : "FAILED";
       UUID id = UUID.randomUUID();
       payrollRepository.insertSalaryPayment(id, entry.get("id"), amount, status,
@@ -735,6 +747,7 @@ public class PayrollService {
     }
 
     var entries = batchEntries(payrollPeriod, selection, employeeIds);
+    // BR-81: tổng cần trả của đợt bằng tổng lương cuối cùng của nhân viên được chọn.
     BigDecimal total = entries.stream().map(entry -> (BigDecimal) entry.get("net_amount"))
       .reduce(BigDecimal.ZERO, BigDecimal::add);
     LocalDate paymentDate = command.paymentDate();

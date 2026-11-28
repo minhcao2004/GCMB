@@ -132,7 +132,7 @@ public class AttendanceService {
         Instant in = null;
         Instant out = null;
         int minutes = 0;
-        // HuyDV / UC-87: tích Đi làm nhận đủ công theo ca, muộn/về sớm ghi chú để xét phạt.
+        // BR-194, BR-204: vắng mặt giữ 0 phút; đi làm ghi đủ giờ của ca.
         if ("WORKED".equals(input.status())) {
             in = scheduledStart;
             out = scheduledEnd;
@@ -242,7 +242,7 @@ public class AttendanceService {
         var rows = (List<Map<String, Object>>) current.get("rows");
         LocalDate today = LocalDate.now(ZoneId.of((String) branch.get("timezone")));
         for (UUID employee : ids) {
-            // HuyDV / UC-89, thay đổi BR-62/63: hủy ca phía sau trong tháng trước khi khóa công.
+            // BR-235: khi chốt công sớm, hủy ca tương lai chưa có chấm công của nhân viên.
             for (var row : rows) {
                 if (employee.equals(row.get("employeeId")) &&
                     LocalDate.parse(row.get("workDate").toString()).isAfter(today) &&

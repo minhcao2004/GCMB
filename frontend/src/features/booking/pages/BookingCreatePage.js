@@ -3,7 +3,8 @@ import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
 import { clearBookingDraft, readBookingDraft, saveBookingDraft } from '../services/bookingDraft';
 import TimeInput from '../components/TimeInput';
-import { formatDate, formatMoneyInput, formatVnd, hourlyRentalMinutes, isValidTimeInput } from '../data/bookingData';
+import { formatDate, formatMoneyInput, formatVnd, isValidTimeInput } from '../data/bookingData';
+import { phoneFormatError } from '../../../shared/utils/formatters';
 
 // Định dạng ngày nhập của biểu mẫu theo giờ máy người dùng.
 function localDate(value = new Date()) {

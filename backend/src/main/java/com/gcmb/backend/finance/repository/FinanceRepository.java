@@ -200,13 +200,13 @@ public class FinanceRepository {
 
     public void insertBranchRequest(UUID requestId, String code, String kind, UUID branchId, UUID categoryId, String categoryType,
                                     String recognitionMode, Integer allocationMonths, BigDecimal amount, LocalDate expenseOn,
-                                    String description, String beneficiaryName, UUID requestedBy, String status) {
+                                    String description, String beneficiaryName, UUID requestedBy, String status, BigDecimal approvalLimit) {
         jdbcTemplate.update("""
             INSERT INTO gcmb.finance_expense_request(id,code,kind,branch_id,category_id,category_type,recognition_mode,allocation_months,
-              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status)
-            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?)
+              origin,amount,expense_on,description,beneficiary_name,bank_account,bank_name,requested_by,status,approval_threshold_amount)
+            VALUES(?,?,?,?,?,?,?,?::integer,'BRANCH_MANAGER',?,?,?,?,?,?,?,?,?)
             """, requestId, code, kind, branchId, categoryId, categoryType, recognitionMode, allocationMonths, amount, expenseOn,
-            description, beneficiaryName, "", "", requestedBy, status);
+            description, beneficiaryName, "", "", requestedBy, status, approvalLimit);
     }
 
     public void insertDirectExpense(UUID requestId, String code, UUID branchId, UUID categoryId, Object costType, String recognitionMode,

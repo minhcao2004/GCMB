@@ -4,6 +4,7 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.auth.exception.AuthFailure;
 import com.gcmb.backend.finance.service.FinanceAccess;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
+import com.gcmb.backend.finance.service.OperatingPolicyService;
 import com.gcmb.backend.workforce.repository.PayrollRepository;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -34,7 +35,7 @@ class PayrollServiceFundTest {
     private final PayrollRepository repository = mock(PayrollRepository.class);
     private final FinanceAccess access = mock(FinanceAccess.class);
     private final PayrollService service = new PayrollService(repository, access, new ObjectMapper(),
-        mock(FinancialPeriodService.class));
+        mock(FinancialPeriodService.class), mock(OperatingPolicyService.class));
     private final Identity actor = new Identity(UUID.randomUUID(), "accountant", "ACCOUNTANT", "/ke-toan", null, null);
     private final UUID employeeId = UUID.randomUUID();
     private final UUID fundId = UUID.randomUUID();

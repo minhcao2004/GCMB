@@ -189,6 +189,7 @@ public class FinancialController {
                                                         @RequestParam(required = false) String to,
                                                         @RequestParam UUID branchId,
                                                         @RequestParam UUID categoryId,
+                                                        @RequestParam(defaultValue = "") String costType,
                                                         @RequestParam(defaultValue = "ALLOCATION") String basis,
                                                         @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
@@ -199,7 +200,7 @@ public class FinancialController {
         if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         List<Map<String, Object>> rows = financialReportRepository.expenseDetailRows(
-            selectedBasis, start, endExclusive, branchId, categoryId, "", search);
+            selectedBasis, start, endExclusive, branchId, categoryId, costType, search);
         java.util.Set<UUID> requestIds = new java.util.LinkedHashSet<>();
         for (Map<String, Object> row : rows) {
             if ("EXPENSE_REQUEST".equals(row.get("sourceType"))) requestIds.add((UUID) row.get("expenseId"));
@@ -215,7 +216,9 @@ public class FinancialController {
         for (Map<String, Object> row : rows) {
             row.put("attachments", attachmentsByRequest.getOrDefault((UUID) row.get("expenseId"), List.of()));
         }
-        return Map.of("month", month, "basis", selectedBasis, "rows", rows);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("month", month); result.put("basis", selectedBasis); result.put("rows", rows);
+        return result;
     }
 
     @GetMapping("/dashboard-details")

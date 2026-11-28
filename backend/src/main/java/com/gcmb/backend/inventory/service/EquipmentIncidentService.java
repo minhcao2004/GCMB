@@ -128,6 +128,7 @@ public class EquipmentIncidentService {
             if(transferFile!=null) equipmentAssetFileStorageService.deleteQuietly(transferFile.objectKey());
             throw e;
         }
+        // BR-165: ghi tình trạng thiết bị sau sửa chữa, không tự chuyển phòng về trạng thái sẵn sàng.
         equipmentIncidentRepository.updateAssetCondition(branchId,id,command.assetCondition());
         equipmentIncidentRepository.logProgress(actor.id(),id,"VERIFIED",command.outcome().trim(),command.completedOn());
     }
@@ -160,6 +161,7 @@ public class EquipmentIncidentService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Chưa thể xác nhận nhận: kiểm tra bàn giao và phòng đích");
         }
     }
+    // BR-200: quản lý cơ sở chỉ xác nhận bàn giao hoặc nhận thiết bị của cơ sở được gán.
     private UUID transferScope(Identity actor, UUID id, boolean source, String action) {
         String message="Bạn không có quyền " + action + " đối với phiếu điều chuyển.";
         if(actor==null || !"BRANCH_MANAGER".equals(actor.role()) || actor.branchId()==null)

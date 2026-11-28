@@ -378,7 +378,7 @@ public class ShiftService {
             input.version() == null ||
             input.version().longValue() != ((Number) row.get("version")).longValue()
         ) throw stale();
-        // UC-86 / BR-58, BR-111: theo yêu cầu người dùng, A -> B trong cùng ca, không chuyển ngày/giờ.
+        // BR-249 (UC-86): người làm thay phải khác người được thay.
         if (input.employeeId().equals(before.get("employee_id"))) throw bad(
             "employeeId",
             "Nhân viên làm thay phải khác người hiện tại."
@@ -387,9 +387,12 @@ public class ShiftService {
         Instant start = time(row, "starts_at"),
             end = time(row, "ends_at"),
             now = Instant.now();
+        // BR-255 (UC-86): không thay nhân viên sau khi ca đã kết thúc.
         if (!end.isAfter(now)) throw bad("form", "Ca đã kết thúc, không thể thay nhân viên.");
+        // BR-256 (UC-86): chặn thay ca đã có chấm công của người ban đầu.
         if (shiftRepository.closedPeriod(actor.branchId(), date) || shiftRepository.attended(assignment)) throw locked();
         if ("CANCELLED".equals(row.get("status"))) throw bad("form", "Ca đã bị hủy.");
+        // BR-250 (UC-86): người làm thay phải là lễ tân đang làm việc tại cơ sở.
         if (
             !shiftRepository.belongs(
                 input.employeeId(),

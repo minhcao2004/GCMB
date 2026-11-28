@@ -1,5 +1,5 @@
 /** Author: HuyDV. Bổ sung theo yêu cầu: ca trước giao tiền, ca sau nhận, không phát sinh thu/chi.
- * Dùng nguồn tiền UC-98/BR-95 và phạm vi chỉ xem BR-177; chưa có mã BR riêng cho bàn giao ca. */
+ * Dùng nguồn tiền UC-98/BR-95, phạm vi chỉ xem BR-177 và quy tắc bàn giao BR-242. */
 package com.gcmb.backend.finance.service;
 
 import static com.gcmb.backend.finance.service.FinanceAccess.*;
@@ -147,6 +147,7 @@ public class ShiftCashHandoverService {
     return recordCount(actor,input,false);
   }
 
+  // BR-242: bàn giao chỉ lưu số đếm và chênh lệch; không tạo thêm dòng thu hoặc chi.
   private Map<String,Object> recordCount(Identity actor, Receive input, boolean dispatch) {
     // Khóa tiền trước hồ sơ như AccountProfileService; giữ khóa phân ca đến khi ghi nhận xong.
     financeAccess.lock();

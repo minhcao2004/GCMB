@@ -93,6 +93,7 @@ public class BranchAdministrationService {
         if (clean(input.reason()).isEmpty()) {
             throw failure(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung lý do thay đổi trạng thái.");
         }
+        // BR-184: lý do đổi trạng thái cơ sở dài tối đa 2.000 ký tự.
         if (clean(input.reason()).length() > 2000) {
             throw failure(HttpStatus.BAD_REQUEST, "Lý do thay đổi trạng thái chỉ được chứa tối đa 2000 ký tự.");
         }
@@ -216,10 +217,12 @@ public class BranchAdministrationService {
             throw failure(HttpStatus.BAD_REQUEST, "Tên cơ sở chỉ được chứa tối đa 200 ký tự.");
         }
         if (clean(input.address()).isEmpty()) throw failure(HttpStatus.BAD_REQUEST, "Vui lòng bổ sung địa chỉ cơ sở.");
+        // BR-180: địa chỉ cơ sở dài tối đa 2.000 ký tự.
         if (clean(input.address()).length() > 2000) {
             throw failure(HttpStatus.BAD_REQUEST, "Địa chỉ cơ sở chỉ được chứa tối đa 2000 ký tự.");
         }
         com.gcmb.backend.auth.service.AuthValidation.phone(input.phone());
+        // BR-181: ghi chú cơ sở dài tối đa 4.000 ký tự.
         if (clean(input.notes()).length() > 4000) {
             throw failure(HttpStatus.BAD_REQUEST, "Ghi chú chỉ được chứa tối đa 4000 ký tự.");
         }

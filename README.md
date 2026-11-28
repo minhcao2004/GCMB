@@ -153,7 +153,7 @@ GCMB/
 
 | Module | Ownership |
 | --- | --- |
-| `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL. |
+| `auth` | Login/logout, sessions, password recovery/change, security configuration, recovery email, and head-office dashboard navigation restored from the URL, including the operating-policy screen. |
 | `accounts` | User accounts, personal profiles, roles, and access management. |
 | `audit` | Mutation audit recording and audit-history lookup. |
 | `shared` (frontend) | Shared admin `AppShell` for the head-office manager, branch manager, receptionist, and accountant with per-audience collapsed-sidebar persistence; presentational UI primitives for buttons, form controls, overlays, data tables, feedback, and page composition, styled with centralized design tokens and without business logic. |
@@ -163,8 +163,8 @@ GCMB/
 | `inventory` | F&B catalog, guest QR menu and orders, reception order handling and service assignment, inventory items, stock receipts with supplier and item expiry dates, adjustments, movement history, equipment assets, incidents, and transfers. |
 | `workforce` | Staff records, branch assignments and transfers, shift schedules, attendance, and payroll. |
 | `dashboard` | Head-office chain overview with day/month/year controls, KPIs, revenue and profit trends, branch ranking, pending approvals, and a draggable notification bell for unread operational alerts linked to the relevant reports or branch/equipment screens; accountant finance reports with month/year/date-range/branch filters, income and expense charts, payment methods, source-import and paid-expense detail, category and branch drill-down, and CSV/XLSX export; branch-manager performance summaries with revenue, bill and F&B totals, room and attendance indicators, low-stock and incident summaries; financial-period operations and accountant Excel export with UC-123 performance summary and UC-125 recorded-ledger detail. |
-| `finance` (frontend) | Accountant fund and expense workflows with cash or bank payment selection, receipt-linked reimbursements, configurable expense categories, one-time direct expenses, recurring expense templates and idempotent monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, and tax-accounting export screens. |
-| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with recorded payment methods, receipt-linked reimbursements, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, cash reconciliation, financial transactions, and period closing. |
+| `finance` (frontend) | Accountant fund and expense workflows with cash or bank payment selection, receipt-linked reimbursements, configurable expense categories, one-time direct expenses, recurring expense templates and idempotent monthly payment cycles with in-app reminders, allocation schedules, cash closing, payroll, financial-period closing, transaction adjustments, tax-accounting export screens, and head-office operating-policy configuration. |
+| `finance` (backend) | Chain-wide funds, configurable expense categories, direct and approved expenses with recorded payment methods, receipt-linked reimbursements, recurring templates and idempotent payment periods, daily in-app reminders, allocated recognition, approvals, cash reconciliation, financial transactions, period closing, and effective-dated operating-policy history for night premiums and branch payment approval limits. |
 
 F&B charges are linked to an active booking and included in its checkout bill. Order processing and inventory updates belong to `inventory`; bill calculation belongs to `booking`. Accountant responsibilities span `booking`, `workforce`, and `finance`.
 

@@ -16,14 +16,16 @@ export default function IncomingRoomOrderDialog({
 }) {
   const order = orders[0];
   const dialogRef = useRef(null);
+  const initializedOrderId = useRef(null);
   const [assignedEmployeeId, setAssignedEmployeeId] = useState('');
   const [quantities, setQuantities] = useState({});
 
   useEffect(() => {
-    if (!order) return;
+    if (!order || initializedOrderId.current === order.id) return;
+    initializedOrderId.current = order.id;
     setAssignedEmployeeId(order.assignedEmployeeId || '');
     setQuantities(Object.fromEntries(order.items.map((item) => [item.menuItemId, Number(item.quantity)])));
-  }, [order?.id]);
+  }, [order]);
 
   useEffect(() => {
     if (order && !assignedEmployeeId && employees.length > 0) {

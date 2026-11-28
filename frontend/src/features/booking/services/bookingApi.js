@@ -43,7 +43,7 @@ export const bookingApi = {
   stayOptions: async (id) => (await api.get(`/reception/bookings/${id}/stay-options`)).data,
   roomChangeQuote: async (id, params) => (await api.get(`/reception/bookings/${id}/room-change-quote`, { params })).data,
   extensionQuote: (id, body) => mutate('post', `/reception/bookings/${id}/extension-quote`, body),
-  // Báo giá và phòng có thể chọn cho lúc tạo/sửa booking.
+  // Báo giá, hạng phòng và số phòng phù hợp cho lúc sửa booking.
   availability: async (params) => (await api.get('/reception/availability', { params })).data,
   editOptions: async (id, params) => (await api.get(`/reception/bookings/${id}/edit-options`, { params })).data,
   // Mọi lệnh ghi đều đi qua mutate để gắn token CSRF mới.

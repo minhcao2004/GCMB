@@ -136,6 +136,7 @@ public class DepositManagementService {
         requireAccountant(identity);
         financialPeriodService.requireOpen(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")), "ghi nhận hoàn cọc");
         if (requestId == null) throw new BookingFailure(400, "requestId", "Yêu cầu hoàn cọc không hợp lệ");
+        // BR-188: mã giao dịch hoàn cọc, nếu có, dài tối đa 200 ký tự.
         String normalizedReference = externalReference == null ? "" : externalReference.strip();
         String reference = normalizedReference.isEmpty() ? null
             : required(normalizedReference, "externalReference", "Mã giao dịch hoàn", 200);

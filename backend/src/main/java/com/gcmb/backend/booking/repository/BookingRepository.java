@@ -361,9 +361,9 @@ public class BookingRepository {
     }
 
     // Cập nhật dữ liệu liên hệ và giờ hẹn của booking.
-    public void updateBooking(UUID id, String contactName, String contactPhone, Instant start, Instant end, String note) {
-        jdbcTemplate.update("UPDATE gcmb.booking SET contact_name=?,contact_phone=?,planned_start=?,planned_end=?,note=? WHERE id=?",
-            contactName, contactPhone, ts(start), ts(end), note, id);
+    public void updateBooking(UUID id, UUID roomTypeId, String contactName, String contactPhone, Instant start, Instant end, String note) {
+        jdbcTemplate.update("UPDATE gcmb.booking SET room_type_id=?,contact_name=?,contact_phone=?,planned_start=?,planned_end=?,note=? WHERE id=?",
+            roomTypeId, contactName, contactPhone, ts(start), ts(end), note, id);
     }
 
     // Tạo chặng phòng ban đầu khi phòng cụ thể được gán cho booking.
@@ -838,11 +838,11 @@ public class BookingRepository {
                 ) AS amount
             ) received ON true
             """;
-        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,r.code room_code,r.name room_name,COALESCE(rt.name,requested_rt.name) room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT b.id,b.code,b.contact_name,b.contact_phone,b.guest_count,b.channel," + plannedStart + " AS planned_start,b.planned_end," + actualCheckinExpression("b") + " AS actual_checkin,b.status,latest.room_id,b.room_type_id,r.code room_code,r.name room_name,COALESCE(rt.name,requested_rt.name) room_type_name,r.operating_status room_operating_status,COALESCE(ch.amount,0) expected_amount,COALESCE(dep.balance,0) deposit_balance,COALESCE(received.amount,0) deposit_received_amount " + from + where + " ORDER BY CASE WHEN b.status='CONFIRMED' THEN 0 ELSE 1 END," + plannedStart + " ASC,b.created_at DESC LIMIT ? OFFSET ?";
         params.add(size); params.add((long) page * size);
         return jdbcTemplate.query(sql, (resultSet, rowNumber) -> new BookingDtos.BookingSummary(resultSet.getObject("id", UUID.class), resultSet.getString("code"),
             resultSet.getString("contact_name"), resultSet.getString("contact_phone"), resultSet.getString("channel"), instant(resultSet, "planned_start"),
-            instant(resultSet, "planned_end"), instant(resultSet, "actual_checkin"), resultSet.getString("status"), resultSet.getObject("room_id", UUID.class), resultSet.getString("room_code"),
+            instant(resultSet, "planned_end"), instant(resultSet, "actual_checkin"), resultSet.getString("status"), resultSet.getObject("room_id", UUID.class), resultSet.getObject("room_type_id", UUID.class), resultSet.getString("room_code"),
             resultSet.getString("room_name"), resultSet.getString("room_type_name"), resultSet.getBigDecimal("expected_amount"), resultSet.getBigDecimal("deposit_balance"),
             resultSet.getBigDecimal("deposit_received_amount"),
             resultSet.getInt("guest_count"), resultSet.getString("room_operating_status")), params.toArray());

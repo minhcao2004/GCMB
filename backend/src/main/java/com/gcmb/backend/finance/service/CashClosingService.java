@@ -148,6 +148,7 @@ public class CashClosingService {
   }
 
   // HuyDV: five calendar days is a reminder, never an automatic withdrawal.
+  // BR-248: công bố hạn nộp két và cờ đến hạn theo chu kỳ năm ngày có tiền mặt.
   private Map<String,Object> cashCycle(UUID accountId,ZoneId zone,Map<String,Object> current) {
     Timestamp lastFullSweepAt=cashClosingRepository.findLastFullSweepAt(accountId);
     Timestamp anchor=cashClosingRepository.findFirstReceiptAfter(accountId,lastFullSweepAt);
@@ -353,6 +354,7 @@ public class CashClosingService {
     return detail(actor,closingId);
   }
 
+  // BR-241: khoản nộp rời két được ghi là dòng tiền ra, giảm số dư két.
   public Map<String,Object> remit(Identity actor,Remittance input) {
     financeAccess.lock();
     UUID branchId=financeAccess.branch(actor,true);

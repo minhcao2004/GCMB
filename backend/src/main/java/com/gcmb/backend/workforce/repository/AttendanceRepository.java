@@ -121,7 +121,11 @@ public class AttendanceRepository {
                 WHERE r.employee_id=e.id AND r.valid_from<=s.work_date
                   AND (r.valid_to IS NULL OR r.valid_to>s.work_date)
                 ORDER BY r.valid_from DESC LIMIT 1)) AS "hourlyRate",
-              CASE WHEN st.start_minute=0 AND st.end_minute=420 THEN 3000 ELSE 0 END AS "nightPremium",
+              CASE WHEN st.start_minute=0 AND st.end_minute=420 THEN
+                (SELECT policy.amount FROM gcmb.operating_policy policy
+                 WHERE policy.policy_key='NIGHT_SHIFT_PREMIUM' AND policy.effective_from<=s.work_date
+                 ORDER BY policy.effective_from DESC,policy.changed_at DESC,policy.id DESC LIMIT 1)
+                ELSE 0 END AS "nightPremium",
               a.id AS "attendanceId",a.status,COALESCE(a.version,0) AS version,
               a.actual_in AS "actualIn",a.actual_out AS "actualOut",
               COALESCE(a.worked_minutes,0) AS "workedMinutes",COALESCE(a.break_minutes,0) AS "breakMinutes",

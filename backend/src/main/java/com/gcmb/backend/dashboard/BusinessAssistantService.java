@@ -61,6 +61,7 @@ public class BusinessAssistantService {
     try {
       if (System.currentTimeMillis() - lastRequestAt < 5000)
         throw new AuthFailure(429, "form", "Vui lòng đợi vài giây trước khi gửi câu tiếp theo.");
+      // BR-251 (UC-144): lấy dữ liệu theo kỳ và cơ sở đang hỏi trước khi tạo câu trả lời.
       var snapshot = overview(actor, question.month(), question.branchId());
       var facts = new LinkedHashMap<>(snapshot);
       facts.remove("branches"); facts.remove("branchId"); facts.remove("configured"); facts.remove("sources");
@@ -187,6 +188,7 @@ public class BusinessAssistantService {
     throw new AuthFailure(502, "form", "Chưa nhận được câu trả lời từ Gemini. Vui lòng thử lại sau.");
   }
 
+  // BR-250 (UC-144): chỉ điều phối các truy vấn báo cáo cho tài khoản đã được phân quyền.
   private Map<String, Object> readTool(Identity actor, String name, tools.jackson.databind.JsonNode args) {
     context.authorize(actor);
     if (!Set.of("read_business_reports", "read_business_snapshot", "read_daily_business_report", "read_popularity",
