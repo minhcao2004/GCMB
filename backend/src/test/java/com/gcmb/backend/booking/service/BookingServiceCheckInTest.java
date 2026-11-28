@@ -10,6 +10,7 @@ import com.gcmb.backend.booking.repository.BookingRepository.ChargeRow;
 import com.gcmb.backend.finance.service.FinancialPeriodService;
 import com.gcmb.backend.inventory.service.FoodOrderService;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +33,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BookingServiceCheckInTest {
+    @Test
+    void earlyCheckInPersistsTheActualStartBeforeTheShiftedEnd() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        BookingRepository repository = new BookingRepository(jdbcTemplate, mock(ObjectMapper.class));
+        UUID bookingId = UUID.randomUUID();
+        Instant arrival = Instant.parse("2026-11-28T07:53:00Z");
+        Instant shiftedEnd = arrival.plus(Duration.ofHours(1));
+
+        repository.checkInBooking(bookingId, arrival, shiftedEnd);
+
+        verify(jdbcTemplate).update(eq("UPDATE gcmb.booking SET status='IN_HOUSE',actual_checkin=?,planned_start=LEAST(planned_start,?),planned_end=? WHERE id=? AND status='CONFIRMED'"),
+            eq(Timestamp.from(arrival)), eq(Timestamp.from(arrival)), eq(Timestamp.from(shiftedEnd)), eq(bookingId));
+    }
+
     @Test
     void lateCheckInRoomOptionsCoverTheShiftedStay() {
         BookingRepository repository = mock(BookingRepository.class);

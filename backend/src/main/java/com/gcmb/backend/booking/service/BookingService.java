@@ -678,7 +678,7 @@ public class BookingService {
         validateGiftChoices(food, giftRequirements.foodQuantity(), "đồ ăn");
         foodOrderService.createComboGiftOrder(identity, bookingId, allocation.id(), drinks, food);
 
-        // Giữ plannedStart làm giờ hẹn gốc; dời chặng phòng và plannedEnd theo giờ nhận phòng thực tế.
+        // BR-164: lưu giờ hẹn gốc trong sự kiện; dời khoảng sử dụng khi khách nhận phòng sớm.
         boolean earlyCheckIn = now.isBefore(booking.plannedStart());
         if (bookingRepository.hasRoomOverlap(allocation.roomId(), effectiveStart, effectiveEnd, bookingId))
             throw roomConflict(allocation.roomCode());
@@ -693,7 +693,7 @@ public class BookingService {
         bookingRepository.event(bookingId, actorId, "BOOKING_CHECKED_IN", null, detailsMap(
             "actualCheckin", now, "roomId", allocation.roomId(), "previousRoomId", previousRoomId, "depositBalance", deposit,
             "earlyCheckIn", earlyCheckIn, "plannedStartBeforeCheckIn", booking.plannedStart(),
-            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", booking.plannedStart(),
+            "plannedEndBeforeCheckIn", booking.plannedEnd(), "plannedStartAfterCheckIn", earlyCheckIn ? now : booking.plannedStart(),
             "plannedEndAfterCheckIn", effectiveEnd));
         return detail(branch.id(), bookingRepository.booking(bookingId, branch.id()));
     }

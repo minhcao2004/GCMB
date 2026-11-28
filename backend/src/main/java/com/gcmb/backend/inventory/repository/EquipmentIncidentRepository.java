@@ -119,9 +119,26 @@ public class EquipmentIncidentRepository {
 
     private record RoomStatus(UUID id,String status) {}
 
-    // UC-71/BR-45: Chỉ cho lưu nghiệm thu từ luồng sửa chữa đã được đánh giá.
+    // UC-71/BR-45/BR-205: Ngày hoàn tất phải không trước ngày bắt đầu xử lý và không sau hôm nay tại cơ sở.
     public int repair(UUID branch, UUID id, UUID actor, RepairCommand c) {
-        return jdbcTemplate.update("WITH target AS (SELECT i.id,COALESCE((SELECT MIN(p.created_at) FROM gcmb.asset_incident_progress p WHERE p.incident_id=i.id AND p.status='IN_PROGRESS'),i.created_at) started_at FROM gcmb.asset_incident i WHERE i.id=? AND i.branch_id=? AND i.status='IN_PROGRESS' AND i.handling_plan IN ('REPAIR','REPLACE') FOR UPDATE), ins AS (INSERT INTO gcmb.asset_repair(incident_id,vendor_name,actual_cost,started_at,finished_at,outcome,verified_by,verified_at) SELECT id,?,?,started_at,?::date::timestamptz,?, ?,CURRENT_TIMESTAMP FROM target RETURNING incident_id) UPDATE gcmb.asset_incident i SET status='VERIFIED' FROM ins WHERE i.id=ins.incident_id",id,branch,c.vendorName().trim(),c.actualCost(),c.completedOn(),c.outcome().trim(),actor);
+        return jdbcTemplate.update("""
+            WITH target AS (
+              SELECT i.id,b.timezone,COALESCE((SELECT MIN(p.created_at) FROM gcmb.asset_incident_progress p
+                  WHERE p.incident_id=i.id AND p.status='IN_PROGRESS'),i.created_at) started_at
+              FROM gcmb.asset_incident i JOIN gcmb.branch b ON b.id=i.branch_id
+              WHERE i.id=? AND i.branch_id=? AND i.status='IN_PROGRESS'
+                AND i.handling_plan IN ('REPAIR','REPLACE') FOR UPDATE OF i
+            ), ins AS (
+              INSERT INTO gcmb.asset_repair(incident_id,vendor_name,actual_cost,started_at,finished_at,outcome,verified_by,verified_at)
+              SELECT id,?,?,started_at,
+                LEAST(CURRENT_TIMESTAMP,((?::date + 1)::timestamp AT TIME ZONE timezone) - INTERVAL '1 microsecond'),
+                ?,?,CURRENT_TIMESTAMP FROM target
+              WHERE ?::date BETWEEN (started_at AT TIME ZONE timezone)::date
+                AND (CURRENT_TIMESTAMP AT TIME ZONE timezone)::date
+              RETURNING incident_id
+            )
+            UPDATE gcmb.asset_incident i SET status='VERIFIED' FROM ins WHERE i.id=ins.incident_id
+            """,id,branch,c.vendorName().trim(),c.actualCost(),c.completedOn(),c.outcome().trim(),actor,c.completedOn());
     }
 
     // UC-71: Cập nhật tình trạng tài sản sau khi ghi nhận kết quả đã nghiệm thu.
