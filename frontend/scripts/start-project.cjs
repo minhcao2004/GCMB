@@ -164,10 +164,8 @@ async function main() {
   await assertFree(3000);
   await startLocalPostgres(config);
   const temporary = path.join(backend, 'target', 'dev-tmp');
-  const migrationOutput = path.join(backend, 'target', 'classes', 'db', 'migration');
-  // Maven's resources goal overwrites current migrations but leaves files whose
-  // versions were changed in place. Rebuild only this generated directory from
-  // source so Flyway cannot discover obsolete duplicate versions.
+  const migrationOutput = path.join(backend, 'target', 'classes', 'db');
+  // Rebuild all generated Flyway locations after switching a database's migration track.
   fs.rmSync(migrationOutput, { recursive: true, force: true });
   fs.mkdirSync(temporary, { recursive: true });
   const backendEnv = {

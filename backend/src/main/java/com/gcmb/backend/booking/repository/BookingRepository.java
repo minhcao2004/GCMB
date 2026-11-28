@@ -475,12 +475,12 @@ public class BookingRepository {
             """, ts(stoppedAt), billedMinutes, amount, actorId, meterId);
     }
 
-    // Dịch chặng phòng khi khách check-in sớm và kích hoạt phòng.
+    // Dịch chặng phòng khi khách check-in lệch giờ hẹn và kích hoạt phòng.
     public int shiftAndOccupyAllocation(UUID allocationId, Instant now, Instant startsAt, Instant endsAt) {
         return jdbcTemplate.update("""
             UPDATE gcmb.room_allocation
             SET starts_at=?,ends_at=?,state='OCCUPIED',actual_start=?,
-                change_reason='Khách nhận phòng sớm; khung giờ được dời để giữ nguyên thời lượng'
+                change_reason='Khung giờ được dời theo giờ nhận phòng thực tế để giữ nguyên thời lượng'
             WHERE id=? AND state='RESERVED'
             """, ts(startsAt), ts(endsAt), ts(now), allocationId);
     }
@@ -593,6 +593,12 @@ public class BookingRepository {
     public void attachUnassignedCharges(UUID bookingId, UUID allocationId) {
         jdbcTemplate.update("UPDATE gcmb.booking_charge SET allocation_id=? WHERE booking_id=? AND allocation_id IS NULL AND status='ACTIVE'",
             allocationId, bookingId);
+    }
+
+    // Giữ nguyên giá đã chốt khi thay phòng ngay trước check-in.
+    public void moveActiveCharges(UUID previousAllocationId, UUID newAllocationId) {
+        jdbcTemplate.update("UPDATE gcmb.booking_charge SET allocation_id=? WHERE allocation_id=? AND status='ACTIVE'",
+            newAllocationId, previousAllocationId);
     }
 
     // Lấy toàn bộ dòng phí, kể cả dòng đã bị thay thế.
@@ -804,7 +810,9 @@ public class BookingRepository {
         if (Boolean.FALSE.equals(hasDeposit)) where.append(" AND COALESCE(received.amount,0)=0");
         String from = """
             FROM gcmb.booking b
-            LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
+            LEFT JOIN LATERAL (SELECT a.room_id FROM gcmb.room_allocation a WHERE a.booking_id=b.id
+                AND (b.status NOT IN ('CONFIRMED','IN_HOUSE') OR a.state IN ('RESERVED','OCCUPIED'))
+                ORDER BY a.created_at DESC,a.id DESC LIMIT 1) latest ON true
              LEFT JOIN gcmb.room r ON r.id=latest.room_id
              LEFT JOIN gcmb.room_type rt ON rt.id=r.room_type_id
              LEFT JOIN gcmb.room_type requested_rt ON requested_rt.id=b.room_type_id

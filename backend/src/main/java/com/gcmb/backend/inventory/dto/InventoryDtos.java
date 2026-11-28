@@ -12,6 +12,8 @@ public final class InventoryDtos {
     public record InventoryItemCommand(String sku, String name, String category, UUID unitId,
                                        String trackingMode, BigDecimal minimumQuantity, Boolean active) {}
 
+    public record InventoryItemWithMenuCommand(InventoryItemCommand item, BigDecimal salePrice) {}
+
     public record InventoryItemView(UUID id, String sku, String name, String category, UUID unitId,
                                     String unitName, String trackingMode, BigDecimal quantity,
                                     BigDecimal minimumQuantity, long stockVersion, boolean active,

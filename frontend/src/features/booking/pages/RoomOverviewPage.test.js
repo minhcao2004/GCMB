@@ -101,7 +101,7 @@ test('keeps an in-house room occupied after its planned end', async () => {
   bookingApi.listAll.mockImplementation((params) => Promise.resolve(params.status === 'IN_HOUSE' ? [booking] : []));
   bookingApi.availability.mockResolvedValue({ rooms: [{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4 }] });
   bookingApi.rooms.mockResolvedValue([{ id: 'room-1', code: 'DEMO-MB-01', name: 'Music Box', capacity: 4, roomTypeName: 'Music Box demo', operatingStatus: 'AVAILABLE' }]);
-  bookingApi.detail.mockResolvedValue({ booking, charges: [], meter: null });
+  bookingApi.detail.mockResolvedValue({ booking, charges: [{ status: 'ACTIVE', kind: 'COMBO', description: 'Gói 2 giờ Music Box' }], meter: null });
   checkoutApi.preview.mockResolvedValue({ amount: 5701740, depositBalance: 60000, payableAmount: 5642000 });
 
   render(<RoomOverviewPage />);
@@ -110,6 +110,8 @@ test('keeps an in-house room occupied after its planned end', async () => {
   expect(room).toHaveTextContent('Đang sử dụng');
   expect(screen.getByRole('button', { name: /Đang sử dụng 1/ })).toBeInTheDocument();
   expect(await screen.findByText('01:51:00')).toBeInTheDocument();
+  expect(await screen.findByText('Gói 2 giờ Music Box')).toBeInTheDocument();
+  expect(screen.queryByText('BK-01')).not.toBeInTheDocument();
   expect(screen.getByText('Đã dừng tại giờ trả dự kiến')).toBeInTheDocument();
   expect(await screen.findByText('5.642.000đ')).toBeInTheDocument();
   expect(checkoutApi.preview).toHaveBeenCalledWith('booking-1');

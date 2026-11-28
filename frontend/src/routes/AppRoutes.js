@@ -20,6 +20,7 @@ import DepositManagementPage from '../features/booking/pages/DepositManagementPa
 import AccountantRefundPage from '../features/booking/pages/AccountantRefundPage';
 import GuestRoomOrderPage from '../features/inventory/pages/GuestRoomOrderPage';
 import ReceptionOrdersPage from '../features/inventory/pages/ReceptionOrdersPage';
+import ReceptionOrderSound from '../features/inventory/components/ReceptionOrderSound';
 
 import HomePage from '../features/landing/pages/HomePage';
 
@@ -32,7 +33,7 @@ import ExpenseBreakdownReportPage from '../features/dashboard/pages/ExpenseBreak
 // Khai báo các đường dẫn công khai và màn hình theo vai trò.
 export default function AppRoutes() {
   const [recovery, setRecovery] = useState(null);
-  return <BrowserRouter><Routes>
+  return <BrowserRouter><ReceptionOrderSound /><Routes>
     <Route path="/" element={<Navigate to="/dang-nhap" replace />} />
     <Route path="/dang-nhap" element={<AuthPage key="login" mode="login" recovery={recovery} onRecovery={setRecovery} />} />
     <Route path="/quen-mat-khau" element={<AuthPage key="forgot" mode="forgot" recovery={recovery} onRecovery={setRecovery} />} />

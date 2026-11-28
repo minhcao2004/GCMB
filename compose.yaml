@@ -53,7 +53,10 @@ services:
     logging: *logging
 
   web:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_PUBLIC_SITE_ORIGIN: ${PUBLIC_SITE_ORIGIN:-https://gcmb.103.78.1.178.sslip.io}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env}

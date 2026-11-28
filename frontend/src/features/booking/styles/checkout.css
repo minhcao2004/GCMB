@@ -53,6 +53,18 @@
 .co-success { background: var(--gcmb-color-success-soft); color: #087b50; }
 .co-warning { background: var(--gcmb-color-warning-soft); color: #946513; }
 .co-error { background: var(--gcmb-color-danger-soft); color: var(--gcmb-color-danger); }
+.co-unserved { margin-top: 18px; border: 1px solid #e7d4ac; border-left: 4px solid var(--gcmb-color-warning); border-radius: var(--gcmb-radius-control); padding: 18px; background: var(--gcmb-color-warning-soft); }
+.co-unserved-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.co-unserved-kicker { color: #795514; font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+.co-unserved h3 { margin: 2px 0 0; color: var(--gcmb-color-ink); font-size: 17px; line-height: 1.35; }
+.co-unserved-count { border-radius: 999px; padding: 5px 10px; color: #795514; background: #fff; font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.checkout-page .co-unserved > p { margin: 12px 0 6px; color: var(--gcmb-color-ink); font-size: 14px; line-height: 1.55; }
+.checkout-page .co-unserved-link { min-height: 36px; border: 0; padding: 4px 0; color: var(--gcmb-color-info); background: transparent; font-size: 13px; font-weight: 700; }
+.checkout-page .co-unserved-link:hover:not(:disabled) { border: 0; background: transparent; text-decoration: underline; }
+.co-unserved-confirm { display: flex; align-items: center; gap: 10px; margin-top: 14px; border: 1px solid #decba3; border-radius: var(--gcmb-radius-control); padding: 12px 14px; color: var(--gcmb-color-ink); background: #fff; font-size: 14px; font-weight: 650; cursor: pointer; }
+.co-unserved-confirm input { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; accent-color: var(--gcmb-color-success); cursor: pointer; }
+.co-unserved-confirm:has(input:disabled) { opacity: .6; cursor: not-allowed; }
+.co-unserved.is-confirmed .co-unserved-confirm { border-color: var(--gcmb-color-success); background: var(--gcmb-color-success-soft); }
 .co-transfer { display: grid; grid-template-columns: minmax(150px,220px) 1fr; gap: 16px; margin-top: 20px; }
 .co-transfer img { width: 100%; align-self: start; border: 1px solid var(--gcmb-color-line); border-radius: var(--gcmb-radius-control); }
 .co-transfer dl { margin: 0; padding: 16px; border-radius: var(--gcmb-radius-control); background: var(--gcmb-color-bg); }

@@ -109,7 +109,9 @@ GCMB/
 │   │   ├── application-prod.yml
 │   │   ├── db/migration/
 │   │   ├── db/migration-equipment-first/
-│   │   └── db/migration-notifications-first/
+│   │   ├── db/migration-notifications-first/
+│   │   ├── db/migration-checkout-first/
+│   │   └── db/migration-salary-first/
 │   ├── src/test/
 │   ├── .mvn/wrapper/
 │   ├── pom.xml

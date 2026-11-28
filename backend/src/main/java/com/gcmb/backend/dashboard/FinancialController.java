@@ -158,26 +158,46 @@ public class FinancialController {
                                                 @RequestParam(required = false) String to,
                                                 @RequestParam(required = false) List<UUID> branchIds,
                                                 @RequestParam(required = false) UUID branchId,
-                                                @RequestParam(defaultValue = "") String costType,
                                                 @RequestParam(required = false) UUID categoryId,
                                                 @RequestParam(defaultValue = "ALLOCATION") String basis,
                                                 @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
         List<LocalDate> range = reportDateRange(month, from, to);
         LocalDate start = range.get(0), endExclusive = range.get(1);
-        String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
         String selectedBasis = basis == null ? "ALLOCATION" : basis.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
-        if (!type.isEmpty() && !List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
         if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
         List<UUID> selectedBranches = monthlyPerformanceService.validateReportBranchIds(branchIds);
         if (selectedBranches.isEmpty() && branchId != null) monthlyPerformanceService.validateReportBranchIds(List.of(branchId));
-        // BR-103/107: mặc định lấy lịch phân bổ, giữ OPEX và CAPEX riêng; CASH dùng ngày thanh toán.
-        List<Map<String, Object>> rows = financialReportRepository.expenseBreakdownRows(selectedBasis, start, endExclusive, selectedBranches,
-            branchId, type, categoryId, search);
-        List<Map<String, Object>> branches = financialReportRepository.findBranchNames();
-        List<Map<String, Object>> categories = financialReportRepository.findExpenseCategories();
+        String branchFilter;
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(start); args.add(endExclusive);
+        if (!selectedBranches.isEmpty()) {
+            branchFilter = " AND branch_id IN (" + String.join(",", java.util.Collections.nCopies(selectedBranches.size(), "?")) + ")";
+            args.addAll(selectedBranches);
+        } else {
+            branchFilter = " AND (?::uuid IS NULL OR branch_id=?)";
+            args.add(branchId); args.add(branchId);
+        }
+        branchFilter += " AND (?::uuid IS NULL OR category_id=?)"
+            + " AND (?='' OR concat_ws(' ',category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')";
+        args.add(categoryId); args.add(categoryId); args.add(search); args.add(search);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(paidExpensesCte(selectedBasis) + """
+            SELECT category_id "categoryId",category_name "categoryName",
+              branch_id "branchId",branch_name "branchName",sum(amount) amount,count(*) "paymentCount"
+            FROM paid_expenses
+            WHERE recognition_date>=? AND recognition_date<?
+            """ + branchFilter + """
+            GROUP BY category_id,category_name,branch_id,branch_name
+            ORDER BY category_name,branch_name
+            """, args.toArray());
+        List<Map<String, Object>> branches = jdbcTemplate.queryForList("SELECT id,name FROM gcmb.branch ORDER BY name");
+        List<Map<String, Object>> categories = jdbcTemplate.queryForList("""
+            SELECT id,name FROM gcmb.expense_category
+            UNION SELECT id,name FROM gcmb.finance_expense_category
+            ORDER BY name
+            """);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("month", month); result.put("from", start.toString()); result.put("to", endExclusive.minusDays(1).toString());
         result.put("basis", selectedBasis);
@@ -193,19 +213,26 @@ public class FinancialController {
                                                         @RequestParam(required = false) String to,
                                                         @RequestParam UUID branchId,
                                                         @RequestParam UUID categoryId,
-                                                        @RequestParam String costType,
                                                         @RequestParam(defaultValue = "ALLOCATION") String basis,
                                                         @RequestParam(defaultValue = "") String q) {
         requireReportRole(actor);
         List<LocalDate> range = reportDateRange(month, from, to);
         LocalDate start = range.get(0), endExclusive = range.get(1);
-        String type = costType == null ? "" : costType.trim().toUpperCase(java.util.Locale.ROOT);
         String selectedBasis = basis == null ? "ALLOCATION" : basis.trim().toUpperCase(java.util.Locale.ROOT);
         String search = q == null ? "" : q.trim();
-        if (!List.of("OPEX", "CAPEX").contains(type)) throw bad("Loại chi phí không hợp lệ.");
         if (!List.of("ALLOCATION", "CASH").contains(selectedBasis)) throw bad("Cách xem chi phí không hợp lệ.");
         if (search.length() > 100) throw bad("Từ khóa tìm kiếm chỉ được chứa tối đa 100 ký tự.");
-        List<Map<String, Object>> rows = financialReportRepository.expenseDetailRows(selectedBasis, start, endExclusive, branchId, categoryId, type, search);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(paidExpensesCte(selectedBasis) + """
+            SELECT source_type "sourceType",record_id "expenseId",expense_code "expenseCode",expense_kind kind,
+               category_name "categoryName",branch_name "branchName",
+              recognition_date "recognitionDate",(paid_at AT TIME ZONE timezone) "paidAt",amount,description,
+              payment_reference "paymentReference",origin
+            FROM paid_expenses
+            WHERE recognition_date>=? AND recognition_date<?
+               AND branch_id=? AND category_id=?
+               AND (?='' OR concat_ws(' ',category_name,branch_name,expense_code,description,payment_reference) ILIKE '%'||?||'%')
+            ORDER BY recognition_date DESC,paid_at DESC,expense_code
+            """, start, endExclusive, branchId, categoryId, search, search);
         java.util.Set<UUID> requestIds = new java.util.LinkedHashSet<>();
         for (Map<String, Object> row : rows) {
             if ("EXPENSE_REQUEST".equals(row.get("sourceType"))) requestIds.add((UUID) row.get("expenseId"));

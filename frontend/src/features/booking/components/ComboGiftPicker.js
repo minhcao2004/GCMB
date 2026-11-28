@@ -92,9 +92,9 @@ export default function ComboGiftPicker({ drinkSelections, setDrinkSelections, f
             <option value="all">Tất cả danh mục</option>
             {pickerCategories.map((category) => <option key={category} value={(category || '').toLocaleLowerCase('vi-VN')}>{category}</option>)}
           </select></label>
-          <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
+          {giftPicker.prefix === 'food' && <div className="booking-gift-picker-stock-filter" role="group" aria-label="Lọc theo tồn kho">
             {[['all', 'Tất cả'], ['available', 'Có thể chọn'], ['untracked', 'Không theo dõi tồn'], ['out', 'Hết tồn']].map(([value, label]) => <button key={value} type="button" className={giftStockFilter === value ? 'is-active' : ''} aria-pressed={giftStockFilter === value} onClick={() => setGiftStockFilter(value)}>{label}</button>)}
-          </div>
+          </div>}
         </div>
         <PaginatedList pageSize={10} resetKey={`${giftSearch}:${giftCategoryFilter}:${giftStockFilter}`} className="booking-gift-picker-list" aria-live="polite">
           {filteredPickerItems.length ? filteredPickerItems.map((item) => {

@@ -226,10 +226,10 @@ export default function ExecutiveDashboard({ user, onNavigate, onAlertNavigate }
     {loading && <p role="status">Đang tải báo cáo…</p>}{error && <p role="alert">{error}</p>}
 
     <div className="executive-kpis" aria-label="Chỉ số chính">
-      <Metric icon="revenue" label="Thu nhập vận hành" value={money(kpis.revenue)} comparison={{ ...data?.comparison, periodType, change: data?.changes?.revenue }} />
+      <Metric icon="revenue" label="Thu nhập vận hành" value={data ? money(kpis.revenue) : '—'} footnote={data ? `${changeText(kpis.revenueChange)} · hóa đơn và cọc` : 'Chưa có dữ liệu'} tone={kpis.revenueChange == null ? '' : kpis.revenueChange >= 0 ? 'positive' : 'negative'} />
       <Metric icon="occupancy" label="Tỷ lệ lấp đầy" value={data ? percent(kpis.occupancy) : '—'} footnote={`Tháng ${kpis.contextMonth || ''}`} />
-      <Metric icon="cost" label="Chi phí vận hành" value={money(kpis.cost)} comparison={{ ...data?.comparison, periodType, change: data?.changes?.expenses, lowerIsBetter: true }} />
-      <Metric icon="profit" label="Lợi nhuận vận hành" value={money(kpis.grossProfit)} negative={kpis.grossProfit < 0} comparison={{ ...data?.comparison, periodType, change: data?.changes?.profit }} />
+      <Metric icon="cost" label="Chi phí vận hành" value={data ? money(kpis.cost) : '—'} footnote="Các khoản chi đã thanh toán" />
+      <Metric icon="profit" label="Lợi nhuận vận hành" value={data ? money(kpis.grossProfit) : '—'} footnote="Thu nhập trừ chi phí vận hành" tone={!data ? '' : kpis.grossProfit >= 0 ? 'positive' : 'negative'} />
     </div>
 
     <section className="executive-insights" aria-label="Tóm tắt điều hành">

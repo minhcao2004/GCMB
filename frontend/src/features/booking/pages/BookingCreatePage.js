@@ -1,5 +1,3 @@
-import { PaginatedList } from '../../../shared/components/Pagination';
-import { phoneFormatError } from '../../../shared/utils/formatters';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiErrors } from '../../auth/services/authApi';
 import { bookingApi } from '../services/bookingApi';
@@ -15,6 +13,11 @@ function localDate(value = new Date()) {
 // Chuyển ngày và giờ nhập trên máy thành mốc ISO gửi backend.
 function dateTimeIso(date, time) {
   return new Date(`${date}T${time}:00`).toISOString();
+}
+
+function normalizeSearch(value) {
+  return String(value || '').trim().toLocaleLowerCase('vi-VN')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 }
 
 // Bọc nhãn và trường nhập thống nhất trong biểu mẫu.
@@ -43,6 +46,8 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [touched, setTouched] = useState({});
+  const [comboSearch, setComboSearch] = useState('');
+  const comboDialogRef = useRef(null);
   const paymentReferenceInput = useRef(null);
 
   useEffect(() => { saveBookingDraft(user, form, false); }, [user, form]);
@@ -56,9 +61,13 @@ export default function BookingCreatePage({ user, options, optionsLoading, optio
   const selectedType = roomTypes.find((item) => item.id === form.roomTypeId) || roomTypes[0] || null;
   const combos = selectedType?.combos || [];
   const selectedCombo = combos.find((item) => item.id === form.comboId) || combos[0] || null;
-  const hourlyMinutes = hourlyRentalMinutes(form.durationHours);
-  const hourlyDurationValid = hourlyMinutes !== null;
-  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyMinutes;
+  const visibleCombos = combos.filter((combo) => normalizeSearch(combo.name).includes(normalizeSearch(comboSearch)));
+  // BR-150: giờ thuê hỗ trợ bước 30 phút để chấp nhận booking 90 phút.
+  const parsedHourlyDuration = Number(form.durationHours);
+  const hourlyDurationValid = Number.isFinite(parsedHourlyDuration)
+    && parsedHourlyDuration >= 1 && parsedHourlyDuration <= 24
+    && Number.isInteger(parsedHourlyDuration * 2);
+  const durationMinutes = form.pricingMode === 'COMBO' ? Number(selectedCombo?.durationMinutes || 120) : hourlyDurationValid ? Number(form.durationHours) * 60 : null;
   const plannedStart = useMemo(() => {
     if (!form.date || !isValidTimeInput(form.time)) return null;
     const date = new Date(`${form.date}T${form.time}:00`);
@@ -280,13 +289,26 @@ const paymentReferenceValid = !paymentReferenceRequired || Boolean(form.transact
             <button type="button" className={form.pricingMode === 'HOURLY' ? 'is-selected' : ''} onClick={() => { markTouched('pricingMode'); setFormError(''); setForm((current) => ({ ...current, pricingMode: 'HOURLY' })); }}>Tính giờ</button>
             <button type="button" className={form.pricingMode === 'COMBO' ? 'is-selected' : ''} onClick={() => { markTouched('pricingMode'); setFormError(''); setForm((current) => ({ ...current, pricingMode: 'COMBO' })); }}>Combo</button>
           </div>
-          {form.pricingMode === 'COMBO' ? <PaginatedList as="div" pageSize={10} className={`booking-package-grid${showComboError ? ' is-invalid' : ''}`}>
-            {combos.map((combo) => <button key={combo.id} type="button" className={`booking-package-choice${form.comboId === combo.id ? ' is-selected' : ''}`} onClick={() => { markTouched('comboId'); setFormError(''); setForm((current) => ({ ...current, comboId: combo.id })); }}>
-              <strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b>{(combo.includedFnbQuantity > 0 || combo.includedFoodQuantity > 0) && <small>Tặng {combo.includedFnbQuantity || 0} đồ uống · {combo.includedFoodQuantity || 0} đồ ăn (chọn lúc check-in)</small>}
-            </button>)}
-            {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
-          </PaginatedList> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
-            <input type="number" name="durationHours" min="0" max="24" step="any" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
+          {form.pricingMode === 'COMBO' ? <div className="booking-package-picker">
+            <span className="booking-package-label">Combo sử dụng</span>
+            <button type="button" className={`booking-package-trigger${showComboError ? ' is-invalid' : ''}`} onClick={() => { setComboSearch(''); comboDialogRef.current?.showModal(); }}>
+              <span>{selectedCombo?.name || 'Chọn combo'}</span><strong>{selectedCombo ? formatVnd(selectedCombo.price) : 'Xem danh sách'}</strong>
+            </button>
+            <dialog ref={comboDialogRef} className="booking-package-dialog" aria-labelledby="booking-package-dialog-title" onClose={() => setComboSearch('')}>
+              <header><h2 id="booking-package-dialog-title">Chọn combo</h2><button type="button" aria-label="Đóng danh sách combo" onClick={() => comboDialogRef.current?.close()}>×</button></header>
+              <search aria-label="Tìm combo"><label className="booking-package-search">Tìm combo
+                <input autoFocus type="search" name="comboSearch" value={comboSearch} onChange={(event) => setComboSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Nhập tên combo…" aria-controls="booking-package-list" />
+              </label></search>
+              <div className="booking-package-grid" id="booking-package-list" role="group" aria-label="Danh sách combo">
+                {visibleCombos.map((combo) => <button key={combo.id} type="button" aria-pressed={form.comboId === combo.id} className={`booking-package-choice${form.comboId === combo.id ? ' is-selected' : ''}`} onClick={() => { markTouched('comboId'); setFormError(''); setForm((current) => ({ ...current, comboId: combo.id })); comboDialogRef.current?.close(); }}>
+                  <span><strong>{combo.name}</strong><b>{formatVnd(combo.price)}</b></span>{(combo.includedFnbQuantity > 0 || combo.includedFoodQuantity > 0) && <small>Tặng {combo.includedFnbQuantity || 0} đồ uống · {combo.includedFoodQuantity || 0} đồ ăn (chọn lúc check-in)</small>}
+                </button>)}
+                {!combos.length && <div className="booking-room-empty">Hạng phòng này chưa có combo đang áp dụng.</div>}
+                {combos.length > 0 && !visibleCombos.length && <div className="booking-room-empty">Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</div>}
+              </div>
+            </dialog>
+          </div> : <Field label="Thời lượng thuê (giờ)" className={showDurationError ? 'is-invalid' : ''}>
+            <input type="number" name="durationHours" min="1" max="24" step="0.5" inputMode="decimal" required value={form.durationHours} onChange={change} onBlur={() => markTouched('durationHours')} aria-invalid={showDurationError} aria-describedby="booking-duration-help" />
             <small id="booking-duration-help" className={showDurationError ? 'booking-field-error' : 'booking-field-hint'} aria-live={showDurationError ? 'polite' : undefined}>
               {showDurationError ? 'Thời lượng phải tương ứng số phút nguyên từ 1 phút đến 24 giờ.' : 'Ví dụ: nhập 0,5 giờ để đặt 30 phút.'}
             </small>

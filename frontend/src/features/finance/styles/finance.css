@@ -417,6 +417,9 @@
 .finance-table-wrap table { border-collapse:separate; border-spacing:0; }
 .finance-table-wrap thead th { position:sticky; z-index:2; top:0; background:#f8f9fb; }
 .finance-table-wrap th { white-space:nowrap; }
+.cash-closing-movements table { min-width:0; table-layout:fixed; }
+.cash-closing-movements :is(th,td):last-child { width:35%; text-align:right; white-space:normal; overflow-wrap:anywhere; }
+.cash-closing-movements td:first-child { overflow-wrap:break-word; }
 .finance-fund-grid-outer { width:100%; max-height:min(62vh,620px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; border:1px solid #edf0f4; border-radius:11px; }
 .finance-fund-grid-inner { min-width:0; }
 .finance-fund-fixed-head,.finance-fund-grid-row { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.8fr) minmax(0,.85fr) minmax(0,1.7fr) minmax(0,.95fr); width:100%; min-width:0; }

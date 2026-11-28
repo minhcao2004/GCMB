@@ -45,8 +45,15 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const branchId = searchParams.get('branchId') || '';
   const categoryId = searchParams.get('categoryId') || '';
   const query = searchParams.get('q') || '';
-  const requestKey = JSON.stringify([month, from, to, branchIds, branchId, categoryId, query]);
+  const requestKey = JSON.stringify([month, from, to, branchIds, branchId, categoryId, basis, query]);
   const currentData = dataKey === requestKey ? data : null;
+
+  useEffect(() => {
+    if (!searchParams.has('costType')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('costType');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   function updateFilter(key, value) {
     const next = new URLSearchParams(searchParams);
@@ -108,11 +115,11 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     }).catch((e) => { if (active) setError(errorText(e)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [user, month, from, to, hasDateRange, branchIds, branchId, categoryId, query, requestKey, revision]);
+  }, [user, month, from, to, hasDateRange, branchIds, branchId, categoryId, basis, query, requestKey, revision]);
 
   useEffect(() => {
     setExpanded(null); setDetails([]); setDetailsError('');
-  }, [month, from, to, branchIds, branchId, categoryId, query]);
+  }, [month, from, to, branchIds, branchId, categoryId, basis, query]);
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -120,8 +127,8 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     setDetailsLoading(true); setDetailsError(''); setDetails([]);
     api.get('/accounting/reports/expense-breakdown/details', { params: {
       ...(hasDateRange ? { from, to } : { month }),
-      branchId: expanded.branchId, categoryId: expanded.categoryId, costType: expanded.costType,
-      basis: 'CASH',
+      branchId: expanded.branchId, categoryId: expanded.categoryId,
+      basis,
       ...(query ? { q: query } : {}),
     } }).then(({ data: result }) => { if (active) setDetails(result.rows || []); })
       .catch((e) => { if (active) setDetailsError(errorText(e)); })
@@ -139,11 +146,9 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
     };
   }, [preview]);
 
-  const totals = useMemo(() => (currentData?.rows || []).reduce((sum, row) => {
-    sum.amount += Number(row.amount) || 0;
-    sum.paymentCount += Number(row.paymentCount) || 0;
-    return sum;
-  }, { amount: 0, paymentCount: 0 }), [currentData]);
+  const totals = useMemo(() => (currentData?.rows || []).reduce((sum, row) => ({
+    amount: sum.amount + (Number(row.amount) || 0), count: sum.count + (Number(row.paymentCount) || 0),
+  }), { amount: 0, count: 0 }), [currentData]);
 
   async function viewEvidence(file) {
     setEvidenceBusy(true); setError('');
@@ -163,7 +168,6 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
 
   if (!user) return <main className="booking-auth-state"><p>Đang kiểm tra phiên đăng nhập…</p></main>;
 
-  const isHeadOfficeManager = user.role === 'HEAD_OFFICE_MANAGER';
   const rows = currentData?.rows || [];
   const filters = <div className="finance-filters expense-report-filters" role="group" aria-label="Bộ lọc báo cáo chi phí">
     {hasDateRange ? <>
@@ -177,40 +181,43 @@ export default function ExpenseBreakdownReportPage({ initialUser = null }) {
   const content = <section className="performance-dashboard accountant-finance expense-breakdown-report" aria-labelledby="expense-report-title" aria-busy={loading}>
     <header className="finance-heading expense-report-heading">
       <div><h1 id="expense-report-title">Báo cáo chi phí</h1></div>
-      <div className="expense-report-summary">
-        <dl className="expense-report-total">
-          <dt>{isHeadOfficeManager ? 'Tổng chi phí' : 'Tổng chi'}</dt>
-          <dd>{currentData ? money(totals.amount) : '—'}
-            {currentData && <small>{totals.paymentCount.toLocaleString('vi-VN')} khoản chi</small>}
-          </dd>
-        </dl>
-        {filters}
+      <div className="finance-filters expense-report-filters">
+        {hasDateRange ? <>
+          <label className="finance-month">Từ ngày<input type="date" required value={from} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('from', event.target.value)} /></label>
+          <label className="finance-month">Đến ngày<input type="date" required value={to} max={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())} onChange={(event) => updateDateRange('to', event.target.value)} /></label>
+        </> : <label className="finance-month">Kỳ báo cáo<input type="month" value={month} onChange={(event) => event.target.value && updateFilter('month', event.target.value)} /></label>}
+        <div className="finance-month"><span>Cơ sở</span><BranchFilterSelect branches={branchOptions} multiple value={branchIds.length ? branchIds : branchId ? [branchId] : []} onChange={updateBranches} /></div>
+        <label className="finance-month">Cách xem<select value={basis} onChange={(event) => updateFilter('basis', event.target.value)}><option value="ALLOCATION">Theo phân bổ</option><option value="CASH">Theo ngày chi</option></select></label>
+        <label className="finance-month">Danh mục<select value={categoryId} onChange={(event) => updateFilter('categoryId', event.target.value)}><option value="">Tất cả danh mục</option>{(currentData?.categories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label className="finance-month expense-report-search">Tìm kiếm<input type="search" value={query} maxLength={100} placeholder="Mã chi, mô tả, danh mục, cơ sở…" onChange={(event) => updateFilter('q', event.target.value)} /></label>
       </div>
     </header>
 
     {error && <p className="finance-state finance-error" role="alert">{error}</p>}
     {loading && <p className="finance-state" role="status">Đang tải báo cáo chi phí…</p>}
+    <dl className="expense-report-totals" aria-label="Tổng chi phí">
+      <div><dt>{allocationBasis?'Tổng chi phí theo phân bổ':'Tổng đã chi theo ngày chi'}</dt><dd>{money(totals.amount)}</dd><small>{totals.count} {allocationBasis?'dòng ghi nhận':'khoản chi'}</small></div>
+    </dl>
 
     {!loading && !error && currentData && rows.length === 0 && <p className="expense-report-empty" role="status">{noResults}</p>}
-    {rows.length > 0 && <div className="expense-report-table-scroll"><PaginatedTable pageSize={10} className="expense-report-table">
-      <caption>Tiền đã chi {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
-      <thead><tr><th scope="col">Nhóm chi</th><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">Số khoản thanh toán</th><th scope="col" className="expense-report-number">Tiền đã chi</th><th scope="col">Chi tiết</th></tr></thead>
+    {rows.length > 0 && <div className="expense-report-table-scroll" role="region" aria-label="Bảng báo cáo chi phí" tabIndex={0}><PaginatedTable pageSize={5} className="expense-report-table">
+      <caption>{allocationBasis?'Chi phí theo tháng ghi nhận':'Dòng tiền chi'} {hasDateRange ? `từ ${from.split('-').reverse().join('/')} đến ${to.split('-').reverse().join('/')}` : `trong tháng ${month}`}</caption>
+      <thead><tr><th scope="col">Danh mục</th><th scope="col">Cơ sở</th><th scope="col">{allocationBasis?'Số dòng ghi nhận':'Số khoản thanh toán'}</th><th scope="col">{allocationBasis?'Tổng ghi nhận':'Tổng đã chi'}</th><th scope="col">Chi tiết</th></tr></thead>
       <tbody>{rows.map((row) => {
-        const key = `${row.costType}:${row.categoryId}:${row.branchId}`;
-        const isExpanded = expanded && `${expanded.costType}:${expanded.categoryId}:${expanded.branchId}` === key;
+        const key = `${row.categoryId}:${row.branchId}`;
+        const isExpanded = expanded && `${expanded.categoryId}:${expanded.branchId}` === key;
         return <Fragment key={key}>
           <tr key={key}>
-            <td><span className={`expense-report-type ${row.costType === 'CAPEX' ? 'is-capex' : 'is-opex'}`}>{row.costType === 'CAPEX' ? 'Chi đầu tư' : 'Chi phí vận hành'}</span></td>
             <td>{row.categoryName}</td><td>{row.branchName}</td>
             <td>{Number(row.paymentCount) || 0}</td><td className="expense-report-number">{money(row.amount)}</td>
             <td><button className="expense-report-detail-button" type="button" aria-expanded={Boolean(isExpanded)} onClick={() => { const next = isExpanded ? null : row; setDetails([]); setDetailsError(''); setDetailsLoading(Boolean(next)); setExpanded(next); }}>{isExpanded ? 'Thu gọn' : 'Xem khoản chi'}</button></td>
           </tr>
-          {isExpanded && <tr className="expense-report-detail-row" key={`${key}:details`}><td colSpan="6">
+          {isExpanded && <tr className="expense-report-detail-row" key={`${key}:details`}><td colSpan="5">
             <div className="expense-report-detail-content"><h3>{row.categoryName} · {row.branchName}</h3>
               {detailsLoading && <p role="status">Đang tải chi tiết…</p>}
               {detailsError && <p role="alert">{detailsError}</p>}
               {!detailsLoading && !detailsError && details.length === 0 && <p>{noResults}</p>}
-              {details.length > 0 && <div className="expense-report-detail-scroll"><PaginatedTable pageSize={5}><thead><tr><th>Ngày thanh toán</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th className="expense-report-number">Số tiền</th><th>Chứng từ</th></tr></thead>
+              {details.length > 0 && <div className="expense-report-detail-scroll" role="region" aria-label={`Chi tiết ${row.categoryName} tại ${row.branchName}`} tabIndex={0}><PaginatedTable pageSize={5}><thead><tr><th>{allocationBasis?'Tháng ghi nhận':'Ngày thanh toán'}</th><th>Mã khoản chi</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th>Chứng từ</th></tr></thead>
                 <tbody>{details.map((item) => <tr key={`${item.sourceType}:${item.expenseId}:${item.recognitionDate}`}>
                   <td>{dateTime(item.paidAt)}</td><td>{item.expenseCode}</td><td>{item.kind === 'REIMBURSEMENT' ? 'Hoàn ứng' : item.origin==='ACCOUNTANT_DIRECT'?'Chi trực tiếp':'Thanh toán'}</td>
                   <td>{item.description || '—'}{item.paymentReference && <small className="expense-report-reference">Mã tham chiếu: {item.paymentReference}</small>}</td><td className="expense-report-number">{money(item.amount)}</td>

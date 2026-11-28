@@ -161,14 +161,14 @@ if (!periodValid) return setFormError(
     if (!quote) return setFormError('Chưa có báo giá cho thời gian đã chọn.');
     if (booking.roomId && !form.roomId) return setFormError('Vui lòng chọn phòng.');
     const selectedRoom = rooms.find((room) => room.id === form.roomId);
-    if (booking.roomId && !selectedRoom) return setFormError('Phòng đã chọn không còn trống trong khung giờ này.');
+    if (form.roomId && !selectedRoom) return setFormError('Phòng đã chọn không còn trống trong khung giờ này.');
     if (selectedRoom && selectedRoom.capacity < Number(booking.guestCount)) {
       return setFormError(`Phòng này nhận tối đa ${selectedRoom.capacity} khách, booking đang có ${booking.guestCount} khách.`);
     }
 
     setSubmitting(true);
     const result = await onUpdate(bookingId, {
-      roomId: booking.roomId ? form.roomId : null,
+      roomId: form.roomId || null,
       plannedStart,
       plannedEnd,
       pricingMode: form.pricingMode,
@@ -182,6 +182,7 @@ if (!periodValid) return setFormError(
   };
 
   const canEdit = booking?.status === 'CONFIRMED' && new Date(booking.plannedStart) > new Date();
+  // BR-04, BR-07: phòng được chọn phải còn trống cho toàn bộ thời gian booking.
   const hasRoomOption = rooms.some((room) => room.id === form?.roomId);
   const displayedCombos = currentCombo && !combos.some((combo) => combo.id === currentCombo.comboId)
     ? [{ id: currentCombo.comboId, name: currentCombo.description, durationMinutes: currentCombo.pricingSnapshot?.durationMinutes, price: currentCombo.unitPrice }, ...combos]
@@ -238,38 +239,41 @@ if (!periodValid) return setFormError(
         <h3 className="booking-cancel-section-title booking-edit-section-title">Thời gian sử dụng</h3>
         <div className="booking-form-grid booking-schedule-grid">
           <label className="booking-form-field"><span>Ngày nhận phòng</span><input type="date" name="startDate" value={form.startDate} onChange={change} /></label>
-          <label className="booking-form-field"><span>Giờ nhận phòng</span><TimeInput name="startTime" value={form.startTime} onChange={change} aria-invalid={!isValidTimeInput(form.startTime)} aria-describedby="booking-edit-start-time-hint" /><small id="booking-edit-start-time-hint" className="booking-field-hint">Định dạng 24 giờ, ví dụ 14:30.</small></label>
+          <label className="booking-form-field"><span>Giờ nhận phòng</span><TimeInput name="startTime" value={form.startTime} onChange={change} aria-invalid={!isValidTimeInput(form.startTime)} /></label>
           <label className="booking-form-field"><span>Ngày trả phòng</span><input type="date" name="endDate" value={form.endDate} onChange={change} readOnly={form.pricingMode === 'HOURLY'} /></label>
-          <label className="booking-form-field"><span>Giờ trả phòng</span><TimeInput name="endTime" value={form.endTime} onChange={change} readOnly={form.pricingMode === 'HOURLY'} aria-invalid={!isValidTimeInput(form.endTime)} aria-describedby="booking-edit-end-time-hint" /><small id="booking-edit-end-time-hint" className="booking-field-hint">{form.pricingMode === 'HOURLY' ? 'Tự động tính theo thời lượng thuê.' : 'Định dạng 24 giờ, ví dụ 14:30.'}</small></label>
+          <label className="booking-form-field"><span>Giờ trả phòng</span><TimeInput name="endTime" value={form.endTime} onChange={change} readOnly={form.pricingMode === 'HOURLY'} aria-invalid={!isValidTimeInput(form.endTime)} /></label>
         </div>
         <div className="booking-pricing-mode booking-edit-pricing-mode" role="group" aria-label="Hình thức tính giá">
           <button type="button" className={form.pricingMode === 'HOURLY' ? 'is-selected' : ''} onClick={() => changeMode('HOURLY')}>Tính giờ</button>
           <button type="button" className={form.pricingMode === 'COMBO' ? 'is-selected' : ''} onClick={() => changeMode('COMBO')}>Combo</button>
         </div>
         {form.pricingMode === 'HOURLY' ? <label className="booking-form-field booking-edit-combo"><span>Thời lượng thuê (giờ)</span>
-          <input type="number" name="durationHours" min="0" max="24" step="any" inputMode="decimal" value={form.durationHours} onChange={change} aria-invalid={!hourlyDurationValid} />
-          <small className={!hourlyDurationValid ? 'booking-inline-error' : ''}>Nhập thời lượng từ 1 phút đến 24 giờ. Ví dụ 0,5 giờ là 30 phút.</small>
+          <input type="number" name="durationHours" min="1" max="24" step="1" inputMode="numeric" value={form.durationHours} onChange={change} aria-invalid={!hourlyDurationValid} />
+          {!hourlyDurationValid && <small className="booking-inline-error">Nhập số giờ nguyên từ 1 đến 24.</small>}
         </label> : <label className="booking-form-field booking-edit-combo"><span>Combo sử dụng</span>
           <select name="comboId" value={form.comboId} onChange={changeCombo}>
             {!form.comboId && <option value="">Chọn combo</option>}
             {displayedCombos.map((combo) => <option key={combo.id} value={combo.id}>{combo.name} · {combo.durationMinutes} phút · {formatVnd(combo.price)}</option>)}
           </select>
-          <small>Đổi combo sẽ đặt lại giờ trả theo thời lượng gói. Có thể chỉnh giờ trả sau đó; thời gian vượt gói được tính phụ phí.</small>
+          <small>Thời gian vượt gói được tính phụ phí.</small>
         </label>}
-         {booking.roomId ? <><div className="booking-section-title-row booking-edit-section-title"><h3>Phòng</h3><span>{loadingRooms ? 'Đang kiểm tra phòng…' : `${rooms.length} phòng còn trống`}</span></div>
-         <label className="booking-form-field">
+         <div className="booking-section-title-row booking-edit-section-title"><h3>Phòng</h3><span>{loadingRooms ? 'Đang kiểm tra phòng…' : `${rooms.length} phòng phù hợp`}</span></div>
+         <label className="booking-form-field" htmlFor="booking-edit-room">
           <span>Phòng sử dụng</span>
-          <select name="roomId" value={form.roomId} onChange={change}>
+          <select id="booking-edit-room" name="roomId" value={form.roomId} onChange={change}>
+            {!booking.roomId && <option value="">Chưa gán phòng · chọn khi check-in</option>}
             {!hasRoomOption && form.roomId && <option value={form.roomId}>{booking.roomCode || booking.roomName || 'Phòng hiện tại'} · hiện không có trong danh sách trống</option>}
             {rooms.map((room) => <option key={room.id} value={room.id}>{room.code} · {room.name} · tối đa {room.capacity} khách</option>)}
-            {!form.roomId && <option value="">Chọn phòng</option>}
           </select>
-         </label></> : <p className="booking-feature-note">Hạng phòng {booking.roomTypeName} · Chọn phòng cụ thể khi check-in.</p>}
+          <small className="booking-edit-room-help">{booking.roomId
+            ? `Chỉ hiện phòng hạng ${booking.roomTypeName} còn trống trong toàn bộ thời gian đã chọn.`
+            : `Chỉ hiện phòng hạng ${booking.roomTypeName} còn trống trong toàn bộ thời gian đã chọn. Có thể chọn phòng lúc check-in.`}</small>
+         </label>
         {roomError && <p className="booking-inline-error" role="alert">{roomError}</p>}
         <label className="booking-form-field booking-note-field"><span>Ghi chú booking</span><textarea name="note" rows="3" maxLength="2000" value={form.note} onChange={change} placeholder="Thông tin khách cần lưu ý" /></label>
         <div className="booking-cancel-deposit-summary booking-edit-summary"><span>Giá hiện tại: <strong>{formatVnd(booking.expectedAmount)}</strong></span><span>Giá sau sửa: <strong>{quote ? formatVnd(quote.expectedAmount) : 'Đang tính…'}</strong></span><span>Tiền cọc đã ghi: <strong>{formatVnd(detail?.deposit?.balance ?? booking.depositBalance)}</strong></span></div>
         {formError && <p className="booking-inline-error" role="alert">{formError}</p>}
-        <div className="booking-cancel-buttons"><button className="booking-button booking-button-primary" type="submit" disabled={submitting || loadingRooms || !periodValid || !quote || !hasRoomOption || Boolean(roomError)}>{submitting ? 'Đang lưu…' : 'Lưu thay đổi'}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={submitting}>Quay lại</button></div>
+        <div className="booking-cancel-buttons"><button className="booking-button booking-button-primary" type="submit" disabled={submitting || loadingRooms || !periodValid || !quote || (form.roomId && !hasRoomOption) || Boolean(roomError)}>{submitting ? 'Đang lưu…' : 'Lưu thay đổi'}</button><button className="booking-button booking-button-secondary" type="button" onClick={onClose} disabled={submitting}>Quay lại</button></div>
       </form>}
       {!loadingDetail && (pageError || !canEdit) && <div className="booking-cancel-buttons"><button className="booking-button booking-button-secondary" type="button" onClick={onClose}>Quay lại</button></div>}
     </section>

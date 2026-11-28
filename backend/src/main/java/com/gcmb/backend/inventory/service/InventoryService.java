@@ -1,11 +1,13 @@
 package com.gcmb.backend.inventory.service;
 
+import com.gcmb.backend.audit.service.MutationAudit;
 import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.booking.service.RefundEvidenceStorageService;
 import com.gcmb.backend.booking.service.RefundEvidenceStorageService.StoredEvidence;
 import com.gcmb.backend.inventory.dto.InventoryDtos.EvidenceContent;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemView;
+import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemWithMenuCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryMetadata;
 import com.gcmb.backend.inventory.dto.InventoryDtos.ReceiptLineCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.ReceiptLineResult;
@@ -13,6 +15,8 @@ import com.gcmb.backend.inventory.dto.InventoryDtos.StockAdjustmentCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.StockMovementView;
 import com.gcmb.backend.inventory.dto.InventoryDtos.StockReceiptCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.StockReceiptResult;
+import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemCommand;
+import com.gcmb.backend.inventory.dto.MenuItemDtos.MenuItemView;
 import com.gcmb.backend.inventory.repository.InventoryRepository;
 import com.gcmb.backend.inventory.repository.InventoryRepository.EvidenceRow;
 import com.gcmb.backend.inventory.repository.InventoryRepository.LockedItem;
@@ -49,10 +53,15 @@ public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
     private final RefundEvidenceStorageService refundEvidenceStorageService;
+    private final MenuItemService menuItemService;
+    private final MutationAudit mutationAudit;
 
-    public InventoryService(InventoryRepository inventoryRepository, RefundEvidenceStorageService refundEvidenceStorageService) {
+    public InventoryService(InventoryRepository inventoryRepository, RefundEvidenceStorageService refundEvidenceStorageService,
+                            MenuItemService menuItemService, MutationAudit mutationAudit) {
         this.inventoryRepository = inventoryRepository;
         this.refundEvidenceStorageService = refundEvidenceStorageService;
+        this.menuItemService = menuItemService;
+        this.mutationAudit = mutationAudit;
     }
 
     @Transactional(readOnly = true)
@@ -87,6 +96,16 @@ public class InventoryService {
         } catch (DataIntegrityViolationException exception) {
             throw constraintFailure(exception, "tạo mặt hàng");
         }
+    }
+
+    @Transactional
+    public InventoryItemView createWithMenu(Identity actor, InventoryItemWithMenuCommand input) {
+        // Hai bản ghi và hai sự kiện audit cùng giao dịch; lỗi tạo món sẽ hoàn tác mặt hàng kho.
+        InventoryItemView item = create(actor, input == null ? null : input.item());
+        mutationAudit.record("CREATE_MENU_ITEM", "MENU_ITEM", null,
+            () -> menuItemService.create(actor, new MenuItemCommand(item.name(), item.category(), "PACKAGED", item.id(),
+                input.salePrice(), true, null, false), null), MenuItemView::id);
+        return item;
     }
 
     @Transactional

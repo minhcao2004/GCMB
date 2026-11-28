@@ -5,6 +5,7 @@ import com.gcmb.backend.auth.dto.Identity;
 import com.gcmb.backend.inventory.dto.InventoryDtos.EvidenceContent;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemView;
+import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryItemWithMenuCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.InventoryMetadata;
 import com.gcmb.backend.inventory.dto.InventoryDtos.StockAdjustmentCommand;
 import com.gcmb.backend.inventory.dto.InventoryDtos.StockMovementView;
@@ -63,6 +64,12 @@ public class InventoryController {
     public InventoryItemView create(@AuthenticationPrincipal Identity actor, @RequestBody InventoryItemCommand body) {
         return mutationAudit.record("CREATE_INVENTORY_ITEM", "INVENTORY_ITEM", null,
             () -> inventoryService.create(actor, body), InventoryItemView::id);
+    }
+
+    @PostMapping("/items/with-menu")
+    public InventoryItemView createWithMenu(@AuthenticationPrincipal Identity actor, @RequestBody InventoryItemWithMenuCommand body) {
+        return mutationAudit.record("CREATE_INVENTORY_ITEM", "INVENTORY_ITEM", null,
+            () -> inventoryService.createWithMenu(actor, body), InventoryItemView::id);
     }
 
     @PutMapping("/items/{id}")

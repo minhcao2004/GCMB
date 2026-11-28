@@ -33,8 +33,40 @@ const stockClass = (item) => !item.active ? 'archived' : item.stockStatus === 'O
 const newId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const EMPTY_LINES = [];
 
+function InventoryItemPicker({ items, categories, unavailableIds = [], onSelect, onClose }) {
+  const dialogRef = useRef(null);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const [status, setStatus] = useState('all');
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog.open) dialog.showModal();
+  }, []);
+  const term = query.trim().toLocaleLowerCase('vi-VN');
+  const visible = items.filter((item) => !unavailableIds.includes(item.id)
+    && (category === 'all' || item.category.toLocaleLowerCase('vi-VN') === category.toLocaleLowerCase('vi-VN'))
+    && (status === 'all' || item.stockStatus === status)
+    && (!term || `${item.sku} ${item.name} ${item.category}`.toLocaleLowerCase('vi-VN').includes(term)));
+  return <dialog ref={dialogRef} className="inv-item-picker" aria-labelledby="inv-picker-title" onClose={onClose}>
+    <div className="inv-picker-heading"><div><h2 id="inv-picker-title">Chọn mặt hàng kho</h2><p>Tìm theo mã hoặc tên, rồi chọn một mặt hàng trong danh sách.</p></div>
+      <button type="button" className="inv-button inv-button-quiet" onClick={() => dialogRef.current?.close()}>Đóng</button></div>
+    <search className="inv-picker-filters">
+      <label className="inv-field"><span>Tìm mặt hàng</span><input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Mã hoặc tên mặt hàng…" /></label>
+      <label className="inv-field"><span>Nhóm hàng</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Tất cả nhóm</option>{categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+      <label className="inv-field"><span>Tình trạng tồn</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Tất cả</option><option value="AVAILABLE">Còn hàng</option><option value="LOW_STOCK">Sắp hết</option><option value="OUT_OF_STOCK">Hết hàng</option></select></label>
+    </search>
+    <p className="inv-picker-count" role="status">{visible.length} mặt hàng phù hợp</p>
+    {visible.length ? <ul className="inv-picker-list">{visible.map((item) => <li key={item.id}><button type="button" onClick={() => { onSelect(item.id); dialogRef.current?.close(); }}>
+      <span><strong>{item.sku} · {item.name}</strong><small>{item.category} · {formatQuantity(item.quantity)} {item.unitName}</small></span>
+      <span className={`inv-status ${stockClass(item)}`}>{stockLabel(item)}</span>
+    </button></li>)}</ul> : <p className="inv-picker-empty">Không tìm thấy kết quả phù hợp. Hãy thử thay đổi từ khóa hoặc bộ lọc.</p>}
+  </dialog>;
+}
+
 export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed, onAddToMenu }) {
   const pageRef = useRef(null);
+  const itemPriceRef = useRef(null);
+  const receiptPriceRef = useRef(null);
   const [items, setItems] = useState([]);
   const [metadata, setMetadata] = useState({ units: [], categories: [] });
   const [loading, setLoading] = useState(true);
@@ -61,8 +93,11 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   const [itemDraft, setItemDraft] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [receiptDraft, setReceiptDraft] = useState(null);
-  const [receiptCreateLineId, setReceiptCreateLineId] = useState(null);
   const [receiptItemDraft, setReceiptItemDraft] = useState(null);
+  const [addItemToMenu, setAddItemToMenu] = useState(false);
+  const [menuSalePrice, setMenuSalePrice] = useState('');
+  const [unlinkedMenuItem, setUnlinkedMenuItem] = useState(null);
+  const [pickerTarget, setPickerTarget] = useState(null);
   const [adjustDraft, setAdjustDraft] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustLoading, setAdjustLoading] = useState(false);
@@ -177,6 +212,8 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   };
 
   const openItemForm = (mode, item = null) => {
+    setAddItemToMenu(false);
+    setMenuSalePrice('');
     setItemMode(mode);
     setItemDraft(item ? {
       sku: item.sku, name: item.name,
@@ -193,8 +230,8 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   };
 
   const openReceipt = () => {
+    setPickerTarget(null);
     setReceiptDraft({ receivedAt: makeLocalDateTime(), supplierName: '', supplierInvoice: '', items: [newReceiptLine(newId())] });
-    setReceiptCreateLineId(null);
     setReceiptItemDraft(null);
     setEvidence(null);
     setError('');
@@ -202,6 +239,7 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   };
 
   const openAdjustment = () => {
+    setPickerTarget(null);
     const first = activeItems[0] || null;
     setAdjustItem(null);
     setAdjustLoading(Boolean(first));
@@ -217,6 +255,12 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
 
   const saveItem = async (event) => {
     event.preventDefault();
+    // BR-111, BR-198: món F&B mới cần giá bán nguyên đồng không âm.
+    if (itemMode === 'create' && addItemToMenu && !/^\d{1,18}$/.test(menuSalePrice)) {
+      setError('Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.');
+      itemPriceRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -224,10 +268,18 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
         ...itemDraft,
         minimumQuantity: Number(itemDraft.minimumQuantity),
       };
-      if (itemMode === 'create') await inventoryApi.createItem(command);
-      else await inventoryApi.updateItem(selectedId, command);
+      let menuResult = null;
+      if (itemMode === 'create') {
+        if (addItemToMenu) menuResult = await inventoryApi.createItemWithMenu(command, menuSalePrice);
+        else await inventoryApi.createItem(command);
+      } else await inventoryApi.updateItem(selectedId, command);
       await reload();
-      setToastMessage(itemMode === 'create' ? 'Đã tạo mặt hàng kho.' : 'Đã cập nhật thông tin mặt hàng.');
+      if (menuResult) setItems((current) => current.some((item) => item.id === menuResult.item.id)
+        ? current : [...current, menuResult.item]);
+      if (menuResult?.menuError) setUnlinkedMenuItem({ item: menuResult.item, error: displayError(menuResult.menuError) });
+      else setUnlinkedMenuItem(null);
+      setToastMessage(menuResult?.menuError ? 'Đã tạo mặt hàng kho. Món F&B chưa được tạo.'
+        : itemMode === 'create' ? addItemToMenu ? 'Đã tạo mặt hàng kho và món F&B.' : 'Đã tạo mặt hàng kho.' : 'Đã cập nhật thông tin mặt hàng.');
       setScreen('stock');
     } catch (saveError) {
       setError(displayError(saveError));
@@ -238,27 +290,52 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
 
   const saveReceiptItem = async () => {
     if (!receiptItemDraft || busy) return;
+    // BR-111, MSG02: các trường bắt buộc không được để trống hoặc chỉ có khoảng trắng.
     if (!receiptItemDraft.name.trim()) { setError('Vui lòng bổ sung tên mặt hàng.'); return; }
     if (!receiptItemDraft.category.trim()) { setError('Vui lòng bổ sung nhóm hàng.'); return; }
     if (!receiptItemDraft.unitId) { setError('Vui lòng bổ sung đơn vị tồn kho.'); return; }
+    // BR-111, BR-198: áp dụng cùng kiểm tra giá bán cho luồng tạo nhanh trong phiếu nhập.
+    if (receiptItemDraft.addToMenu && !/^\d{1,18}$/.test(receiptItemDraft.salePrice)) {
+      setError('Giá bán phải là số nguyên VND không âm và tối đa 18 chữ số.');
+      receiptPriceRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      const item = await inventoryApi.createItem({
+      const command = {
         sku: '', name: receiptItemDraft.name.trim(), category: receiptItemDraft.category.trim(),
         unitId: receiptItemDraft.unitId, trackingMode: receiptItemDraft.trackingMode,
         minimumQuantity: Number(receiptItemDraft.minimumQuantity || 0), active: true,
-      });
+      };
+      const menuResult = receiptItemDraft.addToMenu
+        ? await inventoryApi.createItemWithMenu(command, receiptItemDraft.salePrice)
+        : null;
+      const item = menuResult?.item || await inventoryApi.createItem(command);
       setItems((current) => [...current, item]);
       setMetadata((current) => ({
         ...current,
         categories: current.categories.includes(item.category)
           ? current.categories : [...current.categories, item.category].sort((left, right) => left.localeCompare(right, 'vi')),
       }));
-      updateReceiptLine(receiptCreateLineId, 'inventoryItemId', item.id);
-      setReceiptCreateLineId(null);
+      setReceiptDraft((draft) => {
+        const emptyIndex = draft.items.findIndex((line) => !line.inventoryItemId);
+        if (emptyIndex !== -1) return {
+          ...draft,
+          items: draft.items.map((line, index) => index === emptyIndex
+            ? { ...newReceiptLine(line.id), inventoryItemId: item.id } : line),
+        };
+        return { ...draft, items: [...draft.items, { ...newReceiptLine(newId()), inventoryItemId: item.id }] };
+      });
       setReceiptItemDraft(null);
-      setToastMessage(`Đã tạo mặt hàng ${item.name}. Chọn đơn vị nhận để tiếp tục.`);
+      // MSG10: thông báo tạo mặt hàng thành công.
+      if (menuResult?.menuError) setUnlinkedMenuItem({ item, error: displayError(menuResult.menuError) });
+      else setUnlinkedMenuItem(null);
+      setToastMessage(menuResult?.menuError ? `Đã tạo mặt hàng ${item.name}. Món F&B chưa được tạo.`
+        : receiptItemDraft.addToMenu ? `Đã tạo mặt hàng ${item.name} và món F&B.` : `Đã tạo mặt hàng ${item.name}.`);
+      window.requestAnimationFrame(() => {
+        pageRef.current?.querySelector(`[data-receipt-unit-for="${item.id}"]`)?.focus({ preventScroll: true });
+      });
     } catch (saveError) {
       setError(displayError(saveError));
     } finally {
@@ -304,6 +381,11 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
     // BR-111, MSG02: từ chối tên nhà cung cấp chỉ chứa khoảng trắng.
     if (!receiptDraft.supplierName.trim()) {
       setError('Vui lòng bổ sung nhà cung cấp.');
+      return;
+    }
+    const missingItemLine = receiptDraft.items.findIndex((line) => !line.inventoryItemId);
+    if (missingItemLine !== -1) {
+      setError(`Dòng ${missingItemLine + 1}: Vui lòng chọn mặt hàng.`);
       return;
     }
     const invalidLine = receiptDraft.items.findIndex((line) => receiptQuantity(line).error);
@@ -428,6 +510,14 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   </div>;
 
   const feedbackNotice = <ToastStack error={error} notice={toast} onCloseError={() => setError('')} onCloseNotice={() => setToast('')} />;
+  const menuLinkNotice = unlinkedMenuItem && <div className="inv-menu-link-notice" role="alert">
+    <div><strong>{unlinkedMenuItem.item.name} đã được tạo trong kho, nhưng chưa có trong F&amp;B.</strong>
+      <p>{unlinkedMenuItem.error} Chọn “Thêm vào F&amp;B” để hoàn tất mà không tạo trùng mặt hàng kho.</p></div>
+    <button type="button" className="inv-button inv-button-quiet" onClick={() => {
+      onAddToMenu(unlinkedMenuItem.item.id);
+      setUnlinkedMenuItem(null);
+    }}>Thêm vào F&amp;B</button>
+  </div>;
   const attachmentField = <div className="inv-field inv-evidence-field">
     <label htmlFor="inventory-evidence">Chứng từ <span className="inv-optional">Không bắt buộc</span></label>
     <input key={evidence?.name || 'empty'} id="inventory-evidence" type="file" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf" onChange={(event) => setEvidence(event.target.files?.[0] || null)} />
@@ -493,15 +583,20 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
           <label className="inv-field"><span>Ngưỡng sắp hết *</span><div className="inv-number-with-unit"><input required type="number" min="0" step="0.001" value={itemDraft?.minimumQuantity ?? ''} onChange={(event) => setItemDraft({ ...itemDraft, minimumQuantity: event.target.value })} />{items.find((item) => item.id === selectedId)?.unitName || metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || 'đơn vị'}</div></label>
           {itemMode === 'update' && <label className="inv-check-field"><input type="checkbox" checked={Boolean(itemDraft?.active)} onChange={(event) => setItemDraft({ ...itemDraft, active: event.target.checked })} /><span>Đang sử dụng</span></label>}
         </div>
+        {itemMode === 'create' && <div className="inv-menu-option"><label className="inv-check-field"><input type="checkbox" checked={addItemToMenu} onChange={(event) => setAddItemToMenu(event.target.checked)} /><span>Thêm ngay vào Thực đơn F&amp;B</span></label>
+          {addItemToMenu && <label className="inv-field"><span>Giá bán F&amp;B *</span><MoneyInput ref={itemPriceRef} required maxDigits={18} value={menuSalePrice} onValueChange={setMenuSalePrice} /><small>Món hàng hóa sẽ liên kết với mặt hàng kho này. {itemDraft?.trackingMode === 'AUTO_ON_SALE' ? 'Tồn tự trừ khi bán.' : 'Tồn được theo dõi thủ công.'}</small></label>}
+        </div>}
         <div className="inv-alert inv-alert-info">{itemMode === 'create' ? 'Mặt hàng mới bắt đầu với tồn kho 0. Dùng phiếu nhập để ghi nhận hàng nhận thực tế.' : 'Lưu thông tin mặt hàng không thay đổi số tồn hoặc các biến động đã ghi nhận.'}</div>
         <div className="inv-form-actions"><button type="button" className="inv-button inv-button-quiet" onClick={() => setScreen('stock')} disabled={busy}>Hủy</button><button type="submit" className="inv-button inv-button-primary" disabled={busy}>{busy ? 'Đang lưu…' : itemMode === 'create' ? 'Tạo mặt hàng' : 'Lưu thay đổi'}</button></div>
       </form>
       <aside className="inv-summary inv-item-summary"><h2>Tóm tắt mặt hàng</h2>
-        <p><strong>{itemDraft?.name || 'Tên mặt hàng'}</strong><span>{itemDraft?.sku || 'Mã mặt hàng'} · {metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || 'Đơn vị'}</span></p>
-        <dl><div><dt>Nhóm</dt><dd>{itemDraft?.category || 'Chưa chọn'}</dd></div><div><dt>Theo dõi tồn</dt><dd>{trackingLabel(itemDraft?.trackingMode)}</dd></div>
-          <div><dt>Tồn hiện tại</dt><dd>{itemMode === 'update' ? formatQuantity(items.find((item) => item.id === selectedId)?.quantity) : '0'}</dd></div>
-          <div><dt>Ngưỡng sắp hết</dt><dd>{formatQuantity(itemDraft?.minimumQuantity)}</dd></div></dl>
-        <p className="inv-summary-note">Không ghi nhận nhập hàng hoặc điều chỉnh tồn tại màn hình này.</p>
+        <div className="inv-item-summary-identity"><span>Mặt hàng kho</span><strong>{itemDraft?.name?.trim() || 'Chưa nhập tên mặt hàng'}</strong>
+          <small>{itemDraft?.sku || 'Mã tự cấp khi tạo'}<span aria-hidden="true"> · </span>{metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || 'Chưa chọn đơn vị'}</small></div>
+        <dl className="inv-item-summary-details"><div><dt>Nhóm hàng</dt><dd>{itemDraft?.category || 'Chưa chọn'}</dd></div><div><dt>Theo dõi tồn</dt><dd>{trackingLabel(itemDraft?.trackingMode)}</dd></div>
+          <div><dt>Tồn hiện tại</dt><dd>{formatQuantity(itemMode === 'update' ? items.find((item) => item.id === selectedId)?.quantity : 0)} {metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || ''}</dd></div>
+          <div><dt>Ngưỡng sắp hết</dt><dd>{formatQuantity(itemDraft?.minimumQuantity)} {metadata.units.find((unit) => unit.id === itemDraft?.unitId)?.name || ''}</dd></div>
+          {itemMode === 'create' && addItemToMenu && <div><dt>Giá bán F&amp;B</dt><dd>{menuSalePrice ? `${menuSalePrice.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}₫` : 'Chưa nhập'}</dd></div>}</dl>
+        <p className="inv-item-summary-note">Tồn kho được ghi nhận khi nhập hàng hoặc kiểm kê.</p>
       </aside>
     </div>
     <p className="inv-footnote">Dữ liệu mặt hàng chỉ thuộc cơ sở đang được phân quyền</p>
@@ -510,6 +605,7 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
   if (screen === 'receipt') return <main ref={pageRef} className="inventory-page">
     {heading('Ghi nhận nhập hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Kho hàng`)}
     {feedbackNotice}
+    {menuLinkNotice}
     <div className="inv-form-layout inv-receipt-layout">
       <form id="inventory-receipt-form" className="inv-panel inv-receipt-form" onSubmit={submitReceipt}>
         <h2>Thông tin phiếu nhập</h2>
@@ -520,7 +616,38 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
           {attachmentField}
         </div>
         <div className="inv-line-items">
-          <div className="inv-line-heading"><h3>Mặt hàng nhận</h3><span>{receiptLines.length} dòng</span></div>
+          <div className="inv-line-heading"><h3>Mặt hàng nhận</h3><div className="inv-line-heading-actions">
+            <span>{receiptLines.length} dòng</span>
+            <button type="button" className="inv-button inv-button-quiet inv-receipt-create-toggle" disabled={busy}
+              aria-expanded={Boolean(receiptItemDraft)} aria-controls={receiptItemDraft ? 'inv-receipt-inline-create' : undefined}
+              onClick={() => {
+                if (receiptItemDraft) { setReceiptItemDraft(null); return; }
+                 setReceiptItemDraft({ name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '', trackingMode: 'AUTO_ON_SALE', minimumQuantity: '5', addToMenu: false, salePrice: '' });
+                setError('');
+              }}>{receiptItemDraft ? 'Hủy tạo mặt hàng' : '+ Tạo mặt hàng mới'}</button>
+          </div></div>
+          {receiptItemDraft && <div id="inv-receipt-inline-create" className="inv-receipt-inline-create" role="group" aria-label="Tạo mặt hàng mới"
+            onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}>
+            <strong>Tạo mặt hàng và tiếp tục nhập</strong>
+            <div className="inv-receipt-create-grid">
+              <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft.name} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
+              <label className="inv-field"><span>Nhóm hàng *</span><select value={receiptItemDraft.category} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })}>
+                <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+              <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft.unitId} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
+                <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select></label>
+              <label className="inv-field"><span>Cách theo dõi tồn *</span><select value={receiptItemDraft.trackingMode} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, trackingMode: event.target.value })}>
+                <option value="AUTO_ON_SALE">Tự trừ khi bán</option><option value="MANUAL">Theo dõi thủ công</option>
+              </select></label>
+              <label className="inv-field"><span>Ngưỡng sắp hết</span><input type="number" min="0" step="0.001" value={receiptItemDraft.minimumQuantity} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, minimumQuantity: event.target.value })} /></label>
+            </div>
+            <div className="inv-menu-option"><label className="inv-check-field"><input type="checkbox" checked={receiptItemDraft.addToMenu} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, addToMenu: event.target.checked })} /><span>Thêm ngay vào Thực đơn F&amp;B</span></label>
+              {receiptItemDraft.addToMenu && <label className="inv-field"><span>Giá bán F&amp;B *</span><MoneyInput ref={receiptPriceRef} maxDigits={18} value={receiptItemDraft.salePrice} onValueChange={(value) => setReceiptItemDraft((draft) => ({ ...draft, salePrice: value }))} /><small>Món hàng hóa sẽ liên kết với mặt hàng kho vừa tạo.</small></label>}
+            </div>
+            <div className="inv-receipt-create-actions"><small>Mã mặt hàng sẽ được hệ thống cấp tự động. Tồn ban đầu bằng 0; tồn chỉ tăng khi xác nhận phiếu nhập.</small>
+              <button type="button" className="inv-button inv-button-primary" disabled={busy || !metadata.units.length} onClick={saveReceiptItem}>{busy ? 'Đang tạo…' : receiptItemDraft.addToMenu ? 'Tạo, thêm vào thực đơn và chọn' : 'Tạo và chọn mặt hàng'}</button>
+            </div>
+          </div>}
           <div className="inv-receipt-lines">
             {receiptLines.map((line) => {
               const item = items.find((row) => row.id === line.inventoryItemId);
@@ -530,38 +657,10 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
               const conversionStarted = line.quantity !== '' && (!line.receivingUnit || line.receivingUnit === 'BASE' || line.unitsPerPack !== '');
               return <div className={`inv-receipt-line${line.receivingUnit === 'CUSTOM' ? ' inv-receipt-custom-unit' : !line.receivingUnit || line.receivingUnit === 'BASE' ? ' inv-receipt-base-unit' : ''}`} key={line.id}>
                 <div className="inv-line-product">
-                  <label className="inv-field"><span>Mặt hàng *</span><select required value={line.inventoryItemId} onChange={(event) => updateReceiptLine(line.id, 'inventoryItemId', event.target.value)}>
-                    <option value="">Chọn mặt hàng</option>{activeItems.filter((option) => !receiptLines.some((other) => other.id !== line.id && other.inventoryItemId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.sku} · {option.name}</option>)}
-                  </select></label>
-                  <button type="button" className="inv-text-button inv-receipt-create-toggle" disabled={busy}
-                    onClick={() => {
-                      if (receiptCreateLineId === line.id) { setReceiptCreateLineId(null); setReceiptItemDraft(null); return; }
-                      setReceiptCreateLineId(line.id);
-                      setReceiptItemDraft({ name: '', category: metadata.categories[0] || '', unitId: metadata.units[0]?.id || '', trackingMode: 'AUTO_ON_SALE', minimumQuantity: '5' });
-                      setError('');
-                    }}>+ Tạo mặt hàng mới</button>
-                  {receiptCreateLineId === line.id && <div className="inv-receipt-inline-create" role="group" aria-label="Tạo mặt hàng mới"
-                    onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}>
-                    <strong>Tạo mặt hàng và tiếp tục nhập</strong>
-                    <div className="inv-receipt-create-grid">
-                      <label className="inv-field"><span>Tên mặt hàng *</span><input autoFocus maxLength="200" value={receiptItemDraft?.name || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, name: event.target.value })} placeholder="Ví dụ: Nước suối" /></label>
-                      <label className="inv-field"><span>Nhóm hàng *</span><select value={receiptItemDraft?.category || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, category: event.target.value })}>
-                        <option value="">Chọn nhóm hàng</option>{metadata.categories.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
-                      <label className="inv-field"><span>Đơn vị tồn kho *</span><select value={receiptItemDraft?.unitId || ''} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, unitId: event.target.value })}>
-                        <option value="">Chọn đơn vị</option>{metadata.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-                      </select></label>
-                      <label className="inv-field"><span>Cách theo dõi tồn *</span><select value={receiptItemDraft?.trackingMode || 'AUTO_ON_SALE'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, trackingMode: event.target.value })}>
-                        <option value="AUTO_ON_SALE">Tự trừ khi bán</option><option value="MANUAL">Theo dõi thủ công</option>
-                      </select></label>
-                      <label className="inv-field"><span>Ngưỡng sắp hết</span><input type="number" min="0" step="0.001" value={receiptItemDraft?.minimumQuantity ?? '5'} onChange={(event) => setReceiptItemDraft({ ...receiptItemDraft, minimumQuantity: event.target.value })} /></label>
-                    </div>
-                    <div className="inv-receipt-create-actions"><small>Mã mặt hàng sẽ được hệ thống cấp tự động. Tồn ban đầu bằng 0; tồn chỉ tăng khi xác nhận phiếu nhập.</small>
-                      <button type="button" className="inv-button inv-button-primary" disabled={busy || !metadata.units.length} onClick={saveReceiptItem}>{busy ? 'Đang tạo…' : 'Tạo và chọn mặt hàng'}</button>
-                    </div>
-                  </div>}
+                   <div className="inv-field"><span>Mặt hàng *</span><button type="button" className="inv-picker-trigger" disabled={busy} onClick={() => setPickerTarget(line.id)}>{item ? `${item.sku} · ${item.name}` : 'Chọn mặt hàng'}</button></div>
                 </div>
                 <button type="button" className="inv-remove-line" aria-label={`Bỏ dòng ${item?.name || 'mặt hàng'}`} disabled={receiptLines.length === 1} onClick={() => removeReceiptLine(line.id)}>Bỏ</button>
-                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select required disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
+                <label className="inv-field inv-line-unit"><span>Đơn vị nhận *</span><select required data-receipt-unit-for={line.inventoryItemId} disabled={!item || busy} value={line.receivingUnit} onChange={(event) => updateReceiptLine(line.id, 'receivingUnit', event.target.value)}>
                   <option value="">Chọn đơn vị nhận</option>
                   <option value="BASE">{item?.unitName || 'Đơn vị tồn kho'} (đơn vị tồn kho)</option>
                   {RECEIVING_UNITS.filter((unit) => unit.toLocaleLowerCase('vi-VN') !== item?.unitName.toLocaleLowerCase('vi-VN')).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
@@ -601,6 +700,9 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
           <button type="button" className="inv-button inv-button-quiet" onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại tồn kho</button></div>
       </aside>
     </div>
+    {pickerTarget && <InventoryItemPicker items={activeItems} categories={metadata.categories}
+      unavailableIds={receiptLines.filter((line) => line.id !== pickerTarget).map((line) => line.inventoryItemId).filter(Boolean)}
+      onSelect={(id) => updateReceiptLine(pickerTarget, 'inventoryItemId', id)} onClose={() => setPickerTarget(null)} />}
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Xác nhận nhập kho cập nhật ledger tồn kho</p>
   </main>;
 
@@ -613,9 +715,7 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
         <div className="inv-form-grid">
           <label className="inv-field"><span>Thời điểm kiểm kê *</span><input required type="datetime-local" value={adjustDraft?.adjustedAt || ''} onChange={(event) => setAdjustDraft({ ...adjustDraft, adjustedAt: event.target.value })} /></label>
           <label className="inv-field"><span>Người thực hiện</span><input value={user.fullName || user.username || 'Quản lý cơ sở'} disabled /></label>
-          <label className="inv-field"><span>Mặt hàng *</span><select required disabled={busy} value={adjustDraft?.inventoryItemId || ''} onChange={(event) => selectAdjustmentItem(event.target.value)}>
-            <option value="">Chọn mặt hàng</option>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.sku} · {item.name}</option>)}
-          </select></label>
+           <div className="inv-field"><span>Mặt hàng *</span><button type="button" className="inv-picker-trigger" disabled={busy} onClick={() => setPickerTarget('adjustment')}>{adjustItem ? `${adjustItem.sku} · ${adjustItem.name}` : 'Chọn mặt hàng'}</button></div>
           <label className="inv-field"><span>Đơn vị</span><input value={adjustItem?.unitName || ''} disabled /></label>
           <div className="inv-field"><span id="inventory-system-stock-label">Tồn hệ thống</span><input aria-labelledby="inventory-system-stock-label" value={adjustLoading ? 'Đang tải…' : adjustItem ? formatQuantity(adjustItem.quantity) : '—'} disabled />
             {!adjustLoading && !adjustItem && adjustmentItemId && <button type="button" className="inv-text-button" disabled={busy} onClick={() => setAdjustLoadAttempt((attempt) => attempt + 1)}>Thử tải lại tồn hệ thống</button>}
@@ -639,6 +739,8 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
           <button type="button" className="inv-button inv-button-quiet" disabled={busy} onClick={() => { setEvidence(null); setScreen('stock'); }}>Quay lại danh sách</button></div>
       </aside>
     </div>
+    {pickerTarget === 'adjustment' && <InventoryItemPicker items={activeItems} categories={metadata.categories}
+      onSelect={selectAdjustmentItem} onClose={() => setPickerTarget(null)} />}
     <p className="inv-footnote">Dữ liệu theo cơ sở được phân quyền · Điều chỉnh lưu người ghi, lý do và số tồn trước/sau</p>
   </main>;
 
@@ -646,6 +748,7 @@ export default function InventoryPage({ user, recentReceipt, onReceiptConfirmed,
     {heading('Kho hàng', `Cơ sở ${user.branchName || 'được phân quyền'} · Theo dõi số lượng và trạng thái mặt hàng`,
       <><button type="button" className="inv-button inv-button-quiet" onClick={openAdjustment} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi kiểm kê' : undefined}>Kiểm kê &amp; điều chỉnh</button><button type="button" className="inv-button inv-button-quiet" onClick={openReceipt} disabled={busy || user.readOnly || !activeItems.length} title={!activeItems.length ? 'Tạo mặt hàng trước khi nhập kho' : undefined}>Ghi nhận nhập hàng</button><button type="button" className="inv-button inv-button-primary" disabled={busy || user.readOnly} onClick={() => openItemForm('create')}>Thêm mặt hàng</button></>)}
     {feedbackNotice}
+    {menuLinkNotice}
     {recentReceipt?.items?.length > 0 && <section className="inv-panel inv-receipt-followup" aria-label="Thêm mặt hàng vừa nhập vào thực đơn">
       <h2>Phiếu {recentReceipt.code} đã nhập kho</h2>
       <p>Chọn mặt hàng để tạo món F&amp;B. Giá bán sẽ được nhập riêng trong thực đơn.</p>

@@ -30,6 +30,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,11 +43,14 @@ public class FoodOrderService {
     private final FoodOrderRepository foodOrderRepository;
     private final MenuItemRepository menuItemRepository;
     private final AuthCrypto authCrypto;
+    private final Environment environment;
 
-    public FoodOrderService(FoodOrderRepository foodOrderRepository, MenuItemRepository menuItemRepository, AuthCrypto authCrypto) {
+    public FoodOrderService(FoodOrderRepository foodOrderRepository, MenuItemRepository menuItemRepository,
+                            AuthCrypto authCrypto, Environment environment) {
         this.foodOrderRepository = foodOrderRepository;
         this.menuItemRepository = menuItemRepository;
         this.authCrypto = authCrypto;
+        this.environment = environment;
     }
 
     @Transactional
@@ -216,6 +221,18 @@ public class FoodOrderService {
     }
 
     @Transactional
+    // BR-159: order bỏ qua khi checkout được hủy trước lúc bill chốt; món đã trừ kho được hoàn đúng một lần.
+    public int cancelUnservedForCheckout(Identity actor, UUID bookingId) {
+        UUID branchId = branch(actor);
+        for (var sale : foodOrderRepository.unservedSales(branchId, bookingId)) {
+            BigDecimal before = foodOrderRepository.lockStock(sale.inventoryItemId());
+            foodOrderRepository.insertReturn(sale.inventoryItemId(), sale.id(), sale.quantity(), before,
+                actor.id(), "Hoàn kho order chưa phục vụ khi checkout booking " + bookingId);
+        }
+        return foodOrderRepository.cancelUnservedOrders(branchId, bookingId);
+    }
+
+    @Transactional
     // BR-27, BR-28, BR-29, BR-30, BR-117, BR-123, BR-172: tính phí đơn booking và phân công lễ tân ca hiện tại.
     public OrderView addItems(Identity actor, StaffOrderRequest request) {
         UUID branchId = branch(actor, "thêm món", "booking");
@@ -328,13 +345,15 @@ public class FoodOrderService {
     }
 
     @Transactional
-    // Quy trình ca hiện tại: lễ tân đang làm ca tại cùng cơ sở có thể xác nhận đã phục vụ.
+    // BR-123: lễ tân đang làm ca tại cùng cơ sở được cập nhật tiến độ; tài khoản thử nghiệm chỉ được miễn kiểm tra ca ở dev.
     public OrderView updateServiceStatus(Identity actor, UUID orderId, ServiceStatusCommand command) {
         UUID branchId = branch(actor);
         OrderLock order = lockOrder(orderId, branchId);
         if (order == null) throw notFound("Không tìm thấy order tại cơ sở này.");
-        UUID actingEmployeeId = foodOrderRepository.employeeForUser(actor.id());
-        if (actingEmployeeId == null || !foodOrderRepository.eligibleOnShift(actingEmployeeId, branchId)) {
+        boolean localTester = environment.acceptsProfiles(Profiles.of("dev & !prod"))
+            && "letan.nguyenluongbang".equalsIgnoreCase(actor.username());
+        UUID actingEmployeeId = localTester ? null : foodOrderRepository.employeeForUser(actor.id());
+        if (!localTester && (actingEmployeeId == null || !foodOrderRepository.eligibleOnShift(actingEmployeeId, branchId))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Chỉ lễ tân đang làm ca hiện tại tại cơ sở của booking mới có thể cập nhật tiến độ phục vụ.");
         }

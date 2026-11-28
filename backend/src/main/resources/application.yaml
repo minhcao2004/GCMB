@@ -4,7 +4,8 @@ spring:
   autoconfigure:
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   flyway:
-    locations: classpath:db/migration,classpath:db/migration-equipment-first
+    # Existing databases select one V66/V67 location and one V68+ location via SPRING_FLYWAY_LOCATIONS.
+    locations: classpath:db/migration,classpath:db/migration-equipment-first,classpath:db/migration-checkout-first
     fail-on-missing-locations: true
   mail:
     host: ${SMTP_HOST:}
